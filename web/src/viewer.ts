@@ -8,6 +8,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { axesGizmoSVG } from "./icons.js";
+import { getState, subscribe } from "./app-state.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -136,6 +137,15 @@ export class Viewer {
       this.scene.add(this.gizmo);
     }
 
+    // activeTool → gizmo mode sync. move/rotate/scale tools directly
+    // control the gizmo; select leaves the existing mode unchanged.
+    subscribe("activeTool", (tool) => {
+      if (!this.gizmo) return;
+      if (tool === "move")   this.gizmo.setMode("translate");
+      if (tool === "rotate") this.gizmo.setMode("rotate");
+      if (tool === "scale")  this.gizmo.setMode("scale");
+    });
+
     // G / R / S hotkeys switch gizmo mode; Del deselects.
     window.addEventListener("keydown", (e: KeyboardEvent) => {
       if (!this.gizmo || document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
@@ -180,6 +190,12 @@ export class Viewer {
   }
 
   private onCanvasMouseDown(e: MouseEvent): void {
+    const tool = getState("activeTool");
+    // move/rotate/scale mousedown just ensures the gizmo mode is set (already
+    // wired via subscribe). Picking a new object is "select"-only — other
+    // tools should not change the current selection on click.
+    if (tool !== "select" && tool !== "move" && tool !== "rotate" && tool !== "scale") return;
+
     // Identify which pane was clicked by checking which pane rect contains the pointer.
     const cx = e.clientX, cy = e.clientY;
     const hitPane = this.panes.find(p => {
@@ -187,6 +203,12 @@ export class Viewer {
       return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
     });
     if (!hitPane) return;
+
+    // For transform tools: gizmo mode is already set by the subscribe handler.
+    // Mousedown in transform mode does not re-pick; let OrbitControls and
+    // TransformControls handle the drag natively.
+    if (tool === "move" || tool === "rotate" || tool === "scale") return;
+
     const pr = hitPane.el.getBoundingClientRect();
     const ndcX = ((cx - pr.left) / pr.width) * 2 - 1;
     const ndcY = -((cy - pr.top) / pr.height) * 2 + 1;
