@@ -592,27 +592,19 @@ html[data-mode="night"] .snap-dock::after {
   color: var(--ink-faint); white-space: nowrap;
 }
 
-/* Stage: centered scrollable area with blueprint background */
+/* Stage: centered scrollable area */
 .paper-stage {
   flex: 1;
   min-height: 0;   /* prevent stage from expanding beyond its flex share */
   overflow: auto;
-  background:
-    repeating-linear-gradient(45deg,
-      oklch(0.93 0.014 80) 0 1px,
-      transparent 1px 14px),
-    var(--paper-3);
+  background: var(--paper-3);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
 }
 html[data-mode="night"] .paper-stage {
-  background:
-    repeating-linear-gradient(45deg,
-      oklch(0.20 0.060 248) 0 1px,
-      transparent 1px 14px),
-    var(--paper-3);
+  background: var(--paper-3);
 }
 
 .paper-sheet {
@@ -1084,7 +1076,7 @@ html[data-mode="night"] .paper-stage {
   align-items: stretch;
   padding: 0;
   gap: 0;
-  overflow-x: scroll;
+  overflow-x: auto;
   min-width: 0;
 }
 
