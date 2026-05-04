@@ -78,6 +78,9 @@ export class Viewer {
     // Reference grid + axes.
     this.grid = new THREE.GridHelper(20, 20, 0x6f6f78, 0xc8c2b4);
     this.grid.rotation.x = Math.PI / 2;
+    this.grid.renderOrder = -1;
+    const gridMat = Array.isArray(this.grid.material) ? this.grid.material : [this.grid.material];
+    for (const m of gridMat) { (m as THREE.LineBasicMaterial).depthWrite = false; }
     this.scene.add(this.grid);
 
     this.axes = new THREE.AxesHelper(2);
@@ -425,6 +428,9 @@ export class Viewer {
       this.grid.geometry.dispose();
       this.grid = new THREE.GridHelper(gridSize, gridSize, 0x444444, 0x2c2c34);
       this.grid.rotation.x = Math.PI / 2;
+      this.grid.renderOrder = -1;
+      const gMat2 = Array.isArray(this.grid.material) ? this.grid.material : [this.grid.material];
+      for (const m of gMat2) { (m as THREE.LineBasicMaterial).depthWrite = false; }
       (this.grid as any).__lastSize = gridSize;
       this.scene.add(this.grid);
     }
