@@ -112,6 +112,17 @@ const TOOL_GROUPS: ToolGroup[] = [
   { label: "MEASURE",   tools: ["Ruler", "Compass"] },
 ];
 
+const LAYOUT_RIBBON_TABS = ["COMPOSE", "ANNOTATE", "DRAW", "OUTPUT"] as const;
+type LayoutRibbonTab = typeof LAYOUT_RIBBON_TABS[number];
+
+const LAYOUT_TOOL_GROUPS: ToolGroup[] = [
+  { label: "NAVIGATE",  tools: ["Select", "Pan", "Zoom"] },
+  { label: "VIEWPORT",  tools: ["Frame", "Scale", "Align"] },
+  { label: "ANNOTATE",  tools: ["Text", "Leader", "Callout"] },
+  { label: "DRAW",      tools: ["Line", "Rect", "Circle"] },
+  { label: "DIMENSION", tools: ["Ruler", "Compass"] },
+];
+
 type ModeDef = { key: string; num: string; label: string };
 const MODES: ModeDef[] = [
   { key: "model",    num: "01", label: "MODEL" },
@@ -121,6 +132,71 @@ const MODES: ModeDef[] = [
 
 const RIBBON_TABS = ["MODEL", "DRAFT", "ANALYZE", "RENDER", "ANNOTATE", "SUBMIT"] as const;
 type RibbonTab = typeof RIBBON_TABS[number];
+
+// Module-level refs used by setRibbonMode to swap ribbon content in-place.
+let _ribbonTabsEl: HTMLElement | null = null;
+let _ribbonToolsEl: HTMLElement | null = null;
+
+function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab: string) {
+  tabsEl.innerHTML = "";
+  for (const t of tabs) {
+    const tab = document.createElement("div");
+    tab.className = "ribbon-tab";
+    tab.dataset.tab = t;
+    tab.setAttribute("role", "tab");
+    const isActive = t === initialTab;
+    tab.setAttribute("aria-selected", isActive ? "true" : "false");
+    if (isActive) tab.classList.add("active");
+    tab.textContent = t;
+    tab.addEventListener("click", () => {
+      tabsEl.querySelectorAll<HTMLElement>(".ribbon-tab").forEach((el) => {
+        const active = el === tab;
+        el.classList.toggle("active", active);
+        el.setAttribute("aria-selected", active ? "true" : "false");
+      });
+    });
+    tabsEl.appendChild(tab);
+  }
+}
+
+function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
+  toolsEl.innerHTML = "";
+  for (const group of groups) {
+    const groupEl = document.createElement("div");
+    groupEl.className = "tool-group";
+
+    const btnsEl = document.createElement("div");
+    btnsEl.className = "tool-group-btns";
+    for (const tool of group.tools) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tool-btn";
+      btn.dataset.tool = tool.toLowerCase();
+      btn.title = tool;
+      btn.innerHTML = iconSVG(tool.toLowerCase(), 16);
+      btnsEl.appendChild(btn);
+    }
+    groupEl.appendChild(btnsEl);
+
+    const label = document.createElement("span");
+    label.className = "tool-group-label";
+    label.textContent = group.label;
+    groupEl.appendChild(label);
+
+    toolsEl.appendChild(groupEl);
+  }
+}
+
+export function setRibbonMode(mode: "model" | "layout" | "research") {
+  if (!_ribbonTabsEl || !_ribbonToolsEl) return;
+  if (mode === "layout") {
+    fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, LAYOUT_RIBBON_TABS[0]);
+    fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);
+  } else {
+    fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
+    fillRibbonTools(_ribbonToolsEl, TOOL_GROUPS);
+  }
+}
 
 const THEME_KEY = "gemma-architect.theme";
 type ThemeMode = "day" | "night";
@@ -339,58 +415,23 @@ function buildModebar(host: HTMLElement, onChange?: (k: string) => void): (k: st
   return activate;
 }
 
-function buildRibbon(ribbonHost: HTMLElement, onChange?: (t: RibbonTab) => void, onSplitMode?: (mode: "single" | "quad") => void): (t: RibbonTab) => void {
+function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "quad") => void) {
   ribbonHost.innerHTML = "";
 
-  // .ribbon-tabs — top strip with 6 tab labels.
   const tabsEl = document.createElement("div");
   tabsEl.className = "ribbon-tabs";
   tabsEl.setAttribute("role", "tablist");
   ribbonHost.appendChild(tabsEl);
+  _ribbonTabsEl = tabsEl;
 
-  const tabs: HTMLDivElement[] = [];
-  for (const t of RIBBON_TABS) {
-    const tab = document.createElement("div");
-    tab.className = "ribbon-tab";
-    tab.dataset.tab = t;
-    tab.setAttribute("role", "tab");
-    tab.setAttribute("aria-selected", t === RIBBON_TABS[0] ? "true" : "false");
-    if (t === RIBBON_TABS[0]) tab.classList.add("active");
-    tab.textContent = t;
-    tab.addEventListener("click", () => activate(t));
-    tabs.push(tab);
-    tabsEl.appendChild(tab);
-  }
-
-  // .ribbon-tools — middle area with toolgroups.
   const toolsEl = document.createElement("div");
   toolsEl.className = "ribbon-tools";
   ribbonHost.appendChild(toolsEl);
+  _ribbonToolsEl = toolsEl;
 
-  for (const group of TOOL_GROUPS) {
-    const groupEl = document.createElement("div");
-    groupEl.className = "tool-group";
-
-    const btnsEl = document.createElement("div");
-    btnsEl.className = "tool-group-btns";
-    for (const tool of group.tools) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "tool-btn";
-      btn.dataset.tool = tool.toLowerCase();
-      btn.title = tool;
-      btn.innerHTML = iconSVG(tool.toLowerCase(), 16);
-      btnsEl.appendChild(btn);
-    }
-    groupEl.appendChild(btnsEl);
-
-    const groupLabel = document.createElement("span");
-    groupLabel.className = "tool-group-label";
-    groupLabel.textContent = group.label;
-    groupEl.appendChild(groupLabel);
-
-    toolsEl.appendChild(groupEl);
-  }
+  // Fill with model ribbon content initially.
+  fillRibbonTabs(tabsEl, RIBBON_TABS, RIBBON_TABS[0]);
+  fillRibbonTools(toolsEl, TOOL_GROUPS);
 
   // .ribbon-right — quick actions (palette + export + viewport split).
   const rightEl = document.createElement("div");
@@ -410,20 +451,9 @@ function buildRibbon(ribbonHost: HTMLElement, onChange?: (t: RibbonTab) => void,
     onSplitMode?.("quad");
   });
 
-  // Wire the palette quick button to the Cmd-K shortcut (palette.ts listens on window).
   rightEl.querySelector("#ribbon-palette-btn")?.addEventListener("click", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
   });
-
-  function activate(t: RibbonTab) {
-    for (const el of tabs) {
-      const isActive = el.dataset.tab === t;
-      el.classList.toggle("active", isActive);
-      el.setAttribute("aria-selected", isActive ? "true" : "false");
-    }
-    if (onChange) onChange(t);
-  }
-  return activate;
 }
 
 function wireThemeToggle() {
@@ -493,7 +523,7 @@ export function initShellChrome(opts?: { onModeChange?: (k: string) => void; onS
   const ribbon  = document.querySelector(".ribbon")  as HTMLElement | null;
   if (menubar) buildMenubar(menubar);
   if (modebar) buildModebar(modebar, opts?.onModeChange);
-  if (ribbon)  buildRibbon(ribbon, undefined, opts?.onSplitMode);
+  if (ribbon)  buildRibbon(ribbon, opts?.onSplitMode);
   wireThemeToggle();
   wireFpsCounter();
 }

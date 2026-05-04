@@ -8,7 +8,7 @@
 // Export menu is shared: the active source (whether replicad-generated or
 // loaded-from-file) is queried via viewer.getActiveMeshData().
 
-import { initShellChrome } from "./shell";
+import { initShellChrome, setRibbonMode } from "./shell";
 import { initPalette } from "./palette";
 import { buildWorkbench } from "./workbench";
 import { buildModes, activateMode } from "./modes";
@@ -641,7 +641,10 @@ function downloadBlob(blob: Blob, filename: string) {
 // Boot.
 const workbenchEl = document.querySelector(".workbench") as HTMLElement | null;
 initShellChrome({
-  onModeChange: (k) => activateMode(k, workbenchEl),
+  onModeChange: (k) => {
+    activateMode(k, workbenchEl);
+    setRibbonMode(k as "model" | "layout" | "research");
+  },
   onSplitMode: (mode) => viewer.splitMode(mode),
 });
 initPalette();
