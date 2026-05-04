@@ -2,9 +2,14 @@
 // audit-stubs.ts — scan web/src for stub UI handlers.
 //
 // Per silly-baking-yeti.md T13: zero stubs is part of plan retirement criteria.
-// Detects categories of "dead UI" that ship as visible-but-inert handlers.
+// Detects categories of "dead UI" that ship as visible-but-inert handlers
+// (alert("not implemented"), TODO comments, throw-stubs, etc.).
 //
-// Exits 0 with stdout `0 stubs, 0 dispatch gaps` on clean.
+// Does NOT verify dispatch routing — handlers that exist but route to the
+// wrong sink (e.g. setState instead of dispatch) pass this audit. See
+// scripts/audit-dispatch-routing.ts for that class of regression.
+//
+// Exits 0 with stdout `0 stubs` on clean.
 // Exits 1 with each violation on its own line: `<file>:<line>: <category> — <snippet>`.
 
 import { readdirSync, readFileSync, statSync } from "fs";
@@ -71,7 +76,7 @@ function main(): void {
   for (const f of files) violations.push(...scanFile(f));
 
   if (violations.length === 0) {
-    console.log("0 stubs, 0 dispatch gaps");
+    console.log("0 stubs");
     process.exit(0);
   }
 

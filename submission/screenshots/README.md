@@ -27,6 +27,37 @@ ai-cache.json verified live at 60 rows as of `a59a8a3` (the
 `column-square-3m` corpus row that demo-script.md cut 2 depends on
 for an exact F1=1.000 cache hit is restored).
 
+## Pending re-capture after R1-R4 bundle fix
+
+The 9 web screenshots above were captured from
+https://wordingone.github.io/gemma-architect/ on 2026-05-04 at the
+bundle commits cited in the table. That live deploy contained 4 UI
+regressions Jun flagged the same day in the playwright window
+(silly-baking-yeti.md T1/T2/T3/T4/T7 — see commit 81e5046's
+audit-dispatch-routing.ts firing 11 violations):
+
+- **R1** — ribbon shows TEXT labels (Select/Move/Rotate/Scale) not
+  the small SVG icons exported by `web/src/icons.ts`. Every one of
+  the 9 shots includes the ribbon strip — every shot needs re-capture.
+- **R2** — BLUEPRINT/VELLUM toggle in cropped statusbar instead of
+  menubar-right pill. At 1920×1080 the statusbar is uncropped so the
+  toggle is visible in current shots, but post-fix the visual moves;
+  shots showing the menubar (01/03/06/07/09 especially) need re-capture.
+- **R3a/b/c** — palette inert + no Raycaster + no TransformControls.
+  None of the current 9 shots directly demonstrate selection /
+  transform; no re-capture needed for the existing set, but the
+  pending column-3m + grid composition could pick up an R3-fixed shot.
+- **R4** — UI cropped at viewport heights below 700px. 1920×1080 is
+  unaffected; no re-capture needed for this rule alone.
+
+Re-capture trigger: after Eli's R1-R4 PR merges to master AND deploys
+to GH Pages (verify bundle hash in `dist/` differs from current
+deploy), re-run `bun web/test/capture-screenshots.ts` (or whatever
+the existing capture path is — Eli's lane per Playwright offload
+rule). Update the `Commit` column in the table above with the new
+post-fix bundle commit. Bundle deploy can lag the merge by a few
+minutes per the gh-actions cycle.
+
 ## Pending (manual capture pre-grid-composite)
 
 BlenderBIM column (3 shots) — judges-facing proof that exported IFC4

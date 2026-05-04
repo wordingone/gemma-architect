@@ -274,8 +274,10 @@ OpenCascade ready.
 ```
 
 A second harness, `bun scripts/test-ifc-bounds.ts`, exercises the
-**IFC viewer** path on six bundled real-world IFCs (Schultz Residence,
-AC20-FZK-Haus, AC20-Institute-Var-2, plus three smaller fixtures). It
+**IFC viewer** path on six bundled IFCs (one real architect-authored —
+Schultz Residence; two ArchiCAD-export schema-validation fixtures —
+AC20-FZK-Haus, AC20-Institute-Var-2; plus three smaller fixtures). See
+[`submission/SAMPLES.md`](SAMPLES.md) for per-file provenance. It
 validates that per-element world-space transforms come out of web-ifc's
 column-major `flatTransformation` correctly — a regression in the
 matrix block at `web/src/worker.ts:283-289` would collapse every

@@ -15,7 +15,7 @@ auditing.
 
 | Sample | Size | Entities | License | Provenance |
 | :----- | ---: | -------: | :------ | :--------- |
-| `Schultz_Residence.ifc` | 22.5 MB | ~424k | **CC BY-ND 4.0** | Multi-story residence in the Boston metro area (IfcSite 42°21'30"N 71°3'35"W). Authored in Autodesk Revit 2014 by **Opening Design** (architecture practice). Sourced from [opensourceBIM/IFC-files](https://github.com/opensourceBIM/IFC-files). 11 storeys (Basement→Roof), 105 walls, 25 windows, 17 doors, 10 stairs. IFC2x3. |
+| `Schultz_Residence.ifc` | 21.8 MB | 424,819 | **CC BY-ND 4.0** | Multi-story residence in the Boston metro area (IfcSite 42°21'30"N 71°3'35"W). Authored in Autodesk Revit 2014 by **Opening Design** (architecture practice). Sourced from [opensourceBIM/IFC-files](https://github.com/opensourceBIM/IFC-files). 11 storeys (Basement→Roof), 105 walls, 25 windows, 17 doors, 10 stairs. IFC2x3. |
 
 CC BY-ND 4.0 permits commercial use + display; prohibits derivative works.
 gemma-architect bundles the original file unchanged for users to load
@@ -40,19 +40,19 @@ performance benchmarks alongside the real Schultz Residence.
 
 | Sample | Size | Entities | License | Provenance |
 | :----- | ---: | -------: | :------ | :--------- |
-| `bonsai-project0-openings.ifc` | 47 KB | 788 | Tutorial-bundled | BlenderBIM tutorial "Project 0" starter — small house with openings authored as the BIM-Onboarding sample. Fast to parse, exercises IfcOpeningElement / IfcDoor / IfcWindow paths. |
+| `bonsai-project0-openings.ifc` | 48 KB | 788 | Tutorial-bundled | BlenderBIM tutorial "Project 0" starter — small house with openings authored as the BIM-Onboarding sample. Fast to parse, exercises IfcOpeningElement / IfcDoor / IfcWindow paths. |
 
 ## Loader smoke tests (4)
 
 Minimal fixtures used to verify the file-load pipeline (IFCLoader,
 OBJLoader, STLLoader) — not representative of real geometry.
 
-| Sample | Size | Format | Purpose |
-| :----- | ---: | :----- | :------ |
-| `wall-with-opening-and-window.ifc` | 12 KB | IFC4 | Single wall + window void. Sub-second parse, smoke test. |
-| `simple-sweep-1.ifc` | 4 KB | IFC4X3_ADD2 | Minimal swept solid emitted by IfcOpenShell 0.8.2. Schema-version smoke test — verifies the loader ingests an IFC4X3_ADD2 file (newer civil-infra-extension schema); web-ifc 0.0.77 partial-parses (logs `GetRefArgument` warnings on entities it doesn't fully resolve) but doesn't crash. |
-| `triangle.obj` | 96 B | OBJ | OBJLoader path verification. |
-| `triangle.stl` | 158 B | STL ASCII | STLLoader path verification. |
+| Sample | Size | Entities | Format | Purpose |
+| :----- | ---: | -------: | :----- | :------ |
+| `wall-with-opening-and-window.ifc` | 12 KB | 127 | IFC4 | Single wall + window void. Sub-second parse, smoke test. |
+| `simple-sweep-1.ifc` | 4 KB | 65 | IFC4X3_ADD2 | Minimal swept solid emitted by IfcOpenShell 0.8.2. Schema-version smoke test — verifies the loader ingests an IFC4X3_ADD2 file (newer civil-infra-extension schema); web-ifc 0.0.77 partial-parses (logs `GetRefArgument` warnings on entities it doesn't fully resolve) but doesn't crash. |
+| `triangle.obj` | 96 B | n/a | OBJ | OBJLoader path verification. |
+| `triangle.stl` | 158 B | n/a | STL ASCII | STLLoader path verification. |
 
 ## What this means for judging
 
