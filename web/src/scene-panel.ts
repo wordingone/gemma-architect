@@ -19,6 +19,7 @@ import {
   type SelectionFilters,
 } from "./selection-state";
 import type { IfcHierarchyElement } from "./ifc-types";
+import { subscribe } from "./app-state";
 
 type IfcClass = "ARCHITECTURE" | "STRUCTURE" | "OPENINGS" | "CIRCULATION" | "MESHES";
 function classifyByName(name: string): IfcClass {
@@ -53,15 +54,21 @@ export class ScenePanel {
   private viewer: Viewer;
   private nodes: MeshNode[] = [];
   private collapsed = false;
+  private lastSummary: SceneSummary | null = null;
 
   constructor(root: HTMLElement, viewer: Viewer) {
     this.root = root;
     this.viewer = viewer;
     this.renderEmpty();
+    // Re-render on theme change so swatch chips and inline styles stay in sync.
+    subscribe("night", () => {
+      if (this.lastSummary) this.render(this.lastSummary);
+    });
   }
 
   clear(): void {
     this.nodes = [];
+    this.lastSummary = null;
     this.renderEmpty();
   }
 
@@ -71,6 +78,7 @@ export class ScenePanel {
       this.clear();
       return;
     }
+    this.lastSummary = summary;
     this.nodes = this.walkNodes(obj);
     this.render(summary);
   }
