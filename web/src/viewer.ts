@@ -9,6 +9,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { axesGizmoSVG } from "./icons.js";
 import { getState, subscribe } from "./app-state.js";
+import { setSelected, clearSelected } from "./selection-state.js";
+import { emitChainFragment } from "./transforms.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -47,6 +49,7 @@ export class Viewer {
   private currentBounds: Bounds | null = null;
   private raycaster: THREE.Raycaster;
   private gizmo: TransformControls | null = null;
+  private gizmoCaptured: { position: THREE.Vector3; quaternion: THREE.Quaternion; scale: THREE.Vector3 } | null = null;
 
   constructor(canvas: HTMLCanvasElement, viewportAreaEl: HTMLElement) {
     this.canvas = canvas;
@@ -131,8 +134,42 @@ export class Viewer {
     if (perspPane && perspPane.camera instanceof THREE.PerspectiveCamera) {
       this.gizmo = new TransformControls(perspPane.camera, this.canvas);
       this.gizmo.addEventListener("dragging-changed", (ev) => {
+        const dragging = (ev as THREE.Event & { value: boolean }).value;
         // Disable OrbitControls while dragging the gizmo.
-        if (this.controls) this.controls.enabled = !(ev as THREE.Event & { value: boolean }).value;
+        if (this.controls) this.controls.enabled = !dragging;
+        if (dragging && this.gizmo?.object) {
+          // Capture transform before drag for delta computation on release.
+          const t = this.gizmo.object;
+          this.gizmoCaptured = {
+            position: t.position.clone(),
+            quaternion: t.quaternion.clone(),
+            scale: t.scale.clone(),
+          };
+        } else if (!dragging && this.gizmoCaptured && this.gizmo?.object) {
+          // Drag ended — compute delta and emit chain fragment.
+          const t = this.gizmo.object;
+          const before = this.gizmoCaptured;
+          const mode = this.gizmo.getMode();
+          const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
+          let fragment = "";
+          if (mode === "translate") {
+            const dx = r4(t.position.x - before.position.x);
+            const dy = r4(t.position.y - before.position.y);
+            const dz = r4(t.position.z - before.position.z);
+            if (dx !== 0 || dy !== 0 || dz !== 0) fragment = `.translate([${dx}, ${dy}, ${dz}])`;
+          } else if (mode === "rotate") {
+            const dq = before.quaternion.clone().invert().multiply(t.quaternion);
+            const s = Math.sqrt(1 - dq.w * dq.w);
+            const axis = s < 1e-4 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(dq.x / s, dq.y / s, dq.z / s);
+            const deg = r4((2 * Math.acos(Math.max(-1, Math.min(1, dq.w))) * 180) / Math.PI);
+            if (deg !== 0) fragment = `.rotate(${deg}, [0,0,0], [${r4(axis.x)},${r4(axis.y)},${r4(axis.z)}])`;
+          } else if (mode === "scale") {
+            const f = r4((t.scale.x / before.scale.x + t.scale.y / before.scale.y + t.scale.z / before.scale.z) / 3);
+            if (f !== 1) fragment = `.scale(${f})`;
+          }
+          emitChainFragment(fragment);
+          this.gizmoCaptured = null;
+        }
       });
       this.scene.add(this.gizmo);
     }
@@ -154,8 +191,11 @@ export class Viewer {
       if (e.key === "s" || e.key === "S") this.gizmo.setMode("scale");
       if (e.key === "Delete" || e.key === "Backspace") {
         if (this.gizmo.object) {
-          this.scene.remove(this.gizmo.object);
+          const removed = this.gizmo.object;
+          this.scene.remove(removed);
           this.gizmo.detach();
+          emitChainFragment(`// removed: uuid=${removed.uuid}`);
+          clearSelected();
           window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
         }
       }
@@ -220,8 +260,20 @@ export class Viewer {
     );
     const hits = this.raycaster.intersectObjects(pickables, true);
     const hit = hits[0]?.object ?? null;
-    const uuid = hit ? (hit.parent?.uuid ?? hit.uuid) : null;
-    this.selectObject(hit?.parent instanceof THREE.Mesh || hit?.parent instanceof THREE.Group ? hit.parent : hit);
+    const transformTarget = hit?.parent instanceof THREE.Mesh || hit?.parent instanceof THREE.Group ? hit.parent : hit;
+    const uuid = transformTarget?.uuid ?? null;
+    this.selectObject(transformTarget);
+    // Update selection-state singleton so Inspect tab and transforms.ts subscribe handlers see the change.
+    if (transformTarget) {
+      setSelected({
+        topology: "mesh",
+        uuid: transformTarget.uuid,
+        object: transformTarget,
+        transformTarget,
+      });
+    } else {
+      clearSelected();
+    }
     window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid } }));
   }
 

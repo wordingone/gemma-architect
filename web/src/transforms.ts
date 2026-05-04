@@ -50,6 +50,15 @@ export function clearReplicadSequence(): void {
   _replicadSequence.length = 0;
 }
 
+/** Record one replicad chain fragment and notify listeners via CustomEvent. */
+export function emitChainFragment(fragment: string): void {
+  if (!fragment) return;
+  _replicadSequence.push(fragment);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("gemma:chain-fragment", { detail: { fragment } }));
+  }
+}
+
 export class TransformBinder {
   private viewer: Viewer;
   private controls: TransformControls;
@@ -204,7 +213,7 @@ export class TransformBinder {
         fragment = `.scale(${factor})`;
       }
     }
-    if (fragment) _replicadSequence.push(fragment);
+    if (fragment) emitChainFragment(fragment);
     this.captured = null;
   }
 
@@ -229,7 +238,7 @@ export function deleteSelected(viewer: Viewer): boolean {
   const target = sel.transformTarget;
   const removed = viewer.removeObject(target);
   if (removed) {
-    _replicadSequence.push(`// removed: uuid=${target.uuid}`);
+    emitChainFragment(`// removed: uuid=${target.uuid}`);
     clearSelected();
   }
   return removed;
