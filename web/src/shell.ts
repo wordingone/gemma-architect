@@ -371,6 +371,8 @@ function buildRibbon(ribbonHost: HTMLElement, onChange?: (t: RibbonTab) => void,
     const groupEl = document.createElement("div");
     groupEl.className = "tool-group";
 
+    const btnsEl = document.createElement("div");
+    btnsEl.className = "tool-group-btns";
     for (const tool of group.tools) {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -378,9 +380,10 @@ function buildRibbon(ribbonHost: HTMLElement, onChange?: (t: RibbonTab) => void,
       btn.dataset.tool = tool.toLowerCase();
       btn.title = tool;
       btn.innerHTML = iconSVG(tool.toLowerCase(), 16);
-      groupEl.appendChild(btn);
+      btnsEl.appendChild(btn);
     }
-    // Bundle puts the group label at the END (a footer caption under the buttons).
+    groupEl.appendChild(btnsEl);
+
     const groupLabel = document.createElement("span");
     groupLabel.className = "tool-group-label";
     groupLabel.textContent = group.label;
