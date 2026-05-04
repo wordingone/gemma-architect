@@ -554,6 +554,49 @@ html[data-mode="night"] .snap-dock::after {
   position: relative;
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Bottom toolbar injected by layout.ts */
+.paper-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--chrome);
+  border-top: var(--lw-edge) solid var(--hairline-soft);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.paper-tool {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--chrome);
+  color: var(--ink-soft);
+  border: var(--lw-edge) solid var(--hairline-soft);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+  cursor: pointer;
+  height: 22px;
+}
+.paper-tool:hover { background: var(--chrome-hover); }
+.paper-tool-num { width: 60px; text-align: right; }
+.paper-tool-export { background: var(--gemma); color: var(--canvas); border-color: var(--gemma); }
+.paper-tool-export:hover { opacity: 0.85; }
+.paper-tool-custom { display: none; align-items: center; gap: 6px; }
+.paper-tool-custom.visible { display: flex; }
+.paper-tool-label {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-faint); white-space: nowrap;
+}
+
+/* Stage: centered scrollable area with blueprint background */
+.paper-stage {
+  flex: 1;
+  min-height: 0;   /* prevent stage from expanding beyond its flex share */
+  overflow: auto;
   background:
     repeating-linear-gradient(45deg,
       oklch(0.93 0.014 80) 0 1px,
@@ -563,35 +606,93 @@ html[data-mode="night"] .snap-dock::after {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  overflow: auto;
 }
+html[data-mode="night"] .paper-stage {
+  background:
+    repeating-linear-gradient(45deg,
+      oklch(0.20 0.060 248) 0 1px,
+      transparent 1px 14px),
+    var(--paper-3);
+}
+
 .paper-sheet {
   background: var(--paper);
-  width: 1100px;
-  max-width: 100%;
-  aspect-ratio: 1.414 / 1; /* A-series */
   position: relative;
   border: var(--lw-cut) solid var(--ink-cut);
   box-shadow: 4px 4px 0 oklch(0.86 0.014 80), 6px 6px 16px oklch(0.22 0.015 250 / 0.10);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr 60px;
+  /* JS (applySheetDims) sets explicit width/height. No grid — panels are absolute. */
+  overflow: hidden;
 }
-.paper-sheet::before {
-  content: "";
-  position: absolute;
-  inset: 12px;
-  border: var(--lw-edge) solid var(--ink-edge);
-  pointer-events: none;
-}
+/* .paper-sheet::before removed — blank paper, no inset margin border */
 .paper-cell {
   border: var(--lw-edge) solid var(--ink-edge);
   margin: -0.5px;
   position: relative;
-  padding: 22px 18px 14px;
+  padding: 22px 8px 0;
   display: flex;
   flex-direction: column;
   background: var(--paper);
+  overflow: hidden;
+}
+/* Per-panel toolbar: viewport + scale dropdowns */
+.paper-cell-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 0 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.paper-cell:hover .paper-cell-toolbar,
+.paper-cell.selected .paper-cell-toolbar { opacity: 1; }
+.paper-cell-toolbar select {
+  font-family: var(--mono);
+  font-size: 9px;
+  background: var(--chrome);
+  border: var(--lw-edge) solid var(--hairline-soft);
+  color: var(--ink-dim);
+  padding: 1px 2px;
+  border-radius: 2px;
+  max-width: 120px;
+}
+/* Viewport render area fills remaining space */
+.paper-cell-render {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+/* Scale bar: fixed at bottom-right, out of flow */
+.paper-cell-scalebar {
+  position: absolute;
+  bottom: 5px;
+  right: 8px;
+  line-height: 0;
+}
+.paper-cell-scalebar svg { display: block; }
+/* Close button: top-right, hidden until hover/selected */
+.paper-cell-close {
+  position: absolute;
+  top: 3px; right: 3px;
+  display: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-faint);
+  padding: 2px;
+  border-radius: 2px;
+  line-height: 0;
+}
+.paper-cell:hover .paper-cell-close,
+.paper-cell.selected .paper-cell-close { display: flex; align-items: center; }
+.paper-cell-close:hover { color: var(--ink); }
+/* Drag-creation ghost */
+.paper-cell-ghost {
+  position: absolute;
+  border: 1px dashed var(--ink-dim);
+  background: oklch(0.55 0.08 248 / 0.08);
+  pointer-events: none;
 }
 .paper-cell-label {
   position: absolute;
@@ -610,7 +711,7 @@ html[data-mode="night"] .snap-dock::after {
   color: var(--ink-faint);
   letter-spacing: 0.04em;
 }
-.paper-cell svg { flex: 1; width: 100%; height: 100%; }
+.paper-cell-render svg { flex: 1; width: 100%; height: 100%; display: block; }
 .paper-titleblock {
   grid-column: 1 / -1;
   display: grid;
@@ -985,7 +1086,9 @@ html[data-mode="night"] .snap-dock::after {
   gap: 0;
   overflow-x: auto;
   min-width: 0;
+  scrollbar-width: none; /* Firefox */
 }
+.ribbon-tools::-webkit-scrollbar { display: none; } /* Chrome/Safari/Edge */
 
 .tool-group {
   display: flex;
@@ -1038,7 +1141,7 @@ html[data-mode="night"] .snap-dock::after {
   color: var(--gemma);
   border-color: var(--gemma);
 }
-.tool-btn svg { width: 16px; height: 16px; stroke-width: 1.5; fill: none; stroke: currentColor; }
+.tool-btn svg { width: 16px; height: 16px; min-width: 16px; flex-shrink: 0; stroke-width: 1.5; fill: none; stroke: currentColor; }
 
 .ribbon-right {
   display: flex;
@@ -1105,6 +1208,8 @@ html[data-mode="night"] .snap-dock::after {
 .workbench[data-mode="layout"],
 .workbench[data-mode="research"] {
   grid-template-columns: 1fr;
+  grid-template-rows: 1fr;   /* constrain row to workbench height */
+  overflow: hidden;
 }
 .workbench[data-mode="layout"] > .palette,
 .workbench[data-mode="layout"] > .center-col,

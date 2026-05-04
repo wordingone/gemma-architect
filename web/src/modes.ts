@@ -44,12 +44,7 @@ function buildPaperMode(boundsProvider?: () => SceneBounds | null): HTMLElement 
   buildLayoutMode(el, {
     size: "A1",
     orientation: "landscape",
-    initialPanels: [
-      { x: 60,  y: 60,  w: 380, h: 240, viewport: "top",         scale: "1:100", title: "A · PLAN" },
-      { x: 470, y: 60,  w: 380, h: 240, viewport: "front",       scale: "1:100", title: "B · ELEVATION" },
-      { x: 60,  y: 320, w: 380, h: 240, viewport: "right",       scale: "1:100", title: "C · SECTION" },
-      { x: 470, y: 320, w: 380, h: 240, viewport: "axonometric", scale: "NTS",   title: "D · AXONOMETRIC" },
-    ],
+    showTitleBlock: false,
     bounds: boundsProvider
       ? () => { const b = boundsProvider(); return b ?? ({ min: [-1, -1, -1], max: [1, 1, 1] } as SceneBounds); }
       : undefined,

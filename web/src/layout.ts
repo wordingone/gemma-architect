@@ -137,6 +137,7 @@ export interface LayoutOptions {
   bounds?: SceneBoundsProvider;
   initialPanels?: PanelInit[];
   titleBlock?: Partial<TitleBlock>;
+  showTitleBlock?: boolean;  // default false — blank paper
 }
 
 export interface TitleBlock {
@@ -187,6 +188,12 @@ class LayoutController {
   private dragging: { startX: number; startY: number; el?: HTMLElement } | null = null;
   // Selected panel (for toolbar interaction).
   private selectedPanelId: string | null = null;
+  // Fit-to-stage scale factor (zoom). All mouse coords divided by this.
+  private zoomFactor = 1;
+  // Whether to render the title block.
+  private _showTitleBlock: boolean;
+  // Watches stage size changes (including mode-switch from display:none → flex).
+  private _ro: ResizeObserver | null = null;
 
   constructor(host: HTMLElement, opts: LayoutOptions) {
     this.host = host;
@@ -195,8 +202,15 @@ class LayoutController {
     this.customMm = opts.customMm ?? { ...DEFAULT_CUSTOM };
     this.bounds = opts.bounds ?? DEFAULT_PROVIDER;
     this.title = { ...DEFAULT_TITLE, ...(opts.titleBlock ?? {}) };
+    this._showTitleBlock = opts.showTitleBlock ?? false;
     this.build();
     for (const p of opts.initialPanels ?? []) this.addPanel(p);
+    // Re-fit whenever the stage changes size (covers mode-switch from display:none → flex).
+    const stage = this.sheetEl.parentElement;
+    if (stage && typeof ResizeObserver !== "undefined") {
+      this._ro = new ResizeObserver(() => this.fitToStage());
+      this._ro.observe(stage);
+    }
   }
 
   // --- Build DOM -----
@@ -205,14 +219,14 @@ class LayoutController {
     this.host.innerHTML = "";
     this.host.classList.add("paper-mode");
 
+    const stage = document.createElement("div");
+    stage.className = "paper-stage";
+    this.host.appendChild(stage);
+
     this.toolbarEl = document.createElement("div");
     this.toolbarEl.className = "paper-toolbar";
     this.host.appendChild(this.toolbarEl);
     this.buildToolbar();
-
-    const stage = document.createElement("div");
-    stage.className = "paper-stage";
-    this.host.appendChild(stage);
 
     this.sheetEl = document.createElement("div");
     this.sheetEl.className = "paper-sheet";
@@ -229,11 +243,13 @@ class LayoutController {
     this.sheetEl.addEventListener("mouseup",   ()  => this.onSheetMouseUp());
     this.sheetEl.addEventListener("mouseleave",()  => this.onSheetMouseUp());
 
-    // Title block.
+    // Title block — only when explicitly requested.
     this.titleblockEl = document.createElement("div");
     this.titleblockEl.className = "paper-titleblock";
-    this.sheetEl.appendChild(this.titleblockEl);
-    this.renderTitleBlock();
+    if (this._showTitleBlock) {
+      this.sheetEl.appendChild(this.titleblockEl);
+      this.renderTitleBlock();
+    }
   }
 
   private buildToolbar(): void {
@@ -296,24 +312,6 @@ class LayoutController {
     customWrap.appendChild(this.labelled("H mm", hIn));
     tb.appendChild(customWrap);
 
-    // Spacer + export buttons.
-    const spacer = document.createElement("span");
-    spacer.style.flex = "1";
-    tb.appendChild(spacer);
-
-    const mkExport = (label: string, fmt: string, handler: () => void): HTMLButtonElement => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "paper-tool paper-tool-export";
-      b.dataset.fmt = fmt;
-      b.innerHTML = `${iconSVG("export", 13)} <span>${label}</span>`;
-      b.addEventListener("click", handler);
-      return b;
-    };
-    tb.appendChild(mkExport("PDF", "pdf",  () => triggerDownload(this, "pdf")));
-    tb.appendChild(mkExport("SVG", "svg",  () => triggerDownload(this, "svg")));
-    tb.appendChild(mkExport("AI",  "ai",   () => triggerDownload(this, "ai")));
-    tb.appendChild(mkExport("DWG", "dwg",  () => triggerDownload(this, "dwg")));
   }
 
   private labelled(name: string, control: HTMLElement): HTMLElement {
@@ -332,13 +330,26 @@ class LayoutController {
     const px = sheetPx(mm);
     this.sheetEl.style.width = `${px.w}px`;
     this.sheetEl.style.height = `${px.h}px`;
-    // CSS ratio fallback: certain layouts may want this for fit-to-container.
     this.sheetEl.style.aspectRatio = `${mm.w} / ${mm.h}`;
     this.sheetEl.dataset.size = this.size;
     this.sheetEl.dataset.orientation = this.orientation;
-    // Also report in mm via dataset so tests + export can read sheet size.
     this.sheetEl.dataset.widthMm = String(mm.w);
     this.sheetEl.dataset.heightMm = String(mm.h);
+    // Scale sheet to fit stage after layout stabilizes.
+    requestAnimationFrame(() => this.fitToStage());
+  }
+
+  private fitToStage(): void {
+    const stage = this.sheetEl.parentElement as HTMLElement | null;
+    if (!stage) return;
+    const PAD = 32;
+    const sw = stage.clientWidth  - PAD * 2;
+    const sh = stage.clientHeight - PAD * 2;
+    if (sw <= 0 || sh <= 0) return;
+    const pxW = parseFloat(this.sheetEl.style.width)  || 1;
+    const pxH = parseFloat(this.sheetEl.style.height) || 1;
+    this.zoomFactor = Math.min(1, sw / pxW, sh / pxH);
+    this.sheetEl.style.zoom = String(this.zoomFactor);
   }
 
   // --- Drag-to-create ----
@@ -349,8 +360,8 @@ class LayoutController {
     const tgt = e.target as HTMLElement | null;
     if (tgt && tgt.closest(".paper-cell, .paper-titleblock, .paper-toolbar")) return;
     const rect = this.sheetEl.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / this.zoomFactor;
+    const y = (e.clientY - rect.top) / this.zoomFactor;
     const ghost = document.createElement("div");
     ghost.className = "paper-cell-ghost";
     ghost.style.left = `${x}px`;
@@ -364,8 +375,8 @@ class LayoutController {
   private onSheetMouseMove(e: MouseEvent): void {
     if (!this.dragging) return;
     const rect = this.sheetEl.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = (e.clientX - rect.left) / this.zoomFactor;
+    const y = (e.clientY - rect.top) / this.zoomFactor;
     const dx = x - this.dragging.startX;
     const dy = y - this.dragging.startY;
     const ghost = this.dragging.el!;
