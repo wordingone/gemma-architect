@@ -117,7 +117,7 @@ type LayoutRibbonTab = typeof LAYOUT_RIBBON_TABS[number];
 
 const LAYOUT_TOOL_GROUPS: ToolGroup[] = [
   { label: "NAVIGATE",  tools: ["Select", "Pan", "Zoom"] },
-  { label: "VIEWPORT",  tools: ["Frame", "Scale", "Align"] },
+  { label: "VIEWPORT",  tools: ["Frame", "Scale", "Align", "Detail"] },
   { label: "ANNOTATE",  tools: ["Text", "Leader", "Callout"] },
   { label: "DRAW",      tools: ["Line", "Rect", "Circle"] },
   { label: "DIMENSION", tools: ["Ruler", "Compass"] },
@@ -174,6 +174,16 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
       btn.dataset.tool = tool.toLowerCase();
       btn.title = tool;
       btn.innerHTML = iconSVG(tool.toLowerCase(), 16);
+      btn.addEventListener("click", () => {
+        const wasActive = btn.classList.contains("active");
+        toolsEl.querySelectorAll<HTMLElement>(".tool-btn").forEach((b) => b.classList.remove("active"));
+        if (!wasActive) {
+          btn.classList.add("active");
+          window.dispatchEvent(new CustomEvent("ribbon:tool-click", { detail: { tool: tool.toLowerCase() } }));
+        } else {
+          window.dispatchEvent(new CustomEvent("ribbon:tool-click", { detail: { tool: null } }));
+        }
+      });
       btnsEl.appendChild(btn);
     }
     groupEl.appendChild(btnsEl);
@@ -453,6 +463,11 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
 
   rightEl.querySelector("#ribbon-palette-btn")?.addEventListener("click", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+  });
+
+  // When layout signals tool deactivation, clear active state on ribbon buttons.
+  window.addEventListener("layout:tool-deactivated", () => {
+    _ribbonToolsEl?.querySelectorAll<HTMLElement>(".tool-btn").forEach((b) => b.classList.remove("active"));
   });
 }
 

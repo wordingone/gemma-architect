@@ -688,6 +688,7 @@ html[data-mode="night"] .paper-stage {
 }
 
 .paper-sheet {
+  --iz: 1; /* inverse zoom — JS sets this in fitToStage() */
   background: var(--paper);
   position: relative;
   border: var(--lw-cut) solid var(--ink-cut);
@@ -700,40 +701,59 @@ html[data-mode="night"] .paper-stage {
   border: var(--lw-edge) solid var(--ink-edge);
   margin: -0.5px;
   position: relative;
-  padding: 22px 8px 0;
-  display: flex;
-  flex-direction: column;
+  padding: 0;
   background: var(--paper);
   overflow: hidden;
 }
-/* Per-panel toolbar: viewport + scale dropdowns */
-.paper-cell-toolbar {
+.paper-cell.is-navigating {
+  outline: calc(2px * var(--iz, 1)) solid oklch(0.65 0.18 248);
+  outline-offset: calc(-2px * var(--iz, 1));
+}
+.paper-cell.is-navigating .paper-cell-render {
+  cursor: grab;
+}
+.paper-cell.is-navigating .paper-cell-render:active {
+  cursor: grabbing;
+}
+/* Canvas render area fills the entire cell */
+.paper-cell-render {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.paper-cell-render canvas,
+.paper-cell-render svg { display: block; width: 100%; height: 100%; }
+/* Header overlay: label + dropdowns, always visible above the canvas.
+   All sizes use calc(Xpx * var(--iz)) so content stays at screen size
+   regardless of how far the sheet is zoomed out. */
+.paper-cell-header {
+  position: absolute;
+  top: 0; left: 0; right: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(6px * var(--iz, 1));
+  padding: calc(5px * var(--iz, 1)) calc(8px * var(--iz, 1));
+  background: oklch(0.18 0 0 / 0.82);
+  z-index: 4;
+  pointer-events: auto;
+}
+.paper-cell-label {
+  font-size: calc(11px * var(--iz, 1));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
   flex-shrink: 0;
-  padding: 2px 0 4px;
-  opacity: 0;
-  transition: opacity 0.12s;
 }
-.paper-cell:hover .paper-cell-toolbar,
-.paper-cell.selected .paper-cell-toolbar { opacity: 1; }
-.paper-cell-toolbar select {
+.paper-cell-select {
   font-family: var(--mono);
-  font-size: 9px;
-  background: var(--chrome);
-  border: var(--lw-edge) solid var(--hairline-soft);
-  color: var(--ink-dim);
-  padding: 1px 2px;
-  border-radius: 2px;
-  max-width: 120px;
-}
-/* Viewport render area fills remaining space */
-.paper-cell-render {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
+  font-size: calc(11px * var(--iz, 1));
+  background: oklch(0.28 0 0 / 0.7);
+  border: 1px solid oklch(1 0 0 / 0.2);
+  color: #e0e0e0;
+  padding: calc(2px * var(--iz, 1)) calc(4px * var(--iz, 1));
+  border-radius: calc(3px * var(--iz, 1));
 }
 /* Scale bar: fixed at bottom-right, out of flow */
 .paper-cell-scalebar {
@@ -741,24 +761,40 @@ html[data-mode="night"] .paper-stage {
   bottom: 5px;
   right: 8px;
   line-height: 0;
+  z-index: 4;
 }
 .paper-cell-scalebar svg { display: block; }
-/* Close button: top-right, hidden until hover/selected */
+/* Close button: top-right corner, inside the header overlay z-stack */
 .paper-cell-close {
   position: absolute;
-  top: 3px; right: 3px;
-  display: none;
+  top: calc(4px * var(--iz, 1)); right: calc(4px * var(--iz, 1));
+  display: flex;
+  align-items: center;
   background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--ink-faint);
-  padding: 2px;
+  color: oklch(1 0 0 / 0.5);
+  padding: calc(2px * var(--iz, 1));
   border-radius: 2px;
   line-height: 0;
+  z-index: 5;
 }
-.paper-cell:hover .paper-cell-close,
-.paper-cell.selected .paper-cell-close { display: flex; align-items: center; }
-.paper-cell-close:hover { color: var(--ink); }
+.paper-cell-close:hover { color: #fff; }
+
+/* Panel resize handles */
+.panel-resize-handle {
+  position: absolute;
+  z-index: 6;
+}
+.panel-resize-handle[data-dir="n"]  { top: 0; left: calc(12px * var(--iz,1)); right: calc(12px * var(--iz,1)); height: calc(6px * var(--iz,1)); cursor: n-resize; }
+.panel-resize-handle[data-dir="s"]  { bottom: 0; left: calc(12px * var(--iz,1)); right: calc(12px * var(--iz,1)); height: calc(6px * var(--iz,1)); cursor: s-resize; }
+.panel-resize-handle[data-dir="w"]  { left: 0; top: calc(12px * var(--iz,1)); bottom: calc(12px * var(--iz,1)); width: calc(6px * var(--iz,1)); cursor: w-resize; }
+.panel-resize-handle[data-dir="e"]  { right: 0; top: calc(12px * var(--iz,1)); bottom: calc(12px * var(--iz,1)); width: calc(6px * var(--iz,1)); cursor: e-resize; }
+.panel-resize-handle[data-dir="nw"] { top: 0; left: 0; width: calc(12px * var(--iz,1)); height: calc(12px * var(--iz,1)); cursor: nw-resize; }
+.panel-resize-handle[data-dir="ne"] { top: 0; right: 0; width: calc(12px * var(--iz,1)); height: calc(12px * var(--iz,1)); cursor: ne-resize; }
+.panel-resize-handle[data-dir="se"] { bottom: 0; right: 0; width: calc(12px * var(--iz,1)); height: calc(12px * var(--iz,1)); cursor: se-resize; }
+.panel-resize-handle[data-dir="sw"] { bottom: 0; left: 0; width: calc(12px * var(--iz,1)); height: calc(12px * var(--iz,1)); cursor: sw-resize; }
+
 /* Drag-creation ghost */
 .paper-cell-ghost {
   position: absolute;
@@ -766,24 +802,39 @@ html[data-mode="night"] .paper-stage {
   background: oklch(0.55 0.08 248 / 0.08);
   pointer-events: none;
 }
-.paper-cell-label {
+/* Detail region ghost (dragged inside parent panel) */
+.paper-cell-detail-ghost {
   position: absolute;
-  top: 4px; left: 8px;
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-  font-weight: 700;
+  border: 1.5px dashed var(--sanguine);
+  background: oklch(0.62 0.080 235 / 0.10);
+  pointer-events: none;
+  box-sizing: border-box;
 }
-.paper-cell-scale {
+/* Detail region overlay — shown on the parent panel */
+.paper-cell-detail-region {
   position: absolute;
-  top: 4px; right: 8px;
+  border: 1.5px dashed var(--sanguine);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.paper-cell-detail-label {
+  position: absolute;
+  top: -1px; right: -1px;
+  background: var(--sanguine);
+  color: #fff;
   font-family: var(--mono);
-  font-size: 9px;
-  color: var(--ink-faint);
-  letter-spacing: 0.04em;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 0 0 0 2px;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
 }
-.paper-cell-render svg { flex: 1; width: 100%; height: 100%; display: block; }
+/* Detail panel — sanguine accent border */
+.paper-cell.detail-panel {
+  border-color: var(--sanguine);
+  border-width: 1.5px;
+}
 .paper-titleblock {
   grid-column: 1 / -1;
   display: grid;

@@ -1,23 +1,56 @@
 // Snap / constrain state singleton.
-// Driven by the snap-dock widget in workbench.ts; consumed by create-mode.ts.
+// Driven by the snap-dock widget in workbench.ts; consumed by create-mode.ts
+// (sketch-click quantising) and viewer.ts (gumball drag quantising).
 
 export interface SnapState {
-  gridOn: boolean;
-  step: number;  // grid step in meters
+  snapOn: boolean;       // master toggle — when off, all other snap flags inert
+  orthoOn: boolean;      // axis-only constraint (gumball already does this per-handle)
+  gridOn: boolean;       // translate snaps to grid step
+  polarOn: boolean;      // rotate snaps to angleStep
+  vertexSnapOn: boolean; // gumball relocate snaps to host vertices
+  edgeSnapOn: boolean;   // gumball relocate snaps to host edge endpoints + midpoints
+  step: number;          // grid step in meters
+  angleStep: number;     // polar snap in degrees
 }
 
-const _state: SnapState = { gridOn: true, step: 0.10 };
+const _state: SnapState = {
+  snapOn: true, orthoOn: true, gridOn: true, polarOn: true,
+  vertexSnapOn: true, edgeSnapOn: true,
+  step: 1.0, angleStep: 90,
+};
 
+export function getSnap(): Readonly<SnapState> { return _state; }
 export function getGridOn(): boolean { return _state.gridOn; }
-export function setGridOn(on: boolean): void { _state.gridOn = on; }
+
+// Subscribers re-render dependent UI / scene helpers when snap state
+// changes. The viewer listens to redraw the grid at the new step; the
+// statusbar listens to mirror the visible value.
+type Listener = (s: Readonly<SnapState>) => void;
+const _listeners = new Set<Listener>();
+export function subscribeSnap(fn: Listener): () => void {
+  _listeners.add(fn);
+  return () => _listeners.delete(fn);
+}
+function emit(): void {
+  for (const fn of _listeners) fn(_state);
+}
+
+export function setGridOn(on: boolean): void { _state.gridOn = on; emit(); }
+export function setSnapOn(on: boolean): void { _state.snapOn = on; emit(); }
+export function setOrthoOn(on: boolean): void { _state.orthoOn = on; emit(); }
+export function setPolarOn(on: boolean): void { _state.polarOn = on; emit(); }
+export function setVertexSnapOn(on: boolean): void { _state.vertexSnapOn = on; emit(); }
+export function setEdgeSnapOn(on: boolean): void { _state.edgeSnapOn = on; emit(); }
 export function getStep(): number { return _state.step; }
-export function setStep(m: number): void { _state.step = Math.max(0.001, m); }
+export function setStep(m: number): void { _state.step = Math.max(0.001, m); emit(); }
+export function getAngleStep(): number { return _state.angleStep; }
+export function setAngleStep(deg: number): void { _state.angleStep = Math.max(0.1, deg); emit(); }
 
 // Quantise a world-space XY point.
-// When grid is on: rounds to nearest step increment.
-// When grid is off: still rounds to 1mm to avoid floating-point noise.
+// When master snap + grid both on: rounds to nearest step increment.
+// Otherwise: still rounds to 1mm to avoid floating-point noise.
 export function snapPoint(x: number, y: number): { x: number; y: number } {
-  if (_state.gridOn) {
+  if (_state.snapOn && _state.gridOn) {
     const s = _state.step;
     return { x: Math.round(x / s) * s, y: Math.round(y / s) * s };
   }

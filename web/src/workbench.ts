@@ -17,7 +17,7 @@ import { generateGeometry, GenerateError } from "./ai-generate";
 import { compileDsl } from "./dsl-eval";
 import { dispatchSync, type DispatchArgs } from "./dispatch";
 import { setState } from "./app-state";
-import { setGridOn } from "./snap-state";
+import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./selection-state";
@@ -135,33 +135,81 @@ function buildPalette(host: HTMLElement) {
 
 function buildSnapDock(): HTMLElement {
   const root = el("div", "snap-dock");
+  const snap = getSnap();
+  // Mirror the selection-filters checkbox pattern in scene-panel.ts so the
+  // snap dock and the selection filter panel share one visual language —
+  // two-column grid, sf-row labels, native <input type=checkbox>. Each
+  // checkbox is wired to the snap-state singleton; create-mode.ts (sketch
+  // quantising) and viewer.ts (gumball drag + relocate snapping) read from
+  // the singleton, so changing a box here flows everywhere automatically.
+  const SNAP_KEYS: Array<{ key: keyof typeof snap; label: string }> = [
+    { key: "snapOn",       label: "Snap" },
+    { key: "orthoOn",      label: "Ortho" },
+    { key: "gridOn",       label: "Grid" },
+    { key: "polarOn",      label: "Polar" },
+    { key: "vertexSnapOn", label: "Vertex" },
+    { key: "edgeSnapOn",   label: "Edge" },
+  ];
+  const rows = SNAP_KEYS.map(({ key, label }) => {
+    const checked = snap[key] ? "checked" : "";
+    return `<label class="sf-row" style="display:flex; align-items:center; gap:6px; padding:2px 0; font-size:11px; cursor:pointer;">
+      <input type="checkbox" data-snap="${key}" ${checked} style="margin:0;"/>
+      <span style="color:var(--ink-soft);">${label}</span>
+    </label>`;
+  }).join("");
   root.innerHTML = `
     <div class="snap-dock-title">SNAP / CONSTRAIN</div>
-    <div class="snap-grid">
-      <div class="snap-btn on">SNAP</div>
-      <div class="snap-btn on">ORTHO</div>
-      <div class="snap-btn on">GRID</div>
-      <div class="snap-btn">POLAR</div>
+    <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0 12px; padding:2px 0 4px;">
+      ${rows}
     </div>
-    <div class="snap-dock-title" style="margin-top:4px;">OBJECT SNAP</div>
-    <div class="snap-grid">
-      <div class="snap-btn on">END</div>
-      <div class="snap-btn on">MID</div>
-      <div class="snap-btn">CEN</div>
-      <div class="snap-btn on">PERP</div>
-    </div>
-    <div class="snap-row"><span class="k">step</span><span class="v">0.10 m</span></div>
-    <div class="snap-row"><span class="k">angle</span><span class="v">15°</span></div>
+    <div class="snap-row"><span class="k">step</span><input class="snap-input" id="snap-step-input" type="number" min="0.001" step="0.1" value="${snap.step.toFixed(2)}"><span class="u">m</span></div>
+    <div class="snap-row"><span class="k">angle</span><input class="snap-input" id="snap-angle-input" type="number" min="0.1" step="1" value="${snap.angleStep}"><span class="u">°</span></div>
     <div class="snap-row"><span class="k">cplane</span><span class="v">XY · z=0</span></div>
   `;
-  // Toggle handlers.
-  root.querySelectorAll(".snap-btn").forEach((b) => {
-    const btn = b as HTMLElement;
-    btn.addEventListener("click", () => {
-      btn.classList.toggle("on");
-      if (btn.textContent?.trim() === "GRID") setGridOn(btn.classList.contains("on"));
+  // Wire each checkbox to its corresponding snap-state setter. Setters emit
+  // so subscribed listeners (viewer grid rebuild, etc.) refresh automatically.
+  root.querySelectorAll<HTMLInputElement>("input[data-snap]").forEach((input) => {
+    const key = input.dataset.snap;
+    input.addEventListener("change", () => {
+      const on = input.checked;
+      switch (key) {
+        case "snapOn":       setSnapOn(on); break;
+        case "orthoOn":      setOrthoOn(on); break;
+        case "gridOn":       setGridOn(on); break;
+        case "polarOn":      setPolarOn(on); break;
+        case "vertexSnapOn": setVertexSnapOn(on); break;
+        case "edgeSnapOn":   setEdgeSnapOn(on); break;
+      }
     });
   });
+  // STEP + ANGLE inputs — change drives snap-state.setStep / setAngleStep,
+  // which emits a snap-state subscription so the viewer rebuilds the grid
+  // at the new step. The grid divisions equal sceneSize / step so the
+  // visible gridlines and the snap increments are always one and the same.
+  const stepInput = root.querySelector<HTMLInputElement>("#snap-step-input");
+  if (stepInput) {
+    stepInput.addEventListener("change", () => {
+      const v = parseFloat(stepInput.value);
+      if (Number.isFinite(v) && v > 0) {
+        setStep(v);
+        stepInput.value = v.toFixed(v >= 1 ? 1 : 2);
+      } else {
+        stepInput.value = getSnap().step.toFixed(2);
+      }
+    });
+  }
+  const angleInput = root.querySelector<HTMLInputElement>("#snap-angle-input");
+  if (angleInput) {
+    angleInput.addEventListener("change", () => {
+      const v = parseFloat(angleInput.value);
+      if (Number.isFinite(v) && v > 0) {
+        setAngleStep(v);
+        angleInput.value = String(v);
+      } else {
+        angleInput.value = String(getSnap().angleStep);
+      }
+    });
+  }
   return root;
 }
 
