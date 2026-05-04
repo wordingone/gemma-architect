@@ -3,6 +3,8 @@
 // Parses the v0 lexicon (`docs/console-dsl.md`) and lowers it to the
 // existing replicad surface (`drawRectangle / drawCircle / sketchOnPlane /
 // extrude / fuse / cut / translate`) that the worker already executes.
+// Spatial-dictionary verbs that are not geometry primitives are accepted and
+// routed to the dispatch table at eval time (see compileDsl unknown-verb path).
 //
 // Scope of this stub:
 //   - architectural verbs: `wall`, `slab`, `column`
@@ -32,10 +34,14 @@
 // polylines); box is center+dims-first (cleaner for stair-step / parametric
 // solids where dims are the natural parameters).
 
+import { getEntry, resolveAlias } from "./dictionary";
+
 export type Vec2 = [number, number];
 
+export type DslDispatch = { verb: string; args: Record<string, unknown> };
+
 export type CompileResult =
-  | { ok: true; js: string; solids: string[] }
+  | { ok: true; js: string; solids: string[]; dispatches?: DslDispatch[] }
   | { ok: false; line: number; message: string };
 
 interface Wall {
@@ -259,6 +265,7 @@ function emitColumn(s: Column, name: string): string {
 export function compileDsl(source: string): CompileResult {
   const lines = source.split(/\r?\n/);
   const stmts: Stmt[] = [];
+  const spatialDispatches: DslDispatch[] = [];
   let anonCounter = 0;
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
@@ -402,13 +409,28 @@ export function compileDsl(source: string): CompileResult {
       continue;
     }
 
-    return { ok: false, line: i + 1, message: `unknown verb: '${verb}' (v0 supports: wall, slab, column, box, cut)` };
+    // Not a geometry primitive — check the spatial dictionary. If it resolves,
+    // record as a dispatch (caller executes via dispatchSync) and continue.
+    const canonical = getEntry(verb)?.canonical_name ?? resolveAlias(verb) ?? null;
+    if (canonical) {
+      const args: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(named)) args[k] = v;
+      for (let pi = 0; pi < positional.length; pi++) args[`_${pi}`] = positional[pi];
+      spatialDispatches.push({ verb: canonical, args });
+      continue;
+    }
+
+    return { ok: false, line: i + 1, message: `unknown verb: '${verb}' (supported: wall, slab, column, box, cut + spatial-dictionary verbs)` };
   }
 
   // Emit replicad. Each statement → one binding; final value is fused
   // composite of all bindings (mirrors the existing four-walled-room demo
   // pattern). If only one statement, that's the result.
   if (stmts.length === 0) {
+    // Dispatch-only programs (all spatial-dictionary verbs, no geometry) are valid.
+    if (spatialDispatches.length > 0) {
+      return { ok: true, js: "", solids: [], dispatches: spatialDispatches };
+    }
     return { ok: false, line: 0, message: `empty program` };
   }
   const body: string[] = [];
@@ -431,5 +453,10 @@ export function compileDsl(source: string): CompileResult {
   if (live.length > 1) {
     body.push(`const composite = ${live.slice(1).reduce((acc, n) => `${acc}.fuse(${n})`, live[0])};`);
   }
-  return { ok: true, js: body.join("\n"), solids: live };
+  return {
+    ok: true,
+    js: body.join("\n"),
+    solids: live,
+    dispatches: spatialDispatches.length > 0 ? spatialDispatches : undefined,
+  };
 }

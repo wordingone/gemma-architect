@@ -679,16 +679,28 @@ function buildConsoleTabBody(): HTMLElement {
         pushLine("err", `line ${c.line}: ${c.message}`);
         return;
       }
+      // Execute any spatial-dictionary dispatches embedded in the DSL source.
+      if (c.dispatches && c.dispatches.length > 0) {
+        for (const d of c.dispatches) {
+          const dr = dispatchSync(d.verb, d.args);
+          pushLine(
+            dr.ok ? "ok" : "info",
+            `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+          );
+        }
+      }
       // Compile result has multi-line JS — feed into legacy #js-source then click run.
-      const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
-      const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
-      if (jsSrc && runBtn) {
-        jsSrc.value = c.js;
-        jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
-        pushLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
-        runBtn.click();
-      } else {
-        pushLine("err", "kernel not ready (no #run-btn / #js-source)");
+      if (c.js) {
+        const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
+        const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
+        if (jsSrc && runBtn) {
+          jsSrc.value = c.js;
+          jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
+          pushLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
+          runBtn.click();
+        } else {
+          pushLine("err", "kernel not ready (no #run-btn / #js-source)");
+        }
       }
     } else if (e.key === "ArrowUp") {
       if (buffer.length === 0) return;

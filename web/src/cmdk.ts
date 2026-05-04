@@ -5,6 +5,8 @@
 import { iconSVG } from "./icons";
 import { openExportDrawer } from "./export-drawer";
 import { saveProjectJson } from "./shell";
+import { runAgentTurn } from "./agent-harness";
+import { dispatch } from "./dispatch";
 
 type Cmd = {
   group: "GENERATE" | "MODEL" | "VIEW" | "FILE";
@@ -40,6 +42,24 @@ const ALL_CMDS: Cmd[] = [
   { group: "GENERATE", icon: "sparkle",  label: "Prompt → geometry",        kbd: "⌘P",  run: () => activateDockTab("prompt") },
   { group: "GENERATE", icon: "sparkle",  label: "Run current prompt",       kbd: "⌘⏎", run: () => clickById("ai-generate-btn") },
   { group: "GENERATE", icon: "sparkle",  label: "Vary current with seed",   kbd: "⌘⇧P", run: () => clickById("ai-generate-btn") },
+  {
+    group: "GENERATE", icon: "sparkle",
+    label: "Agent: describe what to build…",
+    kbd: "⌘⌥G",
+    run: () => {
+      const userPrompt = window.prompt("Describe what to build (Gemma·Architect agent):");
+      if (!userPrompt?.trim()) return;
+      runAgentTurn({ prompt: userPrompt.trim() }).then((resp) => {
+        if (resp.dispatches.length === 0) {
+          console.info("[agent]", resp.text || "(no dispatches)");
+          return;
+        }
+        for (const d of resp.dispatches) {
+          dispatch(d.verb, d.args).catch((e) => console.warn("[agent dispatch]", e));
+        }
+      }).catch((e) => console.error("[agent]", e));
+    },
+  },
   { group: "MODEL",    icon: "wall",     label: "New wall",                 kbd: "W",   run: () => selectDemoIndex(0) },
   { group: "MODEL",    icon: "slab",     label: "New slab (raised)",        kbd: "S",   run: () => selectDemoIndex(2) },
   { group: "MODEL",    icon: "column",   label: "New column",               kbd: "C",   run: () => selectDemoIndex(1) },
