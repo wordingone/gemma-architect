@@ -562,13 +562,93 @@ html[data-mode="night"] .snap-dock::after {
 /* Bottom toolbar injected by layout.ts */
 .paper-toolbar {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
+  align-items: stretch;
+  height: 28px;
   background: var(--chrome);
   border-top: var(--lw-edge) solid var(--hairline-soft);
   flex-shrink: 0;
-  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+/* Sheet tab strip (left side of toolbar) */
+.sheet-tab-strip {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  min-width: 0;
+  border-right: var(--lw-edge) solid var(--chrome-seam);
+}
+.sheet-tab-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-right: var(--lw-construction) solid var(--ink-construction);
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 7px;
+  padding: 0;
+}
+.sheet-tab-nav:hover { background: var(--paper-2); color: var(--ink); }
+.sheet-tabs {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.sheet-tabs::-webkit-scrollbar { display: none; }
+.sheet-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  font-family: var(--mono);
+  color: var(--ink-dim);
+  cursor: pointer;
+  border: none;
+  border-right: var(--lw-construction) solid var(--ink-construction);
+  border-top: 2px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: transparent;
+  text-transform: uppercase;
+}
+.sheet-tab:hover { background: var(--paper-2); color: var(--ink); }
+.sheet-tab.active {
+  color: var(--ink);
+  background: var(--paper);
+  border-top-color: var(--gemma);
+}
+.sheet-tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-right: var(--lw-construction) solid var(--ink-construction);
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.sheet-tab-add:hover { background: var(--paper-2); color: var(--ink); }
+
+/* Right side: size/orient controls */
+.paper-toolbar-settings {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  flex-shrink: 0;
 }
 .paper-tool {
   font-family: var(--mono);
@@ -1955,6 +2035,50 @@ html[data-mode="night"] .paper-stage {
 }
 .snap-row .k { color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; font-size: 8.5px; }
 .snap-row .v { color: var(--ink); }
+.snap-row .u { color: var(--ink-faint); margin-left: 4px; font-size: 9px; }
+.snap-row .snap-input {
+  background: var(--paper-2, transparent);
+  border: 1px solid var(--hairline, rgba(0,0,0,0.15));
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 2px 6px;
+  width: 60px;
+  text-align: right;
+  border-radius: var(--r-sm, 2px);
+  outline: none;
+}
+.snap-row .snap-input:focus { border-color: var(--ink); }
+.snap-row .snap-input::-webkit-inner-spin-button,
+.snap-row .snap-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* RELOCATE GUMBALL mode indicator — pinned to the top of the viewport
+   area when active. Hidden by default; viewer.ts toggles display:flex
+   via updateRelocateBadge(). Sanguine fill so it reads as a temporary
+   modal state, not a persistent UI element. */
+.relocate-badge {
+  position: absolute;
+  top: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--sanguine, #c0392b);
+  color: #fff;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  align-items: center;
+  gap: 6px;
+}
+.relocate-badge::before {
+  content: "◉";
+  font-size: 8px;
+}
 
 /* AI prompt panel */
 .ai-panel {

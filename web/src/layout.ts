@@ -111,6 +111,20 @@ function isStubBounds(b: SceneBounds): boolean {
   );
 }
 
+// --- Sheet state ----------------------------------------------------------
+
+interface SheetData {
+  id: string;
+  name: string;
+  size: SheetSizeId;
+  orientation: Orientation;
+  customMm: SheetDims;
+  panels: PanelState[];
+}
+
+let _sheetIdSeq = 0;
+const newSheetId = (): string => `sheet-${++_sheetIdSeq}`;
+
 // --- Panel state ----------------------------------------------------------
 
 export interface PanelInit {
@@ -172,16 +186,26 @@ const newPanelId = (): string => `panel-${++_panelIdSeq}`;
 // can resolve it without callers passing the instance back in.
 class LayoutController {
   host: HTMLElement;
-  size: SheetSizeId;
-  orientation: Orientation;
-  customMm: SheetDims;
+  sheets: SheetData[];
+  activeSheetIdx: number = 0;
   bounds: SceneBoundsProvider;
-  panels: PanelState[] = [];
   title: TitleBlock;
+
+  // Getters proxy to active sheet so callers (export, addPanel, etc.) are unchanged.
+  get activeSheet(): SheetData { return this.sheets[this.activeSheetIdx]; }
+  get panels(): PanelState[] { return this.activeSheet.panels; }
+  get size(): SheetSizeId { return this.activeSheet.size; }
+  set size(v: SheetSizeId) { this.activeSheet.size = v; }
+  get orientation(): Orientation { return this.activeSheet.orientation; }
+  set orientation(v: Orientation) { this.activeSheet.orientation = v; }
+  get customMm(): SheetDims { return this.activeSheet.customMm; }
 
   // DOM refs.
   sheetEl!: HTMLElement;
   toolbarEl!: HTMLElement;
+  tabsScrollEl!: HTMLElement;
+  private sizeSelEl!: HTMLSelectElement;
+  private oriSelEl!: HTMLSelectElement;
   titleblockEl!: HTMLElement;
 
   // Drag-to-create state.
@@ -197,9 +221,15 @@ class LayoutController {
 
   constructor(host: HTMLElement, opts: LayoutOptions) {
     this.host = host;
-    this.size = opts.size ?? "A1";
-    this.orientation = opts.orientation ?? "landscape";
-    this.customMm = opts.customMm ?? { ...DEFAULT_CUSTOM };
+    this.sheets = [{
+      id: newSheetId(),
+      name: "Sheet 1",
+      size: opts.size ?? "A1",
+      orientation: opts.orientation ?? "landscape",
+      customMm: opts.customMm ?? { ...DEFAULT_CUSTOM },
+      panels: [],
+    }];
+    this.activeSheetIdx = 0;
     this.bounds = opts.bounds ?? DEFAULT_PROVIDER;
     this.title = { ...DEFAULT_TITLE, ...(opts.titleBlock ?? {}) };
     this._showTitleBlock = opts.showTitleBlock ?? false;
@@ -256,6 +286,54 @@ class LayoutController {
     const tb = this.toolbarEl;
     tb.innerHTML = "";
 
+    // Left: sheet tab strip (nav arrows + scrollable tabs + add).
+    const tabStrip = document.createElement("div");
+    tabStrip.className = "sheet-tab-strip";
+
+    // Scroll-left button.
+    const navL = document.createElement("button");
+    navL.type = "button";
+    navL.className = "sheet-tab-nav";
+    navL.innerHTML = "&#9664;";
+    navL.title = "Scroll tabs left";
+    navL.addEventListener("click", () => {
+      this.tabsScrollEl.scrollBy({ left: -120, behavior: "smooth" });
+    });
+    tabStrip.appendChild(navL);
+
+    // Scrollable tabs container.
+    const tabsScroll = document.createElement("div");
+    tabsScroll.className = "sheet-tabs";
+    this.tabsScrollEl = tabsScroll;
+    tabStrip.appendChild(tabsScroll);
+
+    // Scroll-right button.
+    const navR = document.createElement("button");
+    navR.type = "button";
+    navR.className = "sheet-tab-nav";
+    navR.innerHTML = "&#9654;";
+    navR.title = "Scroll tabs right";
+    navR.addEventListener("click", () => {
+      this.tabsScrollEl.scrollBy({ left: 120, behavior: "smooth" });
+    });
+    tabStrip.appendChild(navR);
+
+    // Add-sheet button.
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "sheet-tab-add";
+    addBtn.title = "Add sheet";
+    addBtn.textContent = "+";
+    addBtn.addEventListener("click", () => this.addSheet());
+    tabStrip.appendChild(addBtn);
+
+    tb.appendChild(tabStrip);
+    this.renderTabs();
+
+    // Right: settings (size, orient, custom dims).
+    const settings = document.createElement("div");
+    settings.className = "paper-toolbar-settings";
+
     // Sheet-size dropdown.
     const sizeSel = document.createElement("select");
     sizeSel.className = "paper-tool";
@@ -269,9 +347,11 @@ class LayoutController {
     }
     sizeSel.addEventListener("change", () => {
       this.size = sizeSel.value as SheetSizeId;
+      customWrap.classList.toggle("visible", this.size === "Custom");
       this.applySheetDims();
     });
-    tb.appendChild(this.labelled("Size", sizeSel));
+    this.sizeSelEl = sizeSel;
+    settings.appendChild(this.labelled("Size", sizeSel));
 
     // Orientation toggle.
     const oriSel = document.createElement("select");
@@ -287,7 +367,8 @@ class LayoutController {
       this.orientation = oriSel.value as Orientation;
       this.applySheetDims();
     });
-    tb.appendChild(this.labelled("Orient", oriSel));
+    this.oriSelEl = oriSel;
+    settings.appendChild(this.labelled("Orient", oriSel));
 
     // Custom dims (visible only when Custom selected).
     const wIn = document.createElement("input");
@@ -310,8 +391,65 @@ class LayoutController {
     customWrap.className = "paper-tool-custom";
     customWrap.appendChild(this.labelled("W mm", wIn));
     customWrap.appendChild(this.labelled("H mm", hIn));
-    tb.appendChild(customWrap);
+    settings.appendChild(customWrap);
 
+    tb.appendChild(settings);
+  }
+
+  private renderTabs(): void {
+    const c = this.tabsScrollEl;
+    if (!c) return;
+    c.innerHTML = "";
+    this.sheets.forEach((sheet, i) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = `sheet-tab${i === this.activeSheetIdx ? " active" : ""}`;
+      tab.textContent = sheet.name;
+      tab.title = sheet.name;
+      tab.addEventListener("click", () => this.switchSheet(i));
+      // Double-click to rename.
+      tab.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        const name = window.prompt("Rename sheet:", sheet.name);
+        if (name && name.trim()) {
+          sheet.name = name.trim();
+          tab.textContent = sheet.name;
+        }
+      });
+      c.appendChild(tab);
+    });
+    // Scroll active tab into view.
+    const activeTab = c.children[this.activeSheetIdx] as HTMLElement | undefined;
+    activeTab?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+  }
+
+  private switchSheet(idx: number): void {
+    if (idx < 0 || idx >= this.sheets.length || idx === this.activeSheetIdx) return;
+    this.activeSheetIdx = idx;
+    // Clear panels from DOM (keep sheet element, titleblock).
+    this.sheetEl.querySelectorAll(".paper-cell").forEach((el) => el.remove());
+    // Apply new sheet size/orientation.
+    this.applySheetDims();
+    // Re-render this sheet's panels.
+    for (const p of this.activeSheet.panels) this.renderPanel(p);
+    // Sync settings dropdowns.
+    if (this.sizeSelEl) this.sizeSelEl.value = this.size;
+    if (this.oriSelEl) this.oriSelEl.value = this.orientation;
+    // Update tab highlight.
+    this.renderTabs();
+  }
+
+  private addSheet(): void {
+    const n = this.sheets.length + 1;
+    this.sheets.push({
+      id: newSheetId(),
+      name: `Sheet ${n}`,
+      size: this.size,
+      orientation: this.orientation,
+      customMm: { ...this.customMm },
+      panels: [],
+    });
+    this.switchSheet(this.sheets.length - 1);
   }
 
   private labelled(name: string, control: HTMLElement): HTMLElement {
