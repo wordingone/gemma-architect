@@ -10,10 +10,10 @@
 //   - Sheet renders at 96 dpi for screen preview, fit-to-container.
 //   - Click-and-drag on the sheet creates a panel; toolbar buttons change the
 //     viewport assignment + scale.
-//   - Panels render an SVG placeholder per chosen viewport orientation. The
-//     placeholder reads scene bounds from a SceneBoundsProvider injected at
-//     buildLayoutMode-time; tests run with a stub provider that returns a
-//     unit cube, which keeps the panel renderer deterministic + DOM-only.
+//   - Panels render live WebGL thumbnails via window.__viewer.renderThumbnailTo
+//     when a viewer is loaded; an SVG fallback draws scene bounds for tests and
+//     when no viewer is available. SceneBoundsProvider is injected at
+//     buildLayoutMode-time; tests use a stub that returns a unit cube.
 //   - Title block is a dedicated bottom strip; cells are contenteditable.
 //   - Scale bar overlay per panel uses the panel's scale ratio.
 //   - Export to SVG assembles panel SVGs + title block + scale bars into a
@@ -23,6 +23,7 @@
 //     SVG when LibreDWG-WASM isn't bundled (it isn't, today — clear note).
 
 import { iconSVG } from "./icons";
+import type { Viewer } from "./viewer";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
 
@@ -729,7 +730,7 @@ class LayoutController {
     if (this._thumbRAF) return;
     const tick = () => {
       if (this._thumbCanvases.size === 0) { this._thumbRAF = 0; return; }
-      const viewer = (window as unknown as { __viewer?: { renderThumbnailTo: (view: string, dest: HTMLCanvasElement, anchorX?: number, anchorY?: number, snapW?: number, snapH?: number) => void } }).__viewer;
+      const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
       if (viewer) {
         for (const { canvas, viewName, anchorX, anchorY, snapW, snapH } of this._thumbCanvases.values()) {
           viewer.renderThumbnailTo(viewName, canvas, anchorX, anchorY, snapW, snapH);
@@ -757,9 +758,7 @@ class LayoutController {
 
   private _enterNavigate(p: PanelState, canvas: HTMLCanvasElement): void {
     this._exitNavigate();
-    const viewer = (window as unknown as {
-      __viewer?: { createNavControls: (view: string, el: HTMLElement) => { dispose(): void } }
-    }).__viewer;
+    const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
     if (!viewer) return;
     const viewName = layoutViewportToViewName(p.viewport);
     const controls = viewer.createNavControls(viewName, canvas);

@@ -51,12 +51,16 @@ function checkRibbonIcons(): Violation[] {
   let braceDepth = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!inRibbonLoop && /\.ribbon-tools|toolsEl/.test(line) && /TOOL_GROUPS/.test(lines.slice(i, i + 10).join("\n"))) {
-      // crude entry: the comment block above the loop mentions .ribbon-tools
-      // and TOOL_GROUPS appears within ten lines.
+    // Old pattern: inline `for (const group of TOOL_GROUPS)` loop.
+    if (!inRibbonLoop && /for\s*\(\s*const\s+group\s+of\s+TOOL_GROUPS\s*\)/.test(line)) {
+      inRibbonLoop = true;
+      loopStart = i + 1;
+      braceDepth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
       continue;
     }
-    if (!inRibbonLoop && /for\s*\(\s*const\s+group\s+of\s+TOOL_GROUPS\s*\)/.test(line)) {
+    // New pattern: refactored into fillRibbonTools(toolsEl, groups) function.
+    // The render loop now lives inside fillRibbonTools — detect the function start.
+    if (!inRibbonLoop && /function\s+fillRibbonTools\s*\(/.test(line)) {
       inRibbonLoop = true;
       loopStart = i + 1;
       braceDepth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
@@ -68,7 +72,7 @@ function checkRibbonIcons(): Violation[] {
     }
   }
   if (loopStart === -1) {
-    return [{ file: "web/src/shell.ts", line: 0, rule: "R1", detail: "ribbon-tool render loop (`for (const group of TOOL_GROUPS)`) not found — shell.ts shape changed" }];
+    return [{ file: "web/src/shell.ts", line: 0, rule: "R1", detail: "ribbon-tool render loop (`for (const group of TOOL_GROUPS)` or `function fillRibbonTools`) not found — shell.ts shape changed" }];
   }
 
   const violations: Violation[] = [];

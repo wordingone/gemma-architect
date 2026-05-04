@@ -1,4 +1,5 @@
 import { iconSVG } from "./icons.js";
+import { dispatchSync } from "./dispatch.js";
 
 // Shell chrome — design-handoff #171.
 //
@@ -9,7 +10,7 @@ import { iconSVG } from "./icons.js";
 // .app, .menubar, .modebar, .ribbon, .ribbon-tabs, .ribbon-tools, .statusbar,
 // .menu-item / .menu-dropdown / .menu-row / .menu-row-kbd / .menu-sep, etc.
 
-type MenuEntry = { label: string; shortcut?: string; separator?: false } | { separator: true };
+type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; toolId?: string } | { separator: true };
 type MenuItem = {
   label: string;
   entries: MenuEntry[];
@@ -18,12 +19,12 @@ type MenuItem = {
 const MENUS: MenuItem[] = [
   { label: "File", entries: [
     { label: "New project",                shortcut: "⌘N" },
-    { label: "Open…",                      shortcut: "⌘O" },
-    { label: "Save",                       shortcut: "⌘S" },
+    { label: "Open…",                      shortcut: "⌘O",  canonical: "SdOpen" },
+    { label: "Save",                       shortcut: "⌘S",  canonical: "SdSave" },
     { label: "Save As…",                   shortcut: "⇧⌘S" },
     { separator: true },
-    { label: "Import IFC / STEP / OBJ…" },
-    { label: "Export…",                    shortcut: "⌘E" },
+    { label: "Import IFC / STEP / OBJ…",                   canonical: "SdImport" },
+    { label: "Export…",                    shortcut: "⌘E",  canonical: "SdExport" },
     { separator: true },
     { label: "Quit",                       shortcut: "⌘Q" },
   ]},
@@ -36,8 +37,8 @@ const MENUS: MenuItem[] = [
     { label: "Paste",        shortcut: "⌘V" },
     { label: "Duplicate",    shortcut: "⌘D" },
     { separator: true },
-    { label: "Select all",   shortcut: "⌘A" },
-    { label: "Deselect",     shortcut: "esc" },
+    { label: "Select all",   shortcut: "⌘A",  canonical: "SdSelectAll" },
+    { label: "Deselect",     shortcut: "esc", canonical: "SdDeselect" },
   ]},
   { label: "View", entries: [
     { label: "Single viewport", shortcut: "⍐1" },
@@ -53,31 +54,31 @@ const MENUS: MenuItem[] = [
     { label: "Command palette…", shortcut: "⌘K" },
   ]},
   { label: "Sketch", entries: [
-    { label: "Line",       shortcut: "L" },
-    { label: "Rectangle",  shortcut: "R" },
-    { label: "Circle",     shortcut: "C" },
-    { label: "Polyline" },
-    { label: "Polygon" },
-    { label: "Arc" },
-    { label: "Spline" },
+    { label: "Line",       shortcut: "L", toolId: "line" },
+    { label: "Rectangle",  shortcut: "R", toolId: "rect" },
+    { label: "Circle",     shortcut: "C", toolId: "circle" },
+    { label: "Polyline",                  toolId: "polyline" },
+    { label: "Polygon",                   toolId: "polygon" },
+    { label: "Arc",                       toolId: "arc" },
+    { label: "Spline",                    toolId: "spline" },
   ]},
   { label: "Solid", entries: [
-    { label: "Extrude",       shortcut: "E" },
-    { label: "Revolve" },
+    { label: "Extrude",       shortcut: "E", toolId: "extrude" },
+    { label: "Revolve",                      toolId: "revolve" },
     { separator: true },
-    { label: "Boolean union" },
-    { label: "Boolean cut" },
+    { label: "Boolean union",               canonical: "SdBooleanUnion" },
+    { label: "Boolean cut",                 canonical: "SdBooleanDifference" },
     { separator: true },
-    { label: "Fillet edges" },
-    { label: "Chamfer edges" },
+    { label: "Fillet edges",                toolId: "fillet" },
+    { label: "Chamfer edges",               toolId: "chamfer" },
   ]},
   { label: "Arch", entries: [
-    { label: "Wall",   shortcut: "W" },
-    { label: "Slab",   shortcut: "S" },
-    { label: "Column" },
-    { label: "Stair" },
-    { label: "Door" },
-    { label: "Window" },
+    { label: "Wall",   shortcut: "W", toolId: "wall" },
+    { label: "Slab",   shortcut: "S", toolId: "slab" },
+    { label: "Column",               toolId: "column" },
+    { label: "Stair",                toolId: "stair" },
+    { label: "Door",                 toolId: "door" },
+    { label: "Window",               toolId: "window" },
   ]},
   { label: "Render", entries: [
     { label: "Wireframe" },
@@ -154,6 +155,7 @@ function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab
         el.classList.toggle("active", active);
         el.setAttribute("aria-selected", active ? "true" : "false");
       });
+      dispatchSync("setViewContext", { tab: t });
     });
     tabsEl.appendChild(tab);
   }
@@ -287,7 +289,7 @@ function buildMenubar(host: HTMLElement) {
         panel.appendChild(sep);
         continue;
       }
-      const e = entry as { label: string; shortcut?: string };
+      const e = entry as { label: string; shortcut?: string; canonical?: string; toolId?: string };
       const row = document.createElement("div");
       row.className = "menu-row";
       row.setAttribute("role", "menuitem");
@@ -305,10 +307,11 @@ function buildMenubar(host: HTMLElement) {
       }
 
       row.addEventListener("click", () => {
-        // Action wiring lives in #179 (palette dispatch) + per-feature sub-tasks.
-        // For now: log + close.
-        // eslint-disable-next-line no-console
-        console.debug(`[shell] ${menu.label} → ${e.label}${e.shortcut ? " (" + e.shortcut + ")" : ""}`);
+        if (e.toolId) {
+          dispatchSync("setActiveTool", { toolId: e.toolId });
+        } else if (e.canonical) {
+          dispatchSync(e.canonical, {});
+        }
         closeMenu();
       });
       panel.appendChild(row);

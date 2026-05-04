@@ -13,6 +13,7 @@ export type LayoutMode = "single" | "hsplit" | "vsplit" | "quad";
 
 export interface AppState {
   activeTool: string;          // e.g. "select", "wall", "extrude"
+  activeTab: string;           // active ribbon tab, e.g. "MODEL", "DRAFT"
   viewMode: "model" | "layout" | "research";
   layout: LayoutMode;          // viewport split layout
   night: boolean;              // BLUEPRINT (true) / VELLUM (false)
@@ -21,6 +22,7 @@ export interface AppState {
 
 const DEFAULT_STATE: AppState = {
   activeTool: "select",
+  activeTab: "MODEL",
   viewMode: "model",
   layout: "single",            // current TS port runs single-viewport by default
   night: false,
@@ -93,3 +95,4 @@ export function hydrateFromStorage(): void {
 // called once at module init when workbench boots and imports this module.
 import { registerHandler } from "./dispatch.js";
 registerHandler("setActiveTool", (args) => { setState("activeTool", args["toolId"] as string); });
+registerHandler("setViewContext", (args) => { setState("activeTab", args["tab"] as string); });
