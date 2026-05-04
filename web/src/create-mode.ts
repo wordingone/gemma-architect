@@ -19,6 +19,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Viewer } from "./viewer";
 import { setState } from "./app-state";
+import { dispatchSync } from "./dispatch";
 import { snapPoint } from "./snap-state";
 
 // Default heights / sizes from tier1-conventions.
@@ -534,7 +535,7 @@ export function initCreateMode(viewer: Viewer): void {
     if (ev.key === "Escape" && _pending.length > 0) {
       clearTemporary(viewer);
       _pending = [];
-      setState("activeTool", "select");
+      dispatchSync("setActiveTool", { toolId: "select" });
     }
   });
 
