@@ -124,7 +124,7 @@ function buildPalette(host: HTMLElement) {
       // syncToolActiveClass (in app-state) drives the .active class on every
       // [data-tool] element, including this palette-btn — no local toggling
       // needed.
-      btn.addEventListener("click", () => setState("activeTool", tool.id));
+      btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
       sec.appendChild(btn);
     }
     host.appendChild(sec);
@@ -818,7 +818,8 @@ function wireDockResize() {
   window.addEventListener("mousemove", (e: MouseEvent) => {
     if (!dragging) return;
     const dy = startY - e.clientY;
-    const newH = Math.max(80, Math.min(560, startH + dy));
+    const maxH = Math.min(560, window.innerHeight * 0.5);
+    const newH = Math.max(80, Math.min(maxH, startH + dy));
     app.style.setProperty("--dock-h", newH + "px");
   });
   window.addEventListener("mouseup", () => {

@@ -821,3 +821,13 @@
   synonyms: [open]
   kernel: replicad
   alias_source: generic_cad_vocabulary
+
+- canonical_name: setActiveTool
+  kernel_op: setActiveTool
+  args:
+    - {name: toolId, type: string, required: true}
+  topology_role: system
+  kg_predicates: []
+  synonyms: [setTool, activateTool, selectTool]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary

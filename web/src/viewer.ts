@@ -6,6 +6,7 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { axesGizmoSVG } from "./icons.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
@@ -43,6 +44,8 @@ export class Viewer {
   private axes: THREE.AxesHelper;
   private axisLabels: THREE.Sprite[] = [];
   private currentBounds: Bounds | null = null;
+  private raycaster: THREE.Raycaster;
+  private gizmo: TransformControls | null = null;
 
   constructor(canvas: HTMLCanvasElement, viewportAreaEl: HTMLElement) {
     this.canvas = canvas;
@@ -115,6 +118,36 @@ export class Viewer {
     this.handleResize();
     window.addEventListener("resize", () => this.handleResize());
 
+    // Raycaster for object picking. Canvas mousedown → find hit pane →
+    // compute NDC within that pane → cast ray → emit viewer:select event.
+    this.raycaster = new THREE.Raycaster();
+    this.canvas.addEventListener("mousedown", (e: MouseEvent) => this.onCanvasMouseDown(e));
+
+    // TransformControls (gizmo) attached to the persp pane camera.
+    if (perspPane && perspPane.camera instanceof THREE.PerspectiveCamera) {
+      this.gizmo = new TransformControls(perspPane.camera, this.canvas);
+      this.gizmo.addEventListener("dragging-changed", (ev) => {
+        // Disable OrbitControls while dragging the gizmo.
+        if (this.controls) this.controls.enabled = !(ev as THREE.Event & { value: boolean }).value;
+      });
+      this.scene.add(this.gizmo);
+    }
+
+    // G / R / S hotkeys switch gizmo mode; Del deselects.
+    window.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (!this.gizmo || document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
+      if (e.key === "g" || e.key === "G") this.gizmo.setMode("translate");
+      if (e.key === "r" || e.key === "R") this.gizmo.setMode("rotate");
+      if (e.key === "s" || e.key === "S") this.gizmo.setMode("scale");
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (this.gizmo.object) {
+          this.scene.remove(this.gizmo.object);
+          this.gizmo.detach();
+          window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
+        }
+      }
+    });
+
     this.animate();
   }
 
@@ -141,6 +174,37 @@ export class Viewer {
         }
       }
     }
+  }
+
+  private onCanvasMouseDown(e: MouseEvent): void {
+    // Identify which pane was clicked by checking which pane rect contains the pointer.
+    const cx = e.clientX, cy = e.clientY;
+    const hitPane = this.panes.find(p => {
+      const r = p.el.getBoundingClientRect();
+      return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+    });
+    if (!hitPane) return;
+    const pr = hitPane.el.getBoundingClientRect();
+    const ndcX = ((cx - pr.left) / pr.width) * 2 - 1;
+    const ndcY = -((cy - pr.top) / pr.height) * 2 + 1;
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), hitPane.camera);
+    const pickables = this.scene.children.filter(
+      c => c !== this.grid && c !== this.axes && !(c instanceof THREE.Sprite) &&
+           !(c instanceof THREE.DirectionalLight) && !(c instanceof THREE.AmbientLight) &&
+           c !== this.gizmo
+    );
+    const hits = this.raycaster.intersectObjects(pickables, true);
+    const hit = hits[0]?.object ?? null;
+    const uuid = hit ? (hit.parent?.uuid ?? hit.uuid) : null;
+    this.selectObject(hit?.parent instanceof THREE.Mesh || hit?.parent instanceof THREE.Group ? hit.parent : hit);
+    window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid } }));
+  }
+
+  /** Attach the transform gizmo to an object (null = detach). */
+  selectObject(obj: THREE.Object3D | null): void {
+    if (!this.gizmo) return;
+    if (obj) this.gizmo.attach(obj);
+    else this.gizmo.detach();
   }
 
   private animate = (): void => {

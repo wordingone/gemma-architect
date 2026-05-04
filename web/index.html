@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body>
-  <div class="app" style="--dock-h: 260px;">
+  <div class="app" style="--dock-h: min(340px, 35vh);">
     <div class="reg-mark tl"></div>
     <div class="reg-mark tr"></div>
 
@@ -146,9 +146,6 @@
       <span class="sb-cell" id="sb-fps"><span class="k">FPS</span><span class="v">—</span></span>
       <span class="sb-cell" id="sb-saved"><span class="k">Saved</span><span class="v">—</span></span>
       <span class="sb-cell" id="sb-mode"><span class="k">Mode</span><span class="v">MODELING</span></span>
-      <button id="theme-toggle" class="sb-cell sb-theme-btn" type="button" title="Toggle day/night (Ctrl+\)" aria-label="Toggle theme">
-        <span class="k">Theme</span><span class="v"><span class="theme-icon">◐</span></span>
-      </button>
     </div>
   </div>
 

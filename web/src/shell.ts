@@ -1,3 +1,5 @@
+import { iconSVG } from "./icons.js";
+
 // Shell chrome — design-handoff #171.
 //
 // Builds the menubar (9 menus) / modebar (4 modes) / ribbon (6 tabs + tools)
@@ -261,11 +263,12 @@ function buildMenubar(host: HTMLElement) {
   spacer.className = "menubar-spacer";
   host.appendChild(spacer);
 
-  // Right cluster — file label + theme pill + session pill.
+  // Right cluster — file label + BLUEPRINT/VELLUM theme pill + session pill.
   const right = document.createElement("div");
   right.className = "menubar-right";
   right.innerHTML = `
     <span>Untitled.001 · IFC4</span>
+    <button id="blueprint-toggle" class="theme-pill" type="button" title="Toggle day/night (Ctrl+\\)" aria-label="Toggle theme">◑ BLUEPRINT</button>
     <span class="session-pill"><span class="dot"></span>LOCAL · NO CLOUD</span>
   `;
   host.appendChild(right);
@@ -374,7 +377,7 @@ function buildRibbon(ribbonHost: HTMLElement, onChange?: (t: RibbonTab) => void,
       btn.className = "tool-btn";
       btn.dataset.tool = tool.toLowerCase();
       btn.title = tool;
-      btn.textContent = tool;
+      btn.innerHTML = iconSVG(tool.toLowerCase(), 16);
       groupEl.appendChild(btn);
     }
     // Bundle puts the group label at the END (a footer caption under the buttons).
@@ -421,11 +424,18 @@ function buildRibbon(ribbonHost: HTMLElement, onChange?: (t: RibbonTab) => void,
 }
 
 function wireThemeToggle() {
-  setTheme(loadTheme());
-  const btn = document.getElementById("theme-toggle");
+  const initial = loadTheme();
+  setTheme(initial);
+  const btn = document.getElementById("blueprint-toggle");
+  function updatePillLabel(mode: ThemeMode) {
+    if (btn) btn.textContent = mode === "night" ? "○ VELLUM" : "◑ BLUEPRINT";
+  }
+  updatePillLabel(initial);
   btn?.addEventListener("click", () => {
     const cur = (document.documentElement.getAttribute("data-mode") as ThemeMode) ?? "day";
-    setTheme(cur === "day" ? "night" : "day");
+    const next = cur === "day" ? "night" : "day";
+    setTheme(next);
+    updatePillLabel(next);
   });
   window.addEventListener("keydown", (e) => {
     // Ctrl+\ — theme toggle. Skip when the user is editing text so we don't
@@ -436,7 +446,9 @@ function wireThemeToggle() {
     if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.isContentEditable)) return;
     e.preventDefault();
     const cur = (document.documentElement.getAttribute("data-mode") as ThemeMode) ?? "day";
-    setTheme(cur === "day" ? "night" : "day");
+    const next = cur === "day" ? "night" : "day";
+    setTheme(next);
+    updatePillLabel(next);
   });
 }
 
