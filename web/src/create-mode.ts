@@ -172,6 +172,7 @@ function buildLine(a: { x: number; y: number }, b: { x: number; y: number }): { 
   mesh.renderOrder = 1;
   mesh.userData.kind = "mesh";
   mesh.userData.creator = "line";
+  mesh.userData.controlPoints = [new THREE.Vector3(a.x, a.y, 0), new THREE.Vector3(b.x, b.y, 0)];
   const chain = `const line = drawPolyline([[${round(a.x)}, ${round(a.y)}], [${round(b.x)}, ${round(b.y)}]]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
 }
@@ -334,6 +335,7 @@ function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THREE.Obje
   mesh.renderOrder = 1;
   mesh.userData.kind = "mesh";
   mesh.userData.creator = "polyline";
+  mesh.userData.controlPoints = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
   const worldVerts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const poly = drawPolyline([${worldVerts}]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
@@ -369,6 +371,7 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   mesh.renderOrder = 1;
   mesh.userData.kind = "mesh";
   mesh.userData.creator = "curve";
+  mesh.userData.controlPoints = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
   const worldPts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const curv = drawSpline([${worldPts}]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };

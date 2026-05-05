@@ -12,6 +12,7 @@ import { getState, subscribe } from "./app-state.js";
 import { setSelected, clearSelected } from "./selection-state.js";
 import { emitChainFragment } from "./transforms.js";
 import { getSnap, subscribeSnap } from "./snap-state.js";
+import { showHandlesFor, clearHandles, isSubObjectHandle, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -151,6 +152,8 @@ export class Viewer {
   // Offscreen renderer for layout thumbnail panels.
   private _thumbCanvas: HTMLCanvasElement | null = null;
   private _thumbRenderer: THREE.WebGLRenderer | null = null;
+  // Sub-object handle selection: set when the gumball is attached to a CP handle.
+  private subTargetObject: THREE.Object3D | null = null;
 
   constructor(canvas: HTMLCanvasElement, viewportAreaEl: HTMLElement) {
     this.canvas = canvas;
@@ -288,6 +291,15 @@ export class Viewer {
           const dWorld = new THREE.Matrix4().copy(this.pivotProxy.matrix).multiply(this.pivotMatrixBeforeDrag.clone().invert());
           const newMatrix = new THREE.Matrix4().copy(dWorld).multiply(this.targetMatrixBeforeDrag);
           newMatrix.decompose(this.targetObject.position, this.targetObject.quaternion, this.targetObject.scale);
+          // Sub-object: live refit parent geometry as handle moves.
+          if (this.subTargetObject && mode === "translate") {
+            const cpIndex = this.subTargetObject.userData.cpIndex as number;
+            const parent = getHandleParent();
+            if (parent && Array.isArray(parent.userData.controlPoints)) {
+              (parent.userData.controlPoints as THREE.Vector3[])[cpIndex].copy(this.subTargetObject.position);
+              refitParentGeometry(parent);
+            }
+          }
         });
 
         g.addEventListener("dragging-changed", (ev) => {
@@ -340,7 +352,7 @@ export class Viewer {
               const f = r4((dScl.x + dScl.y + dScl.z) / 3);
               if (f !== 1) fragment = `.scale(${f})`;
             }
-            if (fragment) emitChainFragment(fragment);
+            if (fragment && !this.subTargetObject) emitChainFragment(fragment);
             // Re-sync proxy from new target + current offset.
             this.syncPivot();
           }
@@ -575,7 +587,24 @@ export class Viewer {
     // proxy) since the gumball is always attached to the proxy.
     window.addEventListener("keydown", (e: KeyboardEvent) => {
       if (this.gizmos.length === 0 || document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
+      // ESC: sub-object → parent → none (Rhino sub-object model)
+      if (e.key === "Escape") {
+        if (this.subTargetObject) {
+          this.clearSubSelection();
+          e.preventDefault();
+          return;
+        }
+        if (this.targetObject) {
+          this.selectObject(null);
+          clearSelected();
+          window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
+          e.preventDefault();
+          return;
+        }
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
+        // Ignore Delete while in sub-object mode — ESC back to parent first.
+        if (this.subTargetObject) return;
         const removed = this.targetObject;
         if (removed) {
           this.scene.remove(removed);
@@ -693,6 +722,11 @@ export class Viewer {
     const hit = hits[0]?.object ?? null;
     const transformTarget = hit?.parent instanceof THREE.Mesh || hit?.parent instanceof THREE.Group ? hit.parent : hit;
     const uuid = transformTarget?.uuid ?? null;
+    // Sub-object handle click: enter handle-level selection without clearing parent handles.
+    if (transformTarget && isSubObjectHandle(transformTarget)) {
+      this.selectSubObject(transformTarget);
+      return;
+    }
     this.selectObject(transformTarget);
     // Update selection-state singleton so Inspect tab and transforms.ts subscribe handlers see the change.
     if (transformTarget) {
@@ -716,6 +750,8 @@ export class Viewer {
    *  offset — otherwise every click after relocate would snap the gumball
    *  back to the centroid. */
   selectObject(obj: THREE.Object3D | null): void {
+    // Exit any active sub-selection before switching to a new parent target.
+    this.subTargetObject = null;
     // Persist current target's pivotOffset before switching so a deselect →
     // reselect cycle (or a select → other-object → back) restores the user's
     // last relocated gumball position instead of resetting to the centroid.
@@ -735,6 +771,13 @@ export class Viewer {
     }
     this.relocate.active = false;
     this.updateRelocateBadge();
+    // Show CP handles for line/polyline/curve; clear for everything else.
+    const handleCreators = new Set(["line", "polyline", "curve"]);
+    if (obj && handleCreators.has(obj.userData.creator as string)) {
+      showHandlesFor(obj, this);
+    } else {
+      clearHandles(this);
+    }
     if (!this.pivotProxy) {
       // Constructor couldn't create one (no perspPane) — selection is a
       // no-op in that case.
@@ -745,6 +788,45 @@ export class Viewer {
       for (const g of this.gizmos) g.attach(this.pivotProxy);
     } else {
       for (const g of this.gizmos) g.detach();
+    }
+  }
+
+  /** Enter sub-object mode: gumball attaches to the CP handle sphere.
+   *  Handles stay visible; parent geometry refits live as the handle moves. */
+  selectSubObject(handle: THREE.Object3D): void {
+    this.subTargetObject = handle;
+    if (this.targetObject) {
+      this.pivotOffsetByUuid.set(this.targetObject.uuid, this.pivotOffset.clone());
+    }
+    this.targetObject = handle;
+    this.pivotOffset.identity();
+    this.relocate.active = false;
+    this.updateRelocateBadge();
+    if (!this.pivotProxy) return;
+    this.syncPivot();
+    for (const g of this.gizmos) g.attach(this.pivotProxy);
+  }
+
+  /** Exit sub-object mode: drop gumball back to the parent curve/line. */
+  clearSubSelection(): void {
+    if (!this.subTargetObject) return;
+    this.subTargetObject = null;
+    const parent = getHandleParent();
+    if (parent && this.pivotProxy) {
+      if (this.targetObject) {
+        this.pivotOffsetByUuid.set(this.targetObject.uuid, this.pivotOffset.clone());
+      }
+      this.targetObject = parent;
+      const cached = this.pivotOffsetByUuid.get(parent.uuid);
+      if (cached) this.pivotOffset.copy(cached);
+      else this.pivotOffset.identity();
+      this.syncPivot();
+      for (const g of this.gizmos) g.attach(this.pivotProxy);
+    } else {
+      this.targetObject = null;
+      this.pivotOffset.identity();
+      for (const g of this.gizmos) g.detach();
+      clearHandles(this);
     }
   }
 
