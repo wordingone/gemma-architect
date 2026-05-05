@@ -2186,6 +2186,65 @@ html[data-mode="night"] .paper-stage {
 }
 .ai-recent:hover { color: var(--ink); border-left-color: var(--gemma); }
 .ai-recent .ts { font-family: var(--mono); font-size: 9px; color: var(--ink-faint); margin-right: 6px; }
+
+/* Mode toggle pill — flips merged PROMPT/CONSOLE input. Shift+Tab also wired. */
+.ai-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  background: var(--paper);
+  color: var(--ink-faint);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  margin-left: auto;
+  margin-right: 8px;
+}
+.ai-mode-toggle .mode-pip {
+  padding: 3px 8px;
+  transition: color 100ms, background 100ms;
+}
+.ai-mode-toggle .mode-sep {
+  padding: 0 3px;
+  color: var(--ink-faint);
+}
+.ai-panel.mode-prompt  .ai-mode-toggle .mode-pip[data-pip="prompt"],
+.ai-panel.mode-console .ai-mode-toggle .mode-pip[data-pip="console"] {
+  background: var(--gemma);
+  color: var(--paper);
+  font-weight: 700;
+}
+.ai-mode-toggle:hover { border-color: var(--gemma); }
+
+/* Mode-scoped visibility — siblings inside .ai-panel toggle by ancestor class. */
+.ai-panel.mode-prompt  .console-only,
+.ai-panel.mode-console .prompt-only { display: none !important; }
+
+/* In CONSOLE mode the side column is hidden, so the prompt-col spans the grid. */
+.ai-panel.mode-console { grid-template-columns: minmax(0, 1fr); }
+
+/* Inline console history (shown in-place in CONSOLE mode). */
+.ai-console-history {
+  flex: 1 1 0;
+  min-height: 80px;
+  overflow-y: auto;
+  font-family: var(--console);
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--paper-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+
 .ai-header {
   display: flex;
   align-items: center;
