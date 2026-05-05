@@ -12,7 +12,7 @@
 // Tool-call format: model emits ```json {"verb":"Name","args":{...}} ``` blocks.
 // parseDispatches() extracts these; remaining text becomes the response text.
 
-import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage } from "@huggingface/transformers";
+import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
 import { getDictionary } from "./dictionary";
 import { listHandlers } from "./dispatch";
 import { snapshotAsText } from "./scene-kg";
@@ -44,10 +44,10 @@ export type AgentResponse = {
 const MODEL_ID = "onnx-community/gemma-4-E2B-it-ONNX";
 const BADGE_ID = "ai-model-badge";
 
-let _model: Gemma4ForConditionalGeneration | null = null;
+let _model: PreTrainedModel | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _processor: any = null;
-let _loadPromise: Promise<{ model: Gemma4ForConditionalGeneration; processor: unknown }> | null = null;
+let _loadPromise: Promise<{ model: PreTrainedModel; processor: unknown }> | null = null;
 
 function updateBadge(inner: string): void {
   const el = document.getElementById(BADGE_ID);
@@ -64,7 +64,7 @@ type ProgressInfo = {
 // (onnxruntime-web selects WebGL then WASM-SIMD automatically). Model files
 // are cached in browser storage after first download — subsequent visits skip
 // the network transfer entirely.
-async function getModel(): Promise<{ model: Gemma4ForConditionalGeneration; processor: unknown }> {
+async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown }> {
   if (_model && _processor) return { model: _model, processor: _processor };
   if (_loadPromise) return _loadPromise;
 
@@ -119,7 +119,8 @@ async function getModel(): Promise<{ model: Gemma4ForConditionalGeneration; proc
     throw lastErr;
   })();
 
-  return _loadPromise;
+  // _loadPromise was assigned on the line above — non-null is guaranteed here.
+  return _loadPromise!;
 }
 
 // ---- System prompt --------------------------------------------------------
