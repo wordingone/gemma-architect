@@ -4,11 +4,14 @@ The 3-minute screen-recording for the Kaggle submission. Voice-over
 scripted line-by-line, cuts timed against a single take of the production
 page (https://wordingone.github.io/gemma-architect/). Shoot at 1920×1080, 30 fps.
 
-This script targets the **current bundle UI** (post-#170 design handoff):
-menubar / modebar / ribbon shell, dock tabs (PROMPT / CONSOLE / NODES /
-PARAMETERS / HISTORY), Cmd-K palette, multi-format EXPORT drawer,
-drafting-style toggle (`D`), AI prompt → geometry pipeline (#176, cache +
-live LoRA paths), Schultz Residence hero demo (14-element multi-fuse).
+This script targets the **current bundle UI** (post-#170 design handoff,
+post-#34 PROMPT/CONSOLE merge):
+menubar / modebar / ribbon shell, dock tabs (PROMPT / NODES / PARAMETERS
+/ HISTORY) — the PROMPT tab toggles between natural-language PROMPT mode
+and DSL CONSOLE mode via Shift+Tab. Plus Cmd-K palette, multi-format
+EXPORT drawer, drafting-style toggle (`D`), AI prompt → geometry pipeline
+(#176, cache + live LoRA paths), Schultz Residence hero demo (14-element
+multi-fuse).
 
 **Demo path order** is chosen to scale narrative scope:
 single element → parametric variation → AI typed-from-scratch → real-building
@@ -74,7 +77,7 @@ title-block "GEMMA·ARCHITECT — UNTITLED.001 / SCALE 1:50 · IFC4 · METRIC".
 2. Type live: `Build a square column 0.3m by 0.3m, 3m tall.`
 3. Hit `⌘⏎`. The GENERATE button shows `GENERATING…` for ~80ms.
 4. JS source updates to a fresh column construction. Viewer shows a 3m square column.
-5. Status reads `[ai-generate] cache · 0.71 match · 47ms` (in console tab if visible).
+5. Status reads `[ai-generate] cache · 0.71 match · 47ms` (in the PROMPT tab's inline console history; Shift+Tab to bring CONSOLE mode into focus if needed).
 
 **VO (40s budget):**
 

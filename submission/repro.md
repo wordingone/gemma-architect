@@ -237,8 +237,9 @@ The cache is sourced from three corpora that the build script merges:
   on the v2 LoRA eval (each row's `pred` parses, executes, and produces
   a non-empty solid through Tier 1)
 - `data/dsl-demo-corpus.jsonl` — 19 DSL prompts compiled to JS via
-  `web/src/dsl-eval.ts` (`compileDsl()`, the same path the CONSOLE tab
-  uses at runtime — broader coverage on parametric scenarios than the
+  `web/src/dsl-eval.ts` (`compileDsl()`, the same path the PROMPT tab's
+  CONSOLE mode uses at runtime — broader coverage on parametric scenarios
+  than the
   4b-it eval alone)
 - `outputs/cad-lora-v2-4b-it-schultz-eval.jsonl` — 1 row for the
   Schultz Residence using `gold` (the 4b-it `pred` has translate/cut

@@ -33,16 +33,17 @@ A non-CAD user opens a static web page (no install, no login, no API
 key). The page shell is a drafting workbench (post-#170 bundle port):
 top-bar **EXPORT** drawer + Cmd-K palette, left palette of CAD-tool
 glyphs, right sidebar (SCENE / INSPECT / ASSETS), bottom dock with
-five tabs (PROMPT / CONSOLE / NODES / PARAMETERS / HISTORY), 3D viewer
-in the center.
+four tabs (PROMPT / NODES / PARAMETERS / HISTORY), 3D viewer in the
+center. The **PROMPT** tab hosts both natural-language input and a
+DSL console; **Shift+Tab** toggles between modes (PROMPT ⇄ CONSOLE).
 
 1. They open the **PROMPT** tab. A chip strip lists the canned demos.
    They click `"Wall · 5.5×0.2×2.8m"`.
 2. The natural-language prompt fills the textarea; an F1-weighted fuzzy
    match against 60 cached LoRA eval rows returns the closest replicad
    source into a JS source pane. Either is editable. Live LoRA inference
-   is opt-in via `window.__loraUrl`. The CONSOLE tab logs
-   `[ai-generate] cache · X.XX match · ~50ms`.
+   is opt-in via `window.__loraUrl`. The PROMPT tab's inline console
+   logs `[ai-generate] cache · X.XX match · ~50ms`.
 3. They click **GENERATE** (or hit `⌘⏎`). A web worker boots
    OpenCascade WebAssembly (replicad-opencascadejs), executes the
    source against the same Tier 1 tool surface the model was trained
@@ -103,7 +104,8 @@ worker → kernel → IFC pipeline accepts three other entry points:
   are not yet registered — `makeWall`, `makeSlab`, etc. resolve to
   `NoHandler` today. This is the next integration milestone (T6 + T11
   in `silly-baking-yeti.md`).
-- **Type DSL into the CONSOLE tab.** A copyright-safe Rhino-style
+- **Type DSL in the PROMPT tab's CONSOLE mode** (Shift+Tab to toggle
+  from natural-language PROMPT mode). A copyright-safe Rhino-style
   lexicon (~70 verbs hand-curated against IFC4 entity classes,
   documented at `web/src/spatial-dictionary.LICENSE.md`) backs the
   CONSOLE input: `wall(0, 0, 5.5, 0.2, 2.8); slab(0, 0, 5, 6, 0.2);
@@ -215,7 +217,7 @@ the default is the cache.
 as `web/public/ai-cache.json`. Forty come from the LoRA eval corpus (every
 held-out row that scored full round-trip — parse + api + runtime). Nineteen
 come from the DSL corpus (the copyright-safe lexicon's reference rows that
-back CONSOLE-tab typed input). The sixtieth is the Schultz Residence (gold;
+back the PROMPT tab's CONSOLE-mode typed input). The sixtieth is the Schultz Residence (gold;
 the 4b-it pred has structural bugs on the 14-element multi-fuse). On a typed
 prompt, `web/src/ai-generate.ts` does weighted-F1 fuzzy match (numeric and
 dimension tokens count 2x) against the cache and returns the closest match's
@@ -384,8 +386,8 @@ Honest about scope:
   obvious next step.
 - **2D sketch primitives shipped (PR #7, fc1284c)** — solids, arch elements,
   and 2D sketch primitives all work end-to-end on both the prompt path and
-  the CONSOLE tab. All 6 palette buttons are present (`line`, `rect`,
-  `circle`, `polyline`, `curve`, `point`); 4 of 6 DSL verbs (`line`,
+  the PROMPT tab's CONSOLE mode. All 6 palette buttons are present (`line`,
+  `rect`, `circle`, `polyline`, `curve`, `point`); 4 of 6 DSL verbs (`line`,
   `circle`, `rect`, `point`) render as `THREE.Line` / `THREE.RingGeometry` /
   sphere marker on the Z=0 plane via `drawX().sketchOnPlane("XY")`. The
   remaining gap: the LoRA training corpus (`dataset/v2/`) does not yet include
