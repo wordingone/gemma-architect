@@ -1,7 +1,6 @@
 # Screenshot grid for the Kaggle post
 
-Captured 2026-05-04 from the live deployed page
-(https://wordingone.github.io/gemma-architect/) via Playwright at
+Captured 2026-05-05 from localhost:5173 (HEAD build) via Playwright at
 1920×1080. The shots cover the demo-script.md narrative arc — wall
 demo + Schultz Residence hero + chrome surfaces (EXPORT drawer,
 Cmd-K palette, PARAMETERS tab).
@@ -10,15 +9,15 @@ Cmd-K palette, PARAMETERS tab).
 
 | File | Commit | What it shows |
 |------|--------|--------------|
-| `01-prompt-wall.png`        | 9c7c0be | PROMPT tab — wall chip loaded, demo sentence filled, GENERATE ready |
-| `02-wall-rendered.png`      | 9c7c0be | Wall (12 tri) rendered solid — title block + SCENE panel visible |
-| `03-console-cache.png`      | 9c7c0be | CONSOLE tab — init sequence + DSL ready prompt |
-| `04-schultz-solid.png`      | 725b56a | Schultz Residence (14-element multi-fuse) — south 3/4 angle, doorway cut visible, solid shading |
-| `05-schultz-drafting.png`   | 725b56a | Same angle, `D`-key toggled — flat-white drafting render with edge lines, doorway cut prominent |
-| `06-export-drawer.png`      | 9c7c0be | EXPORT drawer open — 12 tiles in 3 sections: BIM·ARCHITECTURAL (IFC/STEP/DWG) · 3D·MESH (OBJ/STL/GLB/glTF/USDZ/FBX) · 2D·DRAWING (SVG/DXF/PDF) |
-| `07-cmdk-palette.png`       | 9c7c0be | ⌘K palette open — full command list (GENERATE / MODEL / VIEW groups, kbd shortcuts) |
-| `08-cmdk-schultz.png`       | 9c7c0be | ⌘K with "Schultz" typed — filtered to single "Schultz Residence (14 elements)" entry |
-| `09-parameters-sliders.png` | 9c7c0be | PARAMETERS tab — wall sliders (5.5 / 0.2 / 2.8m values visible) |
+| `01-prompt-wall.png`        | c162847 | PROMPT tab — wall chip loaded, demo sentence filled, GENERATE ready |
+| `02-wall-rendered.png`      | c162847 | Wall (12 tri) rendered solid — title block + SCENE panel visible |
+| `03-console-cache.png`      | c162847 | CONSOLE tab — init sequence + DSL ready prompt |
+| `04-schultz-solid.png`      | c162847 | Schultz Residence IFC (847 meshes, 270k tri) — south 3/4 angle, doorway cut visible, solid shading |
+| `05-schultz-drafting.png`   | c162847 | Schultz Residence IFC — DRAFT ribbon mode, flat shading, IFC layer tree in SCENE panel |
+| `06-export-drawer.png`      | c162847 | EXPORT drawer open — 12 tiles in 3 sections: BIM·ARCHITECTURAL (IFC/STEP/DWG) · 3D·MESH (OBJ/STL/GLB/glTF/USDZ/FBX) · 2D·DRAWING (SVG/DXF/PDF) |
+| `07-cmdk-palette.png`       | c162847 | ⌘K palette open — full command list (GENERATE / MODEL / VIEW groups, kbd shortcuts) |
+| `08-cmdk-schultz.png`       | c162847 | ⌘K with "Schultz" typed — filtered to single "Schultz Residence (14 elements)" entry |
+| `09-parameters-sliders.png` | c162847 | PARAMETERS tab — wall sliders (5.5 / 0.2 / 2.8m values visible) |
 
 `live-demo-2026-05-04.png` is a wider initial capture kept for reference;
 the 9 numbered shots are the canonical embed set.
@@ -27,36 +26,9 @@ ai-cache.json verified live at 60 rows as of `a59a8a3` (the
 `column-square-3m` corpus row that demo-script.md cut 2 depends on
 for an exact F1=1.000 cache hit is restored).
 
-## Pending re-capture after R1-R4 bundle fix
-
-The 9 web screenshots above were captured from
-https://wordingone.github.io/gemma-architect/ on 2026-05-04 at the
-bundle commits cited in the table. That live deploy contained 4 UI
-regressions Jun flagged the same day in the playwright window
-(silly-baking-yeti.md T1/T2/T3/T4/T7 — see commit 81e5046's
-audit-dispatch-routing.ts firing 11 violations):
-
-- **R1** — ribbon shows TEXT labels (Select/Move/Rotate/Scale) not
-  the small SVG icons exported by `web/src/icons.ts`. Every one of
-  the 9 shots includes the ribbon strip — every shot needs re-capture.
-- **R2** — BLUEPRINT/VELLUM toggle in cropped statusbar instead of
-  menubar-right pill. At 1920×1080 the statusbar is uncropped so the
-  toggle is visible in current shots, but post-fix the visual moves;
-  shots showing the menubar (01/03/06/07/09 especially) need re-capture.
-- **R3a/b/c** — palette inert + no Raycaster + no TransformControls.
-  None of the current 9 shots directly demonstrate selection /
-  transform; no re-capture needed for the existing set, but the
-  pending column-3m + grid composition could pick up an R3-fixed shot.
-- **R4** — UI cropped at viewport heights below 700px. 1920×1080 is
-  unaffected; no re-capture needed for this rule alone.
-
-Re-capture trigger: after Eli's R1-R4 PR merges to master AND deploys
-to GH Pages (verify bundle hash in `dist/` differs from current
-deploy), re-run `bun web/test/capture-screenshots.ts` (or whatever
-the existing capture path is — Eli's lane per Playwright offload
-rule). Update the `Commit` column in the table above with the new
-post-fix bundle commit. Bundle deploy can lag the merge by a few
-minutes per the gh-actions cycle.
+Re-captured 2026-05-05 at c162847 — R1 (SVG ribbon icons), R2 (VELLUM pill),
+R3 (selection + gizmos), R4 (layout crop) regressions all fixed in this build.
+gemma-verify all_passed:true at f531127 (same build).
 
 ## Pending (manual capture pre-grid-composite)
 
