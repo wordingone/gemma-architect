@@ -1,0 +1,19 @@
+{
+  "sha": "704548b",
+  "timestamp": "20260505T195800Z",
+  "all_passed": true,
+  "port": 5174,
+  "surfaces": [
+    { "name": "ribbon-icons-rendered", "passed": true, "evidence": { "count": 24, "failures": [] } },
+    { "name": "theme-propagation", "passed": true, "evidence": { "beforeStyle": "oklch(0.22 0.068 248 / 0.62)", "afterStyle": "oklch(0.955 0.009 85 / 0.62)", "pillText": "◑ BLUEPRINT", "panelChanged": true } },
+    { "name": "palette-tool-behavior", "passed": true, "evidence": { "results": [{"tool":"select","matched":true},{"tool":"move","matched":true},{"tool":"rotate","matched":true},{"tool":"scale","matched":true}] } },
+    { "name": "selection-roundtrip", "passed": true, "evidence": { "eventsHeard": 1, "uuid": "3adf7f50-1f10-4b66-8bb5-5d9317746639", "selectedUuid": "3adf7f50-1f10-4b66-8bb5-5d9317746639" } },
+    { "name": "transform-gizmo-attach", "passed": true, "evidence": { "afterG": [{"mode":"translate","attached":true},{"mode":"rotate","attached":true},{"mode":"scale","attached":true}] } },
+    { "name": "delete-propagation", "passed": true, "evidence": { "beforeCount": 13, "afterCount": 12, "sceneShrunk": true } },
+    { "name": "console-vocab-coverage", "passed": true, "evidence": { "total": 65, "failed_verbs": [] } },
+    { "name": "console-verb-produces-output", "passed": true, "evidence": { "newLines": "12:52:28›wall | 12:52:28✗line 1: wall: expected 2 endpoints, got 0", "isUnknownVerb": false, "hasOutput": true } },
+    { "name": "cmdk-dialog-opens", "passed": true, "evidence": { "inputFound": true, "inputClass": "cmdk-input", "inputPH": "type to search commands · or describe what you want…", "visible": true } },
+    { "name": "layout-tab-functional", "passed": true, "evidence": { "aspectMatches": true, "beforePanels": 0, "afterPanels": 1, "panelAdded": true, "aspect": 1.415843565256935 } },
+    { "name": "ortho-grid-z-order", "passed": true, "evidence": { "gridRenderOrder": -1, "gridDepthWrite": false, "gridBehind": true, "meshCount": 0, "meshesAbove": true } }
+  ]
+}
