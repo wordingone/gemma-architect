@@ -12,7 +12,7 @@
 // Tool-call format: model emits ```json {"verb":"Name","args":{...}} ``` blocks.
 // parseDispatches() extracts these; remaining text becomes the response text.
 
-import { Gemma4ForConditionalGeneration, AutoProcessor } from "@huggingface/transformers";
+import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage } from "@huggingface/transformers";
 import { getDictionary } from "./dictionary";
 import { listHandlers } from "./dispatch";
 import { snapshotAsText } from "./scene-kg";
@@ -240,14 +240,15 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const imageDataUrl = wantsVision ? captureViewport() : null;
 
   type TextPart = { type: "text"; text: string };
-  type ImagePart = { type: "image"; image: string };
+  type ImagePart = { type: "image"; image: RawImage };
   type ContentPart = TextPart | ImagePart;
   type UserContent = string | ContentPart[];
 
   let userContent: UserContent;
   if (imageDataUrl) {
+    const rawImage = await RawImage.fromURL(imageDataUrl);
     userContent = [
-      { type: "image", image: imageDataUrl } satisfies ImagePart,
+      { type: "image", image: rawImage } satisfies ImagePart,
       { type: "text", text: req.prompt } satisfies TextPart,
     ];
   } else {
