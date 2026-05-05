@@ -7,6 +7,7 @@ import { openExportDrawer } from "./export-drawer";
 import { saveProjectJson } from "./shell";
 import { runAgentTurn } from "./agent-harness";
 import { dispatch } from "./dispatch";
+import { setConsoleMode } from "./workbench";
 
 type Cmd = {
   group: "GENERATE" | "MODEL" | "VIEW" | "FILE";
@@ -70,7 +71,8 @@ const ALL_CMDS: Cmd[] = [
   { group: "VIEW",     icon: "split-single", label: "Mode → MODEL",         kbd: "⌥1",  run: () => activateModeKey("model") },
   { group: "VIEW",     icon: "split-quad",   label: "Mode → LAYOUT (paper)", kbd: "⌥2",  run: () => activateModeKey("layout") },
   { group: "VIEW",     icon: "graph",        label: "Mode → RESEARCH",      kbd: "⌥3",  run: () => activateModeKey("research") },
-  { group: "VIEW",     icon: "terminal",     label: "Show CONSOLE tab",     kbd: "⌥C",  run: () => activateDockTab("console") },
+  { group: "VIEW",     icon: "terminal",     label: "Switch to CONSOLE mode (DSL)", kbd: "⇧⇥",  run: () => { activateDockTab("prompt"); setConsoleMode("console"); } },
+  { group: "VIEW",     icon: "sparkle",      label: "Switch to PROMPT mode (NL)",   kbd: "⇧⇥",  run: () => { activateDockTab("prompt"); setConsoleMode("prompt"); } },
   { group: "VIEW",     icon: "graph",        label: "Show NODES tab",       kbd: "⌥N",  run: () => activateDockTab("nodes") },
   { group: "VIEW",     icon: "history",      label: "Show HISTORY tab",     kbd: "⌥H",  run: () => activateDockTab("history") },
   { group: "FILE",     icon: "import",   label: "Import IFC / STEP / OBJ…", kbd: "⌘O",  run: () => clickById("file-pick-btn") },

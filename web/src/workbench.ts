@@ -83,11 +83,32 @@ const PALETTE_SECTIONS: PaletteSection[] = [
 type DockTab = { id: string; icon: string; label: string };
 const DOCK_TABS: DockTab[] = [
   { id: "prompt",     icon: "sparkle",  label: "PROMPT" },
-  { id: "console",    icon: "terminal", label: "CONSOLE" },
   { id: "nodes",      icon: "graph",    label: "NODES" },
   { id: "parameters", icon: "sliders",  label: "PARAMETERS" },
   { id: "history",    icon: "history",  label: "HISTORY" },
 ];
+
+// Merged PROMPT/CONSOLE input: one tab, two modes. Shift+Tab toggles.
+//   "prompt"  → NL → ai-generate (cache → LoRA fallback) → JS → kernel
+//   "console" → DSL / `:verb` registry → compileDsl/dispatchSync → JS → kernel
+// Persists per-session via localStorage.
+type ConsoleMode = "prompt" | "console";
+const CONSOLE_MODE_LS_KEY = "gemma-architect:console-mode-v1";
+function loadConsoleMode(): ConsoleMode {
+  try {
+    const v = localStorage.getItem(CONSOLE_MODE_LS_KEY);
+    return v === "console" ? "console" : "prompt";
+  } catch { return "prompt"; }
+}
+function saveConsoleMode(m: ConsoleMode): void {
+  try { localStorage.setItem(CONSOLE_MODE_LS_KEY, m); } catch {}
+}
+
+// Exposed so cmdk can flip the mode without round-tripping through the DOM.
+let _setConsoleModeFn: ((m: ConsoleMode) => void) | null = null;
+export function setConsoleMode(m: ConsoleMode): void {
+  _setConsoleModeFn?.(m);
+}
 
 type SidebarTab = { id: string; label: string };
 const SIDEBAR_TABS: SidebarTab[] = [
@@ -507,29 +528,42 @@ function demoIdToIndex(id: string): string | null {
 function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body prompt-tab");
 
+  let mode: ConsoleMode = loadConsoleMode();
   const panel = el("div", "ai-panel");
+  panel.classList.add(`mode-${mode}`);
   panel.innerHTML = `
     <div class="ai-header">
-      <div class="ai-title">
+      <div class="ai-title" id="ai-title">
         ${iconSVG("sparkle", 13)}
-        PROMPT  ·  NATURAL LANGUAGE → GEOMETRY
+        <span class="ai-title-text"></span>
       </div>
+      <button class="ai-mode-toggle" id="ai-mode-toggle" type="button"
+              title="Toggle PROMPT ↔ CONSOLE (Shift+Tab)">
+        <span class="mode-pip" data-pip="prompt">PROMPT</span>
+        <span class="mode-sep">⇄</span>
+        <span class="mode-pip" data-pip="console">CONSOLE</span>
+      </button>
       <span class="ai-badge" id="ai-model-badge">
         <span class="v">G</span>EMMA·3·4B  ·  ${(window as { __loraUrl?: string }).__loraUrl ? "LIVE" : "CACHED"}
       </span>
     </div>
     <div class="ai-prompt-col">
-      <textarea class="ai-prompt" id="ai-prompt-input"
-        placeholder="Describe geometry — e.g. four walls forming a 6×4m room with a doorway on the south side"></textarea>
+      <textarea class="ai-prompt" id="ai-prompt-input" rows="3"></textarea>
       <div class="ai-actions">
-        <span class="ai-meta" id="ai-prompt-meta">0 ch · ~0 tok · ⌘⏎ to run</span>
-        <button class="btn btn-accent btn-sm" id="ai-generate-btn" type="button">
+        <span class="ai-meta" id="ai-prompt-meta">0 ch · ~0 tok</span>
+        <button class="btn btn-accent btn-sm prompt-only" id="ai-generate-btn" type="button">
           ${iconSVG("play", 11)} GENERATE
         </button>
       </div>
-      <div class="ai-suggestions" id="ai-chips"></div>
+      <div class="ai-suggestions prompt-only" id="ai-chips"></div>
+      <div class="ai-console-history console-only" id="console-history">
+        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">OpenCascade WebAssembly initialized</span></div>
+        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">web-ifc parser ready · IFC4 schema</span></div>
+        <div class="console-line ok"><span class="ts">00:00:02</span><span class="glyph">✓</span><span class="text">Gemma-3-4b-it adapter loaded</span></div>
+        <div class="console-line info"><span class="ts">00:00:03</span><span class="glyph">·</span><span class="text">DSL ready · type wall|slab|column|box|cut, then ⏎ — Shift+Tab toggles modes</span></div>
+      </div>
     </div>
-    <div class="ai-side-col">
+    <div class="ai-side-col prompt-only">
       <div class="ai-side-title">RECENT</div>
       <div id="ai-recent-list"></div>
       <div class="ai-side-title" style="margin-top:8px;">PIPELINE</div>
@@ -560,21 +594,163 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
   // Wire textarea ↔ legacy #prompt-text + char/token meta.
   const ta = panel.querySelector<HTMLTextAreaElement>("#ai-prompt-input")!;
   const meta = panel.querySelector<HTMLElement>("#ai-prompt-meta")!;
+  const titleText = panel.querySelector<HTMLElement>(".ai-title-text")!;
+  const modeToggle = panel.querySelector<HTMLButtonElement>("#ai-mode-toggle")!;
+  const consoleHistory = panel.querySelector<HTMLDivElement>("#console-history")!;
+
+  // CONSOLE-mode buffer for ArrowUp/Down history (DSL terminal idiom).
+  const cmdBuffer: string[] = [];
+  let cmdBufferIdx = 0;
+
+  const PROMPT_PLACEHOLDER =
+    "Describe geometry — e.g. four walls forming a 6×4m room with a doorway on the south side";
+  const CONSOLE_PLACEHOLDER =
+    "DSL — wall (0 0) (5 0) height=3 thickness=0.2     |     :verb height=3 ⇒ dispatch";
+
   const updateMeta = () => {
     const n = ta.value.length;
-    meta.textContent = `${n} ch · ~${Math.ceil(n / 4)} tok · ⌘⏎ to run`;
+    const hint = mode === "prompt" ? "⌘⏎ run · ⇧⇥ console" : "⏎ run · ⇧⇥ prompt";
+    meta.textContent = `${n} ch · ~${Math.ceil(n / 4)} tok · ${hint}`;
   };
   ta.addEventListener("input", updateMeta);
+
+  function applyMode(next: ConsoleMode) {
+    mode = next;
+    saveConsoleMode(mode);
+    panel.classList.toggle("mode-prompt", mode === "prompt");
+    panel.classList.toggle("mode-console", mode === "console");
+    titleText.textContent = mode === "prompt"
+      ? "PROMPT  ·  NATURAL LANGUAGE → GEOMETRY"
+      : "CONSOLE  ·  DSL → KERNEL";
+    ta.placeholder = mode === "prompt" ? PROMPT_PLACEHOLDER : CONSOLE_PLACEHOLDER;
+    ta.rows = mode === "prompt" ? 3 : 1;
+    updateMeta();
+    if (mode === "console") {
+      consoleHistory.scrollTop = consoleHistory.scrollHeight;
+    }
+  }
+  _setConsoleModeFn = applyMode;
+  applyMode(mode); // initial setup of title + placeholder + meta
+
+  modeToggle.addEventListener("click", () => {
+    applyMode(mode === "prompt" ? "console" : "prompt");
+    ta.focus();
+  });
+
   ta.addEventListener("keydown", (e: KeyboardEvent) => {
+    // Shift+Tab toggles mode regardless of where caret is.
+    if (e.key === "Tab" && e.shiftKey) {
+      e.preventDefault();
+      applyMode(mode === "prompt" ? "console" : "prompt");
+      return;
+    }
+
+    // Cmd/Ctrl+Enter always runs (legacy PROMPT shortcut, works in either mode).
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      runGenerate();
+      runActive();
+      return;
     }
+
+    if (mode === "console") {
+      // CONSOLE mode: plain Enter runs, Shift+Enter inserts newline.
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        runActive();
+        return;
+      }
+      if (e.key === "ArrowUp" && cmdBuffer.length > 0 && ta.value === (cmdBuffer[cmdBufferIdx] ?? "")) {
+        e.preventDefault();
+        cmdBufferIdx = Math.max(0, cmdBufferIdx - 1);
+        ta.value = cmdBuffer[cmdBufferIdx] ?? "";
+        updateMeta();
+        return;
+      }
+      if (e.key === "ArrowDown" && cmdBuffer.length > 0) {
+        e.preventDefault();
+        cmdBufferIdx = Math.min(cmdBuffer.length, cmdBufferIdx + 1);
+        ta.value = cmdBuffer[cmdBufferIdx] ?? "";
+        updateMeta();
+        return;
+      }
+    }
+    // PROMPT mode: plain Enter inserts newline (default textarea behavior).
   });
+
+  function runActive() {
+    if (mode === "prompt") {
+      runGenerate();
+    } else {
+      runConsole(ta.value);
+    }
+  }
 
   // GENERATE → click legacy #run-btn (preserves all existing wiring).
   const genBtn = panel.querySelector<HTMLButtonElement>("#ai-generate-btn")!;
   genBtn.addEventListener("click", () => runGenerate());
+
+  function runConsole(rawIn: string) {
+    const src = rawIn.trim();
+    if (!src) return;
+    cmdBuffer.push(src);
+    cmdBufferIdx = cmdBuffer.length;
+    ta.value = "";
+    updateMeta();
+    pushConsoleLine("cmd", src);
+
+    // `:` prefix routes through the dispatch table alongside the DSL compiler.
+    // Key=val pairs (height=3, thickness=0.2) become DispatchArgs; positional
+    // tuples like (0 0) are ignored by the dispatch path but handled by compileDsl.
+    const isDeclCmd = src.startsWith(":");
+    const dslSrc = isDeclCmd ? src.slice(1).trim() : src;
+
+    if (isDeclCmd) {
+      const tokens = dslSrc.split(/\s+/);
+      const verb = tokens[0];
+      const dispArgs: DispatchArgs = {};
+      for (const t of tokens.slice(1)) {
+        const eq = t.indexOf("=");
+        if (eq > 0) {
+          const k = t.slice(0, eq);
+          const v = t.slice(eq + 1);
+          const n = Number(v);
+          dispArgs[k] = Number.isFinite(n) ? n : v;
+        }
+      }
+      const dr = dispatchSync(verb, dispArgs);
+      pushConsoleLine(
+        dr.ok ? "ok" : "info",
+        `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+      );
+    }
+
+    const c = compileDsl(dslSrc);
+    if (!c.ok) {
+      pushConsoleLine("err", `line ${c.line}: ${c.message}`);
+      return;
+    }
+    if (c.dispatches && c.dispatches.length > 0) {
+      for (const d of c.dispatches) {
+        const dr = dispatchSync(d.verb, d.args);
+        pushConsoleLine(
+          dr.ok ? "ok" : "info",
+          `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+        );
+      }
+    }
+    if (c.js) {
+      const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
+      const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
+      if (jsSrc && runBtn) {
+        jsSrc.value = c.js;
+        jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
+        pushConsoleLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
+        runBtn.click();
+      } else {
+        pushConsoleLine("err", "kernel not ready (no #run-btn / #js-source)");
+      }
+    }
+  }
 
   function pickDemo(id: string) {
     const sel = document.getElementById("prompt-select") as HTMLSelectElement | null;
@@ -645,8 +821,8 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
         status.textContent = `AI: ${err.message}`;
         status.className = "status err";
       }
-      // Auto-switch dock to CONSOLE so the error line is visible without DevTools.
-      document.querySelector<HTMLElement>('.dock-tab[data-tab="console"]')?.click();
+      // Make sure the merged PROMPT tab is showing so the error line is visible.
+      document.querySelector<HTMLElement>('.dock-tab[data-tab="prompt"]')?.click();
     } finally {
       genBtn.disabled = false;
       if (prevLabel) genBtn.innerHTML = prevLabel;
@@ -674,124 +850,6 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
   }
 
   wrap.appendChild(panel);
-  return wrap;
-}
-
-function buildConsoleTabBody(): HTMLElement {
-  const wrap = el("div", "tab-body console-tab");
-  wrap.innerHTML = `
-    <div class="console">
-      <div class="console-history" id="console-history">
-        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">OpenCascade WebAssembly initialized</span></div>
-        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">web-ifc parser ready · IFC4 schema</span></div>
-        <div class="console-line ok"><span class="ts">00:00:02</span><span class="glyph">✓</span><span class="text">Gemma-3-4b-it adapter loaded</span></div>
-        <div class="console-line info"><span class="ts">00:00:03</span><span class="glyph">·</span><span class="text">DSL ready · type wall|slab|column|box|cut, then ⏎</span></div>
-      </div>
-      <div class="console-prompt">
-        <span class="caret">›</span>
-        <input id="console-input" placeholder="DSL — wall (0 0) (5 0) height=3 thickness=0.2     |     column (0 0) height=3 profile=square(0.3)"/>
-        <span style="font-family:var(--mono); font-size:9.5px; color:var(--ink-faint); letter-spacing:0.04em;">⏎ run</span>
-      </div>
-    </div>
-  `;
-
-  // Input handler: type DSL → compile → push JS → run.
-  const input = wrap.querySelector<HTMLInputElement>("#console-input")!;
-  const history = wrap.querySelector<HTMLDivElement>("#console-history")!;
-  const buffer: string[] = [];
-  let bufferIdx = 0;
-
-  function ts(): string {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-  }
-  function pushLine(kind: "cmd" | "ok" | "err" | "info", text: string) {
-    const line = document.createElement("div");
-    line.className = `console-line ${kind}`;
-    const glyph = kind === "cmd" ? "›" : kind === "ok" ? "✓" : kind === "err" ? "✗" : "·";
-    line.innerHTML = `<span class="ts">${ts()}</span><span class="glyph">${glyph}</span><span class="text"></span>`;
-    line.querySelector(".text")!.textContent = text;
-    history.appendChild(line);
-    history.scrollTop = history.scrollHeight;
-  }
-
-  input.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const src = input.value.trim();
-      if (!src) return;
-      buffer.push(src);
-      bufferIdx = buffer.length;
-      input.value = "";
-      pushLine("cmd", src);
-
-      // `:` prefix routes through the dispatch table alongside the DSL compiler.
-      // Key=val pairs (height=3, thickness=0.2) become DispatchArgs; positional
-      // tuples like (0 0) are ignored by the dispatch path but handled by compileDsl.
-      const isDeclCmd = src.startsWith(":");
-      const dslSrc = isDeclCmd ? src.slice(1).trim() : src;
-
-      if (isDeclCmd) {
-        const tokens = dslSrc.split(/\s+/);
-        const verb = tokens[0];
-        const dispArgs: DispatchArgs = {};
-        for (const t of tokens.slice(1)) {
-          const eq = t.indexOf("=");
-          if (eq > 0) {
-            const k = t.slice(0, eq);
-            const v = t.slice(eq + 1);
-            const n = Number(v);
-            dispArgs[k] = Number.isFinite(n) ? n : v;
-          }
-        }
-        const dr = dispatchSync(verb, dispArgs);
-        pushLine(
-          dr.ok ? "ok" : "info",
-          `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-        );
-      }
-
-      const c = compileDsl(dslSrc);
-      if (!c.ok) {
-        pushLine("err", `line ${c.line}: ${c.message}`);
-        return;
-      }
-      // Execute any spatial-dictionary dispatches embedded in the DSL source.
-      if (c.dispatches && c.dispatches.length > 0) {
-        for (const d of c.dispatches) {
-          const dr = dispatchSync(d.verb, d.args);
-          pushLine(
-            dr.ok ? "ok" : "info",
-            `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-          );
-        }
-      }
-      // Compile result has multi-line JS — feed into legacy #js-source then click run.
-      if (c.js) {
-        const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
-        const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
-        if (jsSrc && runBtn) {
-          jsSrc.value = c.js;
-          jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
-          pushLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
-          runBtn.click();
-        } else {
-          pushLine("err", "kernel not ready (no #run-btn / #js-source)");
-        }
-      }
-    } else if (e.key === "ArrowUp") {
-      if (buffer.length === 0) return;
-      e.preventDefault();
-      bufferIdx = Math.max(0, bufferIdx - 1);
-      input.value = buffer[bufferIdx] ?? "";
-    } else if (e.key === "ArrowDown") {
-      if (buffer.length === 0) return;
-      e.preventDefault();
-      bufferIdx = Math.min(buffer.length, bufferIdx + 1);
-      input.value = buffer[bufferIdx] ?? "";
-    }
-  });
-
   return wrap;
 }
 
@@ -993,7 +1051,6 @@ function buildDock(
 
   const panes: Record<string, HTMLElement> = {
     prompt:     buildPromptTabBody(promptPane),
-    console:    buildConsoleTabBody(),
     nodes:      buildNodesTabBody(),
     parameters: buildParametersTabBody(paramPanel),
     history:    buildHistoryTabBody(),
