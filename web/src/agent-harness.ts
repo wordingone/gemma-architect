@@ -1,9 +1,8 @@
 // agent-harness.ts — In-browser WebGPU inference via Transformers.js v4 (#47).
 //
 // Model: onnx-community/gemma-4-E2B-it-ONNX (Q4 quantized, CDN-hosted).
-// Replaces the localhost:8084 llama-server fetch path from the original
-// agent-harness design. Same public interface — chat-panel.ts and cmdk.ts
-// unchanged.
+// Uses Gemma4ForConditionalGeneration + AutoProcessor directly — the
+// "image-text-to-text" pipeline task is not supported in transformers.js 4.2.0.
 //
 // Load sequence:
 //   1. First call to runAgentTurn() triggers model download (~2GB, cached by browser).
@@ -13,7 +12,7 @@
 // Tool-call format: model emits ```json {"verb":"Name","args":{...}} ``` blocks.
 // parseDispatches() extracts these; remaining text becomes the response text.
 
-import { pipeline } from "@huggingface/transformers";
+import { Gemma4ForConditionalGeneration, AutoProcessor } from "@huggingface/transformers";
 import { getDictionary } from "./dictionary";
 import { listHandlers } from "./dispatch";
 import { snapshotAsText } from "./scene-kg";
@@ -45,9 +44,10 @@ export type AgentResponse = {
 const MODEL_ID = "onnx-community/gemma-4-E2B-it-ONNX";
 const BADGE_ID = "ai-model-badge";
 
+let _model: Gemma4ForConditionalGeneration | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _pipe: any = null;
-let _pipePromise: Promise<unknown> | null = null;
+let _processor: any = null;
+let _loadPromise: Promise<{ model: Gemma4ForConditionalGeneration; processor: unknown }> | null = null;
 
 function updateBadge(inner: string): void {
   const el = document.getElementById(BADGE_ID);
@@ -64,12 +64,11 @@ type ProgressInfo = {
 // (onnxruntime-web selects WebGL then WASM-SIMD automatically). Model files
 // are cached in browser storage after first download — subsequent visits skip
 // the network transfer entirely.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getModel(): Promise<any> {
-  if (_pipe) return _pipe;
-  if (_pipePromise) return _pipePromise;
+async function getModel(): Promise<{ model: Gemma4ForConditionalGeneration; processor: unknown }> {
+  if (_model && _processor) return { model: _model, processor: _processor };
+  if (_loadPromise) return _loadPromise;
 
-  _pipePromise = (async () => {
+  _loadPromise = (async () => {
     updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LOADING…`);
     window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
 
@@ -87,7 +86,6 @@ async function getModel(): Promise<any> {
       }
     };
 
-    // Attempt 1: WebGPU (fastest, requires Chrome 113+ or Firefox Nightly)
     type DeviceSpec = { device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string };
     const backends: DeviceSpec[] = [
       { device: "webgpu", dtype: "q4f16", label: "GPU" },
@@ -97,17 +95,17 @@ async function getModel(): Promise<any> {
     let lastErr: Error = new Error("No backend available");
     for (const { device, dtype, label } of backends) {
       try {
-        // @ts-ignore — 'image-text-to-text' is valid at runtime but absent from
-        // PipelineType in @huggingface/transformers@4.2.0 type defs.
-        const p = await pipeline("image-text-to-text", MODEL_ID, {
-          device,
+        const model = await Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
           dtype,
+          device,
           progress_callback: progressCb,
         });
-        _pipe = p;
+        const processor = await AutoProcessor.from_pretrained(MODEL_ID);
+        _model = model;
+        _processor = processor;
         updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · ${label}`);
         window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device, label } }));
-        return p;
+        return { model, processor };
       } catch (e) {
         lastErr = e as Error;
         if (device === "webgpu") {
@@ -121,7 +119,7 @@ async function getModel(): Promise<any> {
     throw lastErr;
   })();
 
-  return _pipePromise;
+  return _loadPromise;
 }
 
 // ---- System prompt --------------------------------------------------------
@@ -233,7 +231,9 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
 // ---- Public entry point --------------------------------------------------
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
-  const model = await getModel();
+  const { model, processor } = await getModel();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const proc = processor as any;
 
   // Attach a viewport screenshot for visual-perception queries.
   const wantsVision = VISION_RE.test(req.prompt);
@@ -265,27 +265,23 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     { role: "user" as const, content: userContent },
   ];
 
+  // Encode: processor applies chat template, tokenizes text, and encodes images.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result: any = await model(messages, {
+  const inputs: any = await proc(messages, { add_generation_prompt: true });
+
+  // Generate — greedy decoding for deterministic tool-call JSON.
+  const outputs = await model.generate({
+    ...inputs,
     max_new_tokens: 1024,
-    temperature: 0.2,
-    do_sample: true,
-    return_full_text: false,
+    do_sample: false,
   });
 
-  // Transformers.js chat output: result[0].generated_text is Message[] or string.
-  const rawOutput: unknown = result?.[0]?.generated_text;
-  let responseText = "";
-  if (Array.isArray(rawOutput)) {
-    const last = rawOutput.at(-1);
-    responseText =
-      last && typeof last === "object" && "content" in last && typeof (last as { content: unknown }).content === "string"
-        ? (last as { content: string }).content
-        : "";
-  } else if (typeof rawOutput === "string") {
-    responseText = rawOutput;
-  }
+  // Decode only the newly generated tokens (strip the prompt prefix).
+  const inputLength: number = inputs.input_ids?.dims?.[1] ?? 0;
+  const generated = inputLength > 0 ? (outputs as any).slice(null, [inputLength, null]) : outputs;
+  const decoded: string[] = proc.batch_decode(generated, { skip_special_tokens: true });
+  const responseText = decoded[0] ?? "";
 
   const { dispatches, text } = parseDispatches(responseText);
-  return { dispatches, text: text || responseText, raw: result };
+  return { dispatches, text: text || responseText, raw: outputs };
 }
