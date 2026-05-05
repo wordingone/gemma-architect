@@ -266,9 +266,36 @@ bun scripts/test-ifc-bounds.ts        # 6 bundled IFC samples; verifies
 bun scripts/verify-dsl-corpus.ts      # 19-row DSL corpus, all compile
 ```
 
-### Live LoRA server (opt-in)
+### Live Gemma 4 E2B-it server (required for CREATE tab conversation)
 
-For users who want the real model in the loop instead of the cache:
+The CREATE dock tab sends each user message to `http://127.0.0.1:8084/v1/chat/completions`.
+Start the server before opening the web app:
+
+```bash
+# 1. Download a Q4_K_M GGUF of Gemma 4 E2B-it (~3GB):
+pip install huggingface_hub
+huggingface-cli download bartowski/gemma-4-E2B-IT-GGUF \
+  gemma-4-E2B-IT-Q4_K_M.gguf --local-dir models/
+
+# 2. Start the server (port 8084):
+GEMMA4_GGUF=models/gemma-4-E2B-IT-Q4_K_M.gguf bash scripts/serve-gemma4-e2b.sh
+# Server is ready when you see: "llama server listening at http://127.0.0.1:8084"
+
+# 3. Open the web app — the CREATE tab is live:
+bun run web:dev
+# Navigate to http://localhost:5173, click CREATE, type a prompt.
+```
+
+`scripts/serve-gemma4-e2b.sh` auto-detects llama-server from avir-cli's vendor directory
+or your PATH. Override with `LLAMA_SERVER=/path/to/llama-server`.
+
+VRAM: Q4_K_M E2B-it ≈ 3GB. Fits alongside any single avir-cli model on a 4090.
+
+### Live LoRA server (opt-in, pre-wave)
+
+*(Legacy path — archived per #40 drift purge. Kept for reference.)*
+
+For users who want the old LoRA adapter in the loop instead of the cache:
 
 ```bash
 pip install fastapi uvicorn pydantic

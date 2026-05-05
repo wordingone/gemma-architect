@@ -14,6 +14,7 @@
 
 import { iconSVG, axesGizmoSVG } from "./icons";
 import { generateGeometry, GenerateError } from "./ai-generate";
+import { ChatPanel } from "./chat-panel";
 import { compileDsl } from "./dsl-eval";
 import { dispatchSync, type DispatchArgs } from "./dispatch";
 import { setState } from "./app-state";
@@ -82,7 +83,8 @@ const PALETTE_SECTIONS: PaletteSection[] = [
 
 type DockTab = { id: string; icon: string; label: string };
 const DOCK_TABS: DockTab[] = [
-  { id: "prompt",     icon: "sparkle",  label: "PROMPT" },
+  { id: "prompt",     icon: "sparkle",  label: "CREATE" },
+  { id: "console",    icon: "terminal", label: "CONSOLE" },
   { id: "nodes",      icon: "graph",    label: "NODES" },
   { id: "parameters", icon: "sliders",  label: "PARAMETERS" },
   { id: "history",    icon: "history",  label: "HISTORY" },
@@ -526,322 +528,23 @@ function demoIdToIndex(id: string): string | null {
 }
 
 function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
-  const wrap = el("div", "tab-body prompt-tab");
+  const wrap = el("div", "tab-body prompt-tab create-tab");
 
-  let mode: ConsoleMode = loadConsoleMode();
-  const panel = el("div", "ai-panel");
-  panel.classList.add(`mode-${mode}`);
-  panel.innerHTML = `
-    <div class="ai-header">
-      <div class="ai-title" id="ai-title">
-        ${iconSVG("sparkle", 13)}
-        <span class="ai-title-text"></span>
-      </div>
-      <button class="ai-mode-toggle" id="ai-mode-toggle" type="button"
-              title="Toggle PROMPT ↔ CONSOLE (Shift+Tab)">
-        <span class="mode-pip" data-pip="prompt">PROMPT</span>
-        <span class="mode-sep">⇄</span>
-        <span class="mode-pip" data-pip="console">CONSOLE</span>
-      </button>
-      <span class="ai-badge" id="ai-model-badge">
-        <span class="v">G</span>EMMA·3·4B  ·  ${(window as { __loraUrl?: string }).__loraUrl ? "LIVE" : "CACHED"}
-      </span>
+  const header = el("div", "ai-header");
+  header.innerHTML = `
+    <div class="ai-title">
+      ${iconSVG("sparkle", 13)}
+      CREATE  ·  CONVERSATION WITH GEMMA·ARCHITECT
     </div>
-    <div class="ai-prompt-col">
-      <textarea class="ai-prompt" id="ai-prompt-input" rows="3"></textarea>
-      <div class="ai-actions">
-        <span class="ai-meta" id="ai-prompt-meta">0 ch · ~0 tok</span>
-        <button class="btn btn-accent btn-sm prompt-only" id="ai-generate-btn" type="button">
-          ${iconSVG("play", 11)} GENERATE
-        </button>
-      </div>
-      <div class="ai-suggestions prompt-only" id="ai-chips"></div>
-      <div class="ai-console-history console-only" id="console-history">
-        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">OpenCascade WebAssembly initialized</span></div>
-        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">web-ifc parser ready · IFC4 schema</span></div>
-        <div class="console-line ok"><span class="ts">00:00:02</span><span class="glyph">✓</span><span class="text">LoRA adapter loaded</span></div>
-        <div class="console-line info"><span class="ts">00:00:03</span><span class="glyph">·</span><span class="text">DSL ready · type wall|slab|column|box|cut, then ⏎ — Shift+Tab toggles modes</span></div>
-      </div>
-    </div>
-    <div class="ai-side-col prompt-only">
-      <div class="ai-side-title">RECENT</div>
-      <div id="ai-recent-list"></div>
-      <div class="ai-side-title" style="margin-top:8px;">PIPELINE</div>
-      <div style="font-family:var(--mono); font-size:10px; color:var(--ink-soft); line-height:1.7; padding-left:8px;">
-        PROMPT → TOKENS<br/>
-        → REPLICAD JS<br/>
-        → OCCT KERNEL<br/>
-        → MESH + IFC4
-      </div>
-    </div>
+    <span class="ai-badge" id="ai-model-badge">
+      <span class="v">G</span>EMMA·4·E2B  ·  LIVE
+    </span>
   `;
+  wrap.appendChild(header);
 
-  // Build chips.
-  const chipsHost = panel.querySelector("#ai-chips") as HTMLElement;
-  for (const c of PROMPT_CHIPS) {
-    const chip = el("span", "ai-chip");
-    chip.textContent = c.label;
-    chip.addEventListener("click", () => {
-      pickDemo(c.demoId);
-    });
-    chipsHost.appendChild(chip);
-  }
-
-  // Build recents from localStorage (empty on first visit — no fake history).
-  const recentHost = panel.querySelector("#ai-recent-list") as HTMLElement;
-  renderRecentList(recentHost);
-
-  // Wire textarea ↔ legacy #prompt-text + char/token meta.
-  const ta = panel.querySelector<HTMLTextAreaElement>("#ai-prompt-input")!;
-  const meta = panel.querySelector<HTMLElement>("#ai-prompt-meta")!;
-  const titleText = panel.querySelector<HTMLElement>(".ai-title-text")!;
-  const modeToggle = panel.querySelector<HTMLButtonElement>("#ai-mode-toggle")!;
-  const consoleHistory = panel.querySelector<HTMLDivElement>("#console-history")!;
-
-  // CONSOLE-mode buffer for ArrowUp/Down history (DSL terminal idiom).
-  const cmdBuffer: string[] = [];
-  let cmdBufferIdx = 0;
-
-  const PROMPT_PLACEHOLDER =
-    "Describe geometry — e.g. four walls forming a 6×4m room with a doorway on the south side";
-  const CONSOLE_PLACEHOLDER =
-    "DSL — wall (0 0) (5 0) height=3 thickness=0.2     |     :verb height=3 ⇒ dispatch";
-
-  const updateMeta = () => {
-    const n = ta.value.length;
-    const hint = mode === "prompt" ? "⌘⏎ run · ⇧⇥ console" : "⏎ run · ⇧⇥ prompt";
-    meta.textContent = `${n} ch · ~${Math.ceil(n / 4)} tok · ${hint}`;
-  };
-  ta.addEventListener("input", updateMeta);
-
-  function applyMode(next: ConsoleMode) {
-    mode = next;
-    saveConsoleMode(mode);
-    panel.classList.toggle("mode-prompt", mode === "prompt");
-    panel.classList.toggle("mode-console", mode === "console");
-    titleText.textContent = mode === "prompt"
-      ? "PROMPT  ·  NATURAL LANGUAGE → GEOMETRY"
-      : "CONSOLE  ·  DSL → KERNEL";
-    ta.placeholder = mode === "prompt" ? PROMPT_PLACEHOLDER : CONSOLE_PLACEHOLDER;
-    ta.rows = mode === "prompt" ? 3 : 1;
-    updateMeta();
-    if (mode === "console") {
-      consoleHistory.scrollTop = consoleHistory.scrollHeight;
-    }
-  }
-  _setConsoleModeFn = applyMode;
-  applyMode(mode); // initial setup of title + placeholder + meta
-
-  modeToggle.addEventListener("click", () => {
-    applyMode(mode === "prompt" ? "console" : "prompt");
-    ta.focus();
-  });
-
-  ta.addEventListener("keydown", (e: KeyboardEvent) => {
-    // Shift+Tab toggles mode regardless of where caret is.
-    if (e.key === "Tab" && e.shiftKey) {
-      e.preventDefault();
-      applyMode(mode === "prompt" ? "console" : "prompt");
-      return;
-    }
-
-    // Cmd/Ctrl+Enter always runs (legacy PROMPT shortcut, works in either mode).
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      runActive();
-      return;
-    }
-
-    if (mode === "console") {
-      // CONSOLE mode: plain Enter runs, Shift+Enter inserts newline.
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        runActive();
-        return;
-      }
-      if (e.key === "ArrowUp" && cmdBuffer.length > 0 && ta.value === (cmdBuffer[cmdBufferIdx] ?? "")) {
-        e.preventDefault();
-        cmdBufferIdx = Math.max(0, cmdBufferIdx - 1);
-        ta.value = cmdBuffer[cmdBufferIdx] ?? "";
-        updateMeta();
-        return;
-      }
-      if (e.key === "ArrowDown" && cmdBuffer.length > 0) {
-        e.preventDefault();
-        cmdBufferIdx = Math.min(cmdBuffer.length, cmdBufferIdx + 1);
-        ta.value = cmdBuffer[cmdBufferIdx] ?? "";
-        updateMeta();
-        return;
-      }
-    }
-    // PROMPT mode: plain Enter inserts newline (default textarea behavior).
-  });
-
-  function runActive() {
-    if (mode === "prompt") {
-      runGenerate();
-    } else {
-      runConsole(ta.value);
-    }
-  }
-
-  // GENERATE → click legacy #run-btn (preserves all existing wiring).
-  const genBtn = panel.querySelector<HTMLButtonElement>("#ai-generate-btn")!;
-  genBtn.addEventListener("click", () => runGenerate());
-
-  function runConsole(rawIn: string) {
-    const src = rawIn.trim();
-    if (!src) return;
-    cmdBuffer.push(src);
-    cmdBufferIdx = cmdBuffer.length;
-    ta.value = "";
-    updateMeta();
-    pushConsoleLine("cmd", src);
-
-    // `:` prefix routes through the dispatch table alongside the DSL compiler.
-    // Key=val pairs (height=3, thickness=0.2) become DispatchArgs; positional
-    // tuples like (0 0) are ignored by the dispatch path but handled by compileDsl.
-    const isDeclCmd = src.startsWith(":");
-    const dslSrc = isDeclCmd ? src.slice(1).trim() : src;
-
-    if (isDeclCmd) {
-      const tokens = dslSrc.split(/\s+/);
-      const verb = tokens[0];
-      const dispArgs: DispatchArgs = {};
-      for (const t of tokens.slice(1)) {
-        const eq = t.indexOf("=");
-        if (eq > 0) {
-          const k = t.slice(0, eq);
-          const v = t.slice(eq + 1);
-          const n = Number(v);
-          dispArgs[k] = Number.isFinite(n) ? n : v;
-        }
-      }
-      const dr = dispatchSync(verb, dispArgs);
-      pushConsoleLine(
-        dr.ok ? "ok" : "info",
-        `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-      );
-    }
-
-    const c = compileDsl(dslSrc);
-    if (!c.ok) {
-      pushConsoleLine("err", `line ${c.line}: ${c.message}`);
-      return;
-    }
-    if (c.dispatches && c.dispatches.length > 0) {
-      for (const d of c.dispatches) {
-        const dr = dispatchSync(d.verb, d.args);
-        pushConsoleLine(
-          dr.ok ? "ok" : "info",
-          `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-        );
-      }
-    }
-    if (c.js) {
-      const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
-      const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
-      if (jsSrc && runBtn) {
-        jsSrc.value = c.js;
-        jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
-        pushConsoleLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
-        runBtn.click();
-      } else {
-        pushConsoleLine("err", "kernel not ready (no #run-btn / #js-source)");
-      }
-    }
-  }
-
-  function pickDemo(id: string) {
-    const sel = document.getElementById("prompt-select") as HTMLSelectElement | null;
-    if (!sel) return;
-    const idx = demoIdToIndex(id);
-    if (idx === null) return;
-    sel.value = idx;
-    sel.dispatchEvent(new Event("change", { bubbles: true }));
-    // After change handler fires, mirror prompt-text into our textarea.
-    queueMicrotask(() => {
-      const ptx = document.getElementById("prompt-text") as HTMLTextAreaElement | null;
-      if (ptx) {
-        ta.value = ptx.value;
-        updateMeta();
-      }
-    });
-  }
-
-  async function runGenerate() {
-    // The legacy #js-source is populated by the demo-change handler whenever
-    // a demo is picked. If the user has edited the prompt away from any demo,
-    // we route through ai-generate (cache-first, LoRA fallback) to produce
-    // a fresh JS string before clicking the legacy #run-btn.
-    const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
-    if (!runBtn) return;
-    const ptx = document.getElementById("prompt-text") as HTMLTextAreaElement | null;
-    const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
-    const userPrompt = ta.value.trim();
-    const demoPrompt = (ptx?.value ?? "").trim();
-    // If the user hasn't edited away from the selected demo, the cached JS in
-    // #js-source is correct — preserve current "demo run" behavior.
-    if (userPrompt && demoPrompt && userPrompt === demoPrompt) {
-      runBtn.click();
-      return;
-    }
-    // Empty textarea — same fallback (just runs whatever js-source has).
-    if (!userPrompt) {
-      runBtn.click();
-      return;
-    }
-    // Edited away from the demo — invoke AI generate.
-    const prevLabel = genBtn.textContent;
-    genBtn.disabled = true;
-    genBtn.innerHTML = `${iconSVG("sparkle", 11)} GENERATING…`;
-    try {
-      const result = await generateGeometry(userPrompt);
-      if (jsSrc) {
-        jsSrc.value = result.js;
-        jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      // Update legacy prompt-text mirror so re-runs treat this as the active prompt.
-      if (ptx) ptx.value = userPrompt;
-      // Surface telemetry to the in-page CONSOLE tab + DevTools console.
-      const msg = result.source === "cache"
-        ? `cache · ${(result.confidence ?? 0).toFixed(2)} match · ${result.latency_ms.toFixed(0)}ms`
-        : result.source === "lora"
-          ? `lora · ${result.latency_ms.toFixed(0)}ms`
-          : `demo`;
-      pushConsoleLine("ok", `[ai-generate] ${msg}`);
-      console.log(`[ai-generate] ${msg}`);
-      runBtn.click();
-    } catch (e) {
-      const err = e as GenerateError;
-      pushConsoleLine("err", `[ai-generate] ${err.message}`);
-      console.error("[ai-generate]", err.message);
-      const status = document.getElementById("status");
-      if (status) {
-        status.textContent = `AI: ${err.message}`;
-        status.className = "status err";
-      }
-      // Make sure the merged PROMPT tab is showing so the error line is visible.
-      document.querySelector<HTMLElement>('.dock-tab[data-tab="prompt"]')?.click();
-    } finally {
-      genBtn.disabled = false;
-      if (prevLabel) genBtn.innerHTML = prevLabel;
-      else genBtn.innerHTML = `${iconSVG("play", 11)} GENERATE`;
-    }
-  }
-
-  // Initial seed: pick first demo so the textarea + js-source are populated.
-  // (Uses queueMicrotask so main.ts has finished wiring the select first.)
-  queueMicrotask(() => {
-    const sel = document.getElementById("prompt-select") as HTMLSelectElement | null;
-    if (sel && sel.options.length > 0) {
-      const ptx = document.getElementById("prompt-text") as HTMLTextAreaElement | null;
-      if (ptx && ptx.value) {
-        ta.value = ptx.value;
-        updateMeta();
-      }
-    }
-  });
+  const chatRoot = el("div", "chat-panel-root");
+  new ChatPanel(chatRoot);
+  wrap.appendChild(chatRoot);
 
   // Keep the legacy prompt-pane element alive in off-grid-host (it still hosts
   // export buttons, file picker, etc.) — DO NOT relocate it here.
@@ -849,7 +552,6 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
     promptPane.classList.add("prompt-pane-embed");
   }
 
-  wrap.appendChild(panel);
   return wrap;
 }
 
