@@ -244,9 +244,12 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   type ContentPart = TextPart | ImagePart;
   type UserContent = string | ContentPart[];
 
+  // Collect images and build user message content.
+  const imageList: RawImage[] = [];
   let userContent: UserContent;
   if (imageDataUrl) {
     const rawImage = await RawImage.fromURL(imageDataUrl);
+    imageList.push(rawImage);
     userContent = [
       { type: "image", image: rawImage } satisfies ImagePart,
       { type: "text", text: req.prompt } satisfies TextPart,
@@ -266,9 +269,17 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     { role: "user" as const, content: userContent },
   ];
 
-  // Encode: processor applies chat template, tokenizes text, and encodes images.
+  // Gemma4Processor._call(text, images, audio, options) — passing options as the
+  // second argument incorrectly routes it to `images`, causing image.rgb() errors.
+  // Correct approach: apply chat template to get a string, then call proc(text, images).
+  const chatText: string = proc.apply_chat_template(messages, {
+    add_generation_prompt: true,
+    tokenize: false,
+  }) as string;
+
+  // Encode: processor tokenizes text and encodes images (null when text-only).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inputs: any = await proc(messages, { add_generation_prompt: true });
+  const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
 
   // Generate — greedy decoding for deterministic tool-call JSON.
   const outputs = await model.generate({
