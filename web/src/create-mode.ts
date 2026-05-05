@@ -560,11 +560,18 @@ export function resetPending(): void {
 // through to viewer.onPointerDown for selection.
 export function initCreateMode(viewer: Viewer): void {
   _viewer = viewer;
-  const canvas = viewer.getCanvas();
+  // The THREE.js canvas has pointer-events:none — clicks land on .vp-body
+  // children of the viewport area. Register on the viewport-area-host ancestor
+  // (always present in static HTML) so the capture listener fires before any
+  // .vp-body listeners registered during buildWorkbench/buildModes.
+  const vpBody =
+    document.getElementById("viewport-area-host") ??
+    document.querySelector<HTMLElement>("#viewport-2 .vp-body") ??
+    viewer.getCanvas();
 
   // Capture-phase listener — runs before the viewer's own pointerdown so we
   // can swallow the event when a create-tool is active.
-  canvas.addEventListener("pointerdown", (ev) => {
+  vpBody.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     const tool = readActiveTool();
     if (!tool) return;
@@ -576,7 +583,7 @@ export function initCreateMode(viewer: Viewer): void {
   }, { capture: true });
 
   // Cursor dot + rubber-band preview on every pointer move.
-  canvas.addEventListener("pointermove", (ev) => {
+  vpBody.addEventListener("pointermove", (ev) => {
     const tool = readActiveTool();
     if (!tool) { hideCursorDot(); return; }
     // Show dot at screen position regardless of ground-plane hit (camera may be near-horizontal).
@@ -589,7 +596,7 @@ export function initCreateMode(viewer: Viewer): void {
     updateRubberBand(viewer, handler, snapped);
   });
 
-  canvas.addEventListener("pointerleave", () => {
+  vpBody.addEventListener("pointerleave", () => {
     hideCursorDot();
   });
 
