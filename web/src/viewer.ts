@@ -161,6 +161,7 @@ export class Viewer {
       canvas,
       antialias: true,
       alpha: true,
+      preserveDrawingBuffer: true, // needed for canvas.toDataURL() in viewport capture
     });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setClearColor(0x000000, 0);

@@ -17,6 +17,7 @@ import { pipeline } from "@huggingface/transformers";
 import { getDictionary } from "./dictionary";
 import { listHandlers } from "./dispatch";
 import { snapshotAsText } from "./scene-kg";
+import { captureViewport } from "./viewport-capture";
 import type { Skill } from "./skills-loader";
 
 export type AgentDispatch = {
@@ -96,7 +97,7 @@ async function getModel(): Promise<any> {
     let lastErr: Error = new Error("No backend available");
     for (const { device, dtype, label } of backends) {
       try {
-        const p = await pipeline("text-generation", MODEL_ID, {
+        const p = await pipeline("image-text-to-text", MODEL_ID, {
           device,
           dtype,
           progress_callback: progressCb,
@@ -168,6 +169,9 @@ function buildSceneContext(): string {
   return `Scene contains ${meshes.length} object(s): ${lines.join("; ")}${suffix}.`;
 }
 
+// Detects prompts that want visual perception of the viewport.
+const VISION_RE = /\b(see|look|view|describe|scene|visible|on (the )?screen|canvas|appear|show me|what('s| is) (there|in|on))\b/i;
+
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
     "You are Gemma·Architect, a parametric CAD assistant embedded in a browser app.",
@@ -176,7 +180,8 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     "Emit one ```json block per tool call. Multiple actions = multiple blocks in sequence.",
     "IMPORTANT: Use ONLY the verb names listed below. Do not invent verb names — unrecognised verbs are silently rejected.",
     summariseDictionary(),
-    `Current scene: ${buildSceneContext()}`,
+    `Current scene (text): ${buildSceneContext()}`,
+    "When a viewport image is attached to a user message, describe what is visible in the scene from that image. When no image is provided, refer to the 'Current scene' text summary above.",
     summariseSkills(skills),
     "For questions or summaries, respond with plain text only (no JSON blocks).",
   ].join("\n\n");
@@ -228,10 +233,29 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const model = await getModel();
 
+  // Attach a viewport screenshot for visual-perception queries.
+  const wantsVision = VISION_RE.test(req.prompt);
+  const imageDataUrl = wantsVision ? captureViewport() : null;
+
+  type TextPart = { type: "text"; text: string };
+  type ImagePart = { type: "image"; image: string };
+  type ContentPart = TextPart | ImagePart;
+  type UserContent = string | ContentPart[];
+
+  let userContent: UserContent;
+  if (imageDataUrl) {
+    userContent = [
+      { type: "image", image: imageDataUrl } satisfies ImagePart,
+      { type: "text", text: req.prompt } satisfies TextPart,
+    ];
+  } else {
+    userContent = req.prompt;
+  }
+
   const messages = [
     { role: "system" as const, content: buildSystemPrompt(req.skills) },
     ...(req.history ?? []),
-    { role: "user" as const, content: req.prompt },
+    { role: "user" as const, content: userContent },
   ];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
