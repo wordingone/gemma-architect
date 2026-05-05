@@ -55,6 +55,8 @@ let _pending: Array<{ x: number; y: number }> = [];
 // Temporary scene objects — removed when the tool completes or is cancelled.
 let _previewMesh: THREE.Mesh | null = null;
 let _markerMesh: THREE.Mesh | null = null;
+// Cursor dot — CSS overlay div that tracks the pointer when a sketch tool is active.
+let _cursorDot: HTMLElement | null = null;
 // Viewer reference set once by initCreateMode — used by resetPending.
 let _viewer: Viewer | null = null;
 
@@ -448,6 +450,45 @@ function clearTemporary(viewer: Viewer): void {
   clearMarker(viewer);
 }
 
+function ensureCursorDot(): HTMLElement {
+  if (_cursorDot) return _cursorDot;
+  const el = document.createElement("div");
+  el.id = "sketch-cursor-dot";
+  el.style.cssText = [
+    "position:fixed",
+    "width:12px",
+    "height:12px",
+    "border-radius:50%",
+    "background:#ffffff",
+    "border:2px solid #111111",
+    "box-shadow:0 0 0 1px #ffffff",
+    "pointer-events:none",
+    "display:none",
+    "transform:translate(-50%,-50%)",
+    "z-index:9999",
+  ].join(";");
+  document.body.appendChild(el);
+  _cursorDot = el;
+  return el;
+}
+
+function moveCursorDot(_viewer: Viewer, _pt: { x: number; y: number }, clientX: number, clientY: number): void {
+  const dot = ensureCursorDot();
+  dot.style.display = "block";
+  dot.style.left = clientX + "px";
+  dot.style.top = clientY + "px";
+}
+
+function hideCursorDot(): void {
+  if (_cursorDot) _cursorDot.style.display = "none";
+}
+
+function destroyCursorDot(): void {
+  if (!_cursorDot) return;
+  _cursorDot.remove();
+  _cursorDot = null;
+}
+
 function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: number; y: number }): void {
   clearPreview(viewer);
   if (_pending.length !== 1) return;
@@ -510,6 +551,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number }, 
 // Reset pending click buffer — used when switching tools.
 export function resetPending(): void {
   if (_viewer) clearTemporary(_viewer);
+  hideCursorDot();
   _pending = [];
 }
 
@@ -533,23 +575,31 @@ export function initCreateMode(viewer: Viewer): void {
     emitClickWorld(viewer, snapped, { tool });
   }, { capture: true });
 
-  // Rubber-band preview: update preview mesh as cursor moves between clicks.
+  // Cursor dot + rubber-band preview on every pointer move.
   canvas.addEventListener("pointermove", (ev) => {
-    if (_pending.length === 0) return;
     const tool = readActiveTool();
-    if (!tool) return;
+    const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
+    if (!tool || !world) {
+      hideCursorDot();
+      return;
+    }
+    const snapped = snapPoint(world.x, world.y);
+    moveCursorDot(viewer, snapped, ev.clientX, ev.clientY);
+    if (_pending.length === 0) return;
     const handler = TOOL_HANDLERS[tool];
     if (!handler || handler.clicks < 2) return;
-    const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
-    if (!world) return;
-    const snapped = snapPoint(world.x, world.y);
     updateRubberBand(viewer, handler, snapped);
+  });
+
+  canvas.addEventListener("pointerleave", () => {
+    hideCursorDot();
   });
 
   // Esc cancels the in-progress placement.
   window.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && _pending.length > 0) {
       clearTemporary(viewer);
+      hideCursorDot();
       _pending = [];
       dispatchSync("setActiveTool", { toolId: "select" });
     }

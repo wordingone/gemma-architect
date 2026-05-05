@@ -41,6 +41,8 @@ import {
 } from "./exporters";
 import { SAMPLES } from "./sample-files";
 import type { WorkerOut } from "./worker";
+import { syncToolActiveClass } from "./app-state";
+import { initCreateMode } from "./create-mode";
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -93,6 +95,8 @@ paramCollapseBtn.addEventListener("click", () => {
 const viewer = new Viewer(canvas, viewportAreaEl);
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
+syncToolActiveClass();
+initCreateMode(viewer);
 const scenePanel = new ScenePanel(scenePanelEl, viewer);
 
 // Navigation hotkeys — Blender-numpad keymap, with letter fallbacks for
