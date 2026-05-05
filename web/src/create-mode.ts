@@ -578,14 +578,12 @@ export function initCreateMode(viewer: Viewer): void {
   // Cursor dot + rubber-band preview on every pointer move.
   canvas.addEventListener("pointermove", (ev) => {
     const tool = readActiveTool();
+    if (!tool) { hideCursorDot(); return; }
+    // Show dot at screen position regardless of ground-plane hit (camera may be near-horizontal).
+    moveCursorDot(viewer, { x: 0, y: 0 }, ev.clientX, ev.clientY);
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
-    if (!tool || !world) {
-      hideCursorDot();
-      return;
-    }
+    if (!world || _pending.length === 0) return;
     const snapped = snapPoint(world.x, world.y);
-    moveCursorDot(viewer, snapped, ev.clientX, ev.clientY);
-    if (_pending.length === 0) return;
     const handler = TOOL_HANDLERS[tool];
     if (!handler || handler.clicks < 2) return;
     updateRubberBand(viewer, handler, snapped);
