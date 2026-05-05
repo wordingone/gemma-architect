@@ -433,19 +433,11 @@ export class Viewer {
       // "all rings glowing"). Tiny sphere = no accidental engulfing.
       {
         const internal = this.gizmos[1] as unknown as { _gizmo: { picker: { rotate: THREE.Object3D } } };
-        const eulers: Record<string, [number, number, number]> = {
-          X: [0, -Math.PI / 2, -Math.PI / 2],
-          Y: [Math.PI / 2, 0, 0],
-          Z: [0, 0, -Math.PI / 2],
-        };
         internal._gizmo.picker.rotate.traverse((o: THREE.Object3D) => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
           if (o.name === "X" || o.name === "Y" || o.name === "Z") {
-            const e = eulers[o.name];
             const newGeo = new THREE.TorusGeometry(0.5, 0.04, 4, 24);
-            const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(e[0], e[1], e[2]));
-            newGeo.applyMatrix4(m);
             mesh.geometry.dispose();
             mesh.geometry = newGeo;
           } else if (o.name === "XYZE") {
