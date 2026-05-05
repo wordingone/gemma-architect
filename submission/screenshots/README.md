@@ -11,11 +11,11 @@ Cmd-K palette, PARAMETERS tab).
 |------|--------|--------------|
 | `01-prompt-wall.png`        | c162847 | PROMPT tab — wall chip loaded, demo sentence filled, GENERATE ready |
 | `02-wall-rendered.png`      | c162847 | Wall (12 tri) rendered solid — title block + SCENE panel visible |
-| `03-console-cache.png`      | c162847 | CONSOLE tab — init sequence + DSL ready prompt |
+| `03-console-cache.png`      | 3b2da67 | CREATE tab — ChatPanel conversation UI with starter prompts; CONSOLE dock tab is a stub (empty body) post-#34 |
 | `04-schultz-solid.png`      | c162847 | Schultz Residence IFC (847 meshes, 270k tri) — south 3/4 angle, doorway cut visible, solid shading |
 | `05-schultz-drafting.png`   | c162847 | Schultz Residence IFC — DRAFT ribbon mode, flat shading, IFC layer tree in SCENE panel |
 | `06-export-drawer.png`      | c162847 | EXPORT drawer open — 12 tiles in 3 sections: BIM·ARCHITECTURAL (IFC/STEP/DWG) · 3D·MESH (OBJ/STL/GLB/glTF/USDZ/FBX) · 2D·DRAWING (SVG/DXF/PDF) |
-| `07-cmdk-palette.png`       | c162847 | ⌘K palette open — full command list (GENERATE / MODEL / VIEW groups, kbd shortcuts) |
+| `07-cmdk-palette.png`       | 3b2da67 | ⌘K palette open — GENERATE / MODEL / VIEW groups; mode-switch entries not yet wired post-#34 |
 | `08-cmdk-schultz.png`       | c162847 | ⌘K with "Schultz" typed — filtered to single "Schultz Residence (14 elements)" entry |
 | `09-parameters-sliders.png` | c162847 | PARAMETERS tab — wall sliders (5.5 / 0.2 / 2.8m values visible) |
 
@@ -29,6 +29,10 @@ for an exact F1=1.000 cache hit is restored).
 Re-captured 2026-05-05 at c162847 — R1 (SVG ribbon icons), R2 (VELLUM pill),
 R3 (selection + gizmos), R4 (layout crop) regressions all fixed in this build.
 gemma-verify all_passed:true at f531127 (same build).
+
+Re-captured #03 + #07 at 3b2da67 (2026-05-05) — post-#34 PROMPT/CONSOLE merge.
+CONSOLE dock tab has no pane body; #03 now shows CREATE tab ChatPanel.
+#07 palette is current (no "Show CONSOLE tab" entry visible).
 
 ## Pending (manual capture pre-grid-composite)
 
