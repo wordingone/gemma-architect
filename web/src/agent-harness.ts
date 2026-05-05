@@ -97,6 +97,8 @@ async function getModel(): Promise<any> {
     let lastErr: Error = new Error("No backend available");
     for (const { device, dtype, label } of backends) {
       try {
+        // @ts-ignore — 'image-text-to-text' is valid at runtime but absent from
+        // PipelineType in @huggingface/transformers@4.2.0 type defs.
         const p = await pipeline("image-text-to-text", MODEL_ID, {
           device,
           dtype,
