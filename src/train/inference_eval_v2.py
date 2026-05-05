@@ -31,7 +31,17 @@ from unsloth import FastModel
 from unsloth.chat_templates import get_chat_template
 
 REPO = Path(__file__).resolve().parents[2]
-ADAPTER = Path(os.environ.get("ADAPTER_DIR", REPO / "outputs/cad-lora-v2-4b-it"))
+
+_adapter_env = os.environ.get("ADAPTER_DIR")
+if not _adapter_env:
+    print(
+        "ADAPTER_DIR unset. Legacy LoRA adapters purged 2026-05-05 "
+        "per Jun directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
+        "Gemma 4 LoRA adapter path before evaluating.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+ADAPTER = Path(_adapter_env)
 EVAL = Path(os.environ.get("EVAL_FILE", REPO / "data/eval_v2.jsonl"))
 
 if not ADAPTER.exists():
@@ -120,7 +130,16 @@ _load_kwargs = {
 if "e2b" in TAG.lower():
     _load_kwargs["attn_implementation"] = "eager"
 model, tokenizer = FastModel.from_pretrained(**_load_kwargs)
-tokenizer = get_chat_template(tokenizer, chat_template="gemma-3")
+_chat_template = os.environ.get("GEMMA4_CHAT_TEMPLATE")
+if not _chat_template:
+    print(
+        "GEMMA4_CHAT_TEMPLATE unset. Legacy chat template purged 2026-05-05 "
+        "per Jun directive (hackathon eligibility drift). "
+        "Set GEMMA4_CHAT_TEMPLATE to chosen Gemma 4 template before eval.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+tokenizer = get_chat_template(tokenizer, chat_template=_chat_template)
 FastModel.for_inference(model)
 
 results = []

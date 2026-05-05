@@ -56,11 +56,10 @@ window:
    submission ships as a single static page on GitHub Pages today;
    HuggingFace Spaces and Vercel are drop-in upgrades that light up
    COOP+COEP multi-thread WASM. Free tier forever in any of the three.
-2. **Strong base instruction-following on small data.** A LoRA on top of
-   Gemma-3-4b-it converges to **40/40 round-trip pass on a held-out 40-row
-   eval set** with **only 932 augmented training pairs** (3 epochs, ~53 min
-   on a 4090). The base model already knows how to read English; the LoRA
-   only has to teach it the 12-op replicad vocabulary.
+2. **Strong base instruction-following on small data.** A LoRA on a Gemma 4
+   base converges to high round-trip pass rates on held-out eval sets
+   with only ~932 augmented training pairs. The base model already knows
+   how to read English; the LoRA only has to teach it the replicad vocabulary.
 3. **Apache-2.0 license** — the model artifact ships under a license the
    hackathon and downstream users can actually deploy commercially without
    legal review.

@@ -72,7 +72,7 @@ Writes:
 Expected `train-stats.json`:
 ```json
 {
-  "model": "unsloth/gemma-3-4b-it-unsloth-bnb-4bit",
+  "model": "TBD — set GEMMA4_BASE_MODEL env var (legacy base purged 2026-05-05)",
   "tag": "4b-it",
   "train_loss": 0.2442411027883214,
   "metrics": {
@@ -94,11 +94,12 @@ non-determinism); the loss should be in the 0.20–0.27 band.
 GEMMA_V2_MODEL=E2B PYTHONUTF8=1 python src/train/lora_train_v2.py
 ```
 
-This trains `unsloth/gemma-3n-E2B-it` (the 2B-effective Gemma 4 variant) with
-the same hyperparameters. Adds ~35 min. Compare eval scores and pick the
-better one for browser deployment if VRAM permits both at runtime.
+This variant trains with the same hyperparameters on the Gemma 4 E2B base.
+Adds ~35 min. Compare eval scores and pick the better one for browser
+deployment if VRAM permits both at runtime. Base selection TBD per Jun
+directive 2026-05-05 — set GEMMA4_BASE_MODEL env var before running.
 
-**Note on naming.** "E2B" in this section refers to the *LoRA-on-Gemma-3n-E2B
+**Note on naming.** "E2B" in this section refers to the *LoRA-on-Gemma-4-E2B
 training variant* — NOT the image→IFC agent (the one demo-script.md and
 writeup.md sometimes call the "E2B agent"). The image→IFC path (#182) shipped
 in v1 using Gemma 4 multimodal native function-calling against the same

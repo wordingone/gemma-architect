@@ -1,4 +1,4 @@
-// Closed-loop tool-chain CAD harness — runs base Gemma 4 26B (no LoRA) at
+// Closed-loop tool-chain CAD harness — runs base Gemma 4 (no LoRA) at
 // http://127.0.0.1:8083/v1 against a CAD prompt with iterative tool calls.
 //
 // Usage:
@@ -389,14 +389,14 @@ async function main() {
         body: JSON.stringify({
           messages,
           tools: TOOLS,
-          // Force a tool call every turn — gemma4 is verbose in its <|channel>thought
+          // Force a tool call every turn — Gemma 4 is verbose in its thought
           // mode and burns context deliberating rather than acting. "required" makes
           // the grammar engine emit a tool call. Loop terminates on submit().
           tool_choice: "required",
           temperature: 0.5,           // higher temp breaks indecision loops
           max_tokens: 2048,
           // llama-server-specific: DRY (Don't Repeat Yourself) penalizes the
-          // "Wait, I'll just make the east wall." x10 indecision loop gemma4-26b
+          // "Wait, I'll just make the east wall." x10 indecision loop Gemma 4
           // falls into on multi-step tool problems. Verbose reasoning is fine;
           // verbatim self-repetition is what breaks the chain.
           dry_multiplier: 0.8,
@@ -417,7 +417,7 @@ async function main() {
       break;
     }
     const msg = choice.message;
-    // Strip the model's reasoning tokens from the saved history. gemma4-26b's
+    // Strip the model's reasoning tokens from the saved history. Gemma 4's
     // <|channel>thought blocks are huge (~500 tokens each) and cumulative reasoning
     // bloat is what causes the iter-3 stall. Keep only the tool call envelope.
     messages.push({ role: "assistant", content: null, tool_calls: msg.tool_calls });

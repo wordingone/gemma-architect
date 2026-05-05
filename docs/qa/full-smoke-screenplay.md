@@ -2619,7 +2619,7 @@ builders (`buildPromptTabBody` :395, `buildConsoleTabBody` :571,
 2. **See:** 4 hardcoded boot lines (workbench.ts:576-579):
    "OpenCascade WebAssembly initialized" (info, ts=00:00:01),
    "web-ifc parser ready · IFC4 schema" (info, 00:00:01),
-   "Gemma-3-4b-it adapter loaded" (ok, 00:00:02),
+   "LoRA adapter loaded" (ok, 00:00:02),
    "DSL ready · type wall|slab|column|box|cut, then ⏎" (info,
    00:00:03).
 3. **Verify:** All 4 `.console-line` elements present at the top with

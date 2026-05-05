@@ -1,9 +1,15 @@
 """
-serve_lora.py — minimal OpenAI-compat /v1/chat/completions server backed by the
-v2 LoRA adapter on Gemma-3-4b-it. Lets the gemma-architect web demo call live
-inference instead of the bundled cache.
+serve_lora.py — minimal OpenAI-compat /v1/chat/completions server backed by a
+v2 LoRA adapter.
+
+Per Jun directive 2026-05-05: legacy bases were purged (hackathon eligibility
+drift). This server is now base-model-agnostic — set
+ADAPTER_DIR + GEMMA4_CHAT_TEMPLATE before running. The script fails loud if
+either is unset.
 
 Usage:
+    set ADAPTER_DIR=outputs/cad-lora-v3-<tag>
+    set GEMMA4_CHAT_TEMPLATE=gemma-4
     python src/serve/serve_lora.py
     # serves on http://localhost:8088/v1/chat/completions
 
@@ -38,7 +44,17 @@ from pydantic import BaseModel
 import uvicorn
 
 REPO = Path(__file__).resolve().parents[2]
-ADAPTER = Path(os.environ.get("ADAPTER_DIR", REPO / "outputs/cad-lora-v2-4b-it"))
+
+_adapter_env = os.environ.get("ADAPTER_DIR")
+if not _adapter_env:
+    print(
+        "ADAPTER_DIR unset. Legacy LoRA adapters purged 2026-05-05 "
+        "per Jun directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
+        "Gemma 4 LoRA adapter path before serving.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+ADAPTER = Path(_adapter_env)
 HOST = os.environ.get("LORA_HOST", "127.0.0.1")
 PORT = int(os.environ.get("LORA_PORT", "8088"))
 
@@ -54,7 +70,16 @@ model, tokenizer = FastModel.from_pretrained(
     max_seq_length=4096,
     load_in_4bit=True,
 )
-tokenizer = get_chat_template(tokenizer, chat_template="gemma-3")
+
+_chat_template = os.environ.get("GEMMA4_CHAT_TEMPLATE")
+if not _chat_template:
+    print(
+        "GEMMA4_CHAT_TEMPLATE unset. Set to the Unsloth chat template name "
+        "matching the chosen Gemma 4 base (e.g. 'gemma-4').",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+tokenizer = get_chat_template(tokenizer, chat_template=_chat_template)
 FastModel.for_inference(model)
 print(f"[serve_lora] loaded in {time.time() - t0:.1f}s", flush=True)
 
@@ -116,7 +141,7 @@ def chat(req: ChatRequest) -> dict:
         "id": f"chatcmpl-{int(time.time() * 1000)}",
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": req.model or "gemma-3-4b-it-cad-lora-v2",
+        "model": req.model or "cad-lora-v2",
         "choices": [
             {
                 "index": 0,

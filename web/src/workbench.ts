@@ -559,7 +559,7 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
       <div class="ai-console-history console-only" id="console-history">
         <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">OpenCascade WebAssembly initialized</span></div>
         <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">web-ifc parser ready · IFC4 schema</span></div>
-        <div class="console-line ok"><span class="ts">00:00:02</span><span class="glyph">✓</span><span class="text">Gemma-3-4b-it adapter loaded</span></div>
+        <div class="console-line ok"><span class="ts">00:00:02</span><span class="glyph">✓</span><span class="text">LoRA adapter loaded</span></div>
         <div class="console-line info"><span class="ts">00:00:03</span><span class="glyph">·</span><span class="text">DSL ready · type wall|slab|column|box|cut, then ⏎ — Shift+Tab toggles modes</span></div>
       </div>
     </div>

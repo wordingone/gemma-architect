@@ -28,7 +28,7 @@ Each section gets its own page in this directory near the deadline:
 ## Status (2026-05-05)
 
 - ✅ Spike B (IFC mining pipeline) — 12 pairs mined from open IFC corpus, retrospective at `docs/spike-b-retrospective.md`.
-- ✅ Spike A (LoRA training) — 76 train + 8 eval pairs, Gemma-3-4b-it QLoRA r=16, eval_loss 0.144 @ epoch 3, **8/8 parse_ok | 8/8 api_clean | 8/8 has_extrude** on held-out set. Adapter at `outputs/spike-a-lora/`. Retrospective at `docs/spike-a-retrospective.md`.
+- ✅ Spike A (LoRA training) — 76 train + 8 eval pairs, QLoRA r=16, eval_loss 0.144 @ epoch 3, **8/8 parse_ok | 8/8 api_clean | 8/8 has_extrude** on held-out set. Adapter at `outputs/archive-gemma3-2026-05-05/spike-a-lora/`. Retrospective at `docs/archive/spike-a-retrospective.md`.
 - ✅ 18-day plan — `docs/plan-18-day.md` (5 sub-gates: model artifact, browser inference, render+export, demo video, Kaggle writeup).
 - ✅ **Dataset v2** — 400 base rows, 5 buckets (50+50+200+50+50), **round-trip 100%**, 932 augmented training rows, 40-row stratified holdout. See `dataset/v2-results.md`.
 - ✅ **4b-it LoRA shipped 2026-05-01** — 53 min on a 4090, train_loss 0.244 @ epoch 3, **40/40 (100%) full round-trip** on the held-out eval. Adapter at `outputs/cad-lora-v2-4b-it/` (gitignored — produced by training, not committed). Publish plan generated at `outputs/cad-lora-v2-publish-plan.json` on the training machine when publish_v2.py ran without HF_TOKEN; on a fresh clone, regenerate by re-running publish_v2.py.

@@ -62,7 +62,7 @@ Full investigation in 5 parallel haiku agent reports (2026-05-01). Headline find
 
 - `google/gemma-4-e2b` — primary in-browser inference target (~2B effective).
 - `google/gemma-4-e4b` — alt target (~4B).
-- `unsloth/gemma-3-4b-it-unsloth-bnb-4bit` — actual base used in v2 LoRA train (Unsloth wheel stand-in until Gemma-4 wheels land).
+- Gemma 4 base TBD — awaiting Jun base selection per 2026-05-05 directive. Legacy base training purged 2026-05-05.
 
 ## 8. Hackathon target
 

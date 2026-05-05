@@ -14,11 +14,10 @@ Watch a 3D wall render. Drag sliders to change the dimensions live.
 Click **Export IFC** and download a file that opens in Revit, ArchiCAD,
 BlenderBIM, or any other BIM tool on the planet.
 
-That is the whole demo. 60 cached Gemma 4 LoRA outputs ship with the
-page; sub-100ms F1 fuzzy match is the default judge experience. The
-geometry kernel and IFC4 emitter do run in-browser via WebAssembly. Live
-LoRA inference is opt-in: `src/serve/serve_lora.py` (FastAPI + Unsloth)
-serves a 4090-resident adapter on port 8088 when `window.__loraUrl` is
+That is the whole demo. The geometry kernel and IFC4 emitter run
+in-browser via WebAssembly. The AI prompt path calls a live LoRA adapter
+via `src/serve/serve_lora.py` (FastAPI + Unsloth) when `window.__loraUrl`
+is
 set.
 
 The goal is to put parametric architectural design — the kind of tool you
@@ -173,12 +172,11 @@ boolean chains) is curated in the dataset but not the model's primary target.
 
 ### Training
 
-- Base: `unsloth/gemma-3-4b-it-unsloth-bnb-4bit` (4B-parameter Gemma 3, 4-bit)
+- Base: TBD — awaiting Gemma 4 base selection per Jun directive 2026-05-05.
+  Earlier training run (legacy base, purged 2026-05-05) reached
+  `train_loss = 0.2442`; metrics not transferable to Gemma 4 base.
 - LoRA: rank 16, alpha 16, all-linear targets via Unsloth FastModel
 - 3 epochs, effective batch 8 (batch 2 × grad-accum 4), AdamW-8bit, lr 2e-4, bf16
-- **53 minutes on one RTX 4090, 932 training rows × 3 epochs (351 steps)**
-- **`train_loss = 0.2442`** at end of epoch 3
-  (`outputs/cad-lora-v2-4b-it/train-stats.json`)
 
 ### Eval (held-out 40 rows, never seen at train time)
 
@@ -348,9 +346,9 @@ bun scripts/web-self-harness.ts
   full source, 18-day plan in `docs/plan-18-day.md`, training scripts in
   `src/train/`, web app in `web/`.
 - **Hugging Face Hub adapter**: `gemma-architect/cad-lora-v2` is the
-  intended path (LoRA on `gemma-3-4b-it-unsloth-bnb-4bit`, Apache-2.0,
+  intended path (LoRA on Gemma 4 base TBD, Apache-2.0,
   model card with eval numbers + intended-use + limitations). Push is
-  pending HF_TOKEN; until then `src/train/publish_v2.py` writes
+  pending Gemma 4 retrain; until then `src/train/publish_v2.py` writes
   `outputs/cad-lora-v2-publish-plan.json` on the training machine
   (`outputs/` is gitignored).
 - **Hosted live demo**: GitHub Pages — https://wordingone.github.io/gemma-architect/
