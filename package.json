@@ -1,7 +1,7 @@
 {
   "name": "gemma-architect",
   "version": "0.1.0",
-  "description": "Browser-native 3D architectural design tool — Gemma 4 fine-tuned on parametric IFC.",
+  "description": "Browser-native 3D architectural design tool \u00e2\u20ac\u201d Gemma 4 fine-tuned on parametric IFC.",
   "type": "module",
   "private": true,
   "scripts": {
@@ -26,7 +26,8 @@
     "rhino3dm": "^8.17.0",
     "three": "^0.162.0",
     "verb-nurbs": "^3.0.3",
-    "web-ifc": "^0.0.77"
+    "web-ifc": "^0.0.77",
+    "@huggingface/transformers": "^4.0.0"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.9.0",

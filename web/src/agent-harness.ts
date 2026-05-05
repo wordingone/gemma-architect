@@ -1,40 +1,35 @@
-// agent-harness.ts — Gemma 4 agent wrapper (T10 per silly-baking-yeti.md).
+// agent-harness.ts — In-browser WebGPU inference via Transformers.js v4 (#47).
 //
-// Wraps the local Gemma 4 (E2B-it) llama-server endpoint with:
-//   - System prompt: Spatial Dictionary entries + Scene KG snapshot + matched skills
-//   - Tools array: dispatch table → OpenAI-compat function definitions
-//   - Multimodal content blocks: optional ImageBitmap frames forwarded as
-//     `image_url` parts (Gemma 4 vision tower handles them natively;
-//     gemma-architect's adapter at `src/serve/serve_lora.py` is OURS, so the
-//     image-stripping bug in avir-cli's openai-adapter does not apply here)
-//   - Tool-call parsing: `tool_calls[]` deltas mapped to AgentDispatch records
+// Model: onnx-community/gemma-4-E2B-it-ONNX (Q4 quantized, CDN-hosted).
+// Replaces the localhost:8084 llama-server fetch path from the original
+// agent-harness design. Same public interface — chat-panel.ts and cmdk.ts
+// unchanged.
 //
-// The harness does NOT execute dispatches itself — it returns the parsed
-// AgentDispatch[] for the caller (shell.ts / agent loop) to invoke via
-// `dispatch()` from `./dispatch`. Keeps this module pure-IO + pure-mapping
-// so it stays unit-testable against a mocked fetch.
+// Load sequence:
+//   1. First call to runAgentTurn() triggers model download (~2GB, cached by browser).
+//   2. Badge element (#ai-model-badge) shows download progress then "LIVE".
+//   3. Subsequent calls skip loading and go straight to inference.
 //
-// Endpoint: http://127.0.0.1:8084/v1/chat/completions (overridable via
-// VITE_AGENT_URL or window.__agentUrl, mirroring the ai-generate.ts pattern).
-// Port 8084 is dedicated to gemma-architect; avir-cli uses 8083.
+// Tool-call format: model emits ```json {"verb":"Name","args":{...}} ``` blocks.
+// parseDispatches() extracts these; remaining text becomes the response text.
 
-import { getDictionary, type SdArg, type SpatialDictionaryEntry } from "./dictionary";
+import { pipeline } from "@huggingface/transformers";
+import { getDictionary } from "./dictionary";
 import { snapshotAsText } from "./scene-kg";
 import type { Skill } from "./skills-loader";
 
+export type AgentDispatch = {
+  verb: string;
+  args: Record<string, unknown>;
+};
+
 export type AgentRequest = {
   prompt: string;
-  /** Prior turns for multi-turn conversation (excludes the current `prompt`). */
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   frames?: ImageBitmap[];
   maxTurns?: number;
   skills?: Skill[];
   model?: string;
-};
-
-export type AgentDispatch = {
-  verb: string;
-  args: Record<string, unknown>;
 };
 
 export type AgentResponse = {
@@ -43,212 +38,190 @@ export type AgentResponse = {
   raw?: unknown;
 };
 
-// ---- Endpoint resolution -----------------------------------------------
+// ---- Model loading --------------------------------------------------------
 
-const DEFAULT_ENDPOINT = "http://127.0.0.1:8084/v1/chat/completions";
-const DEFAULT_MODEL = "gemma-4-e2b-it";
+const MODEL_ID = "onnx-community/gemma-4-E2B-it-ONNX";
+const BADGE_ID = "ai-model-badge";
 
-function getEndpoint(): string {
-  if (typeof window !== "undefined") {
-    const w = window as unknown as { __agentUrl?: string };
-    if (w.__agentUrl) return w.__agentUrl;
-  }
-  const env = (import.meta as unknown as { env?: Record<string, string> }).env;
-  return env?.VITE_AGENT_URL ?? DEFAULT_ENDPOINT;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _pipe: any = null;
+let _pipePromise: Promise<unknown> | null = null;
+
+function updateBadge(inner: string): void {
+  const el = document.getElementById(BADGE_ID);
+  if (el) el.innerHTML = inner;
 }
 
-// ---- JSON-schema generation from the dispatch table --------------------
-// Map SdArgType → JSON-schema property. Kernel-specific handles (edge /
-// surface / solid) become opaque `string` so the agent passes UUIDs.
-function argToJsonSchema(arg: SdArg): Record<string, unknown> {
-  switch (arg.type) {
-    case "number":
-    case "integer":
-      return { type: arg.type === "integer" ? "integer" : "number" };
-    case "boolean":
-      return { type: "boolean" };
-    case "string":
-    case "enum_format":
-      return { type: "string" };
-    case "point2":
-      return { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2 };
-    case "point3":
-    case "vector3":
-      return { type: "array", items: { type: "number" }, minItems: 3, maxItems: 3 };
-    case "polyline":
-    case "polyline_or_circle":
-    case "list_point2":
-      return { type: "array", items: { type: "array", items: { type: "number" } } };
-    case "list_edge":
-    case "list_face":
-    case "list_any":
-    case "list_edge_or_surface":
-      return { type: "array", items: { type: "string" } };
-    case "any":
-      return {};
-    default:
-      // Kernel-internal handles (edge / surface / solid / curve / plane3 /
-      // line3 / number_or_vector3 / arraybuffer / etc.) are passed by
-      // reference as opaque tokens — the agent cites them by UUID, the
-      // dispatch handler resolves them on the kernel side.
-      return { type: "string" };
-  }
+type ProgressInfo = {
+  status: string;
+  name?: string;
+  progress?: number;
+};
+
+// Try WebGPU first (q4f16 quantization); fall back through device:"auto"
+// (onnxruntime-web selects WebGL then WASM-SIMD automatically). Model files
+// are cached in browser storage after first download — subsequent visits skip
+// the network transfer entirely.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getModel(): Promise<any> {
+  if (_pipe) return _pipe;
+  if (_pipePromise) return _pipePromise;
+
+  _pipePromise = (async () => {
+    updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LOADING…`);
+    window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
+
+    const progressCb = (info: ProgressInfo) => {
+      if (info.status === "downloading") {
+        const pct = info.progress != null ? `${Math.round(info.progress)}%` : "";
+        const file = info.name?.split("/").pop() ?? "";
+        const label = [pct, file].filter(Boolean).join(" ");
+        updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  ${label}`);
+        window.dispatchEvent(
+          new CustomEvent("agentmodel:loading", { detail: { progress: info.progress ?? 0, file } }),
+        );
+      } else if (info.status === "loading") {
+        updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  INITIALIZING`);
+      }
+    };
+
+    // Attempt 1: WebGPU (fastest, requires Chrome 113+ or Firefox Nightly)
+    type DeviceSpec = { device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string };
+    const backends: DeviceSpec[] = [
+      { device: "webgpu", dtype: "q4f16", label: "GPU" },
+      { device: "auto",   dtype: "q4",    label: "CPU" },
+    ];
+
+    let lastErr: Error = new Error("No backend available");
+    for (const { device, dtype, label } of backends) {
+      try {
+        const p = await pipeline("text-generation", MODEL_ID, {
+          device,
+          dtype,
+          progress_callback: progressCb,
+        });
+        _pipe = p;
+        updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · ${label}`);
+        window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device, label } }));
+        return p;
+      } catch (e) {
+        lastErr = e as Error;
+        if (device === "webgpu") {
+          console.warn("[agent-harness] WebGPU unavailable, trying CPU fallback:", (e as Error).message);
+          updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LOADING CPU…`);
+        }
+      }
+    }
+
+    window.dispatchEvent(new CustomEvent("agentmodel:error", { detail: lastErr.message }));
+    throw lastErr;
+  })();
+
+  return _pipePromise;
 }
 
-function entryToTool(entry: SpatialDictionaryEntry): Record<string, unknown> {
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-  for (const a of entry.args) {
-    properties[a.name] = argToJsonSchema(a);
-    if (a.required) required.push(a.name);
-  }
-  const description =
-    `${entry.kernel_op} (${entry.topology_role})` +
-    (entry.synonyms.length > 0 ? ` — synonyms: ${entry.synonyms.slice(0, 4).join(", ")}` : "");
-  return {
-    type: "function",
-    function: {
-      name: entry.canonical_name,
-      description,
-      parameters: { type: "object", properties, required },
-    },
-  };
-}
-
-export function buildToolDefinitions(): Record<string, unknown>[] {
-  return getDictionary().map(entryToTool);
-}
-
-// ---- System prompt assembly --------------------------------------------
-
-function summariseSkills(skills: Skill[] | undefined): string {
-  if (!skills || skills.length === 0) return "Available skills: none active for this turn.";
-  const lines = skills.map((s) => `- ${s.name} (v${s.version}): ${s.description}`);
-  return `Available skills:\n${lines.join("\n")}`;
-}
+// ---- System prompt --------------------------------------------------------
 
 function summariseDictionary(): string {
   const dict = getDictionary();
-  // One-line per entry keeps the prompt under ~3KB even at 70 verbs.
   const lines = dict.map((e) => {
-    const argList = e.args.map((a) => `${a.name}:${a.type}${a.required ? "" : "?"}`).join(",");
-    return `- ${e.canonical_name}(${argList}) — ${e.topology_role}`;
+    const argList = e.args.map((a) => `${a.name}:${a.type}${a.required ? "" : "?"}`).join(", ");
+    return `  ${e.canonical_name}(${argList})`;
   });
   return `Available verbs (${dict.length}):\n${lines.join("\n")}`;
 }
 
+function summariseSkills(skills: Skill[] | undefined): string {
+  if (!skills || skills.length === 0) return "Available skills: none active.";
+  return `Available skills:\n${skills.map((s) => `  ${s.name} (v${s.version}): ${s.description}`).join("\n")}`;
+}
+
 export function buildSystemPrompt(skills?: Skill[]): string {
-  const sd = summariseDictionary();
-  const kg = snapshotAsText();
-  const sk = summariseSkills(skills);
   return [
-    "You are Gemma·Architect, a CAD agent. You drive a parametric CAD UI by emitting tool calls against the verbs below.",
-    sd,
-    `Current scene: ${kg}`,
-    sk,
-    "Respond with one or more tool calls when an action is needed. Use plain text only for clarifying questions or summaries.",
+    "You are Gemma·Architect, a parametric CAD assistant embedded in a browser app.",
+    "When the user asks to create or modify geometry, emit tool calls as JSON code blocks.",
+    'Format: ```json\\n{"verb":"VerbName","args":{...}}\\n```',
+    "Emit one ```json block per tool call. Multiple actions = multiple blocks in sequence.",
+    summariseDictionary(),
+    `Current scene: ${snapshotAsText()}`,
+    summariseSkills(skills),
+    "For questions or summaries, respond with plain text only (no JSON blocks).",
   ].join("\n\n");
 }
 
-// ---- Multimodal content blocks -----------------------------------------
-// ImageBitmap (from T12 video-recorder) → base64 PNG data URL via
-// OffscreenCanvas, serialised inline for the inference endpoint.
-async function frameToDataUrl(frame: ImageBitmap): Promise<string> {
-  const canvas = new OffscreenCanvas(frame.width, frame.height);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("agent-harness: 2D canvas context unavailable");
-  ctx.drawImage(frame, 0, 0);
-  const blob = await canvas.convertToBlob({ type: "image/png" });
-  const buf = await blob.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  const b64 = typeof btoa === "function" ? btoa(binary) : "";
-  return `data:image/png;base64,${b64}`;
+export function buildToolDefinitions(): Record<string, unknown>[] {
+  // Not used in the WebGPU path (tool calls are text-parsed, not schema-validated).
+  return [];
 }
 
-async function buildUserContent(
-  prompt: string,
-  frames: ImageBitmap[] | undefined,
-): Promise<unknown> {
-  if (!frames || frames.length === 0) return prompt;
-  const parts: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
-  for (const f of frames) {
-    const url = await frameToDataUrl(f);
-    parts.push({ type: "image_url", image_url: { url } });
-  }
-  return parts;
-}
+// ---- Tool-call parsing ---------------------------------------------------
 
-// ---- Tool-call parsing -------------------------------------------------
+function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: string } {
+  const dispatches: AgentDispatch[] = [];
+  const blockRe = /```json\s*([\s\S]*?)```/gi;
+  const removals: string[] = [];
+  let m: RegExpExecArray | null;
 
-type ChatChoiceMessage = {
-  content?: string | null;
-  tool_calls?: Array<{
-    id?: string;
-    type?: string;
-    function?: { name?: string; arguments?: string };
-  }>;
-};
-
-type ChatCompletionResponse = {
-  choices?: Array<{ message?: ChatChoiceMessage; finish_reason?: string }>;
-};
-
-function parseDispatches(message: ChatChoiceMessage | undefined): AgentDispatch[] {
-  if (!message || !Array.isArray(message.tool_calls)) return [];
-  const out: AgentDispatch[] = [];
-  for (const call of message.tool_calls) {
-    const verb = call.function?.name?.trim();
-    if (!verb) continue;
-    const rawArgs = call.function?.arguments ?? "{}";
-    let args: Record<string, unknown> = {};
+  while ((m = blockRe.exec(raw)) !== null) {
+    removals.push(m[0]);
     try {
-      const parsed = JSON.parse(rawArgs);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        args = parsed as Record<string, unknown>;
+      const parsed: unknown = JSON.parse(m[1].trim());
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      for (const item of items) {
+        if (item && typeof item === "object") {
+          const obj = item as Record<string, unknown>;
+          const verb = typeof obj.verb === "string" ? obj.verb.trim() : "";
+          const args =
+            obj.args && typeof obj.args === "object" && !Array.isArray(obj.args)
+              ? (obj.args as Record<string, unknown>)
+              : {};
+          if (verb) dispatches.push({ verb, args });
+        }
       }
     } catch {
-      // Malformed arg JSON — preserve the raw string so the caller can log
-      // it; dispatch() will reject via ArgValidationError on type mismatch.
-      args = { _raw: rawArgs };
+      // Malformed block — skip silently.
     }
-    out.push({ verb, args });
   }
-  return out;
+
+  let text = raw;
+  for (const block of removals) {
+    text = text.replace(block, "");
+  }
+  return { dispatches, text: text.trim() };
 }
 
-// ---- Public entry point ------------------------------------------------
+// ---- Public entry point --------------------------------------------------
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
-  const endpoint = getEndpoint();
-  const model = req.model ?? DEFAULT_MODEL;
-  const userContent = await buildUserContent(req.prompt, req.frames);
-  const history = req.history ?? [];
+  const model = await getModel();
+
   const messages = [
-    { role: "system", content: buildSystemPrompt(req.skills) },
-    ...history,
-    { role: "user", content: userContent },
+    { role: "system" as const, content: buildSystemPrompt(req.skills) },
+    ...(req.history ?? []),
+    { role: "user" as const, content: req.prompt },
   ];
-  const body = {
-    model,
-    messages,
-    tools: buildToolDefinitions(),
-    tool_choice: "auto",
-    max_tokens: 4096,
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = await model(messages, {
+    max_new_tokens: 1024,
     temperature: 0.2,
-  };
-  const resp = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    do_sample: true,
+    return_full_text: false,
   });
-  if (!resp.ok) {
-    throw new Error(`agent-harness: HTTP ${resp.status} ${resp.statusText}`);
+
+  // Transformers.js chat output: result[0].generated_text is Message[] or string.
+  const rawOutput: unknown = result?.[0]?.generated_text;
+  let responseText = "";
+  if (Array.isArray(rawOutput)) {
+    const last = rawOutput.at(-1);
+    responseText =
+      last && typeof last === "object" && "content" in last && typeof (last as { content: unknown }).content === "string"
+        ? (last as { content: string }).content
+        : "";
+  } else if (typeof rawOutput === "string") {
+    responseText = rawOutput;
   }
-  const json = (await resp.json()) as ChatCompletionResponse;
-  const choice = json.choices?.[0];
-  const dispatches = parseDispatches(choice?.message);
-  const text = choice?.message?.content?.trim() ?? "";
-  return { dispatches, text, raw: json };
+
+  const { dispatches, text } = parseDispatches(responseText);
+  return { dispatches, text: text || responseText, raw: result };
 }
