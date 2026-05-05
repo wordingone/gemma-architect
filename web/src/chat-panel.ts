@@ -76,7 +76,7 @@ export class ChatPanel {
 
     this._sendBtn.addEventListener("click", () => { void this._send(); });
     this._inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         void this._send();
       }
