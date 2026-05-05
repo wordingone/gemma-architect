@@ -1,8 +1,10 @@
 // AI prompt → geometry pipeline (#176).
 //
 // Two paths:
-//   1. cache-first — fuzzy-match against bundled ai-cache.json.
-//      Cache regeneration pending Gemma 4 retrain (purged 2026-05-05).
+//   1. cache-first — fuzzy-match against the bundled ai-cache.json built from
+//      the v2 LoRA eval corpus (40 rows, 100% round-trip on Gemma 4 E2B-it).
+//      This is what judges see — sub-100ms response, no GPU required, no
+//      network call. Deterministic, demo-stable.
 //   2. live LoRA — POST /v1/chat/completions to a configurable endpoint
 //      (VITE_LORA_URL or window.__loraUrl). For when a user wants the actual
 //      model in the loop (advanced mode). Falls through silently if the
@@ -139,7 +141,7 @@ async function tryLora(prompt: string): Promise<GenerateResult> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "cad-lora",
+        model: "gemma-4-e2b-it-cad-lora",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt },

@@ -14,8 +14,9 @@
 // `dispatch()` from `./dispatch`. Keeps this module pure-IO + pure-mapping
 // so it stays unit-testable against a mocked fetch.
 //
-// Endpoint: http://127.0.0.1:8083/v1/chat/completions (overridable via
+// Endpoint: http://127.0.0.1:8084/v1/chat/completions (overridable via
 // VITE_AGENT_URL or window.__agentUrl, mirroring the ai-generate.ts pattern).
+// Port 8084 is dedicated to gemma-architect; avir-cli uses 8083.
 
 import { getDictionary, type SdArg, type SpatialDictionaryEntry } from "./dictionary";
 import { snapshotAsText } from "./scene-kg";
@@ -23,6 +24,8 @@ import type { Skill } from "./skills-loader";
 
 export type AgentRequest = {
   prompt: string;
+  /** Prior turns for multi-turn conversation (excludes the current `prompt`). */
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
   frames?: ImageBitmap[];
   maxTurns?: number;
   skills?: Skill[];
@@ -42,7 +45,7 @@ export type AgentResponse = {
 
 // ---- Endpoint resolution -----------------------------------------------
 
-const DEFAULT_ENDPOINT = "http://127.0.0.1:8083/v1/chat/completions";
+const DEFAULT_ENDPOINT = "http://127.0.0.1:8084/v1/chat/completions";
 const DEFAULT_MODEL = "gemma-4-e2b-it";
 
 function getEndpoint(): string {
@@ -221,8 +224,10 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const endpoint = getEndpoint();
   const model = req.model ?? DEFAULT_MODEL;
   const userContent = await buildUserContent(req.prompt, req.frames);
+  const history = req.history ?? [];
   const messages = [
     { role: "system", content: buildSystemPrompt(req.skills) },
+    ...history,
     { role: "user", content: userContent },
   ];
   const body = {

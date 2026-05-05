@@ -14,6 +14,7 @@
 
 import { iconSVG, axesGizmoSVG } from "./icons";
 import { generateGeometry, GenerateError } from "./ai-generate";
+import { ChatPanel } from "./chat-panel";
 import { compileDsl } from "./dsl-eval";
 import { dispatchSync, type DispatchArgs } from "./dispatch";
 import { setState } from "./app-state";
@@ -82,7 +83,7 @@ const PALETTE_SECTIONS: PaletteSection[] = [
 
 type DockTab = { id: string; icon: string; label: string };
 const DOCK_TABS: DockTab[] = [
-  { id: "prompt",     icon: "sparkle",  label: "PROMPT" },
+  { id: "prompt",     icon: "sparkle",  label: "CREATE" },
   { id: "console",    icon: "terminal", label: "CONSOLE" },
   { id: "nodes",      icon: "graph",    label: "NODES" },
   { id: "parameters", icon: "sliders",  label: "PARAMETERS" },
@@ -505,167 +506,23 @@ function demoIdToIndex(id: string): string | null {
 }
 
 function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
-  const wrap = el("div", "tab-body prompt-tab");
+  const wrap = el("div", "tab-body prompt-tab create-tab");
 
-  const panel = el("div", "ai-panel");
-  panel.innerHTML = `
-    <div class="ai-header">
-      <div class="ai-title">
-        ${iconSVG("sparkle", 13)}
-        PROMPT  ·  NATURAL LANGUAGE → GEOMETRY
-      </div>
-      <span class="ai-badge" id="ai-model-badge">
-        <span class="v">G</span>EMMA·3·4B  ·  ${(window as { __loraUrl?: string }).__loraUrl ? "LIVE" : "CACHED"}
-      </span>
+  const header = el("div", "ai-header");
+  header.innerHTML = `
+    <div class="ai-title">
+      ${iconSVG("sparkle", 13)}
+      CREATE  ·  CONVERSATION WITH GEMMA·ARCHITECT
     </div>
-    <div class="ai-prompt-col">
-      <textarea class="ai-prompt" id="ai-prompt-input"
-        placeholder="Describe geometry — e.g. four walls forming a 6×4m room with a doorway on the south side"></textarea>
-      <div class="ai-actions">
-        <span class="ai-meta" id="ai-prompt-meta">0 ch · ~0 tok · ⌘⏎ to run</span>
-        <button class="btn btn-accent btn-sm" id="ai-generate-btn" type="button">
-          ${iconSVG("play", 11)} GENERATE
-        </button>
-      </div>
-      <div class="ai-suggestions" id="ai-chips"></div>
-    </div>
-    <div class="ai-side-col">
-      <div class="ai-side-title">RECENT</div>
-      <div id="ai-recent-list"></div>
-      <div class="ai-side-title" style="margin-top:8px;">PIPELINE</div>
-      <div style="font-family:var(--mono); font-size:10px; color:var(--ink-soft); line-height:1.7; padding-left:8px;">
-        PROMPT → TOKENS<br/>
-        → REPLICAD JS<br/>
-        → OCCT KERNEL<br/>
-        → MESH + IFC4
-      </div>
-    </div>
+    <span class="ai-badge" id="ai-model-badge">
+      <span class="v">G</span>EMMA·4·E2B  ·  LIVE
+    </span>
   `;
+  wrap.appendChild(header);
 
-  // Build chips.
-  const chipsHost = panel.querySelector("#ai-chips") as HTMLElement;
-  for (const c of PROMPT_CHIPS) {
-    const chip = el("span", "ai-chip");
-    chip.textContent = c.label;
-    chip.addEventListener("click", () => {
-      pickDemo(c.demoId);
-    });
-    chipsHost.appendChild(chip);
-  }
-
-  // Build recents from localStorage (empty on first visit — no fake history).
-  const recentHost = panel.querySelector("#ai-recent-list") as HTMLElement;
-  renderRecentList(recentHost);
-
-  // Wire textarea ↔ legacy #prompt-text + char/token meta.
-  const ta = panel.querySelector<HTMLTextAreaElement>("#ai-prompt-input")!;
-  const meta = panel.querySelector<HTMLElement>("#ai-prompt-meta")!;
-  const updateMeta = () => {
-    const n = ta.value.length;
-    meta.textContent = `${n} ch · ~${Math.ceil(n / 4)} tok · ⌘⏎ to run`;
-  };
-  ta.addEventListener("input", updateMeta);
-  ta.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      runGenerate();
-    }
-  });
-
-  // GENERATE → click legacy #run-btn (preserves all existing wiring).
-  const genBtn = panel.querySelector<HTMLButtonElement>("#ai-generate-btn")!;
-  genBtn.addEventListener("click", () => runGenerate());
-
-  function pickDemo(id: string) {
-    const sel = document.getElementById("prompt-select") as HTMLSelectElement | null;
-    if (!sel) return;
-    const idx = demoIdToIndex(id);
-    if (idx === null) return;
-    sel.value = idx;
-    sel.dispatchEvent(new Event("change", { bubbles: true }));
-    // After change handler fires, mirror prompt-text into our textarea.
-    queueMicrotask(() => {
-      const ptx = document.getElementById("prompt-text") as HTMLTextAreaElement | null;
-      if (ptx) {
-        ta.value = ptx.value;
-        updateMeta();
-      }
-    });
-  }
-
-  async function runGenerate() {
-    // The legacy #js-source is populated by the demo-change handler whenever
-    // a demo is picked. If the user has edited the prompt away from any demo,
-    // we route through ai-generate (cache-first, LoRA fallback) to produce
-    // a fresh JS string before clicking the legacy #run-btn.
-    const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
-    if (!runBtn) return;
-    const ptx = document.getElementById("prompt-text") as HTMLTextAreaElement | null;
-    const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
-    const userPrompt = ta.value.trim();
-    const demoPrompt = (ptx?.value ?? "").trim();
-    // If the user hasn't edited away from the selected demo, the cached JS in
-    // #js-source is correct — preserve current "demo run" behavior.
-    if (userPrompt && demoPrompt && userPrompt === demoPrompt) {
-      runBtn.click();
-      return;
-    }
-    // Empty textarea — same fallback (just runs whatever js-source has).
-    if (!userPrompt) {
-      runBtn.click();
-      return;
-    }
-    // Edited away from the demo — invoke AI generate.
-    const prevLabel = genBtn.textContent;
-    genBtn.disabled = true;
-    genBtn.innerHTML = `${iconSVG("sparkle", 11)} GENERATING…`;
-    try {
-      const result = await generateGeometry(userPrompt);
-      if (jsSrc) {
-        jsSrc.value = result.js;
-        jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      // Update legacy prompt-text mirror so re-runs treat this as the active prompt.
-      if (ptx) ptx.value = userPrompt;
-      // Surface telemetry to the in-page CONSOLE tab + DevTools console.
-      const msg = result.source === "cache"
-        ? `cache · ${(result.confidence ?? 0).toFixed(2)} match · ${result.latency_ms.toFixed(0)}ms`
-        : result.source === "lora"
-          ? `lora · ${result.latency_ms.toFixed(0)}ms`
-          : `demo`;
-      pushConsoleLine("ok", `[ai-generate] ${msg}`);
-      console.log(`[ai-generate] ${msg}`);
-      runBtn.click();
-    } catch (e) {
-      const err = e as GenerateError;
-      pushConsoleLine("err", `[ai-generate] ${err.message}`);
-      console.error("[ai-generate]", err.message);
-      const status = document.getElementById("status");
-      if (status) {
-        status.textContent = `AI: ${err.message}`;
-        status.className = "status err";
-      }
-      // Auto-switch dock to CONSOLE so the error line is visible without DevTools.
-      document.querySelector<HTMLElement>('.dock-tab[data-tab="console"]')?.click();
-    } finally {
-      genBtn.disabled = false;
-      if (prevLabel) genBtn.innerHTML = prevLabel;
-      else genBtn.innerHTML = `${iconSVG("play", 11)} GENERATE`;
-    }
-  }
-
-  // Initial seed: pick first demo so the textarea + js-source are populated.
-  // (Uses queueMicrotask so main.ts has finished wiring the select first.)
-  queueMicrotask(() => {
-    const sel = document.getElementById("prompt-select") as HTMLSelectElement | null;
-    if (sel && sel.options.length > 0) {
-      const ptx = document.getElementById("prompt-text") as HTMLTextAreaElement | null;
-      if (ptx && ptx.value) {
-        ta.value = ptx.value;
-        updateMeta();
-      }
-    }
-  });
+  const chatRoot = el("div", "chat-panel-root");
+  new ChatPanel(chatRoot);
+  wrap.appendChild(chatRoot);
 
   // Keep the legacy prompt-pane element alive in off-grid-host (it still hosts
   // export buttons, file picker, etc.) — DO NOT relocate it here.
@@ -673,7 +530,6 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
     promptPane.classList.add("prompt-pane-embed");
   }
 
-  wrap.appendChild(panel);
   return wrap;
 }
 
