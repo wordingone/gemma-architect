@@ -40,7 +40,8 @@ Each section gets its own page in this directory near the deadline:
 - ✅ **Public GitHub repo live** — github.com/wordingone/gemma-architect (visibility: PUBLIC, Apache-2.0).
 - ✅ **Live demo URL serving** — https://wordingone.github.io/gemma-architect/ (GH Pages, single-thread WASM — COOP+COEP gap; Vercel deploy via `vercel.json` would lift to multi-threaded). Bundle (deployed, verified 2026-05-05 via curl): 8.22 MB main JS / gzip 0.72 MB + 3.88 MB worker + 10.8 MB OpenCascade WASM / gzip 4.58 MB + 1.3 MB web-ifc WASM / gzip 0.48 MB + lazy PDF-export chunks (~1.2 MB / gzip 0.26 MB on demand).
 - ✅ **Performance verified live** — cache hit ~7ms; wall full cycle ~21ms; Schultz 14-element ~210ms (single-thread WASM, GH Pages).
-- ✅ **Screenshot grid 9/9 captured** — `submission/screenshots/01-09*.png` from production URL via Playwright at 1920×1080 (commit ab8d9cf, Schultz hero re-shot at 725b56a).
+- ✅ **create-mode horizontal-camera bug fixed (dc849f0)** — `unprojectToXY` now falls back to camera XY on Z=0 when ray misses the ground plane (#17). CONSOLE auto-opens on generate cache-miss (#16). Both verified deployed.
+- ✅ **Screenshot grid 9/9 captured** — `submission/screenshots/01-09*.png` from production URL via Playwright at 1920×1080 (commit 1838d6c, full re-capture 2026-05-05 after R1-R4 fixes + create-mode PR #13). No visual change in dc849f0 (#16/#17 functional + doc fix).
 - ⏳ HF Hub LoRA — `gemma-architect/cad-lora-v2` not pushed (HF_TOKEN absent).
 - ⏳ Demo video — manual recording per `submission/demo-script.md`.
 - ⏳ BlenderBIM column for screenshot grid (3 shots) — manual capture pre-composite.
