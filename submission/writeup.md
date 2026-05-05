@@ -14,8 +14,12 @@ Watch a 3D wall render. Drag sliders to change the dimensions live.
 Click **Export IFC** and download a file that opens in Revit, ArchiCAD,
 BlenderBIM, or any other BIM tool on the planet.
 
-That is the whole demo. There is no server. The Gemma 4 LoRA, the geometry
-kernel, and the IFC4 emitter all run inside the browser tab.
+That is the whole demo. 60 cached Gemma 4 LoRA outputs ship with the
+page; sub-100ms F1 fuzzy match is the default judge experience. The
+geometry kernel and IFC4 emitter do run in-browser via WebAssembly. Live
+LoRA inference is opt-in: `src/serve/serve_lora.py` (FastAPI + Unsloth)
+serves a 4090-resident adapter on port 8088 when `window.__loraUrl` is
+set.
 
 The goal is to put parametric architectural design — the kind of tool you
 draw a building in before you build it — in front of people who can't
@@ -34,14 +38,16 @@ in the center.
 
 1. They open the **PROMPT** tab. A chip strip lists the canned demos.
    They click `"Wall · 5.5×0.2×2.8m"`.
-2. The natural-language prompt fills the textarea; the model-generated
-   replicad source mirrors into a JS source pane. Either is editable.
+2. The natural-language prompt fills the textarea; an F1-weighted fuzzy
+   match against 60 cached LoRA eval rows returns the closest replicad
+   source into a JS source pane. Either is editable. Live LoRA inference
+   is opt-in via `window.__loraUrl`. The CONSOLE tab logs
+   `[ai-generate] cache · X.XX match · ~50ms`.
 3. They click **GENERATE** (or hit `⌘⏎`). A web worker boots
    OpenCascade WebAssembly (replicad-opencascadejs), executes the
    source against the same Tier 1 tool surface the model was trained
    on, and posts the resulting mesh back to the main thread. three.js
-   renders it in the viewer. The CONSOLE tab logs
-   `[ai-generate] cache · X.XX match · ~50ms`.
+   renders it in the viewer.
 4. They drag the **length** / **thickness** / **height** sliders in
    the PARAMETERS tab. Each change debounces 90ms and re-runs the
    worker — geometry updates live, no model re-inference needed.
@@ -91,13 +97,12 @@ worker → kernel → IFC pipeline accepts three other entry points:
   default 100 px/m scale, extrudes them at 2.8m, and emits IFC4. A
   pencil sketch becomes a loadable BIM file in one drop. Zero deps —
   Sobel and the Hough loop both ship as in-line OffscreenCanvas code.
-- **Reconstruct via Agent (image → IFC) for a JPG of a real
-  floorplan.** Gemma 4 multimodal native — no LoRA on this branch.
-  The image content block is attached directly to a function-calling
-  request; the model emits dispatch calls (`makeWall`, `makeSlab`,
-  `cut`, ...) routed through the same dispatch table the human user
-  types into. One model, two surface types, the multimodal
-  differentiator that justifies "why Gemma 4 specifically."
+- **Multimodal agent path (in-progress).** The architecture wires
+  Gemma 4 multimodal function-calling to the same dispatch table
+  (`web/src/agent-harness.ts`), but dispatch handlers for geometry ops
+  are not yet registered — `makeWall`, `makeSlab`, etc. resolve to
+  `NoHandler` today. This is the next integration milestone (T6 + T11
+  in `silly-baking-yeti.md`).
 - **Type DSL into the CONSOLE tab.** A copyright-safe Rhino-style
   lexicon (~70 verbs hand-curated against IFC4 entity classes,
   documented at `web/src/spatial-dictionary.LICENSE.md`) backs the
@@ -109,8 +114,9 @@ The implication: gemma-architect treats Gemma 4 not as a single
 prompt-completion endpoint but as a **routing function** over a
 dispatch table that's also exposed to human keystrokes, drag-drop, and
 clicks. Judges who score on tech depth will find this in
-`web/src/dispatch.ts` (single source of truth for ~30 canonical
-operations across human + agent input).
+`web/src/dispatch.ts`. The dispatch infrastructure is complete; handler
+registration for geometry ops (`makeWall`, `makeSlab`, etc.) is the
+open integration milestone that closes the human ↔ agent symmetry.
 
 ---
 

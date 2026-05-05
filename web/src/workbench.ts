@@ -21,6 +21,7 @@ import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeS
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./selection-state";
+import { getCreateSequence } from "./create-mode";
 
 // Push a line into the in-page CONSOLE dock tab. The tab body lives in
 // buildConsoleTabBody and re-implements its own local pushLine for the DSL
@@ -455,11 +456,40 @@ const PROMPT_CHIPS: { label: string; demoId: string }[] = [
   { label: "Schultz Residence · 14 elements",   demoId: "schultz-residence" },
 ];
 
-const RECENT_LINES: { ts: string; t: string; demoId: string }[] = [
-  { ts: "00:14", t: "L-shape walls 8×6m, doorway south",     demoId: "l-walls" },
-  { ts: "00:09", t: "slab 6×4m, 200mm, with stair void",     demoId: "slab-with-hole" },
-  { ts: "00:03", t: "circular column r=0.45, h=5",           demoId: "column" },
-];
+// localStorage-backed real session history — populated when user generates geometry.
+const RECENT_LS_KEY = "gemma-architect:recent-v1";
+type RecentEntry = { ts: string; label: string };
+
+function loadRecentEntries(): RecentEntry[] {
+  try {
+    const raw = localStorage.getItem(RECENT_LS_KEY);
+    return raw ? (JSON.parse(raw) as RecentEntry[]) : [];
+  } catch { return []; }
+}
+
+export function saveRecentEntry(label: string): void {
+  const d = new Date();
+  const ts = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const entries = loadRecentEntries().filter(e => e.label !== label);
+  entries.unshift({ ts, label });
+  try { localStorage.setItem(RECENT_LS_KEY, JSON.stringify(entries.slice(0, 5))); } catch {}
+  // Refresh the rendered list if it's in the DOM.
+  renderRecentList(document.getElementById("ai-recent-list"));
+}
+
+function renderRecentList(host: HTMLElement | null): void {
+  if (!host) return;
+  host.innerHTML = "";
+  for (const r of loadRecentEntries()) {
+    const line = el("div", "ai-recent");
+    const span = document.createElement("span");
+    span.className = "ts";
+    span.textContent = r.ts;
+    line.appendChild(span);
+    line.appendChild(document.createTextNode(r.label));
+    host.appendChild(line);
+  }
+}
 
 // Map a demo id (e.g. "l-walls") to the dropdown's numeric option value
 // by matching the option text prefix. main.ts builds the dropdown from
@@ -484,8 +514,8 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
         ${iconSVG("sparkle", 13)}
         PROMPT  ·  NATURAL LANGUAGE → GEOMETRY
       </div>
-      <span class="ai-badge">
-        <span class="v">G</span>EMMA·3·4B  ·  LOCAL
+      <span class="ai-badge" id="ai-model-badge">
+        <span class="v">G</span>EMMA·3·4B  ·  ${(window as { __loraUrl?: string }).__loraUrl ? "LIVE" : "CACHED"}
       </span>
     </div>
     <div class="ai-prompt-col">
@@ -523,14 +553,9 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
     chipsHost.appendChild(chip);
   }
 
-  // Build recents.
+  // Build recents from localStorage (empty on first visit — no fake history).
   const recentHost = panel.querySelector("#ai-recent-list") as HTMLElement;
-  for (const r of RECENT_LINES) {
-    const line = el("div", "ai-recent");
-    line.innerHTML = `<span class="ts">${r.ts}</span>${r.t}`;
-    line.addEventListener("click", () => pickDemo(r.demoId));
-    recentHost.appendChild(line);
-  }
+  renderRecentList(recentHost);
 
   // Wire textarea ↔ legacy #prompt-text + char/token meta.
   const ta = panel.querySelector<HTMLTextAreaElement>("#ai-prompt-input")!;
@@ -770,19 +795,180 @@ function buildConsoleTabBody(): HTMLElement {
   return wrap;
 }
 
+// ── Live construction graph (NODES tab) ────────────────────────────────────
+
+interface NodeRecord { label: string; }
+const _nodes: NodeRecord[] = [];
+let _nodesLastSeqLen = 0;
+let _nodesWrap: HTMLElement | null = null;
+
+const GEOMETRY_OP_RE = /^(Ifc|Sd|sd)/;
+
+function chainToLabel(chain: string): string {
+  const m = chain.match(/const (\w+)\s*=\s*([\w.]+)\(/);
+  if (m) return `${m[1]} · ${m[2]}`;
+  const first = chain.split("\n")[0].slice(0, 60);
+  return first || chain.slice(0, 60);
+}
+
+function commandToLabel(id: string, args: Record<string, unknown>): string {
+  const argStr = Object.entries(args)
+    .filter(([k]) => !["canonical", "kernel"].includes(k))
+    .map(([k, v]) => `${k}=${typeof v === "number" ? (v as number).toFixed(2) : v}`)
+    .slice(0, 3)
+    .join(" ");
+  return argStr ? `${id} · ${argStr}` : id;
+}
+
+function renderNodes(): void {
+  if (!_nodesWrap) return;
+  let list = _nodesWrap.querySelector<HTMLElement>(".nodes-list");
+  if (!list) {
+    list = document.createElement("div");
+    list.className = "nodes-list";
+    list.style.cssText = "padding:8px 12px; font-family:var(--mono); font-size:11px; overflow-y:auto; height:100%;";
+    _nodesWrap.appendChild(list);
+  }
+  if (_nodes.length === 0) {
+    list.innerHTML = `<div class="empty-hint" style="padding:24px; color:var(--ink-faint);">Empty graph — load a demo or type a prompt.</div>`;
+    return;
+  }
+  list.innerHTML = _nodes.map((n, i) => `
+    ${i > 0 ? `<div style="text-align:center; color:var(--ink-faint); font-size:10px; line-height:1.4;">↓</div>` : ""}
+    <div class="node-box" data-idx="${i}" style="
+      border:1px solid var(--hairline); border-radius:4px; padding:6px 10px;
+      margin:2px 0; background:var(--panel-bg); color:var(--ink);
+      cursor:pointer; user-select:none;
+    " title="${escHtml(n.label)}">${escHtml(n.label)}</div>
+  `).join("");
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function buildNodesTabBody(): HTMLElement {
   const wrap = el("div", "tab-body nodes-tab");
-  wrap.innerHTML = `
-    <div class="empty-hint" style="padding:24px; color:var(--ink-dim); font-family:var(--mono); font-size:11px; line-height:1.6;">
-      <div style="font-weight:700; color:var(--ink); margin-bottom:6px; letter-spacing:0.08em;">PIPELINE · GEMMA → REPLICAD → IFC4</div>
-      PROMPT → TOKENS<br/>
-      → REPLICAD JS<br/>
-      → OCCT KERNEL<br/>
-      → MESH + IFC4<br/><br/>
-      <span style="color:var(--ink-faint);">Full node graph editor lands in #176.</span>
-    </div>
-  `;
+  wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden;";
+  _nodesWrap = wrap;
+  renderNodes();
   return wrap;
+}
+
+// ── Live event history (HISTORY tab) ───────────────────────────────────────
+
+interface HistRecord { ts: string; op: string; args: string; }
+const _historyEvents: HistRecord[] = [];
+const HISTORY_CAP = 500;
+let _historyWrap: HTMLElement | null = null;
+let _histSessionStart = 0;
+
+function nowTs(): string {
+  const ms = Date.now() - _histSessionStart;
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return [h, m, sec].map((v) => String(v).padStart(2, "0")).join(":");
+}
+
+function appendHistory(op: string, args: string): void {
+  if (_histSessionStart === 0) _histSessionStart = Date.now();
+  _historyEvents.push({ ts: nowTs(), op, args: args.slice(0, 80) });
+  if (_historyEvents.length > HISTORY_CAP) _historyEvents.shift();
+}
+
+function renderHistory(): void {
+  if (!_historyWrap) return;
+  let list = _historyWrap.querySelector<HTMLElement>(".history-list");
+  if (!list) {
+    list = document.createElement("div");
+    list.className = "history-list";
+    list.style.cssText = "padding:4px 0; font-family:var(--mono); font-size:11px; overflow-y:auto; height:100%;";
+    _historyWrap.appendChild(list);
+  }
+  if (_historyEvents.length === 0) {
+    list.innerHTML = `<div class="empty-hint" style="padding:24px; color:var(--ink-faint);">No ops yet — load a demo or type a prompt.</div>`;
+    return;
+  }
+  list.innerHTML = _historyEvents.map((h) => `
+    <div style="display:grid; grid-template-columns:58px 160px 1fr; align-items:center;
+      padding:4px 12px; gap:8px; border-bottom:1px solid var(--hairline-soft); color:var(--ink);">
+      <span style="color:var(--ink-faint); font-size:10px;">${escHtml(h.ts)}</span>
+      <span style="color:var(--sanguine); font-weight:600; letter-spacing:0.04em;">${escHtml(h.op)}</span>
+      <span style="color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(h.args)}</span>
+    </div>
+  `).join("");
+  list.scrollTop = list.scrollHeight;
+}
+
+function buildHistoryTabBody(): HTMLElement {
+  const wrap = el("div", "tab-body history-tab");
+  wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden;";
+  _historyWrap = wrap;
+  renderHistory();
+  return wrap;
+}
+
+// ── Shared event subscription (called once from buildDock) ─────────────────
+
+function jsToNodeLabels(js: string): string[] {
+  const labels: string[] = [];
+  for (const m of js.matchAll(/const (\w+)\s*=\s*([\w.]+)\(/g)) {
+    labels.push(`${m[1]} · ${m[2]}`);
+  }
+  return labels.length > 0 ? labels : js.trim() ? ["geometry · replicad"] : [];
+}
+
+function initLiveTabSubscriptions(): void {
+  // Replicad worker path: fires when run-ok completes geometry compilation.
+  window.addEventListener("gemma:run-ok", (rawEv) => {
+    const ev = rawEv as CustomEvent<{ js: string; label: string }>;
+    const { js, label } = ev.detail;
+    _nodes.length = 0;
+    _nodesLastSeqLen = 0;
+    for (const lbl of jsToNodeLabels(js)) {
+      _nodes.push({ label: lbl });
+    }
+    appendHistory("generate", label);
+    saveRecentEntry(label);
+    renderNodes();
+    renderHistory();
+  });
+
+  // Dispatch path: IfcWall, SdBox, etc. called via dispatchSync.
+  window.addEventListener("gemma:command", (rawEv) => {
+    const ev = rawEv as CustomEvent<{ id: string; args: Record<string, unknown> }>;
+    const { id, args } = ev.detail;
+
+    const seq = getCreateSequence();
+    for (let i = _nodesLastSeqLen; i < seq.length; i++) {
+      _nodes.push({ label: chainToLabel(seq[i]) });
+    }
+    _nodesLastSeqLen = seq.length;
+
+    if (GEOMETRY_OP_RE.test(id)) {
+      _nodes.push({ label: commandToLabel(id, args as Record<string, unknown>) });
+    }
+
+    const argStr = Object.entries(args as Record<string, unknown>)
+      .filter(([k]) => !["canonical", "kernel"].includes(k))
+      .map(([k, v]) => `${k}=${typeof v === "number" ? (v as number).toFixed(2) : String(v)}`)
+      .slice(0, 4)
+      .join(" ");
+    appendHistory(id, argStr);
+
+    renderNodes();
+    renderHistory();
+  });
+
+  window.addEventListener("viewer:select", (rawEv) => {
+    const uuid: string | null = (rawEv as CustomEvent<{ uuid: string | null }>).detail?.uuid ?? null;
+    if (uuid) {
+      appendHistory("select", uuid.slice(0, 8) + "…");
+      renderHistory();
+    }
+  });
 }
 
 function buildParametersTabBody(paramPanel: HTMLElement | null): HTMLElement {
@@ -794,28 +980,6 @@ function buildParametersTabBody(paramPanel: HTMLElement | null): HTMLElement {
   } else {
     wrap.innerHTML = `<div class="empty-hint">No parameters — load a sample with sliders or run a prompt.</div>`;
   }
-  return wrap;
-}
-
-function buildHistoryTabBody(): HTMLElement {
-  const wrap = el("div", "tab-body history-tab");
-  const items = [
-    { ts: "00:00:08", op: "demo.load",      args: "wall.5500x200x2800" },
-    { ts: "00:00:14", op: "ai.prompt",      args: '"L-shape walls 8x6m"' },
-    { ts: "00:00:14", op: "kernel.exec",    args: "drawRectangle ▶ extrude ▶ fuse" },
-    { ts: "00:00:18", op: "select",         args: "wall.south.b" },
-    { ts: "00:00:48", op: "export.ifc",     args: "untitled.001.ifc · 4.2KB" },
-  ];
-  let html = `<div style="padding:6px 0; font-family:var(--mono); font-size:11px;">`;
-  for (const it of items) {
-    html += `<div style="display:grid; grid-template-columns:60px 140px 1fr 60px; align-items:center; padding:5px 14px; gap:10px; border-bottom:1px solid var(--hairline-soft); color:var(--ink);">
-      <span style="color:var(--ink-faint); font-size:10px;">${it.ts}</span>
-      <span style="color:var(--sanguine); font-weight:600; letter-spacing:0.04em;">${it.op}</span>
-      <span style="color:var(--ink-soft);">${it.args}</span>
-    </div>`;
-  }
-  html += `<div style="padding:14px; color:var(--ink-faint); font-size:10px;">Live history populates after #176 wires geometry ops to the timeline.</div></div>`;
-  wrap.innerHTML = html;
   return wrap;
 }
 
@@ -862,6 +1026,7 @@ function buildDock(
     if (panes[id]) bodyHost.appendChild(panes[id]);
   }
   activate("prompt");
+  initLiveTabSubscriptions();
 }
 
 function wireDockResize() {

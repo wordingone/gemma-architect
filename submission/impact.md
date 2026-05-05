@@ -29,9 +29,9 @@ Hough wall detection runs in-line on the page (zero deps, no service
 to call), extrudes detected segments at 2.8m, emits IFC4 — turns
 "person with a sketch" into "BIM asset producer" without an installer,
 API key, or CAD training prerequisite. For a real photograph of a
-floorplan, the same path drives Gemma 4 multimodal native (no LoRA
-on this branch — function-calling routes the image directly through
-the same dispatch table the typed-prompt path uses).
+floorplan, a Gemma 4 multimodal function-calling path is wired in
+`agent-harness.ts` (geometry dispatch handlers are the remaining
+integration milestone).
 
 The audience who gains access:
 

@@ -44,7 +44,7 @@ Each section gets its own page in this directory near the deadline:
 - ⏳ HF Hub LoRA — `gemma-architect/cad-lora-v2` not pushed (HF_TOKEN absent).
 - ⏳ Demo video — manual recording per `submission/demo-script.md`.
 - ⏳ BlenderBIM column for screenshot grid (3 shots) — manual capture pre-composite.
-- ✅ **CI gates green** — `bun scripts/audit-stubs.ts` returns "0 stubs, 0 dispatch gaps"; `bun scripts/audit-zip-parity.ts` returns "parity OK: 67 labels matched" (lean shell.ts intentionally omits 67 app.jsx menubar items via the INTENTIONALLY_OMITTED set, all justified); `bun run web:typecheck` clean (Eli's 02bb0a9 added the 5 Viewer methods T3/T4 gizmo code wanted + a web:typecheck step in `.github/workflows/ci.yml`). Single-command judges-facing wrapper at `bun run verify` (typecheck + web:typecheck + audit:stubs + audit:parity).
+- ✅ **CI gates green** — `bun scripts/audit-stubs.ts` returns "0 stubs"; `bun scripts/audit-zip-parity.ts` returns "parity OK: 67 labels matched" (lean shell.ts intentionally omits 67 app.jsx menubar items via the INTENTIONALLY_OMITTED set, all justified); `bun run web:typecheck` clean (Eli's 02bb0a9 added the 5 Viewer methods T3/T4 gizmo code wanted + a web:typecheck step in `.github/workflows/ci.yml`). Single-command judges-facing wrapper at `bun run verify` (typecheck + web:typecheck + audit:stubs + audit:parity).
 
 ## Outstanding blockers (judge-visible)
 
