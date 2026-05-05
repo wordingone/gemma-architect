@@ -254,9 +254,14 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     userContent = req.prompt;
   }
 
+  // Keep at most the last 10 turns (20 messages) to bound prefill length.
+  // Beyond ~10 turns, older context hurts latency more than it helps accuracy.
+  const MAX_HISTORY_MSGS = 20;
+  const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+
   const messages = [
     { role: "system" as const, content: buildSystemPrompt(req.skills) },
-    ...(req.history ?? []),
+    ...trimmedHistory,
     { role: "user" as const, content: userContent },
   ];
 
