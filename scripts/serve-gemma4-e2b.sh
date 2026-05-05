@@ -32,6 +32,8 @@ GGUF="${GEMMA4_GGUF:-}"
 if [[ -z "$GGUF" ]]; then
   # Common search locations.
   for candidate in \
+      "B:/M/avir-cli/models/gemma-4-E2B-it-Q8_0.gguf" \
+      "$(ls B:/M/avir-cli/models/gemma-4*E2B*.gguf 2>/dev/null | head -1)" \
       "$HOME/.cache/huggingface/hub/models--bartowski--gemma-4-E2B-IT-GGUF/snapshots"/*/"gemma-4-E2B-IT-Q4_K_M.gguf" \
       "$HOME/.cache/lm-studio/models/google/gemma-4-E2B-IT-GGUF/gemma-4-E2B-IT-Q4_K_M.gguf" \
       "B:/M/avir-cli/models/gemma-4-e2b-q4_k_m.gguf" \
@@ -55,6 +57,7 @@ fi
 SERVER="${LLAMA_SERVER:-}"
 if [[ -z "$SERVER" ]]; then
   for candidate in \
+      "B:/M/avir-cli/vendor/llama-turboquant/build/bin/llama-server.exe" \
       "B:/M/avir-cli/vendor/llama-turboquant/build/bin/Release/llama-server.exe" \
       "$(which llama-server 2>/dev/null || true)" \
       "$(which llama-server.exe 2>/dev/null || true)"; do
