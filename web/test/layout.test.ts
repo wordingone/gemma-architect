@@ -32,7 +32,7 @@ test("layout mode renders A1 sheet with correct dimensions", () => {
 
 test("can add a panel with a viewport assignment", () => {
   const host = freshHost();
-  buildLayoutMode(host, { size: "A1", orientation: "landscape" });
+  buildLayoutMode(host, { size: "A1", orientation: "landscape", spawnDefault: false });
   addPanel(host, { x: 100, y: 100, w: 300, h: 200, viewport: "top", scale: "1:50" });
   const panels = host.querySelectorAll(".paper-cell");
   expect(panels.length).toBe(1);
@@ -139,7 +139,7 @@ test("title block is editable and reflects in SVG export", () => {
 
 test("scale picker accepts presets and parseable custom ratios", () => {
   const host = freshHost();
-  buildLayoutMode(host, { size: "A1", orientation: "landscape" });
+  buildLayoutMode(host, { size: "A1", orientation: "landscape", spawnDefault: false });
   addPanel(host, { x: 50, y: 50, w: 200, h: 150, viewport: "top",  scale: "1:100" });
   addPanel(host, { x: 50, y: 250, w: 200, h: 150, viewport: "top", scale: "1:25"  });
   const ps = getPanels(host);

@@ -174,6 +174,7 @@ export interface LayoutOptions {
   initialPanels?: PanelInit[];
   titleBlock?: Partial<TitleBlock>;
   showTitleBlock?: boolean;  // default false — blank paper
+  spawnDefault?: boolean;   // default true — auto-creates one panel on empty layout
 }
 
 export interface TitleBlock {
@@ -278,7 +279,7 @@ class LayoutController {
     this._showTitleBlock = opts.showTitleBlock ?? false;
     this.build();
     for (const p of opts.initialPanels ?? []) this.addPanel(p);
-    if (this.panels.length === 0) this._spawnDefaultPanel();
+    if (this.panels.length === 0 && opts.spawnDefault !== false) this._spawnDefaultPanel();
     // Re-fit whenever the stage changes size (covers mode-switch from display:none → flex).
     const stage = this.sheetEl.parentElement;
     if (stage && typeof ResizeObserver !== "undefined") {
