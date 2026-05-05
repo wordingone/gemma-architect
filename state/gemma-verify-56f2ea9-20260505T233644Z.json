@@ -1,0 +1,20 @@
+{
+  "sha": "56f2ea9",
+  "timestamp": "2026-05-05T23:36:44Z",
+  "port": 5175,
+  "all_passed": true,
+  "note": "TS typecheck fix: widen _model/_loadPromise/getModel() from Gemma4ForConditionalGeneration to PreTrainedModel (factory return not narrowed in v4.2.0 typings); null-assertion on _loadPromise return. bun run web:typecheck clean. Port discipline: only 5175 listening.",
+  "surfaces": [
+    { "name": "ribbon-icons-rendered", "passed": true, "evidence": { "count": 24, "failures": [] } },
+    { "name": "theme-propagation", "passed": true, "evidence": { "beforeStyle": "oklch(0.955 0.009 85 / 0.62)", "afterStyle": "oklch(0.22 0.068 248 / 0.62)", "pillText": "○ VELLUM", "panelChanged": true } },
+    { "name": "palette-tool-behavior", "passed": true, "evidence": { "results": [{"tool":"select","matched":true},{"tool":"move","matched":true},{"tool":"rotate","matched":true},{"tool":"scale","matched":true}] } },
+    { "name": "selection-roundtrip", "passed": true, "evidence": { "eventsHeard": 1, "uuid": "f53dcda1-a678-4e9d-aa9a-eacd1ec3d3c0" } },
+    { "name": "transform-gizmo-attach", "passed": true, "evidence": { "afterG": [{"mode":"translate","attached":true},{"mode":"rotate","attached":true},{"mode":"scale","attached":true}] } },
+    { "name": "delete-propagation", "passed": true, "evidence": { "beforeCount": 13, "afterCount": 12 } },
+    { "name": "console-vocab-coverage", "passed": true, "evidence": { "tested": 65, "failed_verbs": [] } },
+    { "name": "console-verb-produces-output", "passed": true, "evidence": { "newLines": "wall: expected 2 endpoints, got 0", "isUnknownVerb": false, "hasOutput": true } },
+    { "name": "cmdk-dialog-opens", "passed": true, "evidence": { "inputFound": true, "inputClass": "cmdk-input", "visible": true } },
+    { "name": "layout-tab-functional", "passed": true, "evidence": { "aspectRatio": 1.4158, "a1Aspect": 0.7063, "aspectMatches": true, "beforePanels": 1, "afterPanels": 2, "panelAdded": true } },
+    { "name": "ortho-grid-z-order", "passed": true, "evidence": { "gridRenderOrder": -1, "gridDepthWrite": false, "gridBehind": true, "meshCount": 0, "meshesAbove": true } }
+  ]
+}
