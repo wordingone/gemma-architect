@@ -15,6 +15,7 @@
 
 import { pipeline } from "@huggingface/transformers";
 import { getDictionary } from "./dictionary";
+import { listHandlers } from "./dispatch";
 import { snapshotAsText } from "./scene-kg";
 import type { Skill } from "./skills-loader";
 
@@ -124,16 +125,47 @@ async function getModel(): Promise<any> {
 
 function summariseDictionary(): string {
   const dict = getDictionary();
-  const lines = dict.map((e) => {
+  const implemented = new Set(listHandlers());
+  // Show only verbs that have a registered handler (native or shim).
+  // Falls back to full dictionary if dispatch hasn't initialized yet.
+  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.canonical_name)) : dict;
+  const lines = available.map((e) => {
     const argList = e.args.map((a) => `${a.name}:${a.type}${a.required ? "" : "?"}`).join(", ");
     return `  ${e.canonical_name}(${argList})`;
   });
-  return `Available verbs (${dict.length}):\n${lines.join("\n")}`;
+  const count = available.length;
+  return count > 0
+    ? `Available verbs (${count} — use ONLY these, do not invent verb names):\n${lines.join("\n")}`
+    : "No verbs currently available. Do not emit tool calls.";
 }
 
 function summariseSkills(skills: Skill[] | undefined): string {
   if (!skills || skills.length === 0) return "Available skills: none active.";
   return `Available skills:\n${skills.map((s) => `  ${s.name} (v${s.version}): ${s.description}`).join("\n")}`;
+}
+
+function buildSceneContext(): string {
+  // Try KG first (populated by dispatch-created objects).
+  const kg = snapshotAsText();
+  if (!kg.includes("empty")) return kg;
+
+  // Fall back to walking the THREE.js scene graph for the default demo scene.
+  type ViewerScene = { children?: Array<{ type: string; name?: string; position?: { x: number; y: number; z: number } }> };
+  const viewer = (window as unknown as { __viewer?: { scene?: ViewerScene } }).__viewer;
+  const children = viewer?.scene?.children;
+  if (!children) return kg;
+
+  const meshes = children.filter((c) => c.type === "Mesh" || c.type === "Group");
+  if (meshes.length === 0) return kg;
+
+  const lines = meshes.slice(0, 15).map((m) => {
+    const pos = m.position
+      ? `at (${m.position.x.toFixed(1)}, ${m.position.y.toFixed(1)}, ${m.position.z.toFixed(1)})`
+      : "";
+    return `${m.name || m.type}${pos ? " " + pos : ""}`;
+  });
+  const suffix = meshes.length > 15 ? ` … and ${meshes.length - 15} more` : "";
+  return `Scene contains ${meshes.length} object(s): ${lines.join("; ")}${suffix}.`;
 }
 
 export function buildSystemPrompt(skills?: Skill[]): string {
@@ -142,8 +174,9 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     "When the user asks to create or modify geometry, emit tool calls as JSON code blocks.",
     'Format: ```json\\n{"verb":"VerbName","args":{...}}\\n```',
     "Emit one ```json block per tool call. Multiple actions = multiple blocks in sequence.",
+    "IMPORTANT: Use ONLY the verb names listed below. Do not invent verb names — unrecognised verbs are silently rejected.",
     summariseDictionary(),
-    `Current scene: ${snapshotAsText()}`,
+    `Current scene: ${buildSceneContext()}`,
     summariseSkills(skills),
     "For questions or summaries, respond with plain text only (no JSON blocks).",
   ].join("\n\n");
