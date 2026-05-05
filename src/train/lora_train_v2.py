@@ -1,10 +1,20 @@
 """
-v2 LoRA training — Gemma E2B + 4b-it via Unsloth QLoRA.
+v2 LoRA training — base-model-agnostic Unsloth QLoRA scaffold.
+
+Per Jun directive 2026-05-05: legacy MODEL_VARIANTS entries were purged
+(hackathon eligibility drift). MODEL_VARIANTS is empty until a
+Gemma 4 base is selected — set GEMMA4_BASE_MODEL + GEMMA4_BASE_TAG +
+GEMMA4_CHAT_TEMPLATE before running, or extend MODEL_VARIANTS with the chosen
+Gemma 4 base.
 
 Inputs:  data/train_v2.jsonl, data/eval_v2.jsonl
-Output:  outputs/cad-lora-v2-{model_tag}/
+Output:  outputs/cad-lora-v2-{tag}/
 
-Run sequentially. Pick model via env GEMMA_V2_MODEL ∈ {"4b", "e2b"}; default "4b".
+Usage:
+  set GEMMA4_BASE_MODEL=unsloth/gemma-4-<variant>
+  set GEMMA4_BASE_TAG=<tag>
+  set GEMMA4_CHAT_TEMPLATE=gemma-4
+  python src/train/lora_train_v2.py
 """
 
 import json
@@ -27,22 +37,32 @@ REPO = Path(__file__).resolve().parents[2]
 TRAIN = REPO / "data/train_v2.jsonl"
 EVAL = REPO / "data/eval_v2.jsonl"
 
-MODEL_VARIANTS = {
-    "4b": ("unsloth/gemma-3-4b-it-unsloth-bnb-4bit", "4b-it"),
-    "e2b": ("unsloth/gemma-3n-E2B-it", "e2b-it"),
-}
+# MODEL_VARIANTS purged 2026-05-05. Add Gemma 4 entries here when the base
+# is selected; until then, GEMMA4_BASE_MODEL + GEMMA4_BASE_TAG env vars
+# bypass the dict for one-off runs.
+MODEL_VARIANTS: dict[str, tuple[str, str]] = {}
 
-variant_key = os.environ.get("GEMMA_V2_MODEL", "4b").lower()
-if variant_key not in MODEL_VARIANTS:
-    print(f"unknown GEMMA_V2_MODEL={variant_key}, valid={list(MODEL_VARIANTS)}", file=sys.stderr)
-    sys.exit(2)
+variant_key = os.environ.get("GEMMA_V2_MODEL", "").lower()
+if variant_key in MODEL_VARIANTS:
+    MODEL_NAME, TAG = MODEL_VARIANTS[variant_key]
+else:
+    MODEL_NAME = os.environ.get("GEMMA4_BASE_MODEL", "")
+    TAG = os.environ.get("GEMMA4_BASE_TAG", "")
+    if not MODEL_NAME or not TAG:
+        print(
+            "No model selected. Legacy bases purged 2026-05-05 per Jun "
+            "directive (hackathon eligibility drift). Either:\n"
+            "  - set GEMMA_V2_MODEL to a key in MODEL_VARIANTS (currently empty), or\n"
+            "  - set GEMMA4_BASE_MODEL and GEMMA4_BASE_TAG.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
-MODEL_NAME, TAG = MODEL_VARIANTS[variant_key]
 OUTPUT_DIR = REPO / f"outputs/cad-lora-v2-{TAG}"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MAX_SEQ = 2048
 
-print(f"variant={variant_key} model={MODEL_NAME} → {OUTPUT_DIR}")
+print(f"variant={variant_key or '<env>'} model={MODEL_NAME} → {OUTPUT_DIR}")
 
 print(f"loading {MODEL_NAME} ...")
 _load_kwargs = {
@@ -51,12 +71,9 @@ _load_kwargs = {
     "load_in_4bit": True,
     "full_finetuning": False,
 }
-# Gemma-3n-E2B includes a vision tower (TimmWrapperModel) which under
-# transformers >= 5.3.0.dev0 + torch flex_attention raises ValueError on
-# init. Force eager attention for E2B; 4b-it loads cleanly under default.
-# Discovered 2026-05-03 on the first e2b train attempt.
-if variant_key == "e2b":
-    _load_kwargs["attn_implementation"] = "eager"
+# Per-base kwargs (e.g., attn_implementation overrides for vision-tower
+# variants) belong here when re-introducing variants. Empty until a Gemma 4
+# base is selected.
 model, tokenizer = FastModel.from_pretrained(**_load_kwargs)
 
 model = FastModel.get_peft_model(
@@ -72,7 +89,15 @@ model = FastModel.get_peft_model(
     random_state=42,
 )
 
-tokenizer = get_chat_template(tokenizer, chat_template="gemma-3")
+_chat_template = os.environ.get("GEMMA4_CHAT_TEMPLATE")
+if not _chat_template:
+    print(
+        "GEMMA4_CHAT_TEMPLATE unset. Set to the Unsloth chat template name "
+        "matching the chosen Gemma 4 base (e.g. 'gemma-4').",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+tokenizer = get_chat_template(tokenizer, chat_template=_chat_template)
 
 
 def to_text(example):

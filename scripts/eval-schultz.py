@@ -8,8 +8,12 @@ generation. The standard inference_eval_v2.py uses max_new_tokens=300 which
 truncates Schultz output (~1.3k chars / ~450 tokens). This wrapper bumps
 to max_new_tokens=600.
 
+Per Jun directive 2026-05-05: ADAPTER_DIR + GEMMA4_CHAT_TEMPLATE are required;
+the legacy adapters were purged.
+
 Inputs:
-  ADAPTER_DIR (env, required) → outputs/cad-lora-v2-{tag}/
+  ADAPTER_DIR (env, required)        → outputs/cad-lora-v3-{tag}/
+  GEMMA4_CHAT_TEMPLATE (env, required) → e.g. 'gemma-4'
 
 Output:
   outputs/cad-lora-v2-{tag}-schultz-eval.jsonl (single row)
@@ -30,7 +34,17 @@ from unsloth import FastModel
 from unsloth.chat_templates import get_chat_template
 
 REPO = Path(__file__).resolve().parents[1]
-ADAPTER = Path(os.environ.get("ADAPTER_DIR", REPO / "outputs/cad-lora-v2-e2b-it"))
+
+_adapter_env = os.environ.get("ADAPTER_DIR")
+if not _adapter_env:
+    print(
+        "ADAPTER_DIR unset. Legacy LoRA adapters purged 2026-05-05 "
+        "per Jun directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
+        "Gemma 4 LoRA adapter path before evaluating.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+ADAPTER = Path(_adapter_env)
 SCHULTZ = REPO / "data/schultz-target.jsonl"
 
 if not ADAPTER.exists():
@@ -43,18 +57,24 @@ if not SCHULTZ.exists():
 TAG = ADAPTER.name.replace("cad-lora-v2-", "")
 OUT = REPO / f"outputs/cad-lora-v2-{TAG}-schultz-eval.jsonl"
 
-# E2B's vision tower needs eager attn (same fix as lora_train_v2.py).
 load_kwargs = {
     "model_name": str(ADAPTER),
     "max_seq_length": 2048,
     "load_in_4bit": True,
 }
-if "e2b" in TAG:
-    load_kwargs["attn_implementation"] = "eager"
 
 print(f"loading adapter {ADAPTER} ({TAG})...")
 model, tokenizer = FastModel.from_pretrained(**load_kwargs)
-tokenizer = get_chat_template(tokenizer, chat_template="gemma-3")
+
+_chat_template = os.environ.get("GEMMA4_CHAT_TEMPLATE")
+if not _chat_template:
+    print(
+        "GEMMA4_CHAT_TEMPLATE unset. Set to the Unsloth chat template name "
+        "matching the chosen Gemma 4 base (e.g. 'gemma-4').",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+tokenizer = get_chat_template(tokenizer, chat_template=_chat_template)
 FastModel.for_inference(model)
 
 row = json.loads(SCHULTZ.read_text(encoding="utf-8").strip())

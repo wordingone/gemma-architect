@@ -7,7 +7,7 @@
 
 This plan is the deliverable closing #98. It absorbs:
 - **Spike B** (`docs/spike-b-retrospective.md`): IFC mining pipeline proven, corpus exhausted at 12 unique pairs.
-- **Spike A** (`docs/spike-a-retrospective.md`): QLoRA on Gemma-3-4b-it converges cleanly on 76 pairs (eval_loss 0.14 @ epoch 3). E4B preview wheel pending.
+- **Spike A** (`docs/archive/spike-a-retrospective.md`): QLoRA validates approach on 76 pairs (eval_loss 0.14 @ epoch 3). Legacy base purged 2026-05-05; Gemma 4 base TBD.
 
 The remaining 18 days are **scale + polish**, not "is this approach viable" — that question is answered.
 
@@ -40,7 +40,7 @@ Goal: replace the 76-pair toy dataset with a 400+-pair v2 dataset. Re-train.
 - **D1 (4/30, today)** — finish Spike A LoRA + retrospective ✅. File the 18-day plan ✅. Open `dataset/v2-spec.md` listing target categories + ratios.
 - **D2 (5/1)** — synthetic IFC generator: parametric room/wall/slab/column/footing emitter that round-trips through web-ifc → mining pipeline → training pair. Target 200 synthetic pairs. Diversity knobs: dimensions (0.3-30m), wall thickness (0.1-0.4m), opening counts, L-shape / U-shape / courtyard footprints. Acceptance: 200 pairs validate as round-trippable.
 - **D3 (5/2)** — corpus expansion: pull more open IFC (IfcOpenHouse, FreeCAD-IFC export samples, IFC4 sample suite). Target +50 mined pairs. Hand-curate +50 pairs covering Tier 2 ops (revolves, basic booleans/cuts). Total v2 dataset: 50 (tier1) + 50 (tier1-extra) + 200 (synthetic) + 50 (tier2-curated) + 50 (mined) = 400.
-- **D4 (5/3)** — re-train on v2 dataset. If E4B wheel still pending, train both 4b-it AND E2B (`gemma-3n-E2B-it`) and keep the better-scoring one as primary. Push best adapter to HF Hub as `gemma-architect/cad-lora-v2`. Sub-gate 1 closes here.
+- **D4 (5/3)** — re-train on v2 dataset on Gemma 4 base (TBD per Jun directive 2026-05-05). Push best adapter to HF Hub as `gemma-architect/cad-lora-v2`. Sub-gate 1 closes here.
 
 **Slip rule:** if D4 slips past 5/3, drop the 50 mined-extra and 50 tier2-curated rows and ship a 300-pair v2; do NOT skip the synthetic generator (it's the leverage).
 
@@ -87,7 +87,7 @@ To prevent track stacking (failure mode P2 from `failure-classes.md`):
 - **No IFC4x3 / IFC4 import.** Output is IFC4 export only. Import flow = Tier 4, off-scope.
 - **No multi-language UI.** English prompts only.
 - **No multimodality.** Text-in, JS-out. No image input even though Gemma 4 supports it.
-- **No fine-tune over base instruction-following.** LoRA on top of `gemma-3n-E2B-it` only. Don't attempt full fine-tune; the base instruction-following is the leverage.
+- **No fine-tune over base instruction-following.** LoRA on top of Gemma 4 base only. Don't attempt full fine-tune; the base instruction-following is the leverage.
 - **No AVIR-CLI work during the hackathon.** Per Jun directive 2026-04-30, the queue-burn defaults are paused. avir-cli mailbox check happens once per work session, not continuously.
 
 ---
@@ -96,7 +96,7 @@ To prevent track stacking (failure mode P2 from `failure-classes.md`):
 
 | Risk | Mitigation |
 |---|---|
-| E4B preview wheels never ship → can't fine-tune E4B | Fall back to E2B (`gemma-3n-E2B-it`); 4b-it as last-ditch analogue. Already validated 4b-it works. |
+| Gemma 4 base selection delayed | Use E2B as default; E4B if wheel available. Legacy analogue fallback removed per Jun directive 2026-05-05. |
 | WebGPU + Gemma-4 in-browser inference too slow | Server-side inference proxy on HuggingFace Spaces. Less impressive but still ships. |
 | LoRA adapter doesn't generalize off-distribution | The 400-pair v2 dataset is the bet. If still fails, expand to 800 via second synthetic-generator pass. |
 | Model emits non-Tier1 ops despite training | Post-process / lint the output and reject + re-prompt. Demo can hide this if rare. |

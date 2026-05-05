@@ -93,7 +93,7 @@ documented in [`docs/console-dsl.md`](docs/console-dsl.md).
 
 | What                                       | Number                            |
 | ------------------------------------------ | --------------------------------- |
-| Base model                                 | `unsloth/gemma-3-4b-it-unsloth-bnb-4bit` |
+| Base model                                 | Gemma 4 TBD (legacy base purged 2026-05-05) |
 | LoRA                                       | rank 16, alpha 16, all-linear     |
 | Train rows (augmented)                     | 932                               |
 | Eval rows (held-out, no augmentation)      | 40                                |
@@ -124,8 +124,8 @@ Numbers reproducible end-to-end via [`submission/repro.md`](submission/repro.md)
 
 ## Stack
 
-- **Model:** Gemma-3-4b-it via Unsloth FastModel (4-bit QLoRA).
-  E2B variant deferred (see `submission/repro.md` §3).
+- **Model:** Gemma 4 (base TBD) via Unsloth FastModel (4-bit QLoRA).
+  E2B or E4B variant pending Jun base selection per 2026-05-05 directive.
 - **Geometry kernel:** [replicad](https://replicad.xyz/) 0.20.0 (MIT) on
   [replicad-opencascadejs](https://github.com/sgenoud/replicad) 0.20.2
   (MIT wrapper, with the bundled OpenCascade WASM separately under
@@ -217,9 +217,9 @@ To re-train the LoRA on a 4090, see [`submission/repro.md`](submission/repro.md)
 
 - **GitHub repo** — this repo. Apache-2.0.
 - **Hugging Face Hub adapter** — `gemma-architect/cad-lora-v2` is the
-  intended path (LoRA on `gemma-3-4b-it-unsloth-bnb-4bit`, Apache-2.0,
+  intended path (LoRA on Gemma 4 base TBD, Apache-2.0,
   auto-generated model card with eval + intended-use + limitations).
-  Push is pending HF_TOKEN; until then `src/train/publish_v2.py` writes
+  Push is pending Gemma 4 retrain; until then `src/train/publish_v2.py` writes
   `outputs/cad-lora-v2-publish-plan.json` on the training machine
   (`outputs/` is gitignored). See `submission/README.md` outstanding
   blockers and `dataset/v2-results.md` §Publish.

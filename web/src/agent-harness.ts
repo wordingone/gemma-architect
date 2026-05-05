@@ -4,7 +4,7 @@
 //   - System prompt: Spatial Dictionary entries + Scene KG snapshot + matched skills
 //   - Tools array: dispatch table → OpenAI-compat function definitions
 //   - Multimodal content blocks: optional ImageBitmap frames forwarded as
-//     `image_url` parts (Gemma 3+ vision tower handles them natively;
+//     `image_url` parts (Gemma 4 vision tower handles them natively;
 //     gemma-architect's adapter at `src/serve/serve_lora.py` is OURS, so the
 //     image-stripping bug in avir-cli's openai-adapter does not apply here)
 //   - Tool-call parsing: `tool_calls[]` deltas mapped to AgentDispatch records
@@ -43,7 +43,7 @@ export type AgentResponse = {
 // ---- Endpoint resolution -----------------------------------------------
 
 const DEFAULT_ENDPOINT = "http://127.0.0.1:8083/v1/chat/completions";
-const DEFAULT_MODEL = "gemma-4-26b-it";
+const DEFAULT_MODEL = "gemma-4-e2b-it";
 
 function getEndpoint(): string {
   if (typeof window !== "undefined") {

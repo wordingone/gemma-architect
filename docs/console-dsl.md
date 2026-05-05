@@ -17,7 +17,7 @@ expressive enough to reconstruct a building from any of:
   and one window north"`)
 - a hybrid input (image + text refining it)
 
-…and small enough that the gemma-3n-E2B LoRA-fine-tune can produce it
+…and small enough that a Gemma 4 LoRA fine-tune can produce it
 reliably.
 
 The DSL is the **intermediate representation**. The model writes DSL;
@@ -31,7 +31,7 @@ is the narrow waist between them.
 ```
                 ┌──────────────┐
    image  ──────┤              │
-                │   gemma-3n   │           ┌─────────────────┐
+                │   Gemma 4    │           ┌─────────────────┐
                 │   E2B-it     │── DSL ──▶ │ replicad solid  │── IFC / STEP /
                 │   + LoRA     │           │ graph           │   OBJ / STL /
    text   ──────┤              │           └─────────────────┘   GLB / glTF /
@@ -331,8 +331,8 @@ training) is post-hackathon work.
 
 ## Cross-refs
 
-- avir-cli #102 — gemma-3n-E2B LoRA train (closed; E2B deferred per
-  `dataset/v2-results.md`, 4b-it shipped instead 2026-05-01)
+- avir-cli #102 — Gemma 4 E2B LoRA train (closed; E2B deferred per
+  `dataset/v2-results.md`; legacy training purged 2026-05-05)
 - gemma-architect #168 — 2D→3D reconstruction agent scaffold (closed;
   ships via Gemma 4 multimodal native function-calling)
 - gemma-architect #179 — Cmd-K palette + console parser (closed;
