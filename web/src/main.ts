@@ -207,6 +207,11 @@ worker.onmessage = (ev: MessageEvent<WorkerOut>) => {
     });
     runBtn.disabled = false;
     refreshExportButtons();
+    window.dispatchEvent(
+      new CustomEvent("gemma:run-ok", {
+        detail: { js: jsSource.value, label: shortLabel(currentDemo.label) },
+      }),
+    );
   }
 };
 
