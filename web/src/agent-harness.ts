@@ -173,13 +173,42 @@ function buildSceneContext(): string {
 // Detects prompts that want visual perception of the viewport.
 const VISION_RE = /\b(see|look|view|describe|scene|visible|on (the )?screen|canvas|appear|show me|what('s| is) (there|in|on))\b/i;
 
+const FEW_SHOT_EXAMPLES = `
+Examples of correct tool calls (copy the verb names EXACTLY — do not rename them):
+
+User: create a box 6m long, 4m wide, 3m tall
+Assistant:
+\`\`\`json
+{"verb":"SdBox","args":{"length":6,"width":4,"height":3}}
+\`\`\`
+
+User: draw a wall from origin to (5,0,0)
+Assistant:
+\`\`\`json
+{"verb":"IfcWall","args":{"startPoint":[0,0,0],"endPoint":[5,0,0],"height":3}}
+\`\`\`
+
+User: add a sphere radius 1
+Assistant:
+\`\`\`json
+{"verb":"SdSphere","args":{"radius":1}}
+\`\`\`
+
+User: add a cylinder, radius 0.5 height 2
+Assistant:
+\`\`\`json
+{"verb":"SdCylinder","args":{"radius":0.5,"height":2}}
+\`\`\`
+`.trim();
+
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
     "You are Gemma·Architect, a parametric CAD assistant embedded in a browser app.",
     "When the user asks to create or modify geometry, emit tool calls as JSON code blocks.",
-    'Format: ```json\\n{"verb":"VerbName","args":{...}}\\n```',
+    'Format: ```json\n{"verb":"VerbName","args":{...}}\n```',
     "Emit one ```json block per tool call. Multiple actions = multiple blocks in sequence.",
-    "IMPORTANT: Use ONLY the verb names listed below. Do not invent verb names — unrecognised verbs are silently rejected.",
+    "CRITICAL: Use ONLY the exact verb names listed below. Do not invent or rename verbs — any verb not in the list is silently rejected and nothing will be created.",
+    FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene (text): ${buildSceneContext()}`,
     "When a viewport image is attached to a user message, describe what is visible in the scene from that image. When no image is provided, refer to the 'Current scene' text summary above.",
