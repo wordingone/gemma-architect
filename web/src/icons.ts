@@ -79,6 +79,8 @@ export function iconSVG(name: string, size = 16): string {
     case "frame":   return `<svg ${attr}><rect x="3" y="3" width="18" height="18"/><path d="M3 8h18M3 16h18M8 3v18M16 3v18" opacity="0.35"/></svg>`;
     case "callout": return `<svg ${attr}><rect x="3" y="4" width="15" height="11" rx="1"/><path d="M8 15l-3 4 6-2"/></svg>`;
     case "detail":  return `<svg ${attr}><rect x="2" y="2" width="9" height="9" stroke-dasharray="2 1.5"/><circle cx="15" cy="15" r="6"/><path d="M10 10l5 5"/><path d="M13 15h4M15 13v4"/></svg>`;
+    case "point":   return `<svg ${attr}><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>`;
+    case "curve":   return `<svg ${attr}><path d="M3 18c4 0 4-12 9-12s5 12 9 12"/></svg>`;
     default:        return `<svg ${attr}><rect x="4" y="4" width="16" height="16"/></svg>`;
   }
 }

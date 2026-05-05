@@ -135,6 +135,17 @@
   kernel: nurbs-webgpu
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdPoint
+  kernel_op: makePoint
+  args:
+    - {name: position, type: point2, required: true}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [point, pt, vertex, makepoint]
+  hotkey: P
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §2 Solid primitives
 # ============================================================

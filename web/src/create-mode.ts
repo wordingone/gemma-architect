@@ -106,18 +106,33 @@ function buildWall(a: { x: number; y: number }, b: { x: number; y: number }): { 
 }
 
 function buildRect(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
-  const w = Math.abs(b.x - a.x);
-  const d = Math.abs(b.y - a.y);
+  const w = Math.max(0.01, Math.abs(b.x - a.x));
+  const d = Math.max(0.01, Math.abs(b.y - a.y));
   const cx = (a.x + b.x) / 2;
   const cy = (a.y + b.y) / 2;
-  const h = DEFAULT_RECT_HEIGHT;
-  const geom = new THREE.BoxGeometry(w, d, h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xc9b18a, roughness: 0.55, metalness: 0.05 });
+  const hw = w / 2;
+  const hd = d / 2;
+  const t = 0.015;
+  const outer = new THREE.Shape();
+  outer.moveTo(-hw - t, -hd - t);
+  outer.lineTo( hw + t, -hd - t);
+  outer.lineTo( hw + t,  hd + t);
+  outer.lineTo(-hw - t,  hd + t);
+  outer.closePath();
+  const inner = new THREE.Path();
+  inner.moveTo(-hw + t, -hd + t);
+  inner.lineTo( hw - t, -hd + t);
+  inner.lineTo( hw - t,  hd - t);
+  inner.lineTo(-hw + t,  hd - t);
+  inner.closePath();
+  outer.holes.push(inner);
+  const geom = new THREE.ShapeGeometry(outer);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc9b18a, roughness: 0.4, metalness: 0.0, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(cx, cy, 0);
+  mesh.position.set(cx, cy, 0.001);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "rect";
+  const h = DEFAULT_RECT_HEIGHT;
   const chain = `const rect = drawRectangle(${round(w)}, ${round(d)}).sketchOnPlane("XY").extrude(${round(h)}).translate([${round(cx)}, ${round(cy)}, 0]);`;
   return { mesh, chain };
 }
@@ -126,38 +141,29 @@ function buildCircle(center: { x: number; y: number }, radial: { x: number; y: n
   const dx = radial.x - center.x;
   const dy = radial.y - center.y;
   const r = Math.max(0.05, Math.sqrt(dx * dx + dy * dy));
-  const h = DEFAULT_RECT_HEIGHT;
-  const geom = new THREE.CylinderGeometry(r, r, h, 32);
-  geom.rotateX(Math.PI / 2);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.55, metalness: 0.05 });
+  const t = 0.015;
+  const geom = new THREE.RingGeometry(Math.max(0.02, r - t), r + t, 48);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.4, metalness: 0.0, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(center.x, center.y, 0);
+  mesh.position.set(center.x, center.y, 0.001);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "circle";
+  const h = DEFAULT_RECT_HEIGHT;
   const chain = `const cyl = makeCylinder(${round(r)}, ${round(h)}).translate([${round(center.x)}, ${round(center.y)}, 0]);`;
   return { mesh, chain };
 }
 
 function buildLine(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
-  const midX = (a.x + b.x) / 2;
-  const midY = (a.y + b.y) / 2;
-  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const w = Math.max(length, 0.001);
-  const t = 0.02;
-  const h = 0.001;
-  const geom = new THREE.BoxGeometry(w, t, h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x0e0e10 });
+  const curve = new THREE.LineCurve3(
+    new THREE.Vector3(a.x, a.y, 0),
+    new THREE.Vector3(b.x, b.y, 0),
+  );
+  const geom = new THREE.TubeGeometry(curve, 1, 0.008, 6, false);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2d2d35, roughness: 0.4, metalness: 0.0 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(midX, midY, 0);
-  mesh.rotation.z = (angDeg * Math.PI) / 180;
   mesh.userData.kind = "mesh";
   mesh.userData.creator = "line";
-  const chain = `const line = drawPolyline([[${round(a.x)}, ${round(a.y)}], [${round(b.x)}, ${round(b.y)}]]).sketchOnPlane("XY").extrude(0.001);`;
+  const chain = `const line = drawPolyline([[${round(a.x)}, ${round(a.y)}], [${round(b.x)}, ${round(b.y)}]]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
 }
 
@@ -304,40 +310,23 @@ function buildPolygon(center: { x: number; y: number }, radial: { x: number; y: 
 }
 
 function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THREE.Mesh; chain: string } {
-  // 4-click auto-close polyline → extrude. (Variable click count not supported by
-  // current handler API — fixed to 4 clicks for the demo, see TOOL_HANDLERS comment.)
-  const h = DEFAULT_EXTRUDE_HEIGHT;
-  // Compute centroid so we can extrude in local space and translate.
-  let cx = 0;
-  let cy = 0;
-  for (const p of pts) {
-    cx += p.x;
-    cy += p.y;
+  // 4-click open line strip. Visual is a tube path through the points.
+  // (Variable click count requires sentinel-terminate UX — fixed at 4 for now.)
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  for (let i = 0; i < pts.length - 1; i++) {
+    path.add(new THREE.LineCurve3(
+      new THREE.Vector3(pts[i].x, pts[i].y, 0),
+      new THREE.Vector3(pts[i + 1].x, pts[i + 1].y, 0),
+    ));
   }
-  cx /= pts.length;
-  cy /= pts.length;
-  const shape = new THREE.Shape();
-  pts.forEach((p, i) => {
-    const lx = p.x - cx;
-    const ly = p.y - cy;
-    if (i === 0) shape.moveTo(lx, ly);
-    else shape.lineTo(lx, ly);
-  });
-  shape.closePath();
-  let geom: THREE.BufferGeometry;
-  try {
-    geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-  } catch {
-    // Self-intersecting polygon — fall back to a thin line strip extrusion.
-    geom = new THREE.BoxGeometry(0.1, 0.1, h);
-  }
-  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
+  const segments = Math.max(1, (pts.length - 1) * 4);
+  const geom = new THREE.TubeGeometry(path, segments, 0.008, 6, false);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.4, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(cx, cy, 0);
-  mesh.userData.kind = "brep";
+  mesh.userData.kind = "mesh";
   mesh.userData.creator = "polyline";
   const worldVerts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
-  const chain = `const poly = drawPolyline([${worldVerts}], { close: true }).sketchOnPlane("XY").extrude(${round(h)});`;
+  const chain = `const poly = drawPolyline([${worldVerts}]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
 }
 
@@ -362,6 +351,31 @@ function buildExtrude(base: { x: number; y: number }, top: { x: number; y: numbe
   return { mesh, chain };
 }
 
+function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Mesh; chain: string } {
+  const vecs = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
+  const curve = new THREE.CatmullRomCurve3(vecs, false, "catmullrom", 0.5);
+  const geom = new THREE.TubeGeometry(curve, pts.length * 8, 0.008, 6, false);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.4, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.userData.kind = "mesh";
+  mesh.userData.creator = "curve";
+  const worldPts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
+  const chain = `const curv = drawSpline([${worldPts}]).sketchOnPlane("XY").extrude(0.002);`;
+  return { mesh, chain };
+}
+
+function buildPoint(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const r = 0.05;
+  const geom = new THREE.SphereGeometry(r, 12, 8);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xff7a45, roughness: 0.4, metalness: 0.1 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(p.x, p.y, r);
+  mesh.userData.kind = "mesh";
+  mesh.userData.creator = "point";
+  const chain = `const pt = makeCylinder(${round(r)}, ${round(r * 2)}).translate([${round(p.x)}, ${round(p.y)}, 0]);`;
+  return { mesh, chain };
+}
+
 type ToolHandler = {
   clicks: number;
   handler: (pts: Array<{ x: number; y: number }>) => { mesh: THREE.Mesh; chain: string };
@@ -383,6 +397,8 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   stair:    { clicks: 2, handler: ([a, b]) => buildStair(a, b) },
   polygon:  { clicks: 2, handler: ([a, b]) => buildPolygon(a, b) },
   polyline: { clicks: 4, handler: (pts) => buildPolyline(pts) },
+  curve:    { clicks: 3, handler: (pts) => buildCurve(pts) },
+  point:    { clicks: 1, handler: ([p]) => buildPoint(p) },
   extrude:  { clicks: 2, handler: ([a, b]) => buildExtrude(a, b) },
 };
 

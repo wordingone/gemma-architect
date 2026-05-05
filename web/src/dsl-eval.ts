@@ -80,8 +80,29 @@ interface Box {
   height: number;
   offset: number;
 }
+interface Line {
+  kind: "line";
+  from: Vec2;
+  to: Vec2;
+}
+interface Circle {
+  kind: "circle";
+  at: Vec2;
+  radius: number;
+}
+interface Rect {
+  kind: "rect";
+  cx: number;
+  cy: number;
+  width: number;
+  depth: number;
+}
+interface Point {
+  kind: "point";
+  at: Vec2;
+}
 
-type Stmt = (Wall | Slab | Column | Cut | Box) & { binding: string };
+type Stmt = (Wall | Slab | Column | Cut | Box | Line | Circle | Rect | Point) & { binding: string };
 
 const NUM = /-?\d+(?:\.\d+)?(?:e-?\d+)?/;
 
@@ -262,6 +283,33 @@ function emitColumn(s: Column, name: string): string {
   ].join("\n");
 }
 
+function emitLine(s: Line, name: string): string {
+  const dx = s.to[0] - s.from[0];
+  const dy = s.to[1] - s.from[1];
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const cx = (s.from[0] + s.to[0]) / 2;
+  const cy = (s.from[1] + s.to[1]) / 2;
+  const ang = ((Math.atan2(dy, dx) * 180) / Math.PI).toFixed(4);
+  return `const ${name} = makeBox(${len.toFixed(4)}, 0.02, 0.002).rotate(${ang}, [0,0,0], [0,0,1]).translate([${cx.toFixed(4)}, ${cy.toFixed(4)}, 0]);`;
+}
+
+function emitCircle(s: Circle, name: string): string {
+  return `const ${name} = makeCylinder(${s.radius.toFixed(4)}, 0.002).translate([${s.at[0].toFixed(4)}, ${s.at[1].toFixed(4)}, 0]);`;
+}
+
+function emitRect(s: Rect, name: string): string {
+  return [
+    `const ${name} = drawRectangle(${s.width.toFixed(4)}, ${s.depth.toFixed(4)})`,
+    `  .sketchOnPlane("XY")`,
+    `  .extrude(0.002)`,
+    `  .translate([${s.cx.toFixed(4)}, ${s.cy.toFixed(4)}, 0]);`,
+  ].join("\n");
+}
+
+function emitPoint(s: Point, name: string): string {
+  return `const ${name} = makeCylinder(0.05, 0.05).translate([${s.at[0].toFixed(4)}, ${s.at[1].toFixed(4)}, 0]);`;
+}
+
 export function compileDsl(source: string): CompileResult {
   const lines = source.split(/\r?\n/);
   const stmts: Stmt[] = [];
@@ -409,6 +457,65 @@ export function compileDsl(source: string): CompileResult {
       continue;
     }
 
+    if (verb === "line" || verb === "segment") {
+      if (positional.length < 2) {
+        return { ok: false, line: i + 1, message: `line: expected 2 point tuples, e.g. line (0 0) (3 3)` };
+      }
+      const from = parseTuple(positional[0]);
+      const to = parseTuple(positional[1]);
+      if (!from || from.length < 2 || !to || to.length < 2) {
+        return { ok: false, line: i + 1, message: `line: invalid point syntax — use (x y)` };
+      }
+      stmts.push({ kind: "line", from: [from[0], from[1]], to: [to[0], to[1]], binding: name });
+      continue;
+    }
+
+    if (verb === "circle") {
+      const centerStr = positional[0];
+      const radiusStr = getNamed(named, "radius") ?? positional[1];
+      if (!centerStr || !radiusStr) {
+        return { ok: false, line: i + 1, message: `circle: expected circle (cx cy) radius=R` };
+      }
+      const center = parseTuple(centerStr);
+      const radius = parseNumber(radiusStr);
+      if (!center || center.length < 2 || radius === null) {
+        return { ok: false, line: i + 1, message: `circle: invalid args — use circle (cx cy) radius=R` };
+      }
+      stmts.push({ kind: "circle", at: [center[0], center[1]], radius, binding: name });
+      continue;
+    }
+
+    if (verb === "rectangle" || verb === "rect") {
+      const widthStr = getNamed(named, "width") ?? positional[0];
+      const depthStr = getNamed(named, "depth") ?? getNamed(named, "height") ?? positional[1];
+      if (!widthStr || !depthStr) {
+        return { ok: false, line: i + 1, message: `rectangle: expected width=W depth=D [center=(cx cy)]` };
+      }
+      const width = parseNumber(widthStr);
+      const depth = parseNumber(depthStr);
+      if (width === null || depth === null) {
+        return { ok: false, line: i + 1, message: `rectangle: width/depth not a number` };
+      }
+      const centerStr = getNamed(named, "center") ?? positional[2];
+      const center = centerStr ? parseTuple(centerStr) : null;
+      const cx = center ? center[0] : 0;
+      const cy = center ? center[1] : 0;
+      stmts.push({ kind: "rect", cx, cy, width, depth, binding: name });
+      continue;
+    }
+
+    if (verb === "point" || verb === "pt" || verb === "vertex") {
+      if (positional.length < 1) {
+        return { ok: false, line: i + 1, message: `point: expected (x y)` };
+      }
+      const pt = parseTuple(positional[0]);
+      if (!pt || pt.length < 2) {
+        return { ok: false, line: i + 1, message: `point: invalid point syntax — use point (x y)` };
+      }
+      stmts.push({ kind: "point", at: [pt[0], pt[1]], binding: name });
+      continue;
+    }
+
     // Not a geometry primitive — check the spatial dictionary. If it resolves,
     // record as a dispatch (caller executes via dispatchSync) and continue.
     const canonical = getEntry(verb)?.canonical_name ?? resolveAlias(verb) ?? null;
@@ -441,6 +548,10 @@ export function compileDsl(source: string): CompileResult {
     else if (s.kind === "slab") body.push(emitSlab(s, s.binding));
     else if (s.kind === "column") body.push(emitColumn(s, s.binding));
     else if (s.kind === "box") body.push(emitBox(s, s.binding));
+    else if (s.kind === "line") body.push(emitLine(s, s.binding));
+    else if (s.kind === "circle") body.push(emitCircle(s, s.binding));
+    else if (s.kind === "rect") body.push(emitRect(s, s.binding));
+    else if (s.kind === "point") body.push(emitPoint(s, s.binding));
     else if (s.kind === "cut") {
       body.push(`const ${s.binding} = ${s.a}.cut(${s.b});`);
       consumed.add(s.a);
