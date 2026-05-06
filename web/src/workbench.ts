@@ -84,7 +84,6 @@ const PALETTE_SECTIONS: PaletteSection[] = [
 type DockTab = { id: string; icon: string; label: string };
 const DOCK_TABS: DockTab[] = [
   { id: "prompt",     icon: "sparkle",  label: "CREATE" },
-  { id: "console",    icon: "terminal", label: "CONSOLE" },
   { id: "nodes",      icon: "graph",    label: "NODES" },
   { id: "parameters", icon: "sliders",  label: "PARAMETERS" },
   { id: "history",    icon: "history",  label: "HISTORY" },
@@ -530,27 +529,179 @@ function demoIdToIndex(id: string): string | null {
 function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body prompt-tab create-tab");
 
+  let mode = loadConsoleMode();
+
   const header = el("div", "ai-header");
-  header.innerHTML = `
-    <div class="ai-title">
-      ${iconSVG("sparkle", 13)}
-      CREATE  ·  CONVERSATION WITH GEMMA·ARCHITECT
-    </div>
-    <span class="ai-badge" id="ai-model-badge">
-      <span class="v">G</span>EMMA·4·E2B  ·  LIVE
-    </span>
-  `;
+  function renderHeader(): void {
+    header.innerHTML = `
+      <div class="ai-title">
+        ${mode === "console" ? iconSVG("terminal", 13) : iconSVG("sparkle", 13)}
+        ${mode === "console" ? "CONSOLE  ·  DSL COMMAND INPUT" : "CREATE  ·  CONVERSATION WITH GEMMA·ARCHITECT"}
+      </div>
+      <button class="mode-pill" title="Shift+Tab to toggle mode" data-mode="${mode}">
+        ${mode === "console" ? "● CONSOLE" : "○ CREATE"}
+      </button>
+      <span class="ai-badge" id="ai-model-badge">
+        <span class="v">G</span>EMMA·4·E2B  ·  LIVE
+      </span>
+    `;
+    header.querySelector(".mode-pill")?.addEventListener("click", () => {
+      setConsoleMode(mode === "console" ? "prompt" : "console");
+    });
+  }
+  renderHeader();
   wrap.appendChild(header);
 
+  // Build both inner panes upfront; swap visibility on mode change.
   const chatRoot = el("div", "chat-panel-root");
   new ChatPanel(chatRoot);
-  wrap.appendChild(chatRoot);
 
-  // Keep the legacy prompt-pane element alive in off-grid-host (it still hosts
-  // export buttons, file picker, etc.) — DO NOT relocate it here.
+  const consolePane = buildConsoleInner();
+
+  const innerHost = el("div", "create-tab-inner");
+  innerHost.appendChild(mode === "console" ? consolePane : chatRoot);
+  wrap.appendChild(innerHost);
+
+  // Wire _setConsoleModeFn — this is the hook cmdk + Shift+Tab call.
+  _setConsoleModeFn = (m: ConsoleMode) => {
+    if (m === mode) return;
+    mode = m;
+    saveConsoleMode(m);
+    renderHeader();
+    innerHost.innerHTML = "";
+    innerHost.appendChild(m === "console" ? consolePane : chatRoot);
+  };
+
+  // Shift+Tab global handler (added once per tab build; cleaned up on tab destroy via AbortController).
+  const ac = new AbortController();
+  document.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.shiftKey && e.key === "Tab") {
+      e.preventDefault();
+      setConsoleMode(mode === "console" ? "prompt" : "console");
+    }
+  }, { signal: ac.signal });
+  // Detach when wrap is removed from DOM.
+  new MutationObserver(() => {
+    if (!wrap.isConnected) ac.abort();
+  }).observe(document.body, { childList: true, subtree: true });
+
+  // Keep the legacy prompt-pane element alive in off-grid-host.
   if (promptPane) {
     promptPane.classList.add("prompt-pane-embed");
   }
+
+  return wrap;
+}
+
+function buildConsoleInner(): HTMLElement {
+  const wrap = el("div", "console-inner-pane");
+  wrap.innerHTML = `
+    <div class="console">
+      <div class="console-history" id="console-history">
+        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">OpenCascade WebAssembly initialized</span></div>
+        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">web-ifc parser ready · IFC4 schema</span></div>
+        <div class="console-line ok"><span class="ts">00:00:02</span><span class="glyph">✓</span><span class="text">LoRA adapter loaded</span></div>
+        <div class="console-line info"><span class="ts">00:00:03</span><span class="glyph">·</span><span class="text">DSL ready · type wall|slab|column|box|cut, then ⏎</span></div>
+      </div>
+      <div class="console-prompt">
+        <span class="caret">›</span>
+        <input id="console-input" placeholder="DSL — wall (0 0) (5 0) height=3 thickness=0.2     |     column (0 0) height=3 profile=square(0.3)"/>
+        <span style="font-family:var(--mono); font-size:9.5px; color:var(--ink-faint); letter-spacing:0.04em;">⏎ run</span>
+      </div>
+    </div>
+  `;
+
+  const input = wrap.querySelector<HTMLInputElement>("#console-input")!;
+  const history = wrap.querySelector<HTMLDivElement>("#console-history")!;
+  const buffer: string[] = [];
+  let bufferIdx = 0;
+
+  function ts(): string {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+  }
+  function pushLine(kind: "cmd" | "ok" | "err" | "info", text: string) {
+    const line = document.createElement("div");
+    line.className = `console-line ${kind}`;
+    const glyph = kind === "cmd" ? "›" : kind === "ok" ? "✓" : kind === "err" ? "✗" : "·";
+    line.innerHTML = `<span class="ts">${ts()}</span><span class="glyph">${glyph}</span><span class="text"></span>`;
+    line.querySelector(".text")!.textContent = text;
+    history.appendChild(line);
+    history.scrollTop = history.scrollHeight;
+  }
+
+  input.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.shiftKey && e.key === "Tab") return; // let global handler take it
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const src = input.value.trim();
+      if (!src) return;
+      buffer.push(src);
+      bufferIdx = buffer.length;
+      input.value = "";
+      pushLine("cmd", src);
+
+      const isDeclCmd = src.startsWith(":");
+      const dslSrc = isDeclCmd ? src.slice(1).trim() : src;
+
+      if (isDeclCmd) {
+        const tokens = dslSrc.split(/\s+/);
+        const verb = tokens[0];
+        const dispArgs: DispatchArgs = {};
+        for (const t of tokens.slice(1)) {
+          const eq = t.indexOf("=");
+          if (eq > 0) {
+            const k = t.slice(0, eq);
+            const v = t.slice(eq + 1);
+            const n = Number(v);
+            dispArgs[k] = Number.isFinite(n) ? n : v;
+          }
+        }
+        const dr = dispatchSync(verb, dispArgs);
+        pushLine(
+          dr.ok ? "ok" : "info",
+          `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+        );
+      }
+
+      const c = compileDsl(dslSrc);
+      if (!c.ok) {
+        pushLine("err", `line ${c.line}: ${c.message}`);
+        return;
+      }
+      if (c.dispatches && c.dispatches.length > 0) {
+        for (const d of c.dispatches) {
+          const dr = dispatchSync(d.verb, d.args);
+          pushLine(
+            dr.ok ? "ok" : "info",
+            `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+          );
+        }
+      }
+      if (c.js) {
+        const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
+        const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
+        if (jsSrc && runBtn) {
+          jsSrc.value = c.js;
+          jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
+          pushLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
+          runBtn.click();
+        } else {
+          pushLine("err", "kernel not ready (no #run-btn / #js-source)");
+        }
+      }
+    } else if (e.key === "ArrowUp") {
+      if (buffer.length === 0) return;
+      e.preventDefault();
+      bufferIdx = Math.max(0, bufferIdx - 1);
+      input.value = buffer[bufferIdx] ?? "";
+    } else if (e.key === "ArrowDown") {
+      if (buffer.length === 0) return;
+      e.preventDefault();
+      bufferIdx = Math.min(buffer.length, bufferIdx + 1);
+      input.value = buffer[bufferIdx] ?? "";
+    }
+  });
 
   return wrap;
 }
@@ -731,118 +882,6 @@ function initLiveTabSubscriptions(): void {
   });
 }
 
-function buildConsoleTabBody(): HTMLElement {
-  const wrap = el("div", "tab-body console-tab");
-  wrap.innerHTML = `
-    <div class="console">
-      <div class="console-history" id="console-history">
-        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">OpenCascade WebAssembly initialized</span></div>
-        <div class="console-line info"><span class="ts">00:00:01</span><span class="glyph">·</span><span class="text">web-ifc parser ready · IFC4 schema</span></div>
-        <div class="console-line ok"><span class="ts">00:00:02</span><span class="glyph">✓</span><span class="text">LoRA adapter loaded</span></div>
-        <div class="console-line info"><span class="ts">00:00:03</span><span class="glyph">·</span><span class="text">DSL ready · type wall|slab|column|box|cut, then ⏎</span></div>
-      </div>
-      <div class="console-prompt">
-        <span class="caret">›</span>
-        <input id="console-input" placeholder="DSL — wall (0 0) (5 0) height=3 thickness=0.2     |     column (0 0) height=3 profile=square(0.3)"/>
-        <span style="font-family:var(--mono); font-size:9.5px; color:var(--ink-faint); letter-spacing:0.04em;">⏎ run</span>
-      </div>
-    </div>
-  `;
-
-  const input = wrap.querySelector<HTMLInputElement>("#console-input")!;
-  const history = wrap.querySelector<HTMLDivElement>("#console-history")!;
-  const buffer: string[] = [];
-  let bufferIdx = 0;
-
-  function ts(): string {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-  }
-  function pushLine(kind: "cmd" | "ok" | "err" | "info", text: string) {
-    const line = document.createElement("div");
-    line.className = `console-line ${kind}`;
-    const glyph = kind === "cmd" ? "›" : kind === "ok" ? "✓" : kind === "err" ? "✗" : "·";
-    line.innerHTML = `<span class="ts">${ts()}</span><span class="glyph">${glyph}</span><span class="text"></span>`;
-    line.querySelector(".text")!.textContent = text;
-    history.appendChild(line);
-    history.scrollTop = history.scrollHeight;
-  }
-
-  input.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const src = input.value.trim();
-      if (!src) return;
-      buffer.push(src);
-      bufferIdx = buffer.length;
-      input.value = "";
-      pushLine("cmd", src);
-
-      const isDeclCmd = src.startsWith(":");
-      const dslSrc = isDeclCmd ? src.slice(1).trim() : src;
-
-      if (isDeclCmd) {
-        const tokens = dslSrc.split(/\s+/);
-        const verb = tokens[0];
-        const dispArgs: DispatchArgs = {};
-        for (const t of tokens.slice(1)) {
-          const eq = t.indexOf("=");
-          if (eq > 0) {
-            const k = t.slice(0, eq);
-            const v = t.slice(eq + 1);
-            const n = Number(v);
-            dispArgs[k] = Number.isFinite(n) ? n : v;
-          }
-        }
-        const dr = dispatchSync(verb, dispArgs);
-        pushLine(
-          dr.ok ? "ok" : "info",
-          `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-        );
-      }
-
-      const c = compileDsl(dslSrc);
-      if (!c.ok) {
-        pushLine("err", `line ${c.line}: ${c.message}`);
-        return;
-      }
-      if (c.dispatches && c.dispatches.length > 0) {
-        for (const d of c.dispatches) {
-          const dr = dispatchSync(d.verb, d.args);
-          pushLine(
-            dr.ok ? "ok" : "info",
-            `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-          );
-        }
-      }
-      if (c.js) {
-        const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
-        const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
-        if (jsSrc && runBtn) {
-          jsSrc.value = c.js;
-          jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
-          pushLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
-          runBtn.click();
-        } else {
-          pushLine("err", "kernel not ready (no #run-btn / #js-source)");
-        }
-      }
-    } else if (e.key === "ArrowUp") {
-      if (buffer.length === 0) return;
-      e.preventDefault();
-      bufferIdx = Math.max(0, bufferIdx - 1);
-      input.value = buffer[bufferIdx] ?? "";
-    } else if (e.key === "ArrowDown") {
-      if (buffer.length === 0) return;
-      e.preventDefault();
-      bufferIdx = Math.min(buffer.length, bufferIdx + 1);
-      input.value = buffer[bufferIdx] ?? "";
-    }
-  });
-
-  return wrap;
-}
-
 function buildParametersTabBody(paramPanel: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body parameters-tab");
   if (paramPanel) {
@@ -865,7 +904,6 @@ function buildDock(
 
   const panes: Record<string, HTMLElement> = {
     prompt:     buildPromptTabBody(promptPane),
-    console:    buildConsoleTabBody(),
     nodes:      buildNodesTabBody(),
     parameters: buildParametersTabBody(paramPanel),
     history:    buildHistoryTabBody(),
