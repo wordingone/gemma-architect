@@ -42,6 +42,16 @@ const EXCLUDE_FILES = new Set([
   "nurbs-kernel.LICENSE.md",
 ]);
 
+// Known stubs awaiting Tiers 1-6 of #58. Remove each entry as the corresponding
+// Tier PR lands and eliminates the stub. Format: "web/src/file.ts:line".
+const KNOWN_STUBS_ALLOWLIST = new Set([
+  "web/src/kernel.ts:89",
+  "web/src/kernel.ts:108",
+  "web/src/kernel.ts:113",
+  "web/src/kernel.ts:119",
+  "web/src/ifc-nurbs.ts:30",
+]);
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const ent of readdirSync(dir)) {
     if (ent.startsWith(".")) continue;
@@ -99,15 +109,32 @@ function main(): void {
   const violations: Violation[] = [];
   for (const f of files) violations.push(...scanFile(f));
 
-  if (violations.length === 0) {
-    console.log("0 stubs");
+  const allowed: Violation[] = [];
+  const blocking: Violation[] = [];
+  for (const v of violations) {
+    if (KNOWN_STUBS_ALLOWLIST.has(`${v.file}:${v.line}`)) {
+      allowed.push(v);
+    } else {
+      blocking.push(v);
+    }
+  }
+
+  if (allowed.length > 0) {
+    console.log(`${allowed.length} allowlisted stub${allowed.length === 1 ? "" : "s"} (tracked in #58 Tiers 1-6):`);
+    for (const v of allowed) {
+      console.log(`  ${v.file}:${v.line}: ${v.category} — ${v.snippet}`);
+    }
+  }
+
+  if (blocking.length === 0) {
+    console.log("0 new stubs");
     process.exit(0);
   }
 
-  for (const v of violations) {
+  for (const v of blocking) {
     console.log(`${v.file}:${v.line}: ${v.category} — ${v.snippet}`);
   }
-  console.error(`\n${violations.length} stub${violations.length === 1 ? "" : "s"} found`);
+  console.error(`\n${blocking.length} stub${blocking.length === 1 ? "" : "s"} found`);
   process.exit(1);
 }
 
