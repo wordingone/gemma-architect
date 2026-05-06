@@ -1,0 +1,65 @@
+import { beforeEach, describe, expect, test } from "bun:test";
+import { getDictionary } from "../src/dictionary";
+import { registerHandler, unregisterHandler } from "../src/dispatch";
+import {
+  clearCommandSession,
+  parseToolEnvelope,
+  provideSessionPick,
+  startCommandSession,
+} from "../src/command-session";
+
+function clearAllHandlers() {
+  for (const e of getDictionary()) unregisterHandler(e.canonical_name);
+}
+
+beforeEach(() => {
+  clearAllHandlers();
+  clearCommandSession();
+});
+
+describe("command session", () => {
+  test("parses function envelope and legacy envelope", () => {
+    const a = parseToolEnvelope({ command: "SdLine", parameters: { start: [0, 0] } });
+    const b = parseToolEnvelope({ verb: "SdLine", args: { start: [0, 0] } });
+    expect(a?.command).toBe("SdLine");
+    expect(b?.command).toBe("SdLine");
+  });
+
+  test("line command collects picks then executes", async () => {
+    let called: Record<string, unknown> | null = null;
+    registerHandler("SdLine", (args) => {
+      called = args;
+      return { ok: true };
+    });
+    const s0 = await startCommandSession({
+      command: "SdLine",
+      parameters: {},
+      metadata: { source: "palette" },
+    });
+    expect(s0.status).toBe("needs_input");
+    const s1 = await provideSessionPick([1, 2]);
+    expect(s1.status).toBe("needs_input");
+    const s2 = await provideSessionPick([4, 6]);
+    expect(s2.status).toBe("success");
+    expect(called?.start).toEqual([1, 2]);
+    expect(called?.end).toEqual([4, 6]);
+  });
+
+  test("rectangle command coerces units", async () => {
+    let called: Record<string, unknown> | null = null;
+    registerHandler("SdRectangle", (args) => {
+      called = args;
+      return { ok: true };
+    });
+    const s = await startCommandSession({
+      command: "SdRectangle",
+      parameters: { width: "120cm", depth: "2000mm", center: "(1,2)" },
+      metadata: { source: "agent" },
+    });
+    expect(s.status).toBe("success");
+    expect(called?.width).toBe(1.2);
+    expect(called?.depth).toBe(2);
+    expect(called?.center).toEqual([1, 2]);
+  });
+});
+

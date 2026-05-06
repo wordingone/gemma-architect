@@ -6,7 +6,7 @@
 
 import { runAgentTurn } from "./agent-harness";
 import type { AgentDispatch } from "./agent-harness";
-import { dispatchSync } from "./dispatch";
+import { invokeCommand } from "./command-session";
 import type { Skill } from "./skills-loader";
 
 type Message = {
@@ -104,14 +104,21 @@ export class ChatPanel {
       });
 
       const fired: string[] = [];
+      const execSummaries: string[] = [];
       for (const d of resp.dispatches) {
-        const dr = dispatchSync(d.verb, d.args);
-        fired.push(dr.ok ? d.verb : `${d.verb}(err)`);
+        const out = await invokeCommand({
+          command: d.verb,
+          parameters: d.args,
+          metadata: { source: "agent" },
+        });
+        fired.push(out.status === "success" ? `${out.canonical}` : `${d.verb}(err)`);
+        execSummaries.push(out.summary);
       }
 
       const assistantText =
-        resp.text.trim() ||
-        (fired.length > 0 ? `Dispatched: ${fired.join(", ")}` : "(no response)");
+        execSummaries.length > 0
+          ? execSummaries.join(" ")
+          : (resp.text.trim() || (fired.length > 0 ? `Dispatched: ${fired.join(", ")}` : "(no response)"));
 
       this._removeThinking(thinking);
       this._pushMsg({

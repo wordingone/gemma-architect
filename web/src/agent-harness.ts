@@ -267,8 +267,9 @@ Assistant:
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
     "You are Gemma·Architect, a parametric CAD assistant embedded in a browser app.",
-    "When the user asks to create or modify geometry, emit tool calls as JSON code blocks.",
-    'Format: ```json\n{"verb":"VerbName","args":{...}}\n```',
+    "When the user asks to create or modify geometry, emit tool calls.",
+    'Preferred format: <tool_call>{"command":"VerbName","parameters":{...},"metadata":{"source":"agent"}}</tool_call>',
+    'Legacy format accepted: ```json\n{"verb":"VerbName","args":{...}}\n```',
     "Emit one ```json block per tool call. Multiple actions = multiple blocks in sequence.",
     "CRITICAL: Use ONLY the exact verb names listed below. Do not invent or rename verbs — any verb not in the list is silently rejected and nothing will be created.",
     FEW_SHOT_EXAMPLES,
@@ -298,11 +299,20 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
       for (const item of items) {
         if (item && typeof item === "object") {
           const obj = item as Record<string, unknown>;
-          const verb = typeof obj.verb === "string" ? obj.verb.trim() : "";
-          const args =
+          const verbRaw =
+            typeof obj.verb === "string"
+              ? obj.verb
+              : typeof obj.command === "string"
+                ? obj.command
+                : "";
+          const verb = verbRaw.trim();
+          const args = (
             obj.args && typeof obj.args === "object" && !Array.isArray(obj.args)
-              ? (obj.args as Record<string, unknown>)
-              : {};
+              ? obj.args
+              : obj.parameters && typeof obj.parameters === "object" && !Array.isArray(obj.parameters)
+                ? obj.parameters
+                : {}
+          ) as Record<string, unknown>;
           if (verb) { dispatches.push({ verb, args }); found = true; }
         }
       }
@@ -310,13 +320,19 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
     } catch { return false; }
   }
 
-  // Pass 1: fenced ```json ... ``` blocks.
-  let text = raw.replace(/```json\s*([\s\S]*?)```/gi, (_, inner) => {
+  // Pass 1: FunctionGemma-style <tool_call>{...}</tool_call> blocks.
+  let text = raw.replace(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/gi, (_, inner) => {
     tryExtract(inner.trim());
     return "";
   });
 
-  // Pass 2: bare "json" marker (no backticks) at the start of a line, optionally
+  // Pass 2: fenced ```json ... ``` blocks.
+  text = text.replace(/```json\s*([\s\S]*?)```/gi, (_, inner) => {
+    tryExtract(inner.trim());
+    return "";
+  });
+
+  // Pass 3: bare "json" marker (no backticks) at the start of a line, optionally
   // followed by a newline, then a single-line JSON object.
   // Handles model outputs like "json\n{...}" and "json {...}".
   text = text.replace(/(^|\r?\n)([ \t]*json[ \t]*\r?\n?[ \t]*)(\{[^\n\r]+\})/gi,
@@ -325,7 +341,7 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
       return newline; // keep leading newline to preserve line breaks
     });
 
-  // Pass 3: standalone single-line JSON object with a "verb" field on its own line.
+  // Pass 4: standalone single-line JSON object with a "verb" field on its own line.
   // Handles bare {"verb":"..."} that the model emits without any wrapper.
   text = text.replace(/^[ \t]*(\{[^\n\r]+"verb"[^\n\r]*\})[ \t]*$/gm, (match, inner) => {
     if (tryExtract(inner.trim())) return "";
