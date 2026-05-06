@@ -2378,6 +2378,7 @@ html[data-mode="night"] .paper-stage {
 }
 .chat-compose {
   display: flex;
+  flex-shrink: 0;
   gap: 6px;
   padding: 6px 10px 8px;
   border-top: var(--lw-construction) solid var(--border);
