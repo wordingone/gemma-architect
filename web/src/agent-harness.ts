@@ -269,7 +269,7 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene (text): ${buildSceneContext()}`,
-    "When a viewport image is attached to a user message, describe what is visible in the scene from that image. When no image is provided, refer to the 'Current scene' text summary above.",
+    "Use the 'Current scene' text above to silently inform your responses (e.g. avoid creating duplicates, reference object counts). Do NOT proactively announce or describe scene contents. Do NOT take actions based on scene state alone. Only act on explicit user requests. If a viewport image is attached, describe it only when the user has explicitly asked you to look at or describe the scene.",
     summariseSkills(skills),
     "For questions or summaries, respond with plain text only (no JSON blocks).",
   ].join("\n\n");
@@ -337,24 +337,29 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proc = processor as any;
 
-  // Always capture viewport so the model can see the current scene state.
-  const imageDataUrl = captureViewport();
-
   type TextPart = { type: "text"; text: string };
   type ImagePart = { type: "image"; image: RawImage };
   type ContentPart = TextPart | ImagePart;
   type UserContent = string | ContentPart[];
 
-  // Collect images and build user message content.
+  // Only attach viewport image when the caller explicitly requests it via
+  // req.frames (e.g. user clicked "look at scene" or typed "what do you see?").
+  // Proactive capture caused the model to narrate and act on scene state without
+  // being asked — Jun directive 2026-05-06.
   const imageList: RawImage[] = [];
   let userContent: UserContent;
-  if (imageDataUrl) {
-    const rawImage = await RawImage.fromURL(imageDataUrl);
-    imageList.push(rawImage);
-    userContent = [
-      { type: "image", image: rawImage } satisfies ImagePart,
-      { type: "text", text: req.prompt } satisfies TextPart,
-    ];
+  if (req.frames && req.frames.length > 0) {
+    const snapshotUrl = captureViewport();
+    if (snapshotUrl) {
+      const rawImage = await RawImage.fromURL(snapshotUrl);
+      imageList.push(rawImage);
+    }
+    userContent = imageList.length > 0
+      ? [
+          { type: "image", image: imageList[0] } satisfies ImagePart,
+          { type: "text", text: req.prompt } satisfies TextPart,
+        ]
+      : req.prompt;
   } else {
     userContent = req.prompt;
   }
