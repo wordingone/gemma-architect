@@ -45,7 +45,6 @@ function buildPaperMode(boundsProvider?: () => SceneBounds | null): HTMLElement 
     size: "A1",
     orientation: "landscape",
     showTitleBlock: false,
-    spawnDefault: false, // start with empty sheet; click anywhere to add a panel
     bounds: boundsProvider
       ? () => { const b = boundsProvider(); return b ?? ({ min: [-1, -1, -1], max: [1, 1, 1] } as SceneBounds); }
       : undefined,

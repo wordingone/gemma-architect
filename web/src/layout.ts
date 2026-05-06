@@ -766,12 +766,15 @@ class LayoutController {
 
   private _spawnDefaultPanel(): void {
     const mm = sheetMm(this.size, this.orientation, this.customMm);
-    const margin = 20 * MM_TO_PX;
+    // 30% margin on each side — panel occupies the centre 40% of the sheet.
+    // This leaves the outer border (0-30% and 70-100%) as empty clickable space
+    // so onSheetClick() can add panels without hitting the existing panel.
+    const r = 0.30;
     this.addPanel({
-      x: margin,
-      y: margin,
-      w: Math.round(mm.w * MM_TO_PX - 2 * margin),
-      h: Math.round(mm.h * MM_TO_PX - 2 * margin),
+      x: Math.round(mm.w * MM_TO_PX * r),
+      y: Math.round(mm.h * MM_TO_PX * r),
+      w: Math.round(mm.w * MM_TO_PX * (1 - 2 * r)),
+      h: Math.round(mm.h * MM_TO_PX * (1 - 2 * r)),
       viewport: "perspective",
       scale: "1:100",
     });
