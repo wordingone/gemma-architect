@@ -141,6 +141,124 @@ registerHandler("SdSelectAll", () => {
   window.dispatchEvent(new CustomEvent("viewer:selectAll", { detail: { count: selectable.length } }));
 });
 
+// Geometry-creation handlers for agent dispatches from the CREATE tab.
+// These override the generic gemma:command shim with actual THREE.js mesh creation.
+
+registerHandler("SdBox", (args) => {
+  const w = (args.width as number | undefined) ?? (args.size as number | undefined) ?? 1;
+  const d = (args.depth as number | undefined) ?? (args.length as number | undefined) ?? 1;
+  const h = (args.height as number | undefined) ?? 1;
+  const geom = new THREE.BoxGeometry(w, d, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "SdBox";
+  viewer.addMesh(mesh, "brep");
+  return { created: "box", width: w, depth: d, height: h };
+});
+
+registerHandler("SdSphere", (args) => {
+  const r = (args.radius as number | undefined) ?? 1;
+  const geom = new THREE.SphereGeometry(r, 32, 16);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.4, metalness: 0.0 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.z = r;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "SdSphere";
+  viewer.addMesh(mesh, "brep");
+  return { created: "sphere", radius: r };
+});
+
+registerHandler("SdCylinder", (args) => {
+  const r = (args.radius as number | undefined) ?? 0.5;
+  const h = (args.height as number | undefined) ?? 2;
+  const geom = new THREE.CylinderGeometry(r, r, h, 32);
+  geom.rotateX(Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.z = h / 2;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "SdCylinder";
+  viewer.addMesh(mesh, "brep");
+  return { created: "cylinder", radius: r, height: h };
+});
+
+registerHandler("SdCone", (args) => {
+  const r = (args.radius as number | undefined) ?? 0.5;
+  const h = (args.height as number | undefined) ?? 2;
+  const geom = new THREE.ConeGeometry(r, h, 32);
+  geom.rotateX(Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd0a868, roughness: 0.55, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.z = h / 2;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "SdCone";
+  viewer.addMesh(mesh, "brep");
+  return { created: "cone", radius: r, height: h };
+});
+
+registerHandler("IfcWall", (args) => {
+  const profile = (args.profile as [number, number][]) ?? [[0, 0], [4, 0]];
+  const t = (args.thickness as number | undefined) ?? 0.3;
+  const wallH = (args.height as number | undefined) ?? 3;
+  // Compute total polyline length
+  let len = 0;
+  let cx = 0, cy = 0;
+  for (let i = 0; i < profile.length - 1; i++) {
+    const dx = profile[i + 1][0] - profile[i][0];
+    const dy = profile[i + 1][1] - profile[i][1];
+    len += Math.sqrt(dx * dx + dy * dy);
+    cx += (profile[i][0] + profile[i + 1][0]) / 2;
+    cy += (profile[i][1] + profile[i + 1][1]) / 2;
+  }
+  if (len < 0.01) len = 4;
+  const geom = new THREE.BoxGeometry(len, t, wallH);
+  geom.translate(0, 0, wallH / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  if (profile.length >= 2) {
+    const dx = profile[profile.length - 1][0] - profile[0][0];
+    const dy = profile[profile.length - 1][1] - profile[0][1];
+    mesh.position.set((profile[0][0] + profile[profile.length - 1][0]) / 2, (profile[0][1] + profile[profile.length - 1][1]) / 2, 0);
+    mesh.rotation.z = Math.atan2(dy, dx);
+  }
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcWall";
+  viewer.addMesh(mesh, "brep");
+  return { created: "wall", length: len, thickness: t, height: wallH };
+});
+
+registerHandler("IfcSlab", (args) => {
+  const w = (args.width as number | undefined) ?? (args.length as number | undefined) ?? 4;
+  const d = (args.depth as number | undefined) ?? (args.width as number | undefined) ?? 4;
+  const t = (args.thickness as number | undefined) ?? 0.2;
+  const elev = (args.elevation as number | undefined) ?? 0;
+  const geom = new THREE.BoxGeometry(w, d, t);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xa8a097, roughness: 0.7, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.z = elev;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcSlab";
+  viewer.addMesh(mesh, "brep");
+  return { created: "slab", width: w, depth: d };
+});
+
+registerHandler("IfcColumn", (args) => {
+  const s = (args.size as number | undefined) ?? 0.3;
+  const h = (args.height as number | undefined) ?? 4;
+  const geom = new THREE.BoxGeometry(s, s, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xd1c5b0, roughness: 0.6, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const p = args.position as [number, number] | undefined;
+  if (p) mesh.position.set(p[0], p[1], 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcColumn";
+  viewer.addMesh(mesh, "brep");
+  return { created: "column", height: h };
+});
+
 const scenePanel = new ScenePanel(scenePanelEl, viewer);
 
 // Navigation hotkeys — Blender-numpad keymap, with letter fallbacks for

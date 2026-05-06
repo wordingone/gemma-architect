@@ -176,16 +176,16 @@ const VISION_RE = /\b(see|look|view|describe|scene|visible|on (the )?screen|canv
 const FEW_SHOT_EXAMPLES = `
 Examples of correct tool calls (copy the verb names EXACTLY — do not rename them):
 
-User: create a box 6m long, 4m wide, 3m tall
+User: create a box 6m wide, 4m deep, 3m tall
 Assistant:
 \`\`\`json
-{"verb":"SdBox","args":{"length":6,"width":4,"height":3}}
+{"verb":"SdBox","args":{"width":6,"depth":4,"height":3}}
 \`\`\`
 
-User: draw a wall from origin to (5,0,0)
+User: draw a wall 4m long, 0.3m thick, 3m tall
 Assistant:
 \`\`\`json
-{"verb":"IfcWall","args":{"startPoint":[0,0,0],"endPoint":[5,0,0],"height":3}}
+{"verb":"IfcWall","args":{"profile":[[0,0],[4,0]],"thickness":0.3,"height":3}}
 \`\`\`
 
 User: add a sphere radius 1

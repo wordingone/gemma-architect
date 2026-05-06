@@ -1,0 +1,20 @@
+{
+  "sha": "8fd731f",
+  "timestamp": "2026-05-05T23:55:28Z",
+  "port": 5175,
+  "all_passed": true,
+  "note": "Fix SdBox/IfcWall arg names: SdBox schema uses depth (not length); IfcWall schema uses profile (polyline array)/thickness/height (not startPoint/endPoint). Updated few-shot examples in agent-harness.ts and geometry handlers in main.ts to match dictionary schema. Surface 10 fix: layout-tab uses MouseEvent drag (mousedown+mousemove+mouseup, min 30px) not PointerEvent click.",
+  "surfaces": [
+    { "name": "ribbon-icons-rendered", "passed": true, "evidence": { "count": 24, "failures": [] } },
+    { "name": "theme-propagation", "passed": true, "evidence": { "beforeStyle": "oklch(0.22 0.068 248 / 0.62)", "afterStyle": "oklch(0.955 0.009 85 / 0.62)", "pillText": "◑ BLUEPRINT", "panelChanged": true } },
+    { "name": "palette-tool-behavior", "passed": true, "evidence": { "results": [{"tool":"select","matched":true},{"tool":"move","matched":true},{"tool":"rotate","matched":true},{"tool":"scale","matched":true}] } },
+    { "name": "selection-roundtrip", "passed": true, "evidence": { "eventsHeard": 1, "uuid": "8ca3672b-c945-49ec-8a30-e39665a67bd5" } },
+    { "name": "transform-gizmo-attach", "passed": true, "evidence": { "afterG": [{"mode":"translate","attached":true},{"mode":"rotate","attached":true},{"mode":"scale","attached":true}] } },
+    { "name": "delete-propagation", "passed": true, "evidence": { "beforeCount": 13, "afterCount": 12 } },
+    { "name": "console-vocab-coverage", "passed": true, "evidence": { "tested": 65, "failed_verbs": [] } },
+    { "name": "console-verb-produces-output", "passed": true, "evidence": { "newLines": "wall: expected 2 endpoints, got 0", "isUnknownVerb": false, "hasOutput": true } },
+    { "name": "cmdk-dialog-opens", "passed": true, "evidence": { "inputFound": true, "inputClass": "cmdk-input", "visible": true } },
+    { "name": "layout-tab-functional", "passed": true, "evidence": { "aspectRatio": 1.4158, "a1Aspect": 0.7063, "aspectMatches": true, "beforePanels": 1, "afterPanels": 2, "panelAdded": true } },
+    { "name": "ortho-grid-z-order", "passed": true, "evidence": { "gridRenderOrder": -1, "gridDepthWrite": false, "gridBehind": true, "meshCount": 0, "meshesAbove": true } }
+  ]
+}
