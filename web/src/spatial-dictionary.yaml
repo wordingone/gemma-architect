@@ -692,6 +692,16 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdDelete
+  kernel_op: deleteSelected
+  args: []
+  topology_role: selection
+  kg_predicates: []
+  synonyms: [delete, erase, remove, del]
+  hotkey: Delete
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 - canonical_name: SdDeselect
   kernel_op: deselect
   args: []

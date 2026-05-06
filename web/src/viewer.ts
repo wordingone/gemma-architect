@@ -831,6 +831,23 @@ export class Viewer {
     }
   }
 
+  /** Delete the currently selected object. Called by SdDelete dispatch handler. */
+  deleteSelected(): boolean {
+    const removed = this.targetObject;
+    if (!removed) return false;
+    this.scene.remove(removed);
+    this.pivotOffsetByUuid.delete(removed.uuid);
+    this.targetObject = null;
+    this.pivotOffset.identity();
+    this.relocate.active = false;
+    for (const g of this.gizmos) g.detach();
+    this.updateRelocateBadge();
+    emitChainFragment(`// removed: uuid=${removed.uuid}`);
+    clearSelected();
+    window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
+    return true;
+  }
+
   // Sync the pivot proxy from targetObject + pivotOffset. Called every
   // animation frame between drags so external transforms (e.g. agent
   // chain replays) don't strand the gumball at a stale pose.

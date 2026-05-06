@@ -99,6 +99,11 @@ paramCollapseBtn.addEventListener("click", () => {
 const viewer = new Viewer(canvas, viewportAreaEl);
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
+// SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
+registerHandler("SdDelete", () => {
+  const deleted = viewer.deleteSelected();
+  return { deleted };
+});
 syncToolActiveClass();
 initCreateMode(viewer);
 
