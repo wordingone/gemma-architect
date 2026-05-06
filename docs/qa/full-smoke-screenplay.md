@@ -824,7 +824,7 @@ same shape — author in subsequent ticks.
 2. **See:** Box materializes as a solid mesh in the scene. Vertex markers
    removed (or persist as creation history if T3 keeps them).
 3. **Verify:** SCENE tree adds 1 box. KG triple `rdf:type → IfcBox` (or
-   the spatial-dictionary canonical name). Tool returns to "ready for next
+   the spatial-api canonical name). Tool returns to "ready for next
    click first corner" or returns to select per UX choice.
 
 ### Beat 406: Box — Esc cancel mid-flow
@@ -1667,11 +1667,11 @@ tab is a `<div class="ribbon-tab">` with `data-tab` and `aria-selected`.
 1. **Do:** For each tool id in `TOOL_GROUPS`, verify a corresponding
    handler exists in `dispatch.ts` (per T6 plan acceptance).
 2. **See/Verify:** Run `bun web/test/dispatch.test.ts` (per plan T6
-   verification row). For every entry in `spatial-dictionary.yaml`:
+   verification row). For every entry in `spatial-api.yaml`:
    `dispatch(canonical_name, valid_args)` returns `{ok: true}`. With
    invalid args: `{ok: false, error: "ArgValidationError"}`.
 3. **Gap (file if hit):** Any tool id in `TOOL_GROUPS` that lacks a
-   dispatch handler entry. Cross-ref to spatial-dictionary.yaml.
+   dispatch handler entry. Cross-ref to spatial-api.yaml.
 
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -3827,7 +3827,7 @@ Source: `web/src/dsl-eval.ts` `compileDsl` (parses lexicon) + `docs/console-dsl.
 
 ## §20 — Gemma 4 E2B agent loop (40 beats)
 
-Source: `web/src/ai-generate.ts:generateGeometry` + `web/src/agent-harness.ts` (if present) + `web/src/spatial-dictionary.yaml` + `web/src/dispatch.ts` + `web/src/scene-kg.ts`. Per Pillar 5.
+Source: `web/src/ai-generate.ts:generateGeometry` + `web/src/agent-harness.ts` (if present) + `web/src/spatial-api.yaml` + `web/src/dispatch.ts` + `web/src/scene-kg.ts`. Per Pillar 5.
 
 #### Beat 514: Generate button triggers ai-generate.ts
 1. **Do:** Click GENERATE.
@@ -3881,7 +3881,7 @@ Source: `web/src/ai-generate.ts:generateGeometry` + `web/src/agent-harness.ts` (
 2. **See:** Video frames attach.
 
 #### Beat 526: Spatial Dictionary YAML — 70+ verbs canonical
-1. **Do:** Inspect `web/src/spatial-dictionary.yaml`.
+1. **Do:** Inspect `web/src/spatial-api.yaml`.
 2. **See:** ≥70 entries with IFC4 class + kernel_op + synonyms + Gemma-NL phrases.
 3. **Verify:** Per plan T5.
 
@@ -3895,7 +3895,7 @@ Source: `web/src/ai-generate.ts:generateGeometry` + `web/src/agent-harness.ts` (
 3. **Verify:** Per plan T5 verification.
 
 #### Beat 529: License doc cites case law
-1. **Do:** Read `web/src/spatial-dictionary.LICENSE.md`.
+1. **Do:** Read `web/src/spatial-api.LICENSE.md`.
 2. **See:** Cites Lotus v. Borland, Hoehling, Baker v. Selden, 17 USC §102(b).
 
 #### Beat 530: Runtime alias override at ~/.gemma-architect/aliases.json
@@ -4667,7 +4667,7 @@ each walk, file every FAIL as a new bug citing the beat number.
 
 - `mail #6554` — initial 10 UI defects from Jun's 2026-05-03 walkthrough
 - `mail #6555` — merge decision + revised starting order
-- `web/src/spatial-dictionary.yaml` — canonical names per tool
+- `web/src/spatial-api.yaml` — canonical names per tool
 - `web/src/dispatch.ts` — verb resolution + handler registry
 - `web/src/scene-kg.ts` — KG snapshot + queryKG
 - `B:/Downloads/gemma-architect-handoff.zip` — pixel-parity reference

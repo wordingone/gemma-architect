@@ -107,7 +107,7 @@ worker → kernel → IFC pipeline accepts three other entry points:
 - **Type DSL in the PROMPT tab's CONSOLE mode** (Shift+Tab to toggle
   from natural-language PROMPT mode). A copyright-safe Rhino-style
   lexicon (~70 verbs hand-curated against IFC4 entity classes,
-  documented at `web/src/spatial-dictionary.LICENSE.md`) backs the
+  documented at `web/src/spatial-api.LICENSE.md`) backs the
   CONSOLE input: `wall(0, 0, 5.5, 0.2, 2.8); slab(0, 0, 5, 6, 0.2);
   column(2, 3, 0.4, 3); cut(slab, door)`. Direct geometric control
   for the architect who already speaks CAD.

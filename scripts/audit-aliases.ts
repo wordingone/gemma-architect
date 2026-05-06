@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
-// audit-aliases — verify spatial-dictionary.yaml synonyms[] do not contain
+// audit-aliases — verify spatial-api.yaml synonyms[] do not contain
 // vendor-trademarked tokens. Run in pre-commit + CI. Exits non-zero on
-// any match. See web/src/spatial-dictionary.LICENSE.md for the legal
+// any match. See web/src/spatial-api.LICENSE.md for the legal
 // analysis backing this audit.
 
 import { readFileSync } from "node:fs";
@@ -84,7 +84,7 @@ function extractAliases(yamlText: string): { canonical: string; synonyms: string
 
 function audit(): { hits: AuditHit[]; rowCount: number; tokenCount: number } {
   const repoRoot = resolve(import.meta.dir, "..");
-  const yamlPath = resolve(repoRoot, "web/src/spatial-dictionary.yaml");
+  const yamlPath = resolve(repoRoot, "web/src/spatial-api.yaml");
   const denylistPath = resolve(repoRoot, "web/src/trademark-denylist.json");
 
   const yamlText = readFileSync(yamlPath, "utf8");

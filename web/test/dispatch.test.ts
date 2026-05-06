@@ -1,5 +1,5 @@
 // dispatch.test.ts — verify the central command dispatch (T6).
-// Per plan §T6 verification: every entry in spatial-dictionary.yaml
+// Per plan §T6 verification: every entry in spatial-api.yaml
 // resolves to a handler with arg validation; ArgValidationError is
 // returned not thrown; UnknownVerb returned cleanly; alias resolution
 // follows the documented order (canonical → runtime → compiled).

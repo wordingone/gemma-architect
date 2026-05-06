@@ -37,7 +37,7 @@ const PATTERNS: { rx: RegExp; cat: string }[] = [
 ];
 
 const EXCLUDE_FILES = new Set([
-  "spatial-dictionary.LICENSE.md",
+  "spatial-api.LICENSE.md",
   "nurbs-kernel.LICENSE.md",
 ]);
 

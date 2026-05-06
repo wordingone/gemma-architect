@@ -299,7 +299,7 @@ function checkCropping(): Violation[] {
 // R5 — Console DSL scope reduction. Jun 2026-05-04 localhost review: console
 // emits "unknown verb: 'select' (v0 supports: wall, slab, column, box, cut)"
 // for any verb outside a hardcoded 5-element list. Per silly-baking-yeti.md the
-// console must accept every canonical_name in spatial-dictionary.yaml. The
+// console must accept every canonical_name in spatial-api.yaml. The
 // "v0 supports:" literal in the error message is the structural signature of
 // scope reduction — if present in dsl-eval.ts source, the DSL is gated. Per
 // feedback_never_reduce_scope, only Jun reduces scope; this audit blocks the
@@ -319,7 +319,7 @@ function checkConsoleDslScope(): Violation[] {
         file: "web/src/dsl-eval.ts",
         line: i + 1,
         rule: "R5",
-        detail: "console DSL scope-reduces to 'v0 supports: ...' fallback list; must accept every canonical_name from spatial-dictionary.yaml (silly-baking-yeti T6/T8). Remove the literal + extend compileDsl to dispatch through the spatial-dictionary alias index.",
+        detail: "console DSL scope-reduces to 'v0 supports: ...' fallback list; must accept every canonical_name from spatial-api.yaml (silly-baking-yeti T6/T8). Remove the literal + extend compileDsl to dispatch through the spatial-api alias index.",
       });
     }
   }
