@@ -2,7 +2,7 @@
 #
 # Hybrid schema: IFC4 entity classes as canonical names + generic CAD verbs
 # as synonyms + Gemma-NL phrasings as additional synonyms. Per the project's
-# copyright-safe alias strategy (see spatial-dictionary.LICENSE.md), all
+# copyright-safe alias strategy (see spatial-api.LICENSE.md), all
 # synonyms are unprotectable functional verbs (Lotus v. Borland, scènes à
 # faire, merger doctrine). No vendor-trademarked compound tokens.
 #
@@ -840,6 +840,26 @@
   topology_role: system
   kg_predicates: []
   synonyms: [open]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdUndo
+  kernel_op: undo
+  args: []
+  topology_role: system
+  kg_predicates: []
+  synonyms: [undo, ctrl-z]
+  hotkey: "Ctrl+Z"
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdRedo
+  kernel_op: redo
+  args: []
+  topology_role: system
+  kg_predicates: []
+  synonyms: [redo, ctrl-y, ctrl-shift-z]
+  hotkey: "Ctrl+Y"
   kernel: replicad
   alias_source: generic_cad_vocabulary
 

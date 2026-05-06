@@ -1,6 +1,6 @@
 // Spatial Dictionary loader + alias index — T5.
 //
-// Source-of-truth: web/src/spatial-dictionary.yaml.
+// Source-of-truth: web/src/spatial-api.yaml.
 // Loaded at module init via Vite's ?raw import; parsed once.
 //
 // The parser is a *minimal* YAML subset implementation, sufficient for the
@@ -16,10 +16,10 @@
 // If the YAML grows new constructs (anchors, multi-line strings, etc.)
 // add the case here rather than reaching for a heavyweight YAML lib.
 
-// Vite raw import — bundler reads spatial-dictionary.yaml as a string at
+// Vite raw import — bundler reads spatial-api.yaml as a string at
 // build time. Type assertion needed because TS doesn't know the ?raw query.
 // (vite/client types declare the suffix, included via tsconfig.)
-import yamlText from "./spatial-dictionary.yaml?raw";
+import yamlText from "./spatial-api.yaml?raw";
 
 export type SdArgType =
   | "number" | "integer" | "string" | "boolean"

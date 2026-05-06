@@ -107,6 +107,10 @@ registerHandler("SdDelete", () => {
 syncToolActiveClass();
 initCreateMode(viewer);
 
+// Undo/Redo handlers (#55): route SdUndo and SdRedo to the history module.
+registerHandler("SdUndo", () => { undo(viewer); });
+registerHandler("SdRedo", () => { redo(viewer); });
+
 // Select-all handler (#31): populates the multi-set with every selectable
 // scene object that passes the current filters. Gumball anchors at the
 // centroid of the bounding union.

@@ -1,6 +1,6 @@
-# Spatial Dictionary — License + Copyright Analysis
+# Spatial API — License + Copyright Analysis
 
-The Spatial Dictionary at `spatial-dictionary.yaml` is independently authored
+The Spatial API at `spatial-api.yaml` is independently authored
 by the gemma-architect team. Functional verbs (`line`, `extrude`, `move`,
 `rotate`, `boolean union`, `fillet`, `chamfer`, ...) are the working
 vocabulary of computer-aided geometric modeling — they are NOT creative

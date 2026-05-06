@@ -197,6 +197,24 @@ Assistant:
 \`\`\`json
 {"verb":"SdCylinder","args":{"radius":0.5,"height":2}}
 \`\`\`
+
+User: delete the selected object
+Assistant:
+\`\`\`json
+{"verb":"SdDelete","args":{}}
+\`\`\`
+
+User: undo that
+Assistant:
+\`\`\`json
+{"verb":"SdUndo","args":{}}
+\`\`\`
+
+User: redo
+Assistant:
+\`\`\`json
+{"verb":"SdRedo","args":{}}
+\`\`\`
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

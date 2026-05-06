@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "purpose": "Vendor-trademarked compound tokens that MUST NOT appear in spatial-dictionary.yaml synonyms[]. See spatial-dictionary.LICENSE.md for the full copyright + trademark analysis.",
+  "purpose": "Vendor-trademarked compound tokens that MUST NOT appear in spatial-api.yaml synonyms[]. See spatial-api.LICENSE.md for the full copyright + trademark analysis.",
   "brands": [
     "rhino",
     "rhinoceros",

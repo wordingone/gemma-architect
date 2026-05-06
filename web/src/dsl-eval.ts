@@ -527,14 +527,14 @@ export function compileDsl(source: string): CompileResult {
       continue;
     }
 
-    return { ok: false, line: i + 1, message: `unknown verb: '${verb}' (supported: wall, slab, column, box, cut + spatial-dictionary verbs)` };
+    return { ok: false, line: i + 1, message: `unknown verb: '${verb}' (supported: wall, slab, column, box, cut + spatial-api verbs)` };
   }
 
   // Emit replicad. Each statement → one binding; final value is fused
   // composite of all bindings (mirrors the existing four-walled-room demo
   // pattern). If only one statement, that's the result.
   if (stmts.length === 0) {
-    // Dispatch-only programs (all spatial-dictionary verbs, no geometry) are valid.
+    // Dispatch-only programs (all spatial-api verbs, no geometry) are valid.
     if (spatialDispatches.length > 0) {
       return { ok: true, js: "", solids: [], dispatches: spatialDispatches };
     }

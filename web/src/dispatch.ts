@@ -124,7 +124,7 @@ export function resolveVerb(token: string): string | null {
   // 2. Runtime alias override.
   const rt = runtimeAliases.get(token.toLowerCase());
   if (rt && getEntry(rt)) return rt;
-  // 3. Compiled spatial-dictionary alias.
+  // 3. Compiled spatial-api alias.
   const compiled = resolveAlias(token);
   if (compiled) return compiled;
   return null;
