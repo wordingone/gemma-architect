@@ -45,6 +45,7 @@ import { syncToolActiveClass } from "./app-state";
 import { initCreateMode } from "./create-mode";
 import { undo, redo } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./dispatch";
+import { Point3 as Prim3 } from "./nurbs-primitives";
 import { addToMultiSelected, clearMultiSelected, getFilters, topologyAllowed } from "./selection-state";
 import * as THREE from "three";
 
@@ -266,6 +267,74 @@ registerHandler("IfcColumn", (args) => {
   mesh.userData.creator = "IfcColumn";
   viewer.addMesh(mesh, "brep");
   return { created: "column", height: h };
+});
+
+// ── Tier 1 handlers: SdPoint / SdLine / SdRectangle / SdPolyline (#64) ───────
+// These replace the fan-out shims installed by installDefaultHandlers() below.
+// Render using THREE line/point primitives (not mesh geometry) per Jun's
+// "tubes / spheres" feedback: lines = LineSegments, points = sprite-style Points.
+
+registerHandler("SdPoint", (args) => {
+  const pos = (args.position as number[] | undefined) ?? [0, 0, 0];
+  const p = Prim3.create(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([p.x, p.y, p.z], 3));
+  const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x000000 });
+  const obj = new THREE.Points(geom, mat);
+  obj.userData.kind = "point";
+  obj.userData.creator = "SdPoint";
+  viewer.addMesh(obj, "mesh");
+  return { created: "point", position: [p.x, p.y, p.z] };
+});
+
+registerHandler("SdLine", (args) => {
+  const start = (args.start as number[] | undefined) ?? [0, 0, 0];
+  const end   = (args.end   as number[] | undefined) ?? [1, 0, 0];
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([
+    start[0] ?? 0, start[1] ?? 0, start[2] ?? 0,
+    end[0]   ?? 1, end[1]   ?? 0, end[2]   ?? 0,
+  ], 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
+  const obj = new THREE.LineSegments(geom, mat);
+  obj.userData.kind = "line";
+  obj.userData.creator = "SdLine";
+  viewer.addMesh(obj, "mesh");
+  return { created: "line", start, end };
+});
+
+registerHandler("SdRectangle", (args) => {
+  const w = (args.width  as number | undefined) ?? 1;
+  const h = (args.depth  as number | undefined) ?? (args.height as number | undefined) ?? 1;
+  const c = (args.center as number[] | undefined) ?? [0, 0, 0];
+  const x0 = (c[0] ?? 0) - w / 2, x1 = (c[0] ?? 0) + w / 2;
+  const y0 = (c[1] ?? 0) - h / 2, y1 = (c[1] ?? 0) + h / 2;
+  const z  =  c[2] ?? 0;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([
+    x0, y0, z,  x1, y0, z,  x1, y1, z,  x0, y1, z,
+  ], 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x000000 });
+  const obj = new THREE.LineLoop(geom, mat);
+  obj.userData.kind = "rectangle";
+  obj.userData.creator = "SdRectangle";
+  viewer.addMesh(obj, "mesh");
+  return { created: "rectangle", width: w, depth: h, center: c };
+});
+
+registerHandler("SdPolyline", (args) => {
+  const points = (args.points as number[][] | undefined) ?? [];
+  if (points.length < 2) return { error: "SdPolyline requires at least 2 points", created: null };
+  const closed = (args.closed as boolean | undefined) ?? false;
+  const flat = points.flatMap((p) => [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0]);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x000000 });
+  const obj = closed ? new THREE.LineLoop(geom, mat) : new THREE.Line(geom, mat);
+  obj.userData.kind = "polyline";
+  obj.userData.creator = "SdPolyline";
+  viewer.addMesh(obj, "mesh");
+  return { created: "polyline", points, closed };
 });
 
 // Install shim handlers for every dictionary verb that doesn't have a native
