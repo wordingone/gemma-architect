@@ -170,8 +170,6 @@ function buildSceneContext(): string {
   return `Scene contains ${meshes.length} object(s): ${lines.join("; ")}${suffix}.`;
 }
 
-// Detects prompts that want visual perception of the viewport.
-const VISION_RE = /\b(see|look|view|describe|scene|visible|on (the )?screen|canvas|appear|show me|what('s| is) (there|in|on))\b/i;
 
 const FEW_SHOT_EXAMPLES = `
 Examples of correct tool calls (copy the verb names EXACTLY — do not rename them):
@@ -265,9 +263,8 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proc = processor as any;
 
-  // Attach a viewport screenshot for visual-perception queries.
-  const wantsVision = VISION_RE.test(req.prompt);
-  const imageDataUrl = wantsVision ? captureViewport() : null;
+  // Always capture viewport so the model can see the current scene state.
+  const imageDataUrl = captureViewport();
 
   type TextPart = { type: "text"; text: string };
   type ImagePart = { type: "image"; image: RawImage };

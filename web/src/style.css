@@ -2344,6 +2344,14 @@ html[data-mode="night"] .paper-stage {
   height: 100%;
   overflow: hidden;
 }
+.create-tab-inner,
+.console-inner-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 .chat-panel-root {
   display: flex;
   flex-direction: column;
