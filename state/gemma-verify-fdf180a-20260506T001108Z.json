@@ -1,0 +1,155 @@
+{
+  "sha": "fdf180a",
+  "timestamp": "20260506T001108Z",
+  "port": 5175,
+  "all_passed": true,
+  "note": "CREATE+CONSOLE merged into one tab with Shift+Tab mode toggle; SdBox/IfcWall arg names fixed; all 11 surfaces verified",
+  "surfaces": [
+    {
+      "name": "ribbon-icons-rendered",
+      "passed": true,
+      "evidence": {
+        "count": 24,
+        "failures": []
+      }
+    },
+    {
+      "name": "theme-propagation",
+      "passed": true,
+      "evidence": {
+        "beforeStyle": "oklch(0.955 0.009 85 / 0.62)",
+        "afterStyle": "oklch(0.22 0.068 248 / 0.62)",
+        "pillText": "○ VELLUM",
+        "panelChanged": true
+      }
+    },
+    {
+      "name": "palette-tool-behavior",
+      "passed": true,
+      "evidence": {
+        "results": [
+          {
+            "tool": "select",
+            "activeTool": "select",
+            "matched": true
+          },
+          {
+            "tool": "move",
+            "activeTool": "move",
+            "matched": true
+          },
+          {
+            "tool": "rotate",
+            "activeTool": "rotate",
+            "matched": true
+          },
+          {
+            "tool": "scale",
+            "activeTool": "scale",
+            "matched": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "selection-roundtrip",
+      "passed": true,
+      "evidence": {
+        "eventsHeard": 1,
+        "uuid": "a2788848-1bdc-4b6b-bcde-acac7e2d0608"
+      }
+    },
+    {
+      "name": "transform-gizmo-attach",
+      "passed": true,
+      "evidence": {
+        "beforeG": [
+          {
+            "mode": "translate",
+            "attached": true
+          },
+          {
+            "mode": "rotate",
+            "attached": true
+          },
+          {
+            "mode": "scale",
+            "attached": true
+          }
+        ],
+        "afterG": [
+          {
+            "mode": "translate",
+            "attached": true
+          },
+          {
+            "mode": "rotate",
+            "attached": true
+          },
+          {
+            "mode": "scale",
+            "attached": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "delete-propagation",
+      "passed": true,
+      "evidence": {
+        "beforeCount": 13,
+        "afterCount": 12,
+        "sceneShrunk": true
+      }
+    },
+    {
+      "name": "console-vocab-coverage",
+      "passed": true,
+      "evidence": {
+        "tested": 65,
+        "failed_verbs": []
+      }
+    },
+    {
+      "name": "console-verb-produces-output",
+      "passed": true,
+      "evidence": {
+        "newLines": "17:18:43›wall | 17:18:43✗line 1: wall: expected 2 endpoints, got 0",
+        "isUnknownVerb": false,
+        "hasOutput": true
+      }
+    },
+    {
+      "name": "cmdk-dialog-opens",
+      "passed": true,
+      "evidence": {
+        "inputFound": true,
+        "inputClass": "cmdk-input",
+        "visible": true
+      }
+    },
+    {
+      "name": "layout-tab-functional",
+      "passed": true,
+      "evidence": {
+        "aspectRatio": 1.415843565256935,
+        "a1Aspect": 0.7063020214030915,
+        "aspectMatches": true,
+        "beforePanels": 1,
+        "afterPanels": 2,
+        "panelAdded": true
+      }
+    },
+    {
+      "name": "ortho-grid-z-order",
+      "passed": true,
+      "evidence": {
+        "gridRenderOrder": -1,
+        "gridDepthWrite": false,
+        "gridBehind": true,
+        "meshCount": 0,
+        "meshesAbove": true
+      }
+    }
+  ]
+}
