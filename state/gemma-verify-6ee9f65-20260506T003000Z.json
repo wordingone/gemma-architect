@@ -1,0 +1,139 @@
+{
+  "sha": "6ee9f65",
+  "timestamp": "2026-05-06T00:30:00Z",
+  "port": 5175,
+  "all_passed": true,
+  "surfaces": [
+    {
+      "name": "ribbon-icons-rendered",
+      "passed": true,
+      "evidence": {
+        "count": 24,
+        "failures": []
+      }
+    },
+    {
+      "name": "theme-propagation",
+      "passed": true,
+      "evidence": {
+        "beforeStyle": "oklch(0.22 0.068 248 / 0.62)",
+        "afterStyle": "oklch(0.955 0.009 85 / 0.62)",
+        "pillText": "◑ BLUEPRINT",
+        "panelChanged": true
+      }
+    },
+    {
+      "name": "palette-tool-behavior",
+      "passed": true,
+      "evidence": {
+        "results": [
+          {
+            "tool": "select",
+            "activeTool": "select",
+            "matched": true
+          },
+          {
+            "tool": "move",
+            "activeTool": "move",
+            "matched": true
+          },
+          {
+            "tool": "rotate",
+            "activeTool": "rotate",
+            "matched": true
+          },
+          {
+            "tool": "scale",
+            "activeTool": "scale",
+            "matched": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "selection-roundtrip",
+      "passed": true,
+      "evidence": {
+        "eventsHeard": 1,
+        "uuid": "7cbef9dc-82be-4a4f-acb3-af6855756fce"
+      }
+    },
+    {
+      "name": "transform-gizmo-attach",
+      "passed": true,
+      "evidence": {
+        "afterG": [
+          {
+            "mode": "translate",
+            "attached": true
+          },
+          {
+            "mode": "rotate",
+            "attached": true
+          },
+          {
+            "mode": "scale",
+            "attached": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "delete-propagation",
+      "passed": true,
+      "evidence": {
+        "beforeCount": 13,
+        "afterCount": 12
+      }
+    },
+    {
+      "name": "console-vocab-coverage",
+      "passed": true,
+      "evidence": {
+        "tested": 65,
+        "failed_verbs": []
+      }
+    },
+    {
+      "name": "console-verb-produces-output",
+      "passed": true,
+      "evidence": {
+        "newLines": "17:41:53›wall | 17:41:53✗line 1: wall: expected 2 endpoints, got 0",
+        "isUnknownVerb": false,
+        "hasOutput": true
+      }
+    },
+    {
+      "name": "cmdk-dialog-opens",
+      "passed": true,
+      "evidence": {
+        "inputFound": true,
+        "inputClass": "cmdk-input",
+        "visible": true
+      }
+    },
+    {
+      "name": "layout-tab-functional",
+      "passed": true,
+      "evidence": {
+        "aspectRatio": 1.415843565256935,
+        "a1Aspect": 0.7063020214030915,
+        "aspectMatches": true,
+        "beforePanels": 1,
+        "afterPanels": 2,
+        "panelAdded": true
+      }
+    },
+    {
+      "name": "ortho-grid-z-order",
+      "passed": true,
+      "evidence": {
+        "gridRenderOrder": -1,
+        "gridDepthWrite": false,
+        "gridBehind": true,
+        "meshCount": 0,
+        "meshesAbove": true
+      }
+    }
+  ]
+}
