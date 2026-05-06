@@ -252,6 +252,9 @@ class LayoutController {
   // Live thumbnail canvases for detail panels: panelId → {canvas, viewName}.
   private _thumbCanvases = new Map<string, { canvas: HTMLCanvasElement; viewName: "top" | "persp" | "front" | "right"; anchorX: number; anchorY: number; snapW: number; snapH: number }>();
   private _thumbRAF = 0;
+  // Set by onSheetMouseUp when a drag-to-create completes; suppresses the
+  // subsequent click event so click-to-add doesn't fire a second addPanel.
+  private _dragCompleted = false;
   // Fit-to-stage scale factor (zoom). All mouse coords divided by this.
   private zoomFactor = 1;
   // Whether to render the title block.
@@ -317,6 +320,9 @@ class LayoutController {
     this.sheetEl.addEventListener("mousemove", (e) => this.onSheetMouseMove(e));
     this.sheetEl.addEventListener("mouseup",   ()  => this.onSheetMouseUp());
     this.sheetEl.addEventListener("mouseleave",()  => this.onSheetMouseUp());
+    // Click-to-add: single click on empty sheet area creates a default-size panel.
+    // Fires after mouseup; suppressed when a drag-to-create just completed.
+    this.sheetEl.addEventListener("click", (e) => this.onSheetClick(e));
 
     // Ribbon tool activation.
     window.addEventListener("ribbon:tool-click", (e: Event) => {
@@ -662,8 +668,22 @@ class LayoutController {
     const y = parseFloat(ghost.style.top)    || 0;
     ghost.remove();
     this.dragging = null;
-    if (w < 30 || h < 30) return; // ignore tiny drags
+    if (w < 30 || h < 30) return; // tiny drags — let click handler add default-size panel
+    this._dragCompleted = true; // suppress click-to-add for this pointer sequence
     this.addPanel({ x, y, w, h, viewport: "top", scale: "1:100" });
+  }
+
+  private onSheetClick(e: MouseEvent): void {
+    if (this._dragCompleted) { this._dragCompleted = false; return; }
+    const tgt = e.target as HTMLElement | null;
+    if (tgt && tgt.closest(".paper-cell, .paper-titleblock, .paper-toolbar")) return;
+    const rect = this.sheetEl.getBoundingClientRect();
+    const cx = (e.clientX - rect.left) / this.zoomFactor;
+    const cy = (e.clientY - rect.top)  / this.zoomFactor;
+    // Default size: 200mm × 150mm, centred on click, clamped to sheet.
+    const w = Math.round(200 * MM_TO_PX);
+    const h = Math.round(150 * MM_TO_PX);
+    this.addPanel({ x: Math.max(0, cx - w / 2), y: Math.max(0, cy - h / 2), w, h, viewport: "top", scale: "1:100" });
   }
 
   private finishDetailDrag(): void {
