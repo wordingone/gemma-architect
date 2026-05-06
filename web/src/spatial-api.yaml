@@ -434,9 +434,12 @@
 - canonical_name: SdArray
   kernel_op: array
   args:
-    - {name: target,  type: any,     required: true}
+    - {name: target,  type: any,     required: false, default: point}
     - {name: count,   type: integer, required: true}
     - {name: spacing, type: vector3, required: true}
+    - {name: rows,    type: integer, required: false}
+    - {name: cols,    type: integer, required: false}
+    - {name: spacingY,type: vector3, required: false, default: [0, 1, 0]}
   topology_role: transform
   kg_predicates: [groupedWith]
   synonyms: [array, repeat, pattern]

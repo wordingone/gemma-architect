@@ -41,8 +41,9 @@ describe("command session", () => {
     expect(s1.status).toBe("needs_input");
     const s2 = await provideSessionPick([4, 6]);
     expect(s2.status).toBe("success");
-    expect(called?.start).toEqual([1, 2]);
-    expect(called?.end).toEqual([4, 6]);
+    const r1 = called as unknown as Record<string, unknown>;
+    expect(r1.start).toEqual([1, 2]);
+    expect(r1.end).toEqual([4, 6]);
   });
 
   test("rectangle command coerces units", async () => {
@@ -57,9 +58,10 @@ describe("command session", () => {
       metadata: { source: "agent" },
     });
     expect(s.status).toBe("success");
-    expect(called?.width).toBe(1.2);
-    expect(called?.depth).toBe(2);
-    expect(called?.center).toEqual([1, 2]);
+    const r2 = called as unknown as Record<string, unknown>;
+    expect(r2.width).toBe(1.2);
+    expect(r2.depth).toBe(2);
+    expect(r2.center).toEqual([1, 2]);
   });
 });
 

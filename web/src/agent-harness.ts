@@ -137,8 +137,16 @@ function summariseDictionary(): string {
   // Falls back to full dictionary if dispatch hasn't initialized yet.
   const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.canonical_name)) : dict;
   const lines = available.map((e) => {
-    const argList = e.args.map((a) => `${a.name}:${a.type}${a.required ? "" : "?"}`).join(", ");
-    return `  ${e.canonical_name}(${argList})`;
+    const argList = e.args
+      .map((a) => {
+        const req = a.required ? "required" : "optional";
+        const unit = a.unit ? ` unit=${a.unit}` : "";
+        const def = a.default !== undefined ? ` default=${JSON.stringify(a.default)}` : "";
+        return `${a.name}:${a.type} [${req}${unit}${def}]`;
+      })
+      .join(", ");
+    const syn = e.synonyms.length > 0 ? ` synonyms=[${e.synonyms.join(", ")}]` : "";
+    return `  ${e.canonical_name}(${argList})${syn}`;
   });
   const count = available.length;
   return count > 0
@@ -262,6 +270,7 @@ Assistant:
 \`\`\`json
 {"verb":"SdExport","args":{"format":"ifc"}}
 \`\`\`
+
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

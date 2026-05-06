@@ -50,7 +50,7 @@ import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePoin
 import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
 import { tessellateSurface } from "./nurbs-surfaces";
 import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "./nurbs-surface-algorithms";
-import { addToMultiSelected, clearMultiSelected, getFilters, topologyAllowed } from "./selection-state";
+import { addToMultiSelected, clearMultiSelected, getFilters, getSelected, topologyAllowed } from "./selection-state";
 import * as THREE from "three";
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -555,6 +555,85 @@ registerHandler("SdLoft", (args) => {
   } catch (e) {
     return { error: String(e), created: null };
   }
+});
+
+registerHandler("SdArray", (args) => {
+  const count = Math.max(1, Math.trunc((args.count as number | undefined) ?? 1));
+  const spacing = (args.spacing as number[] | undefined) ?? [1, 0, 0];
+  const sx = spacing[0] ?? 1;
+  const sy = spacing[1] ?? 0;
+  const sz = spacing[2] ?? 0;
+
+  const cols = Math.max(1, Math.trunc((args.cols as number | undefined) ?? (args.countX as number | undefined) ?? count));
+  const rows = Math.max(1, Math.trunc((args.rows as number | undefined) ?? (args.countY as number | undefined) ?? 1));
+  const spacingY = (args.spacingY as number[] | undefined) ?? [0, 1, 0];
+  const syx = spacingY[0] ?? 0;
+  const syy = spacingY[1] ?? 1;
+  const syz = spacingY[2] ?? 0;
+
+  const target = args.target;
+  const selected = getSelected()?.transformTarget ?? null;
+  const active = viewer.getActiveObject();
+  const baseObj = selected ?? active ?? null;
+
+  function makePoint(position: [number, number, number]): THREE.Points {
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(position, 3));
+    const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x000000 });
+    const obj = new THREE.Points(geom, mat);
+    obj.userData.kind = "point";
+    obj.userData.creator = "SdArray";
+    return obj;
+  }
+
+  const isPointTarget =
+    target === "point" ||
+    target === "SdPoint" ||
+    (Array.isArray(target) && target.length >= 2) ||
+    (target && typeof target === "object" && (target as Record<string, unknown>).kind === "point");
+
+  const basePointRaw =
+    Array.isArray(target)
+      ? target
+      : (target && typeof target === "object" && Array.isArray((target as Record<string, unknown>).position))
+        ? ((target as Record<string, unknown>).position as number[])
+        : ([0, 0, 0] as number[]);
+  const basePoint: [number, number, number] = [
+    basePointRaw[0] ?? 0,
+    basePointRaw[1] ?? 0,
+    basePointRaw[2] ?? 0,
+  ];
+
+  let created = 0;
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const dx = i * sx + j * syx;
+      const dy = i * sy + j * syy;
+      const dz = i * sz + j * syz;
+      if (isPointTarget || !baseObj) {
+        const p = makePoint([basePoint[0] + dx, basePoint[1] + dy, basePoint[2] + dz]);
+        viewer.addMesh(p, "mesh");
+      } else {
+        const clone = baseObj.clone(true);
+        clone.position.set(
+          baseObj.position.x + dx,
+          baseObj.position.y + dy,
+          baseObj.position.z + dz,
+        );
+        clone.userData.creator = "SdArray";
+        viewer.addMesh(clone, (clone.userData.kind as string | undefined) ?? "mesh");
+      }
+      created++;
+    }
+  }
+
+  return {
+    created: isPointTarget || !baseObj ? "point-array" : "array",
+    count: created,
+    rows,
+    cols,
+    spacing: [sx, sy, sz],
+  };
 });
 
 // Install shim handlers for every dictionary verb that doesn't have a native

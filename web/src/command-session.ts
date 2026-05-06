@@ -104,10 +104,17 @@ function coerceArg(spec: SdArg, value: unknown): unknown {
 }
 
 function normalizeArgs(entry: SpatialDictionaryEntry, partial: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+  // Preserve pass-through args that may be accepted by concrete handlers but
+  // are not yet reflected in the dictionary schema (migration window).
+  const out: Record<string, unknown> = { ...partial };
   for (const spec of entry.args) {
     const raw = partial[spec.name] !== undefined ? partial[spec.name] : spec.default;
     out[spec.name] = coerceArg(spec, raw);
+  }
+  // Practical default for array/grid prompts: if no explicit target is provided,
+  // treat it as a point-pattern request instead of failing validation.
+  if (entry.canonical_name === "SdArray" && (out.target === undefined || out.target === null)) {
+    out.target = "point";
   }
   return out;
 }
