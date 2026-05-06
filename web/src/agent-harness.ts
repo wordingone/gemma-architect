@@ -224,15 +224,12 @@ export function buildToolDefinitions(): Record<string, unknown>[] {
 
 function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: string } {
   const dispatches: AgentDispatch[] = [];
-  const blockRe = /```json\s*([\s\S]*?)```/gi;
-  const removals: string[] = [];
-  let m: RegExpExecArray | null;
 
-  while ((m = blockRe.exec(raw)) !== null) {
-    removals.push(m[0]);
+  function tryExtract(jsonStr: string): boolean {
     try {
-      const parsed: unknown = JSON.parse(m[1].trim());
+      const parsed: unknown = JSON.parse(jsonStr);
       const items = Array.isArray(parsed) ? parsed : [parsed];
+      let found = false;
       for (const item of items) {
         if (item && typeof item === "object") {
           const obj = item as Record<string, unknown>;
@@ -241,18 +238,35 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
             obj.args && typeof obj.args === "object" && !Array.isArray(obj.args)
               ? (obj.args as Record<string, unknown>)
               : {};
-          if (verb) dispatches.push({ verb, args });
+          if (verb) { dispatches.push({ verb, args }); found = true; }
         }
       }
-    } catch {
-      // Malformed block — skip silently.
-    }
+      return found;
+    } catch { return false; }
   }
 
-  let text = raw;
-  for (const block of removals) {
-    text = text.replace(block, "");
-  }
+  // Pass 1: fenced ```json ... ``` blocks.
+  let text = raw.replace(/```json\s*([\s\S]*?)```/gi, (_, inner) => {
+    tryExtract(inner.trim());
+    return "";
+  });
+
+  // Pass 2: bare "json" marker (no backticks) at the start of a line, optionally
+  // followed by a newline, then a single-line JSON object.
+  // Handles model outputs like "json\n{...}" and "json {...}".
+  text = text.replace(/(^|\r?\n)([ \t]*json[ \t]*\r?\n?[ \t]*)(\{[^\n\r]+\})/gi,
+    (match, newline, _prefix, inner) => {
+      tryExtract(inner.trim());
+      return newline; // keep leading newline to preserve line breaks
+    });
+
+  // Pass 3: standalone single-line JSON object with a "verb" field on its own line.
+  // Handles bare {"verb":"..."} that the model emits without any wrapper.
+  text = text.replace(/^[ \t]*(\{[^\n\r]+"verb"[^\n\r]*\})[ \t]*$/gm, (match, inner) => {
+    if (tryExtract(inner.trim())) return "";
+    return match; // not a valid dispatch — leave as-is
+  });
+
   return { dispatches, text: text.trim() };
 }
 
