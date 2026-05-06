@@ -44,7 +44,7 @@ import type { WorkerOut } from "./worker";
 import { syncToolActiveClass } from "./app-state";
 import { initCreateMode } from "./create-mode";
 import { undo, redo } from "./history";
-import { registerHandler, dispatchSync } from "./dispatch";
+import { registerHandler, dispatchSync, installDefaultHandlers } from "./dispatch";
 import { addToMultiSelected, clearMultiSelected, getFilters, topologyAllowed } from "./selection-state";
 import * as THREE from "three";
 
@@ -267,6 +267,12 @@ registerHandler("IfcColumn", (args) => {
   viewer.addMesh(mesh, "brep");
   return { created: "column", height: h };
 });
+
+// Install shim handlers for every dictionary verb that doesn't have a native
+// handler yet. This makes all 66+ verbs reachable by the agent (#58 Tier 0).
+// Explicit registerHandler() calls above take priority — installDefaultHandlers
+// skips any canonical name that already has a handler.
+installDefaultHandlers();
 
 const scenePanel = new ScenePanel(scenePanelEl, viewer);
 

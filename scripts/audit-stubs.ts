@@ -38,6 +38,7 @@ const PATTERNS: { rx: RegExp; cat: string }[] = [
 
 const EXCLUDE_FILES = new Set([
   "spatial-api.LICENSE.md",
+  "spatial-dictionary.LICENSE.md",
   "nurbs-kernel.LICENSE.md",
 ]);
 
@@ -54,19 +55,42 @@ function walk(dir: string, out: string[] = []): string[] {
 
 function scanFile(file: string): Violation[] {
   const rel = relative(REPORT_ROOT, file).replace(/\\/g, "/");
-  const lines = readFileSync(file, "utf8").split(/\r?\n/);
+  const source = readFileSync(file, "utf8");
+  const lines = source.split(/\r?\n/);
   const found: Violation[] = [];
+
+  // Skip our own audit script self-references.
+  if (rel.endsWith("/audit-stubs.ts")) return found;
+
+  // Single-line patterns scanned line-by-line.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    // Skip our own audit script self-references and the patterns array.
-    if (rel.endsWith("/audit-stubs.ts")) continue;
     for (const { rx, cat } of PATTERNS) {
+      if (cat === "throw-stub") continue; // handled by multi-line scan below
       if (rx.test(line)) {
         found.push({ file: rel, line: i + 1, category: cat, snippet: line.trim().slice(0, 120) });
-        break; // one violation per line, first match wins
+        break;
       }
     }
   }
+
+  // Multi-line throw-stub: match `throw new Error(` and check the next 3
+  // lines for stub/TODO/not-implemented/not-wired keywords. This catches
+  // kernel.ts patterns like `throw new Error(\n  "...stub..."\n)`.
+  const throwRx = /throw\s+new\s+Error\s*\(/;
+  const stubKw = /\b(TODO|stub|not[\s_-]*(?:implemented|wired))\b/i;
+  for (let i = 0; i < lines.length; i++) {
+    if (!throwRx.test(lines[i])) continue;
+    // Already flagged by single-line scan above?
+    const alreadyFlagged = found.some((v) => v.line === i + 1 && v.category === "throw-stub");
+    if (alreadyFlagged) continue;
+    // Check this line and the next 3 for stub keywords.
+    const window = lines.slice(i, i + 4).join(" ");
+    if (stubKw.test(window)) {
+      found.push({ file: rel, line: i + 1, category: "throw-stub", snippet: lines[i].trim().slice(0, 120) });
+    }
+  }
+
   return found;
 }
 

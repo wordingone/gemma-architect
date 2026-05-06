@@ -215,6 +215,48 @@ Assistant:
 \`\`\`json
 {"verb":"SdRedo","args":{}}
 \`\`\`
+
+User: move the selected object 2m in the X direction
+Assistant:
+\`\`\`json
+{"verb":"SdMove","args":{"x":2,"y":0,"z":0}}
+\`\`\`
+
+User: rotate 45 degrees around Z
+Assistant:
+\`\`\`json
+{"verb":"SdRotate","args":{"angle":45,"axis":[0,0,1]}}
+\`\`\`
+
+User: scale the selection by 2
+Assistant:
+\`\`\`json
+{"verb":"SdScale","args":{"factor":2}}
+\`\`\`
+
+User: select the object
+Assistant:
+\`\`\`json
+{"verb":"SdSelect","args":{}}
+\`\`\`
+
+User: group the selected objects
+Assistant:
+\`\`\`json
+{"verb":"SdGroup","args":{}}
+\`\`\`
+
+User: import a file
+Assistant:
+\`\`\`json
+{"verb":"SdImport","args":{}}
+\`\`\`
+
+User: export as IFC
+Assistant:
+\`\`\`json
+{"verb":"SdExport","args":{"format":"ifc"}}
+\`\`\`
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
