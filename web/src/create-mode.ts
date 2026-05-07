@@ -56,7 +56,7 @@ export function clearCreateSequence(): void {
 let _pending: Array<{ x: number; y: number }> = [];
 // Temporary scene objects — removed when the tool completes or is cancelled.
 let _previewMesh: THREE.Mesh | null = null;
-let _markerMesh: THREE.Mesh | null = null;
+let _markerMesh: THREE.Points | null = null;
 // Cursor dot — CSS overlay div that tracks the pointer when a sketch tool is active.
 let _cursorDot: HTMLElement | null = null;
 // Viewer reference set once by initCreateMode — used by resetPending.
@@ -162,15 +162,12 @@ function buildCircle(center: { x: number; y: number }, radial: { x: number; y: n
 }
 
 function buildLine(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
-  const curve = new THREE.LineCurve3(
-    new THREE.Vector3(a.x, a.y, 0),
-    new THREE.Vector3(b.x, b.y, 0),
-  );
-  const geom = new THREE.TubeGeometry(curve, 1, 0.012, 6, false);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x2d2d35, roughness: 0.4, metalness: 0.0, depthTest: false });
-  const mesh = new THREE.Mesh(geom, mat);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([a.x, a.y, 0, b.x, b.y, 0], 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x2d2d35, depthTest: false });
+  const mesh = new THREE.LineSegments(geom, mat);
   mesh.renderOrder = 1;
-  mesh.userData.kind = "mesh";
+  mesh.userData.kind = "line";
   mesh.userData.creator = "line";
   mesh.userData.controlPoints = [new THREE.Vector3(a.x, a.y, 0), new THREE.Vector3(b.x, b.y, 0)];
   const chain = `const line = drawPolyline([[${round(a.x)}, ${round(a.y)}], [${round(b.x)}, ${round(b.y)}]]).sketchOnPlane("XY").extrude(0.002);`;
@@ -320,20 +317,13 @@ function buildPolygon(center: { x: number; y: number }, radial: { x: number; y: 
 }
 
 function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3D; chain: string } {
-  // 4-click open line strip. Visual is a tube path through the points.
-  const path = new THREE.CurvePath<THREE.Vector3>();
-  for (let i = 0; i < pts.length - 1; i++) {
-    path.add(new THREE.LineCurve3(
-      new THREE.Vector3(pts[i].x, pts[i].y, 0),
-      new THREE.Vector3(pts[i + 1].x, pts[i + 1].y, 0),
-    ));
-  }
-  const segments = Math.max(1, (pts.length - 1) * 4);
-  const geom = new THREE.TubeGeometry(path, segments, 0.012, 6, false);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.4, metalness: 0.05, depthTest: false });
-  const mesh = new THREE.Mesh(geom, mat);
+  const flat = pts.flatMap((p) => [p.x, p.y, 0]);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x2d2d35, depthTest: false });
+  const mesh = new THREE.Line(geom, mat);
   mesh.renderOrder = 1;
-  mesh.userData.kind = "mesh";
+  mesh.userData.kind = "polyline";
   mesh.userData.creator = "polyline";
   mesh.userData.controlPoints = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
   const worldVerts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
@@ -365,11 +355,15 @@ function buildExtrude(base: { x: number; y: number }, top: { x: number; y: numbe
 function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3D; chain: string } {
   const vecs = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
   const curve = new THREE.CatmullRomCurve3(vecs, false, "catmullrom", 0.5);
-  const geom = new THREE.TubeGeometry(curve, pts.length * 8, 0.012, 6, false);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.4, metalness: 0.05, depthTest: false });
-  const mesh = new THREE.Mesh(geom, mat);
+  const N = Math.max(32, pts.length * 8);
+  const curvePts = curve.getPoints(N);
+  const flat = curvePts.flatMap((v) => [v.x, v.y, v.z]);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x2d2d35, depthTest: false });
+  const mesh = new THREE.Line(geom, mat);
   mesh.renderOrder = 1;
-  mesh.userData.kind = "mesh";
+  mesh.userData.kind = "curve";
   mesh.userData.creator = "curve";
   mesh.userData.controlPoints = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
   const worldPts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
@@ -378,29 +372,15 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
 }
 
 function buildPoint(p: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
-  const r = 0.06;
-  const group = new THREE.Group();
-  group.position.set(p.x, p.y, 0);
-  group.renderOrder = 1;
-
-  // Outline sphere — BackSide renders only back faces, creating a dark rim.
-  const outlineGeom = new THREE.SphereGeometry(r * 1.28, 12, 8);
-  const outlineMat = new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.BackSide, depthTest: false });
-  const outlineMesh = new THREE.Mesh(outlineGeom, outlineMat);
-  outlineMesh.renderOrder = 1;
-  group.add(outlineMesh);
-
-  // Inner white sphere.
-  const innerGeom = new THREE.SphereGeometry(r, 12, 8);
-  const innerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, metalness: 0.1, depthTest: false });
-  const innerMesh = new THREE.Mesh(innerGeom, innerMat);
-  innerMesh.renderOrder = 2;
-  group.add(innerMesh);
-
-  group.userData.kind = "mesh";
-  group.userData.creator = "point";
-  const chain = `const pt = makeCylinder(${round(r)}, ${round(r * 2)}).translate([${round(p.x)}, ${round(p.y)}, 0]);`;
-  return { mesh: group, chain };
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([p.x, p.y, 0], 3));
+  const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x222222, depthTest: false });
+  const mesh = new THREE.Points(geom, mat);
+  mesh.renderOrder = 1;
+  mesh.userData.kind = "point";
+  mesh.userData.creator = "point";
+  const chain = `const pt = makeCylinder(0.06, 0.12).translate([${round(p.x)}, ${round(p.y)}, 0]);`;
+  return { mesh, chain };
 }
 
 // 3-corner box (#30): c1 + c2 define the base rectangle as a diagonal pair;
@@ -469,10 +449,10 @@ const TOOL_TODOS: Record<string, string> = {
 
 function setMarker(viewer: Viewer, pt: { x: number; y: number }): void {
   clearMarker(viewer);
-  const geom = new THREE.SphereGeometry(0.06, 8, 8);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff8800, depthTest: false });
-  _markerMesh = new THREE.Mesh(geom, mat);
-  _markerMesh.position.set(pt.x, pt.y, 0.05);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([pt.x, pt.y, 0.05], 3));
+  const mat = new THREE.PointsMaterial({ size: 8, sizeAttenuation: false, color: 0xff8800, depthTest: false });
+  _markerMesh = new THREE.Points(geom, mat);
   _markerMesh.renderOrder = 999;
   viewer.getScene().add(_markerMesh);
 }
