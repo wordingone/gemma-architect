@@ -248,6 +248,8 @@ export class Viewer {
     // — preventDefault on the same pointerdown does NOT stop other
     // pointerdown listeners on the same event.
     this.raycaster = new THREE.Raycaster();
+    this.raycaster.params.Line.threshold = 0.15;
+    this.raycaster.params.Points.threshold = 0.2;
     viewportAreaEl.addEventListener("pointerdown", (e: PointerEvent) => this.onCanvasMouseDown(e));
 
     // Three TransformControls — translate / rotate / scale — all visible at
@@ -297,7 +299,8 @@ export class Viewer {
             const cpIndex = this.subTargetObject.userData.cpIndex as number;
             const parent = getHandleParent();
             if (parent && Array.isArray(parent.userData.controlPoints)) {
-              (parent.userData.controlPoints as THREE.Vector3[])[cpIndex].copy(this.subTargetObject.position);
+              const local = parent.worldToLocal(this.subTargetObject.position.clone());
+              (parent.userData.controlPoints as THREE.Vector3[])[cpIndex].copy(local);
               refitParentGeometry(parent);
             }
           }
@@ -708,6 +711,11 @@ export class Viewer {
     // Mousedown in transform mode does not re-pick; let OrbitControls and
     // TransformControls handle the drag natively.
     if (tool === "move" || tool === "rotate" || tool === "scale") return;
+    // If a gumball handle is hovered/active (axis set) or dragging, do not
+    // run selection picking on this pointerdown. Otherwise selection updates
+    // race with TransformControls pointerdown and break handle drags.
+    if (this.gizmos.some((g) => (g as unknown as { axis: string | null }).axis !== null)) return;
+    if (this.isAnyGumballDragging()) return;
 
     const pr = hitPane.el.getBoundingClientRect();
     const ndcX = ((cx - pr.left) / pr.width) * 2 - 1;

@@ -9,7 +9,7 @@
 //   2. Badge element (#ai-model-badge) shows download progress then "LIVE".
 //   3. Subsequent calls skip loading and go straight to inference.
 //
-// Tool-call format: model emits ```json {"verb":"Name","args":{...}} ``` blocks.
+// Function-call format: model emits ```json {"verb":"Name","args":{...}} ``` blocks.
 // parseDispatches() extracts these; remaining text becomes the response text.
 
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
@@ -150,8 +150,8 @@ function summariseDictionary(): string {
   });
   const count = available.length;
   return count > 0
-    ? `Available verbs (${count} — use ONLY these, do not invent verb names):\n${lines.join("\n")}`
-    : "No verbs currently available. Do not emit tool calls.";
+    ? `Available function schemas (${count} — use ONLY these function names, do not invent function names):\n${lines.join("\n")}`
+    : "No function schemas currently available. Do not emit function calls.";
 }
 
 function summariseSkills(skills: Skill[] | undefined): string {
@@ -185,7 +185,7 @@ function buildSceneContext(): string {
 
 
 const FEW_SHOT_EXAMPLES = `
-Examples of correct tool calls (copy the verb names EXACTLY — do not rename them):
+Examples of correct function calls (copy the function names EXACTLY — do not rename them):
 
 User: create a box 6m wide, 4m deep, 3m tall
 Assistant:
@@ -276,11 +276,11 @@ Assistant:
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
     "You are Gemma·Architect, a parametric CAD assistant embedded in a browser app.",
-    "When the user asks to create or modify geometry, emit tool calls.",
+    "When the user asks to create or modify geometry, emit function calls.",
     'Preferred format: <tool_call>{"command":"VerbName","parameters":{...},"metadata":{"source":"agent"}}</tool_call>',
     'Legacy format accepted: ```json\n{"verb":"VerbName","args":{...}}\n```',
-    "Emit one ```json block per tool call. Multiple actions = multiple blocks in sequence.",
-    "CRITICAL: Use ONLY the exact verb names listed below. Do not invent or rename verbs — any verb not in the list is silently rejected and nothing will be created.",
+    "Emit one ```json block per function call. Multiple actions = multiple blocks in sequence.",
+    "CRITICAL: Use ONLY the exact function names listed below. Do not invent or rename functions — any function not in the list is silently rejected and nothing will be created.",
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene (text): ${buildSceneContext()}`,
@@ -291,11 +291,11 @@ export function buildSystemPrompt(skills?: Skill[]): string {
 }
 
 export function buildToolDefinitions(): Record<string, unknown>[] {
-  // Not used in the WebGPU path (tool calls are text-parsed, not schema-validated).
+  // Not used in the WebGPU path (function calls are text-parsed, not schema-validated).
   return [];
 }
 
-// ---- Tool-call parsing ---------------------------------------------------
+// ---- Function-call parsing ----------------------------------------------
 
 function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: string } {
   const dispatches: AgentDispatch[] = [];
@@ -417,7 +417,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
 
-  // Generate — greedy decoding for deterministic tool-call JSON.
+  // Generate — greedy decoding for deterministic function-call JSON.
   const outputs = await model.generate({
     ...inputs,
     max_new_tokens: 1024,

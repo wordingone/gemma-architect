@@ -116,6 +116,54 @@ initCreateMode(viewer);
 registerHandler("SdUndo", () => { undo(viewer); });
 registerHandler("SdRedo", () => { redo(viewer); });
 
+registerHandler("SdMove", (args) => {
+  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  if (!sel) return { moved: false, reason: "no selection" };
+  const x = (args.x as number | undefined)
+    ?? (Array.isArray(args.delta) ? (args.delta as number[])[0] : undefined)
+    ?? (Array.isArray(args.vector) ? (args.vector as number[])[0] : undefined)
+    ?? 0;
+  const y = (args.y as number | undefined)
+    ?? (Array.isArray(args.delta) ? (args.delta as number[])[1] : undefined)
+    ?? (Array.isArray(args.vector) ? (args.vector as number[])[1] : undefined)
+    ?? 0;
+  const z = (args.z as number | undefined)
+    ?? (Array.isArray(args.delta) ? (args.delta as number[])[2] : undefined)
+    ?? (Array.isArray(args.vector) ? (args.vector as number[])[2] : undefined)
+    ?? 0;
+  sel.position.x += x;
+  sel.position.y += y;
+  sel.position.z += z;
+  sel.updateMatrix();
+  sel.updateMatrixWorld(true);
+  return { moved: true, delta: [x, y, z] };
+});
+
+registerHandler("SdScale", (args) => {
+  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  if (!sel) return { scaled: false, reason: "no selection" };
+  const f = (args.factor as number | undefined) ?? 1;
+  sel.scale.multiplyScalar(f);
+  sel.updateMatrix();
+  sel.updateMatrixWorld(true);
+  return { scaled: true, factor: f };
+});
+
+registerHandler("SdRotate", (args) => {
+  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  if (!sel) return { rotated: false, reason: "no selection" };
+  const deg = (args.angle as number | undefined) ?? 0;
+  const axis = (args.axis as number[] | undefined) ?? [0, 0, 1];
+  const q = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(axis[0] ?? 0, axis[1] ?? 0, axis[2] ?? 1).normalize(),
+    (deg * Math.PI) / 180,
+  );
+  sel.quaternion.premultiply(q);
+  sel.updateMatrix();
+  sel.updateMatrixWorld(true);
+  return { rotated: true, angle: deg, axis };
+});
+
 // Select-all handler (#31): populates the multi-set with every selectable
 // scene object that passes the current filters. Gumball anchors at the
 // centroid of the bounding union.
@@ -294,15 +342,20 @@ registerHandler("SdPoint", (args) => {
 registerHandler("SdLine", (args) => {
   const start = (args.start as number[] | undefined) ?? [0, 0, 0];
   const end   = (args.end   as number[] | undefined) ?? [1, 0, 0];
+  const sx = start[0] ?? 0, sy = start[1] ?? 0, sz = start[2] ?? 0;
+  const ex = end[0] ?? 1, ey = end[1] ?? 0, ez = end[2] ?? 0;
+  const cx = (sx + ex) / 2, cy = (sy + ey) / 2, cz = (sz + ez) / 2;
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute([
-    start[0] ?? 0, start[1] ?? 0, start[2] ?? 0,
-    end[0]   ?? 1, end[1]   ?? 0, end[2]   ?? 0,
+    sx - cx, sy - cy, sz - cz,
+    ex - cx, ey - cy, ez - cz,
   ], 3));
   const mat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
   const obj = new THREE.LineSegments(geom, mat);
+  obj.position.set(cx, cy, cz);
   obj.userData.kind = "line";
-  obj.userData.creator = "SdLine";
+  obj.userData.creator = "line";
+  obj.userData.controlPoints = [new THREE.Vector3(sx, sy, sz), new THREE.Vector3(ex, ey, ez)];
   viewer.addMesh(obj, "mesh");
   return { created: "line", start, end };
 });
@@ -336,7 +389,8 @@ registerHandler("SdPolyline", (args) => {
   const mat = new THREE.LineBasicMaterial({ color: 0x000000 });
   const obj = closed ? new THREE.LineLoop(geom, mat) : new THREE.Line(geom, mat);
   obj.userData.kind = "polyline";
-  obj.userData.creator = "SdPolyline";
+  obj.userData.creator = "polyline";
+  obj.userData.controlPoints = points.map((p) => new THREE.Vector3(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0));
   viewer.addMesh(obj, "mesh");
   return { created: "polyline", points, closed };
 });

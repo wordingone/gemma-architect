@@ -35,7 +35,8 @@ export function showHandlesFor(parent: THREE.Object3D, viewer: Viewer): void {
   if (!cps || cps.length === 0) return;
   _parentObj = parent;
   for (let i = 0; i < cps.length; i++) {
-    const h = makeHandleMesh(cps[i].clone(), i, parent.uuid);
+    const wp = parent.localToWorld(cps[i].clone());
+    const h = makeHandleMesh(wp, i, parent.uuid);
     viewer.getScene().add(h);
     _handles.push(h);
   }
@@ -65,25 +66,19 @@ export function refitParentGeometry(parent: THREE.Object3D): void {
   const cps = parent.userData.controlPoints as THREE.Vector3[] | undefined;
   if (!cps || cps.length < 2) return;
   const creator = parent.userData.creator as string;
-  const mesh = parent as THREE.Mesh;
-  if (!("geometry" in mesh)) return;
+  const obj = parent as THREE.Object3D & { geometry?: THREE.BufferGeometry };
+  if (!obj.geometry) return;
 
   let newGeom: THREE.BufferGeometry | null = null;
   if (creator === "line" && cps.length === 2) {
-    const curve = new THREE.LineCurve3(cps[0], cps[1]);
-    newGeom = new THREE.TubeGeometry(curve, 1, 0.012, 6, false);
+    newGeom = new THREE.BufferGeometry().setFromPoints([cps[0], cps[1]]);
   } else if (creator === "polyline") {
-    const path = new THREE.CurvePath<THREE.Vector3>();
-    for (let i = 0; i < cps.length - 1; i++) {
-      path.add(new THREE.LineCurve3(cps[i], cps[i + 1]));
-    }
-    const segments = Math.max(1, (cps.length - 1) * 4);
-    newGeom = new THREE.TubeGeometry(path, segments, 0.012, 6, false);
+    newGeom = new THREE.BufferGeometry().setFromPoints(cps);
   } else if (creator === "curve") {
     const curve = new THREE.CatmullRomCurve3(cps, false, "catmullrom", 0.5);
-    newGeom = new THREE.TubeGeometry(curve, cps.length * 8, 0.012, 6, false);
+    newGeom = new THREE.BufferGeometry().setFromPoints(curve.getPoints(Math.max(cps.length * 16, 64)));
   }
   if (!newGeom) return;
-  mesh.geometry.dispose();
-  mesh.geometry = newGeom;
+  obj.geometry.dispose();
+  obj.geometry = newGeom;
 }

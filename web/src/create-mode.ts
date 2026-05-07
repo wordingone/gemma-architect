@@ -116,60 +116,64 @@ function buildRect(a: { x: number; y: number }, b: { x: number; y: number }): { 
   const d = Math.max(0.01, Math.abs(b.y - a.y));
   const cx = (a.x + b.x) / 2;
   const cy = (a.y + b.y) / 2;
-  const hw = w / 2;
-  const hd = d / 2;
-  const t = 0.015;
-  const outer = new THREE.Shape();
-  outer.moveTo(-hw - t, -hd - t);
-  outer.lineTo( hw + t, -hd - t);
-  outer.lineTo( hw + t,  hd + t);
-  outer.lineTo(-hw - t,  hd + t);
-  outer.closePath();
-  const inner = new THREE.Path();
-  inner.moveTo(-hw + t, -hd + t);
-  inner.lineTo( hw - t, -hd + t);
-  inner.lineTo( hw - t,  hd - t);
-  inner.lineTo(-hw + t,  hd - t);
-  inner.closePath();
-  outer.holes.push(inner);
-  const geom = new THREE.ShapeGeometry(outer);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xc9b18a, roughness: 0.4, metalness: 0.0, side: THREE.DoubleSide, depthTest: false });
-  const mesh = new THREE.Mesh(geom, mat);
+  const x0 = -w / 2, x1 = w / 2;
+  const y0 = -d / 2, y1 = d / 2;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([
+    x0, y0, 0,
+    x1, y0, 0,
+    x1, y1, 0,
+    x0, y1, 0,
+  ], 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xc9b18a });
+  const mesh = new THREE.LineLoop(geom, mat);
   mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
-  mesh.userData.kind = "brep";
+  mesh.userData.kind = "rectangle";
   mesh.userData.creator = "rect";
   const h = DEFAULT_RECT_HEIGHT;
   const chain = `const rect = drawRectangle(${round(w)}, ${round(d)}).sketchOnPlane("XY").extrude(${round(h)}).translate([${round(cx)}, ${round(cy)}, 0]);`;
-  return { mesh, chain };
+  return { mesh: mesh as unknown as THREE.Mesh, chain };
 }
 
 function buildCircle(center: { x: number; y: number }, radial: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
   const dx = radial.x - center.x;
   const dy = radial.y - center.y;
   const r = Math.max(0.05, Math.sqrt(dx * dx + dy * dy));
-  const t = 0.015;
-  const geom = new THREE.RingGeometry(Math.max(0.02, r - t), r + t, 48);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.4, metalness: 0.0, side: THREE.DoubleSide, depthTest: false });
-  const mesh = new THREE.Mesh(geom, mat);
+  const segs = 64;
+  const pts: number[] = [];
+  for (let i = 0; i < segs; i++) {
+    const t = (i / segs) * Math.PI * 2;
+    pts.push(r * Math.cos(t), r * Math.sin(t), 0);
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xb6d59a });
+  const mesh = new THREE.LineLoop(geom, mat);
   mesh.position.set(center.x, center.y, 0);
   mesh.renderOrder = 1;
-  mesh.userData.kind = "brep";
+  mesh.userData.kind = "circle";
   mesh.userData.creator = "circle";
   const h = DEFAULT_RECT_HEIGHT;
   const chain = `const cyl = makeCylinder(${round(r)}, ${round(h)}).translate([${round(center.x)}, ${round(center.y)}, 0]);`;
-  return { mesh, chain };
+  return { mesh: mesh as unknown as THREE.Mesh, chain };
 }
 
 function buildLine(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
+  const cx = (a.x + b.x) / 2;
+  const cy = (a.y + b.y) / 2;
   const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute([a.x, a.y, 0, b.x, b.y, 0], 3));
-  const mat = new THREE.LineBasicMaterial({ color: 0x2d2d35, depthTest: false });
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([
+    a.x - cx, a.y - cy, 0,
+    b.x - cx, b.y - cy, 0,
+  ], 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x2d2d35 });
   const mesh = new THREE.LineSegments(geom, mat);
+  mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
   mesh.userData.kind = "line";
   mesh.userData.creator = "line";
-  mesh.userData.controlPoints = [new THREE.Vector3(a.x, a.y, 0), new THREE.Vector3(b.x, b.y, 0)];
+  mesh.userData.controlPoints = [new THREE.Vector3(a.x - cx, a.y - cy, 0), new THREE.Vector3(b.x - cx, b.y - cy, 0)];
   const chain = `const line = drawPolyline([[${round(a.x)}, ${round(a.y)}], [${round(b.x)}, ${round(b.y)}]]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
 }
@@ -317,15 +321,20 @@ function buildPolygon(center: { x: number; y: number }, radial: { x: number; y: 
 }
 
 function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3D; chain: string } {
-  const flat = pts.flatMap((p) => [p.x, p.y, 0]);
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   const geom = new THREE.BufferGeometry();
+  const flat = pts.flatMap((p) => [p.x - cx, p.y - cy, 0]);
   geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
-  const mat = new THREE.LineBasicMaterial({ color: 0x2d2d35, depthTest: false });
+  const mat = new THREE.LineBasicMaterial({ color: 0x9ec5d8 });
   const mesh = new THREE.Line(geom, mat);
+  mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
   mesh.userData.kind = "polyline";
   mesh.userData.creator = "polyline";
-  mesh.userData.controlPoints = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
+  mesh.userData.controlPoints = pts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
   const worldVerts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const poly = drawPolyline([${worldVerts}]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
@@ -353,34 +362,38 @@ function buildExtrude(base: { x: number; y: number }, top: { x: number; y: numbe
 }
 
 function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3D; chain: string } {
-  const vecs = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const vecs = pts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
   const curve = new THREE.CatmullRomCurve3(vecs, false, "catmullrom", 0.5);
-  const N = Math.max(32, pts.length * 8);
-  const curvePts = curve.getPoints(N);
-  const flat = curvePts.flatMap((v) => [v.x, v.y, v.z]);
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
-  const mat = new THREE.LineBasicMaterial({ color: 0x2d2d35, depthTest: false });
+  const sampled = curve.getPoints(Math.max(pts.length * 16, 64));
+  const geom = new THREE.BufferGeometry().setFromPoints(sampled);
+  const mat = new THREE.LineBasicMaterial({ color: 0x9ec5d8 });
   const mesh = new THREE.Line(geom, mat);
+  mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
   mesh.userData.kind = "curve";
   mesh.userData.creator = "curve";
-  mesh.userData.controlPoints = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
+  mesh.userData.controlPoints = vecs;
   const worldPts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const curv = drawSpline([${worldPts}]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
 }
 
 function buildPoint(p: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
+  const r = 0.06;
   const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute([p.x, p.y, 0], 3));
-  const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x222222, depthTest: false });
-  const mesh = new THREE.Points(geom, mat);
-  mesh.renderOrder = 1;
-  mesh.userData.kind = "point";
-  mesh.userData.creator = "point";
-  const chain = `const pt = makeCylinder(0.06, 0.12).translate([${round(p.x)}, ${round(p.y)}, 0]);`;
-  return { mesh, chain };
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+  const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0xffffff });
+  const group = new THREE.Points(geom, mat);
+  group.position.set(p.x, p.y, 0);
+  group.renderOrder = 1;
+  group.userData.kind = "point";
+  group.userData.creator = "point";
+  const chain = `const pt = makeCylinder(${round(r)}, ${round(r * 2)}).translate([${round(p.x)}, ${round(p.y)}, 0]);`;
+  return { mesh: group, chain };
 }
 
 // 3-corner box (#30): c1 + c2 define the base rectangle as a diagonal pair;
@@ -613,6 +626,9 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number }, 
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep");
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
+  // After committing a create operation, return to Select so transform-gizmo
+  // interactions are not swallowed by create-mode capture listeners.
+  dispatchSync("setActiveTool", { toolId: "select" });
   return out;
 }
 
