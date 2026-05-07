@@ -51,7 +51,8 @@ let context: BrowserContext;
 let attachedViaCDP = false;
 
 if (!isolated && existsSync(CDP_JSON)) {
-  const { endpoint } = JSON.parse(readFileSync(CDP_JSON, "utf8"));
+  const raw = readFileSync(CDP_JSON, "utf8").replace(/^﻿/, "");
+  const { endpoint } = JSON.parse(raw);
   browser = await chromium.connectOverCDP(endpoint);
   context = browser.contexts()[0] ?? await browser.newContext();
   attachedViaCDP = true;
@@ -382,10 +383,10 @@ console.log(`Output: ${outFile}`);
 // --- Teardown ---
 await page.close();
 if (!attachedViaCDP) {
+  // Isolated mode: close the browser we launched
   await browser.close();
-} else {
-  // Do NOT close the shared browser — that's Jun's window
-  await browser.disconnect();
 }
+// CDP mode: do NOT call browser.close() — that would kill Jun's window.
+// Drop the connection by letting the process exit naturally.
 
 process.exit(allPassed ? 0 : 1);
