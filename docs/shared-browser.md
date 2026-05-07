@@ -82,6 +82,45 @@ In CDP mode the runner finds the existing tab whose URL starts with `http://loca
 
 ---
 
+## Driving the canonical tab — use `bun run cdp ...`
+
+`scripts/cdp.ts` is the default path for interacting with the canonical tab. Every action goes through the app's normal pointer/keyboard pipeline — identical to a real mouse/keyboard event from Jun.
+
+**Using `bun run cdp eval` more than once for the same action means a new subcommand should be filed.**
+
+### Subcommand reference
+
+```bash
+bun run cdp inspect                          # scene tree + selection state (JSON, read-only)
+bun run cdp click <selector>                 # PointerEvent click on CSS selector
+bun run cdp click-text "<text>"              # click element by exact text content
+bun run cdp click-at <x> <y>               # PointerEvent at viewport coords (relative to .vp-body)
+bun run cdp key <name> [--mods ctrl,shift]  # KeyboardEvent: Delete, Escape, g, ArrowUp, etc.
+bun run cdp eval "<js>"                      # arbitrary evaluate (escape hatch — file a ticket first)
+bun run cdp screenshot [--out path.png]      # save canonical-tab screenshot
+bun run cdp prompt "<text>"                  # type into DSL console + submit
+bun run cdp select-all                       # Ctrl+A
+bun run cdp delete-selected                  # Delete keystroke
+```
+
+### End-to-end example
+
+```bash
+# Delete the default wall the right way (user-path mirroring):
+bun run cdp click-text "Wall"    # click-select wall in scene panel or ribbon
+bun run cdp key Delete           # Delete keystroke → fires app pipeline → history records SdDelete
+```
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | success |
+| 1 | action failed (selector not found, etc.) |
+| 2 | no canonical tab (start shared browser first) |
+
+---
+
 ## Restart cleanly
 
 ```powershell

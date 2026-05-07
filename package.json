@@ -20,7 +20,8 @@
     "verify:deploy": "bun scripts/validate-deploy.ts",
     "shared-browser:start": "powershell -File scripts/shared-browser/start.ps1",
     "shared-browser:stop": "powershell -File scripts/shared-browser/stop.ps1",
-    "verify:cdp": "node --experimental-strip-types scripts/gemma-verify-cdp.ts"
+    "verify:cdp": "node --experimental-strip-types scripts/gemma-verify-cdp.ts",
+    "cdp": "node --experimental-strip-types scripts/cdp.ts"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
