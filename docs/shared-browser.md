@@ -76,6 +76,10 @@ B:/M/gemma-architect-master/state/gemma-verify-<sha>-<timestamp>.json
 
 When `attached_via_cdp: true`, the JSON satisfies the gemma-verify-gate hook. The hook will also fail loud if `cdp.json` is missing (see gate behavior below).
 
+### Canonical tab
+
+In CDP mode the runner finds the existing tab whose URL starts with `http://localhost:5175/` and reuses it — it never opens a new tab. If no such tab exists the runner exits 2 with `BLOCKED: no canonical tab found`. The tab is never closed after the run; Jun's window and tab survive every `verify:cdp` invocation. To restore a closed canonical tab, run `stop.ps1` then `start.ps1`.
+
 ---
 
 ## Restart cleanly

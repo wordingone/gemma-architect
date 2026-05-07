@@ -63,8 +63,25 @@ if (!isolated && existsSync(CDP_JSON)) {
   console.log("Launched isolated browser");
 }
 
-const page = await context.newPage();
-await page.goto(DEV_URL, { waitUntil: "networkidle", timeout: 15000 });
+let page: import("playwright").Page;
+
+if (attachedViaCDP) {
+  // Find the canonical :5175 tab — never spawn a new one
+  const allPages = browser.contexts().flatMap(c => c.pages());
+  const canonical = allPages.find(p => p.url().startsWith(DEV_URL));
+  if (!canonical) {
+    console.error(`BLOCKED: no canonical tab found at ${DEV_URL}`);
+    console.error("Is the shared browser running? Try: bun run shared-browser:start");
+    process.exit(2);
+  }
+  page = canonical;
+  console.log(`Canonical tab: ${page.url()}`);
+  // Reload to wipe prior-run JS state without closing the tab
+  await page.reload({ waitUntil: "networkidle", timeout: 15000 });
+} else {
+  page = await context.newPage();
+  await page.goto(DEV_URL, { waitUntil: "networkidle", timeout: 15000 });
+}
 
 // --- Install test hook ---
 await page.evaluate(() => {
@@ -381,12 +398,11 @@ console.log(`attached_via_cdp: ${attachedViaCDP}`);
 console.log(`Output: ${outFile}`);
 
 // --- Teardown ---
-await page.close();
 if (!attachedViaCDP) {
-  // Isolated mode: close the browser we launched
+  // Isolated mode only: close page and browser we launched
+  await page.close();
   await browser.close();
 }
-// CDP mode: do NOT call browser.close() — that would kill Jun's window.
-// Drop the connection by letting the process exit naturally.
+// CDP mode: never close page or browser — Jun's canonical tab and window survive.
 
 process.exit(allPassed ? 0 : 1);
