@@ -45,7 +45,9 @@ import { syncToolActiveClass } from "./app-state";
 import { initCreateMode } from "./create-mode";
 import { undo, redo } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./dispatch";
-import { Point3 as Prim3 } from "./nurbs-primitives";
+import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs-primitives";
+import { tessellate, createClampedUniformNurbs } from "./nurbs-curves";
+import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
 import { addToMultiSelected, clearMultiSelected, getFilters, topologyAllowed } from "./selection-state";
 import * as THREE from "three";
 
@@ -335,6 +337,118 @@ registerHandler("SdPolyline", (args) => {
   obj.userData.creator = "SdPolyline";
   viewer.addMesh(obj, "mesh");
   return { created: "polyline", points, closed };
+});
+
+// ── Tier 2 handlers: SdArc / SdCircle / SdEllipse / SdSpline (#72) ───────────
+// Renders NURBS curves via tessellation → THREE.Line / THREE.LineLoop.
+// Catalog ref: nurbs-curves.ts + nurbs-curve-algorithms.ts §3.
+
+function ptToArray(p: { x: number; y: number; z: number }): number[] {
+  return [p.x, p.y, p.z];
+}
+
+function polylineToGeom(pts: { x: number; y: number; z: number }[]): THREE.BufferGeometry {
+  const flat = pts.flatMap(p => [p.x, p.y, p.z]);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
+  return geom;
+}
+
+function curveMat(): THREE.LineBasicMaterial {
+  return new THREE.LineBasicMaterial({ color: 0x000000 });
+}
+
+registerHandler("SdArc", (args) => {
+  const c = (args.center as number[] | undefined) ?? [0, 0, 0];
+  const radius = (args.radius as number | undefined) ?? 1;
+  const startAngle = (args.startAngle as number | undefined) ?? 0;
+  const endAngle   = (args.endAngle   as number | undefined) ?? Math.PI / 2;
+  const arc: PrimArc = {
+    center: Prim3.create(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0),
+    radius,
+    startAngle,
+    endAngle,
+    plane: PrimPlane.worldXY(),
+  };
+  const nurbs = nurbsCurveFromArc(arc);
+  const pts = tessellate(nurbs, 64);
+  const obj = new THREE.Line(polylineToGeom(pts), curveMat());
+  obj.userData.kind = "arc";
+  obj.userData.creator = "SdArc";
+  viewer.addMesh(obj, "mesh");
+  return { created: "arc", center: ptToArray(arc.center), radius, startAngle, endAngle };
+});
+
+registerHandler("SdCircle", (args) => {
+  const c = (args.center as number[] | undefined) ?? [0, 0, 0];
+  const radius = (args.radius as number | undefined) ?? 1;
+  const arc: PrimArc = {
+    center: Prim3.create(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0),
+    radius,
+    startAngle: 0,
+    endAngle: 2 * Math.PI,
+    plane: PrimPlane.worldXY(),
+  };
+  const nurbs = nurbsCurveFromArc(arc);
+  const pts = tessellate(nurbs, 128);
+  const obj = new THREE.LineLoop(polylineToGeom(pts), curveMat());
+  obj.userData.kind = "circle";
+  obj.userData.creator = "SdCircle";
+  viewer.addMesh(obj, "mesh");
+  return { created: "circle", center: ptToArray(arc.center), radius };
+});
+
+registerHandler("SdEllipse", (args) => {
+  const c  = (args.center as number[] | undefined) ?? [0, 0, 0];
+  const rx = (args.rx as number | undefined) ?? (args.radiusX as number | undefined) ?? 1;
+  const ry = (args.ry as number | undefined) ?? (args.radiusY as number | undefined) ?? 0.5;
+  const center = Prim3.create(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0);
+
+  // Ellipse via affine squash of unit circle: create unit-circle NURBS, then
+  // scale control points by (rx, ry) in the XY plane frame.
+  const unitArc: PrimArc = {
+    center: { x: 0, y: 0, z: 0 },
+    radius: 1,
+    startAngle: 0,
+    endAngle: 2 * Math.PI,
+    plane: PrimPlane.worldXY(),
+  };
+  const unitNurbs = nurbsCurveFromArc(unitArc);
+
+  // Transform homogeneous CVs: (x*w, y*w, z*w, w) → scale Euclidean (x,y) by (rx,ry)
+  const newCvs: number[] = [];
+  for (let i = 0; i < unitNurbs.cvCount; i++) {
+    const base = i * 4; // cvStride = 4 for rational
+    const w  = unitNurbs.cvs[base + 3] ?? 1;
+    const ex = (unitNurbs.cvs[base + 0] ?? 0) / w; // Euclidean x
+    const ey = (unitNurbs.cvs[base + 1] ?? 0) / w; // Euclidean y
+    const newX = center.x + ex * rx;
+    const newY = center.y + ey * ry;
+    const newZ = center.z;
+    newCvs.push(newX * w, newY * w, newZ * w, w);
+  }
+  const ellipseNurbs = { ...unitNurbs, cvs: newCvs };
+  const pts = tessellate(ellipseNurbs, 128);
+  const obj = new THREE.LineLoop(polylineToGeom(pts), curveMat());
+  obj.userData.kind = "ellipse";
+  obj.userData.creator = "SdEllipse";
+  viewer.addMesh(obj, "mesh");
+  return { created: "ellipse", center: ptToArray(center), rx, ry };
+});
+
+registerHandler("SdSpline", (args) => {
+  const rawPts = (args.points as number[][] | undefined) ?? [];
+  if (rawPts.length < 4) {
+    return { error: "SdSpline requires at least 4 points (cubic spline)", created: null };
+  }
+  const pts3 = rawPts.map(p => Prim3.create(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0));
+  const nurbs = createClampedUniformNurbs(3, 4, pts3);
+  const tess = tessellate(nurbs, pts3.length * 16);
+  const obj = new THREE.Line(polylineToGeom(tess), curveMat());
+  obj.userData.kind = "spline";
+  obj.userData.creator = "SdSpline";
+  viewer.addMesh(obj, "mesh");
+  return { created: "spline", points: pts3.map(p => ptToArray(p)) };
 });
 
 // Install shim handlers for every dictionary verb that doesn't have a native
