@@ -98,9 +98,12 @@ if (cmd === "inspect") {
         }))
       : [];
     const activeObj = v?.getActiveObject?.() ?? null;
-    // selection-state and history are module-private; access via dynamic import
-    const selMod = await import("/src/selection-state.ts").catch(() => null);
-    const histMod = await import("/src/history.ts").catch(() => null);
+    // Dynamic imports run in the browser (vite resolves /src/...); indirect
+    // through variables so tsc on the Node side doesn't try to resolve them.
+    const selPath = "/src/selection-state.ts";
+    const histPath = "/src/history.ts";
+    const selMod = await import(selPath).catch(() => null);
+    const histMod = await import(histPath).catch(() => null);
     const selected = selMod?.getSelected?.() ?? null;
     return {
       scene_children: children,
