@@ -8,7 +8,7 @@ web-ifc all run inside a single tab.
 **Hackathon entry:** Gemma 4 Good Hackathon (Kaggle + Google DeepMind),
 deadline 2026-05-18.
 **Track:** Equity — 3D parametric design accessibility for non-CAD users.
-**License:** Apache-2.0 (see [`LICENSE`](LICENSE)).
+**License:** CC BY 4.0 (see [`LICENSE`](LICENSE)).
 
 ---
 
@@ -141,7 +141,7 @@ Numbers reproducible end-to-end via [`submission/repro.md`](submission/repro.md)
   multi-thread SharedArrayBuffer path lights up automatically on any
   host that can serve those headers (Vercel, Spaces, self-hosted nginx).
 
-License chain (Apache-2.0 / MIT / MPL-2.0 / LGPL-2.1-with-linking-exception)
+License chain (CC BY 4.0 / MIT / MPL-2.0 / LGPL-2.1-with-linking-exception)
 is fully compatible with commercial deployment. MPL-2.0 on web-ifc is
 weakly copyleft per file (modifications to its source must stay MPL),
 but our app code that *uses* web-ifc has no copyleft obligation.
@@ -215,9 +215,9 @@ To re-train the LoRA on a 4090, see [`submission/repro.md`](submission/repro.md)
 
 ## What ships with this submission
 
-- **GitHub repo** — this repo. Apache-2.0.
+- **GitHub repo** — this repo. CC BY 4.0.
 - **Hugging Face Hub adapter** — `gemma-architect/cad-lora-v2` is the
-  intended path (LoRA on Gemma 4 base TBD, Apache-2.0,
+  intended path (LoRA on Gemma 4 base TBD, CC BY 4.0,
   auto-generated model card with eval + intended-use + limitations).
   Push is pending Gemma 4 retrain; until then `src/train/publish_v2.py` writes
   `outputs/cad-lora-v2-publish-plan.json` on the training machine
