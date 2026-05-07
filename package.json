@@ -1,7 +1,7 @@
 {
   "name": "gemma-architect",
   "version": "0.1.0",
-  "description": "Browser-native 3D architectural design tool \u00e2\u20ac\u201d Gemma 4 fine-tuned on parametric IFC.",
+  "description": "Browser-native 3D architectural design tool — Gemma 4 fine-tuned on parametric IFC.",
   "type": "module",
   "private": true,
   "scripts": {
@@ -17,7 +17,10 @@
     "audit:parity": "bun scripts/audit-zip-parity.ts",
     "audit:dispatch": "bun scripts/audit-dispatch-routing.ts",
     "verify": "bun run typecheck && bun run web:typecheck && bun run audit:stubs && bun run audit:parity && bun run audit:dispatch",
-    "verify:deploy": "bun scripts/validate-deploy.ts"
+    "verify:deploy": "bun scripts/validate-deploy.ts",
+    "shared-browser:start": "powershell -File scripts/shared-browser/start.ps1",
+    "shared-browser:stop": "powershell -File scripts/shared-browser/stop.ps1",
+    "verify:cdp": "bun scripts/gemma-verify-cdp.ts"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
@@ -36,6 +39,7 @@
     "bun-types": "^1.3.13",
     "esbuild": "^0.28.0",
     "happy-dom": "^20.9.0",
+    "playwright": "^1.59.1",
     "rollup": "^4.60.2",
     "typescript": "^5.3.3",
     "vite": "^8.0.10",
