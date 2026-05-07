@@ -19,10 +19,10 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Viewer } from "./viewer";
-import { setState } from "./app-state";
-import { dispatchSync } from "./dispatch";
+import { setState } from "../app-state";
+import { dispatchSync } from "../commands/dispatch";
 import { snapPoint } from "./snap-state";
-import { pushAction } from "./history";
+import { pushAction } from "../history";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;

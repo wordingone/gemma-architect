@@ -93,6 +93,6 @@ export function hydrateFromStorage(): void {
 // Wire app-state verbs into the dispatch table. Imported lazily to avoid
 // bundling dispatch.ts into modules that don't need it — registerHandler is
 // called once at module init when workbench boots and imports this module.
-import { registerHandler } from "./dispatch.js";
+import { registerHandler } from "./commands/dispatch.js";
 registerHandler("setActiveTool", (args) => { setState("activeTool", args["toolId"] as string); });
 registerHandler("setViewContext", (args) => { setState("activeTab", args["tab"] as string); });

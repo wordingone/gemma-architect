@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { loadSkills, findSkillsForPrompt, parseFrontmatter } from "../src/skills-loader";
+import { loadSkills, findSkillsForPrompt, parseFrontmatter } from "../src/agent/skills-loader";
 
 // Resolve relative to this test file so the run is worktree-portable
 // (matches the same trick `scripts/test-ai-match.ts` uses).

@@ -3,7 +3,7 @@
 // Undo removes the object from the scene; redo re-adds it.
 
 import * as THREE from "three";
-import type { Viewer } from "./viewer";
+import type { Viewer } from "./viewer/viewer";
 
 type Action = { obj: THREE.Object3D; chain: string };
 

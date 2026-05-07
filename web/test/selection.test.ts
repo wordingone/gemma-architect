@@ -14,7 +14,7 @@ import {
   getSelected,
   setFilter,
   getFilters,
-} from "../src/selection-state";
+} from "../src/viewer/selection-state";
 import { makeTestViewer, addBoxBrep } from "./test-helpers";
 
 beforeEach(() => {

@@ -5,7 +5,7 @@
 // follows the documented order (canonical → runtime → compiled).
 
 import { describe, expect, test, beforeEach } from "bun:test";
-import { getDictionary, clearDictionaryCache } from "../src/dictionary";
+import { getDictionary, clearDictionaryCache } from "../src/commands/dictionary";
 import {
   dispatch,
   dispatchSync,
@@ -17,7 +17,7 @@ import {
   setRuntimeAliases,
   installDefaultHandlers,
   dispatchCoverage,
-} from "../src/dispatch";
+} from "../src/commands/dispatch";
 
 function clearAllHandlers() {
   // We can't `dispatch.clear()` because the registry is module-private.

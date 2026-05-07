@@ -15,15 +15,15 @@
 import { iconSVG, axesGizmoSVG } from "./icons";
 import { generateGeometry, GenerateError } from "./ai-generate";
 import { ChatPanel } from "./chat-panel";
-import { compileDsl } from "./dsl-eval";
-import { dispatchSync, type DispatchArgs } from "./dispatch";
+import { compileDsl } from "./commands/dsl-eval";
+import { dispatchSync, type DispatchArgs } from "./commands/dispatch";
 import { setState } from "./app-state";
-import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./snap-state";
+import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./viewer/snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import * as THREE from "three";
-import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./selection-state";
-import { getCreateSequence } from "./create-mode";
-import { prefetchModel } from "./agent-harness";
+import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./viewer/selection-state";
+import { getCreateSequence } from "./viewer/create-mode";
+import { prefetchModel } from "./agent/agent-harness";
 
 // Push a line into the in-page CONSOLE dock tab. The tab body lives in
 // buildConsoleTabBody and re-implements its own local pushLine for the DSL

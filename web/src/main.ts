@@ -14,7 +14,7 @@ import { buildWorkbench } from "./workbench";
 import { buildModes, activateMode } from "./modes";
 import { initCmdK } from "./cmdk";
 import { initExportDrawer, openExportDrawer } from "./export-drawer";
-import { Viewer } from "./viewer";
+import { Viewer } from "./viewer/viewer";
 import { ScenePanel, type SceneSummary } from "./scene-panel";
 import { applyDrafting, removeDrafting, isDrafting } from "./drafting";
 import { DEMOS, applyParams, type DemoPrompt, type Param } from "./demo-prompts";
@@ -42,15 +42,15 @@ import {
 import { SAMPLES } from "./sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass } from "./app-state";
-import { initCreateMode } from "./create-mode";
+import { initCreateMode } from "./viewer/create-mode";
 import { undo, redo } from "./history";
-import { registerHandler, dispatchSync, installDefaultHandlers } from "./dispatch";
+import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs-primitives";
 import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePointAt, domain as curveDomain } from "./nurbs-curves";
 import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
 import { tessellateSurface } from "./nurbs-surfaces";
 import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "./nurbs-surface-algorithms";
-import { addToMultiSelected, clearMultiSelected, getFilters, getSelected, topologyAllowed } from "./selection-state";
+import { addToMultiSelected, clearMultiSelected, getFilters, getSelected, topologyAllowed } from "./viewer/selection-state";
 import * as THREE from "three";
 
 const $ = <T extends HTMLElement>(id: string): T => {

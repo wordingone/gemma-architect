@@ -19,8 +19,8 @@
 // The harness is purely orchestration — it does not itself decide what
 // walls or slabs look like. Dispatch handlers + scene-kg own that.
 
-import { runAgentTurn, type AgentDispatch } from "./agent-harness";
-import { dispatch } from "./dispatch";
+import { runAgentTurn, type AgentDispatch } from "./agent/agent-harness";
+import { dispatch } from "./commands/dispatch";
 import { buildIfc, type IfcMesh } from "./ifc-build";
 
 // ============================================================

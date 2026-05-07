@@ -23,7 +23,7 @@
 //     SVG when LibreDWG-WASM isn't bundled (it isn't, today — clear note).
 
 import { iconSVG } from "./icons";
-import type { Viewer } from "./viewer";
+import type { Viewer } from "./viewer/viewer";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
 

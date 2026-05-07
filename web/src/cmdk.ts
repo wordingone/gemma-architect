@@ -5,8 +5,8 @@
 import { iconSVG } from "./icons";
 import { openExportDrawer } from "./export-drawer";
 import { saveProjectJson } from "./shell";
-import { runAgentTurn } from "./agent-harness";
-import { dispatch } from "./dispatch";
+import { runAgentTurn } from "./agent/agent-harness";
+import { dispatch } from "./commands/dispatch";
 import { setConsoleMode } from "./workbench";
 
 type Cmd = {

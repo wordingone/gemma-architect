@@ -13,10 +13,10 @@
 // parseDispatches() extracts these; remaining text becomes the response text.
 
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
-import { getDictionary } from "./dictionary";
-import { listHandlers } from "./dispatch";
-import { snapshotAsText } from "./scene-kg";
-import { captureViewport } from "./viewport-capture";
+import { getDictionary } from "../commands/dictionary";
+import { listHandlers } from "../commands/dispatch";
+import { snapshotAsText } from "../scene-kg";
+import { captureViewport } from "../viewport-capture";
 import type { Skill } from "./skills-loader";
 
 export type AgentDispatch = {

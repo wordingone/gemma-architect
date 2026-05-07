@@ -11,13 +11,13 @@
 // be inferred.
 
 import * as THREE from "three";
-import type { Viewer } from "./viewer";
+import type { Viewer } from "./viewer/viewer";
 import { iconSVG } from "./icons";
 import {
   getFilters,
   setFilter,
   type SelectionFilters,
-} from "./selection-state";
+} from "./viewer/selection-state";
 import type { IfcHierarchyElement } from "./ifc-types";
 import { subscribe } from "./app-state";
 

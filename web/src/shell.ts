@@ -1,5 +1,5 @@
 import { iconSVG } from "./icons.js";
-import { dispatchSync } from "./dispatch.js";
+import { dispatchSync } from "./commands/dispatch.js";
 
 // Shell chrome — design-handoff #171.
 //

@@ -17,7 +17,7 @@ import {
   topologyAllowed,
   type Selection,
   type Topology,
-} from "../src/selection-state";
+} from "../src/viewer/selection-state";
 
 type SelectionHelper = {
   owner: THREE.Mesh;

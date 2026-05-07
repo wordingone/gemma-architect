@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { getDictionary } from "../src/dictionary";
-import { registerHandler, unregisterHandler } from "../src/dispatch";
+import { getDictionary } from "../src/commands/dictionary";
+import { registerHandler, unregisterHandler } from "../src/commands/dispatch";
 import {
   clearCommandSession,
   parseToolEnvelope,
   provideSessionPick,
   startCommandSession,
-} from "../src/command-session";
+} from "../src/commands/command-session";
 
 function clearAllHandlers() {
   for (const e of getDictionary()) unregisterHandler(e.canonical_name);

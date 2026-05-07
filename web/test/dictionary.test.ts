@@ -10,7 +10,7 @@ import {
   getEntry,
   clearDictionaryCache,
   type SpatialDictionaryEntry,
-} from "../src/dictionary";
+} from "../src/commands/dictionary";
 
 const REQUIRED_FIELDS: Array<keyof SpatialDictionaryEntry> = [
   "canonical_name",

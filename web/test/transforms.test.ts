@@ -15,7 +15,7 @@ import {
   setSelected,
   getSelected,
   clearSelected,
-} from "../src/selection-state";
+} from "../src/viewer/selection-state";
 import { makeTestViewer, addBoxBrep } from "./test-helpers";
 
 beforeEach(() => {
@@ -154,7 +154,7 @@ describe("Phase 2 — transform gizmo chain emission", () => {
 
 describe("Phase 3 — create-mode click-to-place", () => {
   test("Line tool: click(0,0) + click(5,0) creates new edge with polyline chain", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();
@@ -172,7 +172,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
   });
 
   test("Wall tool: click(0,0) + click(6,0) creates 6m wall along X with proper translate", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();
@@ -187,7 +187,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
   });
 
   test("Rect tool: click(0,0) + click(4,3) creates a 4x3 rect", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();
@@ -201,7 +201,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
   });
 
   test("Circle tool: click(2,2) center + click(5,2) → radius 3 cylinder", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();
@@ -215,7 +215,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
   });
 
   test("Door tool: single click emits cut chain", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();
@@ -228,7 +228,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
   });
 
   test("Window tool: single click emits cut chain at sill height", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();
@@ -241,7 +241,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
   });
 
   test("Switching tools resets pending click buffer", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();
@@ -259,7 +259,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
   });
 
   test("Unsupported tool (extrude) logs TODO, returns null, no chain emitted", async () => {
-    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/create-mode");
+    const { emitClickWorld, getCreateSequence, clearCreateSequence, resetPending } = await import("../src/viewer/create-mode");
     clearCreateSequence();
     resetPending();
     const v = makeTestViewer();

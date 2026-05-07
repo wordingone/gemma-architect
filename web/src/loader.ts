@@ -16,7 +16,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import type { Bounds } from "./viewer";
+import type { Bounds } from "./viewer/viewer";
 import type { IfcHierarchyElement } from "./ifc-types";
 import type { IfcElementRange } from "./worker";
 export type { IfcHierarchyElement };

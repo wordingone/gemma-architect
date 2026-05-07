@@ -4,10 +4,10 @@
 // through agent-harness.ts → dispatch.ts. Dispatches fire immediately after
 // each model turn; their verb names are shown as inline pills.
 
-import { runAgentTurn } from "./agent-harness";
-import type { AgentDispatch } from "./agent-harness";
-import { invokeCommand } from "./command-session";
-import type { Skill } from "./skills-loader";
+import { runAgentTurn } from "./agent/agent-harness";
+import type { AgentDispatch } from "./agent/agent-harness";
+import { invokeCommand } from "./commands/command-session";
+import type { Skill } from "./agent/skills-loader";
 
 type Message = {
   role: "user" | "assistant";
