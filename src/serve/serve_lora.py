@@ -33,10 +33,13 @@ CORS is wide open since the demo runs on a different localhost port.
 Adapter is loaded once at startup (~30s on a 4090).
 """
 
+import base64
+import io
 import os
 import sys
 import time
 from pathlib import Path
+from typing import Any, Union
 
 os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 os.environ.setdefault("UNSLOTH_COMPILE_DISABLE", "1")
@@ -52,6 +55,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+try:
+    from PIL import Image as PILImage
+    _PIL_AVAILABLE = True
+except ImportError:
+    print("[serve_lora] Pillow not installed — image_url content blocks will be stripped", file=sys.stderr)
+    _PIL_AVAILABLE = False
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -129,9 +139,15 @@ if USE_MTP:
         _drafter = None
 
 
+class ContentBlock(BaseModel):
+    type: str
+    text: str | None = None
+    image_url: dict[str, Any] | None = None
+
+
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    content: Union[str, list[ContentBlock]]
 
 
 class ChatRequest(BaseModel):
@@ -139,6 +155,27 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     max_tokens: int | None = 2048
     temperature: float | None = 0.1
+
+
+def _decode_data_url(url: str) -> "PILImage.Image":
+    _, b64 = url.split(",", 1)
+    return PILImage.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
+
+
+def _normalize_message(m: ChatMessage) -> tuple[str, list]:
+    """Returns (text, pil_images) for one message."""
+    if isinstance(m.content, str):
+        return m.content, []
+    texts: list[str] = []
+    images: list = []
+    for block in m.content:
+        if block.type == "text" and block.text:
+            texts.append(block.text)
+        elif block.type == "image_url" and block.image_url and _PIL_AVAILABLE:
+            url = block.image_url.get("url", "")
+            if url.startswith("data:"):
+                images.append(_decode_data_url(url))
+    return " ".join(texts), images
 
 
 app = FastAPI()
@@ -164,19 +201,51 @@ def health() -> dict:
 def chat(req: ChatRequest) -> dict:
     if not req.messages:
         raise HTTPException(400, "messages required")
-    messages = [{"role": m.role, "content": m.content} for m in req.messages]
+
+    # Collect normalized messages and any attached images
+    norm_messages: list[dict] = []
+    all_images: list = []
+    for m in req.messages:
+        text, images = _normalize_message(m)
+        all_images.extend(images)
+        if images:
+            # Gemma 4 vision format: image token precedes text in each turn
+            norm_messages.append({
+                "role": m.role,
+                "content": [{"type": "image"}, {"type": "text", "text": text}],
+            })
+        else:
+            norm_messages.append({"role": m.role, "content": text})
+
     try:
-        prompt_ids = tokenizer.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_tensors="pt",
-        ).to("cuda")
+        if all_images:
+            # Multimodal path: template without tokenization, then process with images
+            text_prompt = tokenizer.apply_chat_template(
+                norm_messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            model_inputs = tokenizer(
+                text=text_prompt,
+                images=all_images,
+                return_tensors="pt",
+            ).to("cuda")
+            prompt_len = model_inputs["input_ids"].shape[-1]
+        else:
+            # Text-only path (original)
+            input_ids = tokenizer.apply_chat_template(
+                norm_messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_tensors="pt",
+            ).to("cuda")
+            model_inputs = {"input_ids": input_ids}
+            prompt_len = input_ids.shape[-1]
     except Exception as e:
-        raise HTTPException(400, f"chat template failed: {e}")
+        raise HTTPException(400, f"tokenization failed: {e}")
 
     generate_kwargs: dict = dict(
-        input_ids=prompt_ids,
+        **model_inputs,
         max_new_tokens=req.max_tokens or 2048,
         temperature=req.temperature or 0.1,
         do_sample=(req.temperature or 0.1) > 0,
@@ -189,7 +258,7 @@ def chat(req: ChatRequest) -> dict:
     t0 = time.time()
     out = model.generate(**generate_kwargs)
     elapsed = time.time() - t0
-    new_tokens = out[0, prompt_ids.shape[-1]:]
+    new_tokens = out[0, prompt_len:]
     text = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
     n_new = int(new_tokens.shape[0])
 
@@ -206,9 +275,9 @@ def chat(req: ChatRequest) -> dict:
             }
         ],
         "usage": {
-            "prompt_tokens": int(prompt_ids.shape[-1]),
+            "prompt_tokens": prompt_len,
             "completion_tokens": n_new,
-            "total_tokens": int(prompt_ids.shape[-1]) + n_new,
+            "total_tokens": prompt_len + n_new,
         },
         "_latency_ms": int(elapsed * 1000),
         "_tps": round(n_new / elapsed, 1) if elapsed > 0 else None,
