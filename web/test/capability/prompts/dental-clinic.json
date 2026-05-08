@@ -1,0 +1,54 @@
+{
+  "id": "dental-clinic",
+  "category": "commercial",
+  "prompt": "Design a dental clinic: reception, 4 treatment rooms (each ≥3m × 4m), sterilization room, 2 bathrooms, staff lounge. Single-story, 180m².",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "gross_floor_area",
+      "description": "Gross floor area 180 ± 20m²",
+      "type": "area",
+      "min": 160,
+      "max": 200
+    },
+    {
+      "id": "treatment_rooms",
+      "description": "At least 4 treatment rooms",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "treat",
+      "min": 4
+    },
+    {
+      "id": "sterilization_room",
+      "description": "Sterilization room present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "steril",
+      "min": 1
+    },
+    {
+      "id": "bathroom_count",
+      "description": "At least 2 bathrooms",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "bath",
+      "min": 2
+    },
+    {
+      "id": "reception_present",
+      "description": "Reception space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "recept",
+      "min": 1
+    },
+    {
+      "id": "single_story",
+      "description": "Single story — Z extent ≤ 4.5m",
+      "type": "z_extent",
+      "min": 2.4,
+      "max": 4.5
+    }
+  ]
+}

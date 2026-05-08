@@ -1,0 +1,46 @@
+{
+  "id": "walkup-4story",
+  "category": "residential",
+  "prompt": "4-story walk-up apartment: 4 units per floor (16 total), each ≈65m². 28m × 18m footprint. ADA-compliant ground-floor unit.",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "footprint_width",
+      "description": "Footprint X-span 28 ± 5%",
+      "type": "dimension",
+      "axis": "X",
+      "min": 26.6,
+      "max": 29.4
+    },
+    {
+      "id": "footprint_depth",
+      "description": "Footprint Y-span 18 ± 5%",
+      "type": "dimension",
+      "axis": "Y",
+      "min": 17.1,
+      "max": 18.9
+    },
+    {
+      "id": "floor_count",
+      "description": "4 building storeys",
+      "type": "count",
+      "target": "IfcBuildingStorey",
+      "min": 4,
+      "max": 4
+    },
+    {
+      "id": "unit_count",
+      "description": "At least 16 unit spaces",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "unit",
+      "min": 16
+    },
+    {
+      "id": "ada_door_widths",
+      "description": "All doors ≥ 0.91m wide (ADA ground-floor unit requirement)",
+      "type": "door_width",
+      "min_width": 0.91
+    }
+  ]
+}

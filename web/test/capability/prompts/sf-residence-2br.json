@@ -1,0 +1,68 @@
+{
+  "id": "sf-residence-2br",
+  "category": "residential",
+  "prompt": "Design a single-family residence: 12m × 10m footprint, 2 stories, 2BR/1BA upstairs + open kitchen/living/dining + half-bath downstairs + attached single-car garage, 2.7m ceilings, gable roof.",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "footprint_width",
+      "description": "Building footprint X-span within 12 ± 0.5m",
+      "type": "dimension",
+      "axis": "X",
+      "min": 11.5,
+      "max": 12.5
+    },
+    {
+      "id": "footprint_depth",
+      "description": "Building footprint Y-span within 10 ± 0.5m",
+      "type": "dimension",
+      "axis": "Y",
+      "min": 9.5,
+      "max": 10.5
+    },
+    {
+      "id": "floor_count",
+      "description": "At least 2 distinct floor levels",
+      "type": "count",
+      "target": "IfcBuildingStorey",
+      "min": 2
+    },
+    {
+      "id": "bedroom_count",
+      "description": "At least 2 bedroom spaces",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "bed",
+      "min": 2
+    },
+    {
+      "id": "bathroom_count",
+      "description": "At least 1 full bathroom (plus half-bath = at least 2 total)",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "bath",
+      "min": 1
+    },
+    {
+      "id": "garage_present",
+      "description": "Garage space present (≥ 4m × 6m)",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "garage",
+      "min": 1
+    },
+    {
+      "id": "roof_present",
+      "description": "Roof element present",
+      "type": "presence",
+      "target": "IfcRoof"
+    },
+    {
+      "id": "z_extent",
+      "description": "Building Z height reflects 2 stories × 2.7m ceilings + roof",
+      "type": "z_extent",
+      "min": 5.0,
+      "max": 8.5
+    }
+  ]
+}

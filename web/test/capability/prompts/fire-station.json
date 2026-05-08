@@ -1,0 +1,46 @@
+{
+  "id": "fire-station",
+  "category": "civic",
+  "prompt": "Fire station: 3 truck bays (each 7m × 12m), dorm wing (6 beds + 2 bathrooms), kitchen, day room, training room. Single-story, 600m².",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "gross_floor_area",
+      "description": "Gross floor area 600 ± 50m²",
+      "type": "area",
+      "min": 550,
+      "max": 650
+    },
+    {
+      "id": "truck_bays",
+      "description": "At least 3 bay spaces",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "bay",
+      "min": 3
+    },
+    {
+      "id": "bathroom_count",
+      "description": "At least 2 bathrooms",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "bath",
+      "min": 2
+    },
+    {
+      "id": "kitchen_present",
+      "description": "Kitchen space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "kitchen",
+      "min": 1
+    },
+    {
+      "id": "single_story",
+      "description": "Single story — Z extent ≤ 5.5m (truck bay headroom)",
+      "type": "z_extent",
+      "min": 3.5,
+      "max": 5.5
+    }
+  ]
+}

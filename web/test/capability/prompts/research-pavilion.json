@@ -1,0 +1,44 @@
+{
+  "id": "research-pavilion",
+  "category": "civic",
+  "prompt": "Research pavilion: 8m × 8m, 4m ceiling, full south glazing, north-facing light shelf, exposed timber roof structure.",
+  "min_pass_threshold": 0.6,
+  "expected_checks": [
+    {
+      "id": "footprint_width",
+      "description": "Footprint X-span 8 ± 0.5m",
+      "type": "dimension",
+      "axis": "X",
+      "min": 7.5,
+      "max": 8.5
+    },
+    {
+      "id": "footprint_depth",
+      "description": "Footprint Y-span 8 ± 0.5m",
+      "type": "dimension",
+      "axis": "Y",
+      "min": 7.5,
+      "max": 8.5
+    },
+    {
+      "id": "ceiling_height",
+      "description": "Z extent ≈ 4m ceiling",
+      "type": "z_extent",
+      "min": 3.8,
+      "max": 5.5
+    },
+    {
+      "id": "roof_present",
+      "description": "Roof element present",
+      "type": "presence",
+      "target": "IfcRoof"
+    },
+    {
+      "id": "wall_count",
+      "description": "At least 4 perimeter walls",
+      "type": "count",
+      "target": "IfcWall",
+      "min": 4
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "community-center",
+  "category": "civic",
+  "prompt": "Community center: large hall (15m × 10m, 5m ceiling), 2 meeting rooms, kitchen, restrooms, lobby. ADA throughout.",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "hall_width",
+      "description": "Main hall X-span ≥ 15m",
+      "type": "dimension",
+      "axis": "X",
+      "min": 14.0,
+      "max": 17.0
+    },
+    {
+      "id": "hall_depth",
+      "description": "Main hall Y-span ≥ 10m",
+      "type": "dimension",
+      "axis": "Y",
+      "min": 9.0,
+      "max": 12.0
+    },
+    {
+      "id": "ceiling_height",
+      "description": "Hall ceiling Z ≈ 5m",
+      "type": "z_extent",
+      "min": 4.5,
+      "max": 6.5
+    },
+    {
+      "id": "meeting_rooms",
+      "description": "At least 2 meeting rooms",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "meet",
+      "min": 2
+    },
+    {
+      "id": "kitchen_present",
+      "description": "Kitchen space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "kitchen",
+      "min": 1
+    },
+    {
+      "id": "ada_door_widths",
+      "description": "All doors ≥ 0.91m (ADA throughout)",
+      "type": "door_width",
+      "min_width": 0.91
+    }
+  ]
+}

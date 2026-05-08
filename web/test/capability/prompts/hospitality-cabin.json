@@ -1,0 +1,46 @@
+{
+  "id": "hospitality-cabin",
+  "category": "hospitality",
+  "prompt": "6m × 8m single-story cabin: bedroom + ensuite, kitchenette/living open plan, wraparound deck (1.5m wide), pitched roof with exposed beams.",
+  "min_pass_threshold": 0.6,
+  "expected_checks": [
+    {
+      "id": "footprint_width",
+      "description": "Core footprint X-span 6 ± 0.3m",
+      "type": "dimension",
+      "axis": "X",
+      "min": 5.7,
+      "max": 6.3
+    },
+    {
+      "id": "footprint_depth",
+      "description": "Core footprint Y-span 8 ± 0.3m",
+      "type": "dimension",
+      "axis": "Y",
+      "min": 7.7,
+      "max": 8.3
+    },
+    {
+      "id": "roof_present",
+      "description": "Roof element present",
+      "type": "presence",
+      "target": "IfcRoof"
+    },
+    {
+      "id": "bedroom_present",
+      "description": "Bedroom space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "bed",
+      "min": 1
+    },
+    {
+      "id": "deck_present",
+      "description": "Deck/terrace space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "deck",
+      "min": 1
+    }
+  ]
+}

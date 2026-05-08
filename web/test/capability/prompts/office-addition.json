@@ -1,0 +1,56 @@
+{
+  "id": "office-addition",
+  "category": "commercial",
+  "prompt": "Office addition: 8m × 6m new wing connected via 2m-wide covered breezeway to existing 1-story building; new wing has 2 offices + 1 conference + restroom.",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "addition_width",
+      "description": "Addition footprint X-span 8 ± 0.3m",
+      "type": "dimension",
+      "axis": "X",
+      "min": 7.7,
+      "max": 8.3
+    },
+    {
+      "id": "addition_depth",
+      "description": "Addition footprint Y-span 6 ± 0.3m",
+      "type": "dimension",
+      "axis": "Y",
+      "min": 5.7,
+      "max": 6.3
+    },
+    {
+      "id": "office_count",
+      "description": "At least 2 office spaces",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "office",
+      "min": 2
+    },
+    {
+      "id": "conference_present",
+      "description": "Conference room present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "conf",
+      "min": 1
+    },
+    {
+      "id": "restroom_present",
+      "description": "Restroom present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "rest",
+      "min": 1
+    },
+    {
+      "id": "breezeway_present",
+      "description": "Breezeway/connector space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "breeze",
+      "min": 1
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id": "office-25desk",
+  "category": "commercial",
+  "prompt": "Design a 25-desk office: open floor plan, 2 conference rooms (8 + 12 seats), kitchenette, 2 ADA restrooms, reception. 200m² gross.",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "gross_floor_area",
+      "description": "Gross floor area 200 ± 20m²",
+      "type": "area",
+      "min": 180,
+      "max": 220
+    },
+    {
+      "id": "conference_rooms",
+      "description": "At least 2 conference room spaces",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "conf",
+      "min": 2
+    },
+    {
+      "id": "restroom_count",
+      "description": "At least 2 restrooms",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "rest",
+      "min": 2
+    },
+    {
+      "id": "reception_present",
+      "description": "Reception space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "recept",
+      "min": 1
+    },
+    {
+      "id": "kitchenette_present",
+      "description": "Kitchenette space present",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "kitchen",
+      "min": 1
+    },
+    {
+      "id": "ada_door_widths",
+      "description": "All doors ≥ 0.91m wide (ADA)",
+      "type": "door_width",
+      "min_width": 0.91
+    }
+  ]
+}

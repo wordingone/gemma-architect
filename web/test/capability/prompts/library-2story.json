@@ -1,0 +1,47 @@
+{
+  "id": "library-2story",
+  "category": "civic",
+  "prompt": "Design a 2-story library: ground floor stacks + reading + reference desk; 2nd floor study rooms (4 rooms, each 3m × 4m). 25m × 18m, 3.5m ceilings.",
+  "min_pass_threshold": 0.7,
+  "expected_checks": [
+    {
+      "id": "footprint_width",
+      "description": "Footprint X-span 25 ± 5%",
+      "type": "dimension",
+      "axis": "X",
+      "min": 23.75,
+      "max": 26.25
+    },
+    {
+      "id": "footprint_depth",
+      "description": "Footprint Y-span 18 ± 5%",
+      "type": "dimension",
+      "axis": "Y",
+      "min": 17.1,
+      "max": 18.9
+    },
+    {
+      "id": "floor_count",
+      "description": "2 building storeys",
+      "type": "count",
+      "target": "IfcBuildingStorey",
+      "min": 2,
+      "max": 2
+    },
+    {
+      "id": "study_rooms",
+      "description": "At least 4 study rooms on level 2",
+      "type": "count",
+      "target": "IfcSpace",
+      "tag_contains": "study",
+      "min": 4
+    },
+    {
+      "id": "ceiling_height",
+      "description": "Ceiling height ≈ 3.5m per floor",
+      "type": "z_extent",
+      "min": 6.5,
+      "max": 8.5
+    }
+  ]
+}
