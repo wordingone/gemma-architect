@@ -387,7 +387,10 @@
   kernel_op: translate
   args:
     - {name: target, type: any,     required: false}
-    - {name: vector, type: vector3, required: true}
+    - {name: vector, type: vector3, required: false}
+    - {name: x,      type: number,  required: false, unit: m, default: 0}
+    - {name: y,      type: number,  required: false, unit: m, default: 0}
+    - {name: z,      type: number,  required: false, unit: m, default: 0}
   topology_role: transform
   kg_predicates: []
   synonyms: [move, translate, m, shift]
