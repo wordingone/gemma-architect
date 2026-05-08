@@ -82,6 +82,12 @@ export function iconSVG(name: string, size = 16): string {
     case "detail":  return `<svg ${attr}><rect x="2" y="2" width="9" height="9" stroke-dasharray="2 1.5"/><circle cx="15" cy="15" r="6"/><path d="M10 10l5 5"/><path d="M13 15h4M15 13v4"/></svg>`;
     case "point":   return `<svg ${attr}><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>`;
     case "curve":   return `<svg ${attr}><path d="M3 18c4 0 4-12 9-12s5 12 9 12"/></svg>`;
+    case "aligned-dim":       return `<svg ${attr}><path d="M3 12h18"/><path d="M5 7v10M19 7v10"/><path d="M5 12l3-3M5 12l3 3M19 12l-3-3M19 12l-3 3" stroke-width="0.9"/></svg>`;
+    case "angular-dim":       return `<svg ${attr}><path d="M8 19V8l8 0"/><path d="M8 13a6 6 0 0 1 5.2-5.9"/></svg>`;
+    case "area-dim":          return `<svg ${attr}><rect x="4" y="5" width="16" height="14"/><path d="M7 9h10M7 13h10M7 17h4" stroke-width="0.9"/></svg>`;
+    case "volume-dim":        return `<svg ${attr}><path d="M4 16l7-3 7 3v-7l-7-4-7 4z"/><path d="M4 9l7 3 7-3M11 12v7"/></svg>`;
+    case "label":             return `<svg ${attr}><path d="M3 8h11l4 4-4 4H3z"/></svg>`;
+    case "transient-measure": return `<svg ${attr}><path d="M3 12h18" stroke-dasharray="3 2"/><path d="M5 8v8M19 8v8"/></svg>`;
     default:        return `<svg ${attr}><rect x="4" y="4" width="16" height="16"/></svg>`;
   }
 }

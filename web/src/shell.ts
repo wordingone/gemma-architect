@@ -110,18 +110,17 @@ const TOOL_GROUPS: ToolGroup[] = [
   { label: "SKETCH 2D", tools: ["Line", "Rect", "Circle", "Polygon", "Polyline", "Arc", "Spline"] },
   { label: "SOLID",     tools: ["Extrude", "Revolve", "Fillet", "Chamfer", "Boolean"] },
   { label: "ARCH",      tools: ["Wall", "Slab", "Column", "Stair", "Door", "Window"] },
-  { label: "MEASURE",   tools: ["Ruler", "Compass"] },
+  { label: "MEASURE",   tools: ["Ruler", "Compass", "Aligned-Dim", "Angular-Dim", "Area-Dim", "Volume-Dim", "Label", "Transient-Measure"] },
 ];
 
-const LAYOUT_RIBBON_TABS = ["COMPOSE", "ANNOTATE", "DRAW", "OUTPUT"] as const;
+const LAYOUT_RIBBON_TABS = ["RENDER", "ARCH", "COMP"] as const;
 type LayoutRibbonTab = typeof LAYOUT_RIBBON_TABS[number];
 
 const LAYOUT_TOOL_GROUPS: ToolGroup[] = [
   { label: "NAVIGATE",  tools: ["Select", "Pan", "Zoom"] },
   { label: "VIEWPORT",  tools: ["Viewport", "Frame", "Scale", "Align", "Detail"] },
-  { label: "ANNOTATE",  tools: ["Text", "Leader", "Callout"] },
   { label: "DRAW",      tools: ["Line", "Rect", "Circle"] },
-  { label: "DIMENSION", tools: ["Ruler", "Compass"] },
+  { label: "MEASURE",   tools: ["Ruler", "Compass", "Text", "Leader", "Callout", "Aligned-Dim", "Angular-Dim", "Area-Dim"] },
 ];
 
 type ModeDef = { key: string; num: string; label: string };
@@ -131,7 +130,7 @@ const MODES: ModeDef[] = [
   { key: "research", num: "03", label: "RESEARCH" },
 ];
 
-const RIBBON_TABS = ["MODEL", "DRAFT", "ANALYZE", "RENDER", "ANNOTATE", "SUBMIT"] as const;
+const RIBBON_TABS = ["RENDER", "ARCH", "COMP"] as const;
 type RibbonTab = typeof RIBBON_TABS[number];
 
 // Module-level refs used by setRibbonMode to swap ribbon content in-place.
@@ -155,7 +154,11 @@ function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab
         el.classList.toggle("active", active);
         el.setAttribute("aria-selected", active ? "true" : "false");
       });
-      dispatchSync("setViewContext", { tab: t });
+      if (t === "ARCH" || t === "COMP") {
+        window.dispatchEvent(new CustomEvent("ribbon:section-tab", { detail: { tab: t } }));
+      } else {
+        dispatchSync("setViewContext", { tab: t });
+      }
     });
     tabsEl.appendChild(tab);
   }
@@ -204,6 +207,9 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   if (mode === "layout") {
     fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, LAYOUT_RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);
+  } else if (mode === "research") {
+    fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
+    fillRibbonTools(_ribbonToolsEl, TOOL_GROUPS);
   } else {
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, TOOL_GROUPS);

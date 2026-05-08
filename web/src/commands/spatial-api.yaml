@@ -804,6 +804,42 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdDimAligned
+  kernel_op: dimAligned
+  args:
+    - {name: from,     type: point3, required: true}
+    - {name: to,       type: point3, required: true}
+    - {name: offset,   type: number, required: false, default: 0.5}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [aligned dim, aligned dimension, dim aligned, linear dimension]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdDimAngular
+  kernel_op: dimAngular
+  args:
+    - {name: vertex, type: point3, required: true}
+    - {name: from,   type: point3, required: true}
+    - {name: to,     type: point3, required: true}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [angular dim, angular dimension, dim angular, angle dimension]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdLabel
+  kernel_op: label
+  args:
+    - {name: text,     type: string, required: true}
+    - {name: target,   type: any,    required: false}
+    - {name: position, type: point3, required: false}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [label, annotate, tag, text label, callout label]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §13 IO
 # ============================================================

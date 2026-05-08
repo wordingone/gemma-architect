@@ -1371,6 +1371,7 @@ html[data-mode="night"] .paper-stage {
   border-bottom: 1px dashed var(--hairline);
 }
 .palette-section:last-child { border-bottom: none; }
+.palette-section--hidden { display: none; }
 .palette-btn {
   width: 36px; height: 32px;
   display: flex; align-items: center; justify-content: center;
@@ -1390,6 +1391,45 @@ html[data-mode="night"] .paper-stage {
   box-shadow: inset 2px 0 0 var(--sanguine);
 }
 .palette-btn svg { width: 18px; height: 18px; stroke-width: 1.25; }
+.phone-slider {
+  position: relative;
+  display: flex;
+  background: var(--paper-2, oklch(0.93 0.004 250));
+  border-radius: 4px;
+  padding: 2px;
+  margin: 4px 6px 2px;
+  user-select: none;
+}
+.phone-slider-thumb {
+  position: absolute;
+  top: 2px; bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  background: var(--paper, oklch(0.97 0.003 250));
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+.phone-slider-btn {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  font-family: var(--mono);
+  text-align: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-faint);
+  position: relative;
+  z-index: 1;
+  transition: color 0.15s;
+  border-radius: 2px;
+}
+.phone-slider-btn.active { color: var(--ink); }
+
 .palette-btn .corner {
   position: absolute;
   bottom: 2px; right: 2px;

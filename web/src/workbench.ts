@@ -13,6 +13,7 @@
 // keeps working without changes.
 
 import { iconSVG, axesGizmoSVG } from "./icons";
+import { buildPhoneSlider, type SliderTab } from "./phone-slider";
 import { generateGeometry, GenerateError } from "./ai-generate";
 import { ChatPanel } from "./chat-panel";
 import { compileDsl } from "./commands/dsl-eval";
@@ -78,7 +79,19 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "wall",    icon: "wall",    label: "Wall" },
     { id: "slab",    icon: "slab",    label: "Slab" },
     { id: "column",  icon: "column",  label: "Column" },
+  ]},
+  { tools: [
     { id: "stair",   icon: "stair",   label: "Stair" },
+    { id: "door",    icon: "door",    label: "Door" },
+    { id: "window",  icon: "window",  label: "Window" },
+  ]},
+  { tools: [
+    { id: "aligned-dim",       icon: "aligned-dim",       label: "Aligned Dim" },
+    { id: "angular-dim",       icon: "angular-dim",       label: "Angular Dim" },
+    { id: "area-dim",          icon: "area-dim",          label: "Area" },
+    { id: "volume-dim",        icon: "volume-dim",        label: "Volume" },
+    { id: "label",             icon: "label",             label: "Label" },
+    { id: "transient-measure", icon: "transient-measure", label: "Transient" },
   ]},
 ];
 
@@ -137,26 +150,57 @@ function el(tag: string, cls?: string, attrs?: Record<string, string>): HTMLElem
   return e;
 }
 
+// PALETTE_SECTIONS indices: 0=transform 1=sketch 2=solid 3=arch 4=comp 5=measure
+const ARCH_SECTION_IDX = 3;
+const COMP_SECTION_IDX = 4;
+
 function buildPalette(host: HTMLElement) {
   host.innerHTML = "";
-  for (const section of PALETTE_SECTIONS) {
+
+  let sliderSetTab: ((t: SliderTab) => void) | null = null;
+  const sectionEls: HTMLElement[] = [];
+
+  for (let i = 0; i < PALETTE_SECTIONS.length; i++) {
+    // Insert phone-slider before ARCH/COMP sections.
+    if (i === ARCH_SECTION_IDX) {
+      const { root: sliderRoot, setTab } = buildPhoneSlider({
+        initial: "ARCH",
+        onChange: (tab) => {
+          showSectionTab(tab);
+          window.dispatchEvent(new CustomEvent("ribbon:section-tab", { detail: { tab } }));
+        },
+      });
+      sliderSetTab = setTab;
+      host.appendChild(sliderRoot);
+    }
+
+    const section = PALETTE_SECTIONS[i];
     const sec = el("div", "palette-section");
+    if (i === COMP_SECTION_IDX) sec.classList.add("palette-section--hidden");
     for (const tool of section.tools) {
       const btn = el("button", "palette-btn", { type: "button", title: tool.label, "data-tool": tool.id });
       btn.innerHTML = iconSVG(tool.icon, 18) +
         `<span class="palette-tooltip">${tool.label}</span><span class="corner"></span>`;
-      // Palette button click drives app-state, which fans out to ribbon
-      // tool-btns and statusbar Tool cell via subscriptions in shell.ts.
-      // syncToolActiveClass (in app-state) drives the .active class on every
-      // [data-tool] element, including this palette-btn — no local toggling
-      // needed.
       btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
       sec.appendChild(btn);
     }
     host.appendChild(sec);
+    sectionEls[i] = sec;
   }
-  // Initial active class is driven by syncToolActiveClass in shell.ts via
-  // the activeTool subscription firing once on attach (default "select").
+
+  function showSectionTab(tab: SliderTab) {
+    const showArch = tab === "ARCH";
+    sectionEls[ARCH_SECTION_IDX]?.classList.toggle("palette-section--hidden", !showArch);
+    sectionEls[COMP_SECTION_IDX]?.classList.toggle("palette-section--hidden", showArch);
+  }
+
+  window.addEventListener("ribbon:section-tab", (rawEv) => {
+    const tab = (rawEv as CustomEvent<{ tab: SliderTab }>).detail?.tab;
+    if (tab === "ARCH" || tab === "COMP") {
+      showSectionTab(tab);
+      sliderSetTab?.(tab);
+    }
+  });
 }
 
 function buildSnapDock(): HTMLElement {
