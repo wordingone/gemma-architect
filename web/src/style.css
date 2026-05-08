@@ -2570,6 +2570,189 @@ html[data-mode="night"] .paper-stage {
   color: var(--gemma);
 }
 /* ============================================================
+   SKILL CANVAS (P5a)
+   ============================================================ */
+
+.skill-canvas-root {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  grid-template-columns: 110px 1fr;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--mono);
+}
+.skill-canvas-palette {
+  grid-row: 1;
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 4px;
+  border-right: 1px solid var(--hairline);
+  overflow-y: auto;
+  background: var(--glass-bg);
+}
+.skill-canvas-palette-title {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 0 4px 4px;
+  border-bottom: 1px dashed var(--hairline);
+  margin-bottom: 2px;
+}
+.skill-canvas-palette-item {
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  cursor: grab;
+  color: var(--ink-soft);
+  border: 1px solid transparent;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.skill-canvas-palette-item:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+  border-color: var(--hairline);
+}
+.skill-canvas-palette-item:active { cursor: grabbing; }
+
+.skill-canvas-viewport {
+  grid-row: 1;
+  grid-column: 2;
+  position: relative;
+  overflow: hidden;
+  background: var(--paper-2);
+  background-image:
+    radial-gradient(circle, var(--hairline) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.skill-canvas-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.skill-canvas-svg .sc-edge {
+  fill: none;
+  stroke: var(--gemma, #7c4dff);
+  stroke-width: 1.5;
+  pointer-events: stroke;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.skill-canvas-svg .sc-edge:hover { opacity: 1; stroke-width: 2; }
+.skill-canvas-svg .sc-edge-draft {
+  fill: none;
+  stroke: var(--ink-faint);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.skill-canvas-nodes { position: absolute; inset: 0; }
+.sc-node {
+  position: absolute;
+  width: 140px;
+  background: var(--panel-bg, var(--paper));
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+  cursor: move;
+  user-select: none;
+}
+.sc-node:hover { border-color: var(--gemma, #7c4dff); }
+.sc-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper-3);
+  border-radius: 6px 6px 0 0;
+}
+.sc-node-verb {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.sc-node-del {
+  background: transparent;
+  border: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 2px;
+}
+.sc-node-del:hover { background: var(--paper); color: var(--err, #c0392b); }
+.sc-node-ports {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+}
+.sc-port {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--gemma, #7c4dff);
+  background: var(--paper);
+  cursor: crosshair;
+}
+.sc-port-in  { cursor: default; }
+.sc-port-out { cursor: crosshair; }
+.sc-port:hover { background: var(--gemma, #7c4dff); }
+
+.skill-canvas-toolbar {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--hairline);
+  background: var(--glass-bg);
+}
+
+/* Nodes / Canvas sub-tab switcher inside SKILL NODES pane */
+.skill-nodes-view-switcher {
+  display: flex;
+  gap: 0;
+  padding: 0 0 6px;
+  border-bottom: 1px dashed var(--hairline);
+  margin-bottom: 4px;
+}
+.skill-nodes-view-btn {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 0;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.skill-nodes-view-btn:first-child { border-radius: 3px 0 0 3px; }
+.skill-nodes-view-btn:last-child  { border-radius: 0 3px 3px 0; border-left: none; }
+.skill-nodes-view-btn.active {
+  background: var(--paper-3);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ============================================================
    SKILL NODES TAB
    ============================================================ */
 

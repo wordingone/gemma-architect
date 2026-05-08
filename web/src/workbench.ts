@@ -30,6 +30,7 @@ import { getCreateSequence } from "./viewer/create-mode";
 import { prefetchModel } from "./agent/agent-harness";
 import { listSavedSkills, deleteSkill, type SavedSkill, type SkillStep } from "./skill-store";
 import { openSaveSkillModal } from "./skill-modal";
+import { SkillCanvas } from "./skill-canvas";
 
 // Push a line into the in-page CONSOLE dock tab. The tab body lives in
 // buildConsoleTabBody and re-implements its own local pushLine for the DSL
@@ -879,13 +880,60 @@ async function renderSkillNodes(): Promise<void> {
   }
 }
 
+let _canvasInstance: SkillCanvas | null = null;
+
 function buildNodesTabBody(): HTMLElement {
-  const wrap = el("div", "tab-body nodes-tab");
-  wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden; overflow-y:auto; padding:8px 10px; gap:4px;";
-  _nodesWrap = wrap;
-  _skillsWrap = wrap;
+  const outer = el("div", "tab-body nodes-tab");
+  outer.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden;";
+
+  // View switcher: LIST | CANVAS
+  const switcher = document.createElement("div");
+  switcher.className = "skill-nodes-view-switcher";
+  const listBtn   = document.createElement("button");
+  const canvasBtn = document.createElement("button");
+  listBtn.className   = "skill-nodes-view-btn active";
+  canvasBtn.className = "skill-nodes-view-btn";
+  listBtn.textContent   = "List";
+  canvasBtn.textContent = "Canvas";
+  switcher.appendChild(listBtn);
+  switcher.appendChild(canvasBtn);
+
+  // List pane
+  const listPane = document.createElement("div");
+  listPane.style.cssText = "flex:1; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:4px;";
+  _nodesWrap = listPane;
+  _skillsWrap = listPane;
+
+  // Canvas pane (hidden by default)
+  const canvasPane = document.createElement("div");
+  canvasPane.style.cssText = "flex:1; overflow:hidden; display:none;";
+
+  const activate = (view: "list" | "canvas") => {
+    if (view === "list") {
+      listBtn.classList.add("active");
+      canvasBtn.classList.remove("active");
+      listPane.style.display = "flex";
+      canvasPane.style.display = "none";
+    } else {
+      canvasBtn.classList.add("active");
+      listBtn.classList.remove("active");
+      listPane.style.display = "none";
+      canvasPane.style.display = "block";
+      if (!_canvasInstance) {
+        _canvasInstance = new SkillCanvas(canvasPane);
+      }
+    }
+  };
+
+  listBtn.addEventListener("click",   () => activate("list"));
+  canvasBtn.addEventListener("click", () => activate("canvas"));
+
+  outer.appendChild(switcher);
+  outer.appendChild(listPane);
+  outer.appendChild(canvasPane);
+
   void renderSkillNodes();
-  return wrap;
+  return outer;
 }
 
 // ── Live event history (HISTORY tab) ───────────────────────────────────────
