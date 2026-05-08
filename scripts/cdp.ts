@@ -13,6 +13,7 @@
 //   eval "<js>"                    arbitrary page.evaluate (escape hatch — file a ticket first)
 //   screenshot [--out path.png]    save canonical-tab screenshot to disk
 //   prompt <text>                  type into DSL console input + submit (Enter)
+//   chat <text>                    type into NL agent chat input + click SEND (agent mode)
 //   select-all                     Ctrl+A
 //   delete-selected                Delete keystroke (assumes something is selected)
 //
@@ -200,6 +201,24 @@ if (cmd === "inspect") {
   }, text);
   console.log(`prompt: ${text}`);
 
+} else if (cmd === "chat") {
+  const text = args.join(" ");
+  if (!text) die("usage: cdp chat <text>");
+  await page.evaluate((text: string) => {
+    const input = document.querySelector<HTMLTextAreaElement>(".chat-input");
+    if (!input) throw new Error("no .chat-input found — ensure app is in agent mode (not console mode)");
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const sendBtn = document.querySelector<HTMLButtonElement>(".chat-send-btn");
+    if (sendBtn && !sendBtn.disabled) {
+      sendBtn.click();
+    } else {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, ctrlKey: true }));
+      input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true, ctrlKey: true }));
+    }
+  }, text);
+  console.log(`chat: ${text}`);
+
 } else if (cmd === "select-all") {
   await dispatchKey("a", ["ctrl"]);
   console.log("select-all (Ctrl+A)");
@@ -211,7 +230,7 @@ if (cmd === "inspect") {
 } else {
   die(
     `unknown subcommand: ${cmd ?? "(none)"}\n` +
-    "available: inspect · click · click-text · click-at · key · eval · screenshot · prompt · select-all · delete-selected"
+    "available: inspect · click · click-text · click-at · key · eval · screenshot · prompt · chat · select-all · delete-selected"
   );
 }
 
