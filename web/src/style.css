@@ -2473,6 +2473,29 @@ html[data-mode="night"] .paper-stage {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.chat-image-preview {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-top: var(--lw-construction) solid var(--border);
+  background: var(--paper-2);
+}
+.chat-image-thumb {
+  width: 80px; height: 60px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+}
+.chat-image-remove {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 5px;
+}
+.chat-image-remove:hover { color: var(--ink); }
 .chat-compose {
   display: flex;
   flex-shrink: 0;
@@ -2480,6 +2503,10 @@ html[data-mode="night"] .paper-stage {
   padding: 6px 10px 8px;
   border-top: var(--lw-construction) solid var(--border);
   align-items: flex-end;
+}
+.chat-compose--drag {
+  background: color-mix(in srgb, var(--gemma) 8%, transparent);
+  border-top-color: var(--gemma);
 }
 .chat-input {
   flex: 1;

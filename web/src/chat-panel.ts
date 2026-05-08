@@ -9,7 +9,6 @@ import type { AgentDispatch, AgentResponse } from "./agent/agent-harness";
 import { invokeCommand } from "./commands/command-session";
 import type { Skill } from "./agent/skills-loader";
 import { findSkillsForPrompt } from "./agent/skills-loader";
-import { listSavedSkills } from "./skill-store";
 import { isSimplePlan } from "./plan";
 import { lastTurn } from "./telemetry";
 
@@ -48,10 +47,8 @@ export class ChatPanel {
   private _sendBtn!: HTMLButtonElement;
   private _perfStripEl!: HTMLElement;
   private _skills: Skill[] = [];
-  private _attachedImage: { dataUrl: string; name: string } | null = null;
-  private _imgPreviewEl!: HTMLElement;
-  private _imgThumbEl!: HTMLImageElement;
-  private _fileInput!: HTMLInputElement;
+  private _pendingImage: ImageBitmap | null = null;
+  private _imagePreviewEl!: HTMLElement;
 
   constructor(private _root: HTMLElement) {
     this._build();
@@ -74,26 +71,55 @@ export class ChatPanel {
       <div class="chat-starters"></div>
       <div class="chat-perf-strip" style="display:none"></div>
       <div class="chat-image-preview" style="display:none">
-        <img class="chat-image-thumb" alt="attached image">
-        <button class="chat-image-clear" type="button" title="Remove image">✕</button>
+        <canvas class="chat-image-thumb" width="80" height="60"></canvas>
+        <button class="chat-image-remove" type="button" title="Remove image">✕</button>
       </div>
       <div class="chat-compose">
         <textarea class="chat-input"
-          placeholder="Ask Gemma·Architect — create geometry, inspect the scene, explain commands…"
+          placeholder="Ask Gemma·Architect — paste or drop an image, then describe what to build…"
           rows="2"></textarea>
-        <button class="btn btn-sm chat-attach-btn" type="button" title="Attach image (or paste / drop)">📎</button>
         <button class="btn btn-accent btn-sm chat-send-btn" type="button">SEND</button>
       </div>
-      <input type="file" class="chat-file-input" accept="image/*" style="display:none">
     `;
     this._listEl      = this._root.querySelector(".chat-list")!;
     this._startersEl  = this._root.querySelector(".chat-starters")!;
     this._perfStripEl = this._root.querySelector(".chat-perf-strip")!;
+    this._imagePreviewEl = this._root.querySelector<HTMLElement>(".chat-image-preview")!;
     this._inputEl     = this._root.querySelector<HTMLTextAreaElement>(".chat-input")!;
     this._sendBtn     = this._root.querySelector<HTMLButtonElement>(".chat-send-btn")!;
-    this._imgPreviewEl = this._root.querySelector(".chat-image-preview")!;
-    this._imgThumbEl  = this._root.querySelector<HTMLImageElement>(".chat-image-thumb")!;
-    this._fileInput   = this._root.querySelector<HTMLInputElement>(".chat-file-input")!;
+
+    this._root.querySelector(".chat-image-remove")!.addEventListener("click", () => {
+      this._clearPendingImage();
+    });
+
+    // Image paste (Ctrl+V / ⌘+V with image on clipboard)
+    this._inputEl.addEventListener("paste", (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith("image/"));
+      if (!item) return;
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) void this._attachImageFile(file);
+    });
+
+    // Image drag-and-drop onto compose area
+    const compose = this._root.querySelector(".chat-compose")!;
+    compose.addEventListener("dragover", (e: Event) => {
+      const de = e as DragEvent;
+      if (Array.from(de.dataTransfer?.items ?? []).some((i) => i.type.startsWith("image/"))) {
+        de.preventDefault();
+        (compose as HTMLElement).classList.add("chat-compose--drag");
+      }
+    });
+    compose.addEventListener("dragleave", () => {
+      (compose as HTMLElement).classList.remove("chat-compose--drag");
+    });
+    compose.addEventListener("drop", (e: Event) => {
+      const de = e as DragEvent;
+      de.preventDefault();
+      (compose as HTMLElement).classList.remove("chat-compose--drag");
+      const file = Array.from(de.dataTransfer?.files ?? []).find((f) => f.type.startsWith("image/"));
+      if (file) void this._attachImageFile(file);
+    });
 
     window.addEventListener("debug:telemetry-toggle", () => {
       const visible = this._perfStripEl.style.display !== "none";
@@ -119,59 +145,32 @@ export class ChatPanel {
         void this._send();
       }
     });
-
-    // Image attach button → hidden file picker
-    this._root.querySelector(".chat-attach-btn")!.addEventListener("click", () => {
-      this._fileInput.click();
-    });
-    this._fileInput.addEventListener("change", () => {
-      const file = this._fileInput.files?.[0];
-      if (file) void this._loadImageFile(file);
-      this._fileInput.value = "";
-    });
-
-    // Clear attached image
-    this._root.querySelector(".chat-image-clear")!.addEventListener("click", () => {
-      this._clearImage();
-    });
-
-    // Paste: grab first image item from clipboard
-    this._inputEl.addEventListener("paste", (e: ClipboardEvent) => {
-      const items = Array.from(e.clipboardData?.items ?? []);
-      const imageItem = items.find((it) => it.type.startsWith("image/"));
-      if (imageItem) {
-        e.preventDefault();
-        const file = imageItem.getAsFile();
-        if (file) void this._loadImageFile(file);
-      }
-    });
-
-    // Drop image onto compose area
-    const compose = this._root.querySelector(".chat-compose")!;
-    compose.addEventListener("dragover", (e) => { e.preventDefault(); });
-    compose.addEventListener("drop", (e) => {
-      e.preventDefault();
-      const file = (e as DragEvent).dataTransfer?.files?.[0];
-      if (file?.type.startsWith("image/")) void this._loadImageFile(file);
-    });
   }
 
-  private async _loadImageFile(file: File): Promise<void> {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-    this._attachedImage = { dataUrl, name: file.name };
-    this._imgThumbEl.src = dataUrl;
-    this._imgPreviewEl.style.display = "flex";
+  private async _attachImageFile(file: File): Promise<void> {
+    const bitmap = await createImageBitmap(file);
+    if (this._pendingImage) this._pendingImage.close();
+    this._pendingImage = bitmap;
+
+    // Draw thumbnail
+    const canvas = this._imagePreviewEl.querySelector<HTMLCanvasElement>(".chat-image-thumb")!;
+    const ctx = canvas.getContext("2d")!;
+    // Scale to fit 80×60 preserving aspect ratio
+    const scale = Math.min(canvas.width / bitmap.width, canvas.height / bitmap.height);
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+
+    this._imagePreviewEl.style.display = "flex";
+    this._inputEl.placeholder = "Describe what to build from this image…";
+    this._inputEl.focus();
   }
 
-  private _clearImage(): void {
-    this._attachedImage = null;
-    this._imgThumbEl.src = "";
-    this._imgPreviewEl.style.display = "none";
+  private _clearPendingImage(): void {
+    if (this._pendingImage) { this._pendingImage.close(); this._pendingImage = null; }
+    this._imagePreviewEl.style.display = "none";
+    this._inputEl.placeholder = "Ask Gemma·Architect — paste or drop an image, then describe what to build…";
   }
 
   private async _send(): Promise<void> {
@@ -180,7 +179,12 @@ export class ChatPanel {
     this._inputEl.value = "";
     this._startersEl.style.display = "none";
 
-    this._pushMsg({ role: "user", content: text });
+    // Capture and clear pending image before async work
+    const pendingFrame = this._pendingImage;
+    this._clearPendingImage();
+
+    const userLabel = pendingFrame ? `🖼 ${text}` : text;
+    this._pushMsg({ role: "user", content: userLabel });
     this._history.push({ role: "user", content: text });
 
     this._sendBtn.disabled = true;
@@ -188,38 +192,15 @@ export class ChatPanel {
     const thinking = this._appendThinking();
 
     try {
-      // P5b: if text is a "run <skill name>" command, animate on canvas instead
-      // of routing through inference. Requires run/play/execute prefix so that
-      // prompts like "draw a wall" don't accidentally match a skill named "wall".
-      const savedSkills = await listSavedSkills().catch(() => []);
-      const lowerText = text.toLowerCase();
-      const RUN_PREFIX = /^(run|play|execute)\s+/i;
-      const matchedSaved = RUN_PREFIX.test(text)
-        ? savedSkills.find(sk => {
-            const after = lowerText.replace(RUN_PREFIX, "");
-            return after.startsWith(sk.name.toLowerCase());
-          })
-        : undefined;
-      if (matchedSaved) {
-        this._removeThinking(thinking);
-        window.dispatchEvent(new CustomEvent("skill:animate", { detail: { steps: matchedSaved.steps } }));
-        const msg = `Running skill "${matchedSaved.name}" on canvas…`;
-        this._pushMsg({ role: "assistant", content: msg });
-        this._history.push({ role: "assistant", content: msg });
-        return;
-      }
-
       const matchedSkills = this._skills.length > 0 ? findSkillsForPrompt(this._skills, text) : [];
       const skillsToPass = matchedSkills.length > 0 ? matchedSkills : this._skills;
-      const attachedImage = this._attachedImage;
-      this._clearImage(); // clear before await so UI resets immediately
       const resp = await runAgentTurn({
         prompt: text,
         history: this._history.slice(0, -1),
         skills: skillsToPass,
         skillsTotal: this._skills.length,
         maxNewTokens: estimateMaxTokens(text),
-        ...(attachedImage ? { userImage: attachedImage.dataUrl } : {}),
+        ...(pendingFrame ? { frames: [pendingFrame] } : {}),
       });
 
       this._removeThinking(thinking);
