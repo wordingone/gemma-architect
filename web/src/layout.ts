@@ -286,7 +286,7 @@ class LayoutController {
     // Re-fit whenever the stage changes size (covers mode-switch from display:none → flex).
     const stage = this.sheetEl.parentElement;
     if (stage && typeof ResizeObserver !== "undefined") {
-      this._ro = new ResizeObserver(() => this.fitToStage());
+      this._ro = new ResizeObserver(() => requestAnimationFrame(() => this.fitToStage()));
       this._ro.observe(stage);
     }
   }
