@@ -213,6 +213,9 @@ function appendArchCompSlider(tabsEl: HTMLElement) {
     },
   });
   tabsEl.appendChild(root);
+  // Sync palette on every (re-)mount — no-op at first paint (buildPalette not yet
+  // registered); on MODEL re-entry keeps slider+palette in sync.
+  window.dispatchEvent(new CustomEvent("ribbon:section-tab", { detail: { tab: "ARCH" } }));
 }
 
 export function setRibbonMode(mode: "model" | "layout" | "research") {
