@@ -386,7 +386,7 @@
 - canonical_name: SdMove
   kernel_op: translate
   args:
-    - {name: target, type: any,     required: true}
+    - {name: target, type: any,     required: false}
     - {name: vector, type: vector3, required: true}
   topology_role: transform
   kg_predicates: []
@@ -398,7 +398,7 @@
 - canonical_name: SdRotate
   kernel_op: rotate
   args:
-    - {name: target, type: any,     required: true}
+    - {name: target, type: any,     required: false}
     - {name: angle,  type: number,  required: true, unit: deg}
     - {name: axis,   type: vector3, required: false, default: [0, 0, 1]}
     - {name: pivot,  type: point3,  required: false, default: [0, 0, 0]}
@@ -411,7 +411,7 @@
 - canonical_name: SdScale
   kernel_op: scale
   args:
-    - {name: target, type: any,     required: true}
+    - {name: target, type: any,     required: false}
     - {name: factor, type: number_or_vector3, required: true}
     - {name: pivot,  type: point3,  required: false, default: [0, 0, 0]}
   topology_role: transform
