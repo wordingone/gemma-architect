@@ -166,6 +166,9 @@ function record(result: SurfaceResult) {
     const selectBtn = document.querySelector(".palette-btn[data-tool=select]") as HTMLElement | null;
     if (selectBtn) selectBtn.click();
     await new Promise(res => setTimeout(res, 80));
+    // Activate the INSPECT tab so .props-subtitle is rendered (it's lazily mounted).
+    const inspectTab = document.querySelector(".sb-tab[data-tab=inspect]") as HTMLElement | null;
+    if (inspectTab) { inspectTab.click(); await new Promise(res => setTimeout(res, 80)); }
     (window as any).__gemmaTest.events["viewer:select"] = 0;
     (window as any).__gemmaTest.events["viewer:select:uuid"] = null;
     const handler = (e: Event) => {
@@ -183,9 +186,13 @@ function record(result: SurfaceResult) {
     await new Promise(res => setTimeout(res, 300));
     const eventsHeard = (window as any).__gemmaTest.events["viewer:select"];
     const uuid        = (window as any).__gemmaTest.events["viewer:select:uuid"];
-    const passed      = eventsHeard > 0;
+    // DOM-level evidence: inspect panel subtitle must reflect the selection.
+    // .props-subtitle is lazily mounted — only present when inspect tab is active.
+    const inspectSubtitle = (document.querySelector(".props-subtitle") as HTMLElement | null)?.textContent?.trim() ?? "";
+    const inspectUpdated = inspectSubtitle !== "" && inspectSubtitle !== "no selection";
+    const passed = eventsHeard > 0 && inspectUpdated;
     window.removeEventListener("viewer:select", handler);
-    return { passed, evidence: { eventsHeard, uuid } };
+    return { passed, evidence: { eventsHeard, uuid, inspectSubtitle, inspectUpdated } };
   });
   record({ name: "selection-roundtrip", ...r as any });
 }
@@ -212,7 +219,9 @@ function record(result: SurfaceResult) {
     await new Promise(res => setTimeout(res, 300));
     const afterG = v.gizmos.map((g: any) => ({ mode: g.mode, attached: g.object !== null }));
     const anyAttached = afterG.some((g: any) => g.attached);
-    return { passed: anyAttached, evidence: { beforeG, afterG } };
+    const targetSelected = !!v.targetObject;
+    const passed = anyAttached && targetSelected;
+    return { passed, evidence: { beforeG, afterG, targetSelected } };
   });
   record({ name: "transform-gizmo-attach", ...r as any });
 }
@@ -295,6 +304,8 @@ function record(result: SurfaceResult) {
 }
 
 // --- Surface 8: console-verb-produces-output ---
+// Uses a valid wall command so we can assert geometry was created (gemma:run-ok event +
+// currentMesh.uuid change), not just that a parse-error message appeared.
 {
   await page.evaluate(async () => {
     const tab = document.querySelector("[data-tab=prompt]") as HTMLElement | null;
@@ -306,17 +317,31 @@ function record(result: SurfaceResult) {
   const r = await page.evaluate(async () => {
     const input = document.querySelector("#console-input") as HTMLInputElement | null;
     if (!input) return { passed: false, evidence: { reason: "no #console-input" } };
+    const v = (window as any).__viewer;
+    const beforeMeshUuid = v?.currentMesh?.uuid ?? null;
+    // Listen for gemma:run-ok — fired after worker returns AND setMesh() completes.
+    let runOkFired = false;
+    const runOkHandler = () => { runOkFired = true; };
+    window.addEventListener("gemma:run-ok", runOkHandler, { once: true });
     const before = document.querySelector("#console-history")?.children.length ?? 0;
-    input.value = "wall";
+    // Full wall command — compiles to replicad JS and creates geometry.
+    input.value = "wall (0 0) (4 0) height=3 thickness=0.2";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
     input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
-    await new Promise(res => setTimeout(res, 500));
+    // Poll for gemma:run-ok up to 5 s (WASM worker round-trip).
+    const deadline = Date.now() + 5000;
+    while (!runOkFired && Date.now() < deadline) {
+      await new Promise(res => setTimeout(res, 100));
+    }
+    window.removeEventListener("gemma:run-ok", runOkHandler);
+    const afterMeshUuid = v?.currentMesh?.uuid ?? null;
+    const meshChanged = afterMeshUuid !== null && afterMeshUuid !== beforeMeshUuid;
     const lines = Array.from(document.querySelectorAll("#console-history .console-line")).slice(before).map(l => l.textContent).join(" | ");
     const isUnknownVerb = /unknown verb/i.test(lines);
     const hasOutput = lines.length > 0;
-    const passed = hasOutput && !isUnknownVerb;
-    return { passed, evidence: { newLines: lines.slice(-300), isUnknownVerb, hasOutput } };
+    const passed = hasOutput && !isUnknownVerb && runOkFired && meshChanged;
+    return { passed, evidence: { newLines: lines.slice(-300), isUnknownVerb, hasOutput, runOkFired, beforeMeshUuid, afterMeshUuid, meshChanged } };
   });
   record({ name: "console-verb-produces-output", ...r as any });
 }

@@ -660,7 +660,7 @@ function buildConsoleInner(): HTMLElement {
         }
         const dr = dispatchSync(verb, dispArgs);
         pushLine(
-          dr.ok ? "ok" : "info",
+          dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
           `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
         );
       }
@@ -674,7 +674,7 @@ function buildConsoleInner(): HTMLElement {
         for (const d of c.dispatches) {
           const dr = dispatchSync(d.verb, d.args);
           pushLine(
-            dr.ok ? "ok" : "info",
+            dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
             `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
           );
         }
