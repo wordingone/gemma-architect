@@ -1322,7 +1322,7 @@ html[data-mode="night"] .paper-stage {
 
 .workbench {
   display: grid;
-  grid-template-columns: 44px 1fr 280px;
+  grid-template-columns: 80px 1fr 280px;
   min-height: 0;
   border-bottom: var(--lw-edge) solid var(--chrome-seam);
   background: transparent;
@@ -1364,10 +1364,11 @@ html[data-mode="night"] .paper-stage {
   padding: 4px 0;
 }
 .palette-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 4px 0;
+  display: grid;
+  grid-template-columns: repeat(2, 36px);
+  gap: 2px;
+  justify-content: center;
+  padding: 4px 2px;
   border-bottom: 1px dashed var(--hairline);
 }
 .palette-section:last-child { border-bottom: none; }
