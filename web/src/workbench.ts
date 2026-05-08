@@ -6,7 +6,7 @@
 //     .center-col    — viewport-area + dock-divider + dock
 //     .sidebar       — right rail, SCENE / INSPECT / ASSETS tabs + snap-dock
 //
-// The dock has 5 tabs (PROMPT / CONSOLE / NODES / PARAMETERS / HISTORY).
+// The dock has 4 tabs (PROMPT / SKILL NODES / PARAMETERS / HISTORY).
 // Existing prompt-pane content moves into the PROMPT tab body; param-panel
 // into PARAMETERS; scene-panel into the SCENE sidebar tab. The IDs remain
 // intact so main.ts wiring (run button, file picker, sample selector, etc.)
@@ -28,6 +28,8 @@ import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./viewer/selection-state";
 import { getCreateSequence } from "./viewer/create-mode";
 import { prefetchModel } from "./agent/agent-harness";
+import { listSavedSkills, deleteSkill, type SavedSkill, type SkillStep } from "./skill-store";
+import { openSaveSkillModal } from "./skill-modal";
 
 // Push a line into the in-page CONSOLE dock tab. The tab body lives in
 // buildConsoleTabBody and re-implements its own local pushLine for the DSL
@@ -114,7 +116,7 @@ const PALETTE_SECTIONS: PaletteSection[] = [
 type DockTab = { id: string; icon: string; label: string };
 const DOCK_TABS: DockTab[] = [
   { id: "prompt",     icon: "sparkle",  label: "CREATE" },
-  { id: "nodes",      icon: "graph",    label: "NODES" },
+  { id: "nodes",      icon: "graph",    label: "SKILL NODES" },
   { id: "parameters", icon: "sliders",  label: "PARAMETERS" },
   { id: "history",    icon: "history",  label: "HISTORY" },
 ];
@@ -752,7 +754,11 @@ function buildConsoleInner(): HTMLElement {
   return wrap;
 }
 
-// ── Live construction graph (NODES tab) ────────────────────────────────────
+// ── Live construction graph (SKILL NODES tab) ──────────────────────────────
+
+// Session dispatch log — parallel to _nodes, records actual verb+args for
+// skill capture. Cleared whenever the scene is cleared (gemma:run-ok resets).
+const _sessionSteps: SkillStep[] = [];
 
 interface NodeRecord { label: string; }
 const _nodes: NodeRecord[] = [];
@@ -804,11 +810,81 @@ function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+let _skillsWrap: HTMLElement | null = null;
+
+async function renderSkillNodes(): Promise<void> {
+  if (!_skillsWrap) return;
+  const saved = await listSavedSkills().catch(() => [] as SavedSkill[]);
+  _skillsWrap.innerHTML = "";
+
+  // Session steps header + Save button
+  const sessionHeader = document.createElement("div");
+  sessionHeader.className = "skill-nodes-session-header";
+  const stepCount = _sessionSteps.filter(s => /^(Ifc|Sd)/.test(s.verb)).length;
+  sessionHeader.innerHTML = `
+    <span class="skill-nodes-session-label">Session · ${stepCount} step${stepCount === 1 ? "" : "s"}</span>
+    <button class="btn btn-sm skill-nodes-save-btn" type="button" ${stepCount === 0 ? "disabled" : ""}>Save as skill</button>
+  `;
+  const saveBtn = sessionHeader.querySelector<HTMLButtonElement>(".skill-nodes-save-btn")!;
+  saveBtn.addEventListener("click", () => {
+    const steps = _sessionSteps.filter(s => /^(Ifc|Sd)/.test(s.verb));
+    openSaveSkillModal(steps);
+  });
+  _skillsWrap.appendChild(sessionHeader);
+
+  // Live session node list (current build chain)
+  const liveSection = document.createElement("div");
+  liveSection.className = "skill-nodes-live";
+  if (_nodes.length === 0) {
+    liveSection.innerHTML = `<div class="empty-hint">Empty — run a prompt to build a chain.</div>`;
+  } else {
+    liveSection.innerHTML = _nodes.map((n, i) => `
+      ${i > 0 ? `<div class="skill-nodes-arrow">↓</div>` : ""}
+      <div class="node-box" data-idx="${i}" title="${escHtml(n.label)}">${escHtml(n.label)}</div>
+    `).join("");
+  }
+  _skillsWrap.appendChild(liveSection);
+
+  // Saved skills section
+  if (saved.length > 0) {
+    const savedHeader = document.createElement("div");
+    savedHeader.className = "skill-nodes-saved-header";
+    savedHeader.textContent = `Saved skills (${saved.length})`;
+    _skillsWrap.appendChild(savedHeader);
+
+    for (const skill of saved) {
+      const card = document.createElement("div");
+      card.className = "skill-card";
+      card.innerHTML = `
+        <div class="skill-card-name">${escHtml(skill.name)}</div>
+        ${skill.description ? `<div class="skill-card-desc">${escHtml(skill.description)}</div>` : ""}
+        <div class="skill-card-meta">${skill.steps.length} step${skill.steps.length === 1 ? "" : "s"}</div>
+        <div class="skill-card-actions">
+          <button class="btn btn-sm skill-card-run" type="button">Run</button>
+          <button class="btn btn-sm skill-card-delete" type="button">Delete</button>
+        </div>
+      `;
+      card.querySelector<HTMLButtonElement>(".skill-card-run")!.addEventListener("click", async () => {
+        for (const step of skill.steps) {
+          dispatchSync(step.verb, step.args as DispatchArgs);
+          await new Promise(r => setTimeout(r, 50));
+        }
+      });
+      card.querySelector<HTMLButtonElement>(".skill-card-delete")!.addEventListener("click", async () => {
+        await deleteSkill(skill.id);
+        void renderSkillNodes();
+      });
+      _skillsWrap.appendChild(card);
+    }
+  }
+}
+
 function buildNodesTabBody(): HTMLElement {
   const wrap = el("div", "tab-body nodes-tab");
-  wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden;";
+  wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden; overflow-y:auto; padding:8px 10px; gap:4px;";
   _nodesWrap = wrap;
-  renderNodes();
+  _skillsWrap = wrap;
+  void renderSkillNodes();
   return wrap;
 }
 
@@ -883,6 +959,7 @@ function initLiveTabSubscriptions(): void {
     const ev = rawEv as CustomEvent<{ js: string; label: string }>;
     const { js, label } = ev.detail;
     _nodes.length = 0;
+    _sessionSteps.length = 0;
     _nodesLastSeqLen = 0;
     for (const lbl of jsToNodeLabels(js)) {
       _nodes.push({ label: lbl });
@@ -890,6 +967,7 @@ function initLiveTabSubscriptions(): void {
     appendHistory("generate", label);
     saveRecentEntry(label);
     renderNodes();
+    void renderSkillNodes();
     renderHistory();
   });
 
@@ -906,6 +984,7 @@ function initLiveTabSubscriptions(): void {
 
     if (GEOMETRY_OP_RE.test(id)) {
       _nodes.push({ label: commandToLabel(id, args as Record<string, unknown>) });
+      _sessionSteps.push({ verb: id, args: args as Record<string, unknown> });
     }
 
     const argStr = Object.entries(args as Record<string, unknown>)
@@ -916,7 +995,13 @@ function initLiveTabSubscriptions(): void {
     appendHistory(id, argStr);
 
     renderNodes();
+    void renderSkillNodes();
     renderHistory();
+  });
+
+  // Refresh skill nodes after a skill is saved (modal dispatches this event).
+  window.addEventListener("skillstore:saved", () => {
+    void renderSkillNodes();
   });
 
   window.addEventListener("viewer:select", (rawEv) => {

@@ -2569,6 +2569,214 @@ html[data-mode="night"] .paper-stage {
   border: var(--lw-construction) solid var(--gemma);
   color: var(--gemma);
 }
+/* ============================================================
+   SKILL NODES TAB
+   ============================================================ */
+
+.skill-nodes-session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 6px;
+  border-bottom: 1px dashed var(--hairline);
+  margin-bottom: 4px;
+}
+.skill-nodes-session-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+.skill-nodes-live { display: flex; flex-direction: column; gap: 0; margin-bottom: 8px; }
+.skill-nodes-arrow {
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.node-box {
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 2px 0;
+  background: var(--panel-bg);
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-box:hover { background: var(--paper-3); }
+.skill-nodes-saved-header {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  padding: 8px 0 4px;
+  border-top: 1px dashed var(--hairline);
+  margin-top: 4px;
+}
+.skill-card {
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  background: var(--panel-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.skill-card-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.skill-card-desc {
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+.skill-card-meta {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-faint);
+}
+.skill-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.skill-card-delete { color: var(--err, #c0392b); }
+
+/* ============================================================
+   SKILL SAVE MODAL
+   ============================================================ */
+
+.skill-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.skill-modal {
+  background: var(--paper);
+  border: var(--lw-edge) solid var(--chrome-seam);
+  border-radius: var(--r-md, 6px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+  width: min(480px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.skill-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+.skill-modal-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.skill-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+}
+.skill-modal-close:hover { background: var(--paper-3); color: var(--ink); }
+.skill-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+}
+.skill-modal-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.skill-modal-name,
+.skill-modal-desc {
+  background: var(--paper-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  outline: none;
+}
+.skill-modal-name:focus,
+.skill-modal-desc:focus { border-color: var(--gemma); }
+.skill-modal-steps-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding-bottom: 2px;
+}
+.skill-modal-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: 4px;
+}
+.skill-modal-step {
+  display: grid;
+  grid-template-columns: 20px 120px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.skill-modal-step:hover { background: var(--paper-2); }
+.skill-modal-step-num { color: var(--ink-faint); text-align: right; }
+.skill-modal-step-verb { color: var(--sanguine); font-weight: 600; }
+.skill-modal-step-args {
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skill-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--hairline);
+}
+
 .chat-thinking {
   opacity: 0.5;
 }
