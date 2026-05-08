@@ -5,9 +5,10 @@
 // each model turn; their verb names are shown as inline pills.
 
 import { runAgentTurn } from "./agent/agent-harness";
-import type { AgentDispatch } from "./agent/agent-harness";
+import type { AgentDispatch, AgentResponse } from "./agent/agent-harness";
 import { invokeCommand } from "./commands/command-session";
 import type { Skill } from "./agent/skills-loader";
+import { isSimplePlan } from "./plan";
 
 type Message = {
   role: "user" | "assistant";
@@ -99,34 +100,18 @@ export class ChatPanel {
     try {
       const resp = await runAgentTurn({
         prompt: text,
-        history: this._history.slice(0, -1), // history before this turn
+        history: this._history.slice(0, -1),
         skills: this._skills,
+        maxNewTokens: 1024,
       });
-
-      const fired: string[] = [];
-      const execSummaries: string[] = [];
-      for (const d of resp.dispatches) {
-        const out = await invokeCommand({
-          command: d.verb,
-          parameters: d.args,
-          metadata: { source: "agent" },
-        });
-        fired.push(out.status === "success" ? `${out.canonical}` : `${d.verb}(err)`);
-        execSummaries.push(out.summary);
-      }
-
-      const assistantText =
-        execSummaries.length > 0
-          ? execSummaries.join(" ")
-          : (resp.text.trim() || (fired.length > 0 ? `Dispatched: ${fired.join(", ")}` : "(no response)"));
 
       this._removeThinking(thinking);
-      this._pushMsg({
-        role: "assistant",
-        content: assistantText,
-        dispatches: resp.dispatches,
-      });
-      this._history.push({ role: "assistant", content: assistantText });
+
+      if (resp.dispatches.length === 0 || isSimplePlan(resp.dispatches)) {
+        await this._executeAndPush(resp);
+      } else {
+        this._pushPlanMsg(resp);
+      }
     } catch (e) {
       this._removeThinking(thinking);
       const err = e as Error;
@@ -135,6 +120,57 @@ export class ChatPanel {
       this._sendBtn.disabled = false;
       this._sendBtn.textContent = "SEND";
     }
+  }
+
+  private async _executeAndPush(resp: AgentResponse): Promise<void> {
+    const fired: string[] = [];
+    const execSummaries: string[] = [];
+    for (const d of resp.dispatches) {
+      const out = await invokeCommand({
+        command: d.verb,
+        parameters: d.args,
+        metadata: { source: "agent" },
+      });
+      fired.push(out.status === "success" ? `${out.canonical}` : `${d.verb}(err)`);
+      execSummaries.push(out.summary);
+    }
+    const assistantText =
+      execSummaries.length > 0
+        ? execSummaries.join(" ")
+        : (resp.text.trim() || (fired.length > 0 ? `Dispatched: ${fired.join(", ")}` : "(no response)"));
+    this._pushMsg({ role: "assistant", content: assistantText, dispatches: resp.dispatches });
+    this._history.push({ role: "assistant", content: assistantText });
+  }
+
+  private _pushPlanMsg(resp: AgentResponse): void {
+    const planText = resp.plan ?? resp.dispatches.map((d, i) => `${i + 1}. ${d.verb}`).join("\n");
+
+    const item = document.createElement("div");
+    item.className = "chat-msg chat-msg-assistant chat-plan-pending";
+
+    const planBlock = document.createElement("pre");
+    planBlock.className = "chat-plan-block";
+    planBlock.textContent = planText;
+    item.appendChild(planBlock);
+
+    const runBtn = document.createElement("button");
+    runBtn.className = "btn btn-accent btn-sm chat-plan-run-btn";
+    runBtn.textContent = "Run plan";
+    item.appendChild(runBtn);
+
+    runBtn.addEventListener("click", () => {
+      runBtn.disabled = true;
+      runBtn.textContent = "Executing…";
+      void this._executeAndPush(resp).then(() => {
+        planBlock.remove();
+        runBtn.remove();
+        item.classList.remove("chat-plan-pending");
+      });
+    });
+
+    this._messages.push({ role: "assistant", content: planText });
+    this._listEl.appendChild(item);
+    this._listEl.scrollTop = this._listEl.scrollHeight;
   }
 
   private _pushMsg(msg: Message): void {

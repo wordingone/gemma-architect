@@ -84,7 +84,7 @@ function extractAliases(yamlText: string): { canonical: string; synonyms: string
 
 function audit(): { hits: AuditHit[]; rowCount: number; tokenCount: number } {
   const repoRoot = resolve(import.meta.dir, "..");
-  const yamlPath = resolve(repoRoot, "web/src/spatial-api.yaml");
+  const yamlPath = resolve(repoRoot, "web/src/commands/spatial-api.yaml");
   const denylistPath = resolve(repoRoot, "web/src/trademark-denylist.json");
 
   const yamlText = readFileSync(yamlPath, "utf8");

@@ -31,11 +31,13 @@ export type AgentRequest = {
   maxTurns?: number;
   skills?: Skill[];
   model?: string;
+  maxNewTokens?: number; // default 512; pass 1024 for plan turns
 };
 
 export type AgentResponse = {
   dispatches: AgentDispatch[];
   text: string;
+  plan?: string; // extracted from <plan>…</plan> block
   raw?: unknown;
 };
 
@@ -185,108 +187,65 @@ function buildSceneContext(): string {
 
 
 const FEW_SHOT_EXAMPLES = `
-Examples of correct function calls (copy the function names EXACTLY — do not rename them):
+Examples — copy verb names EXACTLY; always emit <plan> before tool_call tags:
+
+User: draw a 5m wall, 0.2m thick, 2.8m tall
+Assistant:
+<plan>
+1. IfcWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8
+</plan>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
 
 User: create a box 6m wide, 4m deep, 3m tall
 Assistant:
-\`\`\`json
-{"verb":"SdBox","args":{"width":6,"depth":4,"height":3}}
-\`\`\`
+<plan>
+1. SdBox — width=6, depth=4, height=3
+</plan>
+<tool_call>{"command":"SdBox","parameters":{"width":6,"depth":4,"height":3},"metadata":{"source":"agent"}}</tool_call>
 
-User: draw a wall 4m long, 0.3m thick, 3m tall
+User: move the selected object 3m in X
 Assistant:
-\`\`\`json
-{"verb":"IfcWall","args":{"profile":[[0,0],[4,0]],"thickness":0.3,"height":3}}
-\`\`\`
-
-User: add a sphere radius 1
-Assistant:
-\`\`\`json
-{"verb":"SdSphere","args":{"radius":1}}
-\`\`\`
-
-User: add a cylinder, radius 0.5 height 2
-Assistant:
-\`\`\`json
-{"verb":"SdCylinder","args":{"radius":0.5,"height":2}}
-\`\`\`
-
-User: delete the selected object
-Assistant:
-\`\`\`json
-{"verb":"SdDelete","args":{}}
-\`\`\`
-
-User: undo that
-Assistant:
-\`\`\`json
-{"verb":"SdUndo","args":{}}
-\`\`\`
-
-User: redo
-Assistant:
-\`\`\`json
-{"verb":"SdRedo","args":{}}
-\`\`\`
-
-User: move the selected object 2m in the X direction
-Assistant:
-\`\`\`json
-{"verb":"SdMove","args":{"x":2,"y":0,"z":0}}
-\`\`\`
+<plan>
+1. SdMove — x=3, y=0, z=0
+</plan>
+<tool_call>{"command":"SdMove","parameters":{"x":3,"y":0,"z":0},"metadata":{"source":"agent"}}</tool_call>
 
 User: rotate 45 degrees around Z
 Assistant:
-\`\`\`json
-{"verb":"SdRotate","args":{"angle":45,"axis":[0,0,1]}}
-\`\`\`
+<plan>
+1. SdRotate — angle=45, axis=[0,0,1]
+</plan>
+<tool_call>{"command":"SdRotate","parameters":{"angle":45,"axis":[0,0,1]},"metadata":{"source":"agent"}}</tool_call>
 
-User: scale the selection by 2
+User: delete the selected object
 Assistant:
-\`\`\`json
-{"verb":"SdScale","args":{"factor":2}}
-\`\`\`
+<plan>
+1. SdDelete — selected
+</plan>
+<tool_call>{"command":"SdDelete","parameters":{},"metadata":{"source":"agent"}}</tool_call>
 
-User: select the object
+User: undo that
 Assistant:
-\`\`\`json
-{"verb":"SdSelect","args":{}}
-\`\`\`
-
-User: group the selected objects
-Assistant:
-\`\`\`json
-{"verb":"SdGroup","args":{}}
-\`\`\`
-
-User: import a file
-Assistant:
-\`\`\`json
-{"verb":"SdImport","args":{}}
-\`\`\`
-
-User: export as IFC
-Assistant:
-\`\`\`json
-{"verb":"SdExport","args":{"format":"ifc"}}
-\`\`\`
-
+<plan>
+1. SdUndo
+</plan>
+<tool_call>{"command":"SdUndo","parameters":{},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
-    "You are Gemma·Architect, a parametric CAD assistant embedded in a browser app.",
-    "When the user asks to create or modify geometry, emit function calls.",
-    'Preferred format: <tool_call>{"command":"VerbName","parameters":{...},"metadata":{"source":"agent"}}</tool_call>',
-    'Legacy format accepted: ```json\n{"verb":"VerbName","args":{...}}\n```',
-    "Emit one ```json block per function call. Multiple actions = multiple blocks in sequence.",
-    "CRITICAL: Use ONLY the exact function names listed below. Do not invent or rename functions — any function not in the list is silently rejected and nothing will be created.",
+    "You are Gemma·Architect, a parametric CAD assistant. Be direct — no preamble, no performative filler ('certainly!', 'I'll help you with that!', 'Great!' and similar are forbidden).",
+    "PLAN BEFORE DISPATCH: For every request that emits tool calls, first emit a compact <plan> block, then the tool_call blocks.\n<plan> format — EXACTLY this structure, no prose:\n<plan>\n1. VerbName — key_arg=value, …\n2. VerbName — key_arg=value\n</plan>",
+    "AMBIGUITY: Infer the most common default and proceed. If one critical parameter is missing, state your assumption on ONE line (e.g. 'Assuming 2.8 m ceiling height.') then execute. Do NOT ask multiple clarifying questions.",
+    'Preferred tool call format: <tool_call>{"command":"VerbName","parameters":{...},"metadata":{"source":"agent"}}</tool_call>',
+    'Fallback format: ```json\n{"verb":"VerbName","args":{...}}\n```',
+    "CRITICAL: Use ONLY the exact function names listed below. Any unknown name is silently dropped — nothing will be created.",
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
-    `Current scene (text): ${buildSceneContext()}`,
-    "Use the 'Current scene' text above to silently inform your responses (e.g. avoid creating duplicates, reference object counts). Do NOT proactively announce or describe scene contents. Do NOT take actions based on scene state alone. Only act on explicit user requests. If a viewport image is attached, describe it only when the user has explicitly asked you to look at or describe the scene.",
+    `Current scene: ${buildSceneContext()}`,
+    "Use scene info silently (avoid duplicates, reference object counts). Do NOT narrate scene contents unprompted. Act ONLY on explicit user requests. If a viewport image is attached, describe it only when explicitly asked.",
     summariseSkills(skills),
-    "For questions or summaries, respond with plain text only (no JSON blocks).",
+    "For questions (no geometry change): plain text only, ≤60 words, no JSON or tool_call blocks.",
   ].join("\n\n");
 }
 
@@ -414,15 +373,19 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   }) as string;
 
   // Encode: processor tokenizes text and encodes images (null when text-only).
+  const t0 = performance.now();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
+  const tProc = performance.now();
 
   // Generate — greedy decoding for deterministic function-call JSON.
   const outputs = await model.generate({
     ...inputs,
-    max_new_tokens: 1024,
+    max_new_tokens: req.maxNewTokens ?? 512,
     do_sample: false,
   });
+  const tGen = performance.now();
+  console.debug(`[agent] proc=${Math.round(tProc - t0)}ms gen=${Math.round(tGen - tProc)}ms tokens=${req.maxNewTokens ?? 512}`);
 
   // Decode only the newly generated tokens (strip the prompt prefix).
   const inputLength: number = inputs.input_ids?.dims?.[1] ?? 0;
@@ -430,6 +393,13 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const decoded: string[] = proc.batch_decode(generated, { skip_special_tokens: true });
   const responseText = decoded[0] ?? "";
 
-  const { dispatches, text } = parseDispatches(responseText);
-  return { dispatches, text: text || responseText, raw: outputs };
+  // Extract <plan> block before dispatch parsing.
+  let plan: string | undefined;
+  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
+    plan = inner.trim();
+    return "";
+  });
+
+  const { dispatches, text } = parseDispatches(afterPlan);
+  return { dispatches, text: text.trim() || responseText, plan, raw: outputs };
 }
