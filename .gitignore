@@ -43,3 +43,9 @@ CLAUDE.md
 
 # One-off browser AC scripts — run ad-hoc, not tracked or typechecked
 scripts/_ac-*.ts
+
+# git worktrees created by EnterWorktree / git worktree add
+.worktrees/
+
+# Bench download scratch dir
+.tmp-bench-downloads/

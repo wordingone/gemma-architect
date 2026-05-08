@@ -22,7 +22,8 @@
     "shared-browser:start": "powershell -File scripts/shared-browser/start.ps1",
     "shared-browser:stop": "powershell -File scripts/shared-browser/stop.ps1",
     "verify:cdp": "node --experimental-strip-types scripts/gemma-verify-cdp.ts",
-    "cdp": "node --experimental-strip-types scripts/cdp.ts"
+    "cdp": "node --experimental-strip-types scripts/cdp.ts",
+    "capability-bench": "bun scripts/capability-bench.ts"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
