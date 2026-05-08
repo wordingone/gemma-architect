@@ -21,8 +21,9 @@
 // are read from the JSON sidecar (typed) — keeping the parser dumb is a
 // deliberate scope limit.
 
-import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+// node:fs and node:path are used only inside loadSkills (Node.js / test context).
+// They are imported dynamically so the module is safe to bundle for the browser,
+// where loadSkills is never called.
 
 export type Skill = {
   name: string;
@@ -214,6 +215,10 @@ function defaultSkillsDir(): string {
 }
 
 export async function loadSkills(skillsDir?: string): Promise<Skill[]> {
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  const { readFile, readdir } = await import(/* @vite-ignore */ "node:fs/promises");
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  const { join } = await import(/* @vite-ignore */ "node:path");
   const dir = skillsDir ?? defaultSkillsDir();
   const entries = await readdir(dir, { withFileTypes: true });
   const skills: Skill[] = [];

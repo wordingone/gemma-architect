@@ -426,7 +426,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // Generate — greedy decoding for deterministic function-call JSON.
   const outputs = await model.generate({
     ...inputs,
-    max_new_tokens: req.maxNewTokens ?? 512,
+    max_new_tokens: req.maxNewTokens ?? 1024,
     do_sample: false,
   });
   const tGen = performance.now();

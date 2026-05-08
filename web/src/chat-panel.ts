@@ -31,7 +31,9 @@ function estimateMaxTokens(prompt: string): number {
   // Short informational queries rarely need more than 256 tokens.
   if (/\?$/.test(p) || /^(what|how|why|is|are|show|list|describe|explain)\b/.test(p)) return 256;
   // Multi-step design requests need headroom for plan + multiple tool_calls.
-  if (/\b(design|pavilion|room|building|house|complex|floor\s*plan|facade)\b/.test(p)) return 1024;
+  // Covers all 10 P8a benchmark prompt categories (fire-station→station,
+  // hospitality-cabin→cabin, walkup-4story→apartment, community-center→center/hall).
+  if (/\b(design|pavilion|room|building|house|complex|floor|facade|station|cabin|apartment|center|hall|clinic|library|residence|create|model)\b/.test(p)) return 1024;
   // Default: single geometry command fits in 512.
   return 512;
 }
