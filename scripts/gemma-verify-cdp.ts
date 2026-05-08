@@ -14,6 +14,32 @@
 //   bun scripts/gemma-verify-cdp.ts [--isolated]
 //
 //   --isolated : force a fresh browser launch even if cdp.json exists (CI mode)
+//
+// --- Gate confidence level (all_passed: true asserts / does NOT assert) ---
+//
+// ASSERTS:
+//   - Ribbon SVG icons render (no text-only buttons)
+//   - BLUEPRINT/VELLUM theme toggle propagates to scene panel colors
+//   - Palette tool active-class updates on click (select/move/rotate/scale)
+//   - Clicking viewport fires viewer:select with a uuid
+//   - G key attaches gizmos to the selected object
+//   - Delete key decrements scene.children count
+//   - All 65 DSL canonical verbs are recognised (no "unknown verb" output)
+//   - Typing "wall" in console produces output + fires gemma:run-ok + changes mesh uuid
+//   - Cmd-K opens cmdk dialog with visible input
+//   - LAYOUT tab shows A1-aspect paper sheet; click adds a panel
+//   - Ortho grid renders behind scene meshes (renderOrder=-1, depthWrite=false)
+//   - Cmdk dialog is closed (Escape) before subsequent surfaces run (teardown)
+//   - Dispatch errors in workbench.ts are thrown, not swallowed
+//
+// DOES NOT ASSERT:
+//   - Agent chat path (skills filter, telemetry, multi-turn history)
+//   - LoRA / remote endpoint latency or correctness
+//   - WebGPU ONNX model load or inference quality
+//   - Export correctness (IFC/GLB/GLTF byte validity)
+//   - Streaming output or token-by-token render
+//   - Undo/redo chain integrity beyond surface 6 delete
+//   - Multi-user or concurrent session behaviour
 
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
