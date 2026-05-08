@@ -261,8 +261,10 @@ registerHandler("SdCone", (args) => {
 });
 
 registerHandler("IfcWall", (args) => {
-  const profile = (args.profile as [number, number][]) ?? [[0, 0], [4, 0]];
-  const t = (args.thickness as number | undefined) ?? 0.3;
+  const rawProfile = args.profile as [number, number][] | undefined;
+  const wallLen = (args.length as number | undefined) ?? 4;
+  const profile: [number, number][] = rawProfile ?? [[0, 0], [wallLen, 0]];
+  const t = (args.thickness as number | undefined) ?? 0.2;
   const wallH = (args.height as number | undefined) ?? 3;
   // Compute total polyline length
   let len = 0;

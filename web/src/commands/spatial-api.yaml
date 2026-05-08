@@ -454,9 +454,10 @@
   ifc4_class: IfcWall
   kernel_op: makeWall
   args:
-    - {name: profile,   type: polyline, required: true}
-    - {name: thickness, type: number,   required: true, unit: m, default: 0.2}
-    - {name: height,    type: number,   required: true, unit: m, default: 3.0}
+    - {name: profile,   type: polyline, required: false}
+    - {name: length,    type: number,   required: false, unit: m, default: 4.0}
+    - {name: thickness, type: number,   required: false, unit: m, default: 0.2}
+    - {name: height,    type: number,   required: false, unit: m, default: 3.0}
   topology_role: host
   kg_predicates: [hosts, containedIn, bounds]
   synonyms: [wall, makewall, drawwall, w]

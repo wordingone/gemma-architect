@@ -220,6 +220,26 @@ describe("Dispatch + validation", () => {
   });
 });
 
+describe("IfcWall optional-profile regression (#81)", () => {
+  beforeEach(() => {
+    unregisterHandler("IfcWall");
+  });
+
+  test("dispatch succeeds with only {length, thickness, height} — no profile", async () => {
+    registerHandler("IfcWall", (args) => ({ got: args }));
+    const r = await dispatch("IfcWall", { length: 5, thickness: 0.2, height: 2.8 });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.canonical).toBe("IfcWall");
+  });
+
+  test("dispatch succeeds with empty args — all args optional, no ArgValidationError", async () => {
+    registerHandler("IfcWall", () => "ok");
+    const r = await dispatch("IfcWall", {});
+    // All args optional: validation passes, handler is called, result is ok
+    if (!r.ok) expect(r.error).not.toBe("ArgValidationError");
+  });
+});
+
 describe("Bulk handler installation + coverage", () => {
   test("installDefaultHandlers covers every dictionary entry", () => {
     installDefaultHandlers();
