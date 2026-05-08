@@ -346,15 +346,19 @@ function record(result: SurfaceResult) {
 {
   await page.keyboard.press("Meta+k");
   await page.waitForTimeout(500);
-  const r = await page.evaluate(() => {
-    const input = document.querySelector(".cmdk-input, [data-cmdk-input]") as HTMLElement | null;
-    const visible = input ? input.getBoundingClientRect().height > 0 : false;
-    return { passed: !!input && visible, evidence: { inputFound: !!input, inputClass: input?.className, inputPH: (input as HTMLInputElement | null)?.placeholder, visible } };
-  });
-  record({ name: "cmdk-dialog-opens", ...r as any });
-  // Teardown: close any open dialog so subsequent surfaces start from a clean state.
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
+  let s9Result: { passed: boolean; evidence: Record<string, unknown> } = { passed: false, evidence: { reason: "evaluate threw" } };
+  try {
+    s9Result = await page.evaluate(() => {
+      const input = document.querySelector(".cmdk-input, [data-cmdk-input]") as HTMLElement | null;
+      const visible = input ? input.getBoundingClientRect().height > 0 : false;
+      return { passed: !!input && visible, evidence: { inputFound: !!input, inputClass: input?.className, inputPH: (input as HTMLInputElement | null)?.placeholder, visible } };
+    });
+  } finally {
+    // Always dismiss cmdk — even if evaluate threw — so later surfaces start clean.
+    try { await page.keyboard.press("Escape"); } catch { /* ignore if page navigated */ }
+    await page.waitForTimeout(300);
+  }
+  record({ name: "cmdk-dialog-opens", ...s9Result });
 }
 
 // --- Surface 10: layout-tab-functional ---

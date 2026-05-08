@@ -144,10 +144,14 @@ function open() {
   panelEl = document.createElement("div");
   panelEl.className = "cmdk";
   panelEl.innerHTML = `
-    <input class="cmdk-input" placeholder="type to search commands · or describe what you want…" />
+    <div class="cmdk-header">
+      <input class="cmdk-input" placeholder="type to search commands · or describe what you want…" />
+      <button class="cmdk-close" aria-label="Close" type="button">✕</button>
+    </div>
     <div class="cmdk-list"></div>
   `;
   document.body.appendChild(panelEl);
+  panelEl.querySelector(".cmdk-close")?.addEventListener("click", close);
 
   inputEl = panelEl.querySelector(".cmdk-input") as HTMLInputElement;
   listEl = panelEl.querySelector(".cmdk-list") as HTMLDivElement;

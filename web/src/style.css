@@ -3075,8 +3075,12 @@ html[data-mode="night"] .paper-stage {
   z-index: 40;
   overflow: hidden;
 }
+.cmdk-header {
+  display: flex; align-items: center;
+  border-bottom: 1px solid var(--hairline);
+}
 .cmdk-input {
-  width: 100%;
+  flex: 1;
   border: none;
   outline: none;
   background: transparent;
@@ -3084,8 +3088,16 @@ html[data-mode="night"] .paper-stage {
   font-family: var(--sans);
   font-size: 16px;
   color: var(--ink);
-  border-bottom: 1px solid var(--hairline);
 }
+.cmdk-close {
+  flex-shrink: 0;
+  appearance: none; border: none; background: transparent;
+  padding: 14px 14px;
+  font-size: 13px; line-height: 1;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.cmdk-close:hover { color: var(--ink); }
 .cmdk-input::placeholder { color: var(--ink-faint); }
 .cmdk-list { max-height: 380px; overflow-y: auto; }
 .cmdk-group-label {
@@ -3121,8 +3133,8 @@ html[data-mode="night"] .paper-stage {
 
 .cmdk-backdrop {
   position: fixed; inset: 0;
-  background: oklch(0.95 0.01 80 / 0.5);
-  backdrop-filter: blur(2px);
+  background: oklch(0.15 0.01 250 / 0.25);
+  backdrop-filter: blur(1px);
   z-index: 35;
 }
 
