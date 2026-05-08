@@ -1557,38 +1557,20 @@ html[data-mode="night"] .paper-stage {
   overflow: hidden;
 }
 
-/* ── Render mode selector (#95 P3) ───────────────────────────────────────── */
-.rm-selector {
-  position: absolute;
-  top: 8px; right: 8px;
-  z-index: 20;
-  font-family: var(--mono);
-  font-size: 10px;
-}
-.rm-toggle-btn {
-  background: var(--paper-2);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-sm);
-  color: var(--ink-soft);
-  padding: 3px 7px;
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-.rm-toggle-btn:hover { background: var(--paper-3); color: var(--ink); }
-.rm-dropdown {
-  position: absolute;
-  top: calc(100% + 4px); right: 0;
+/* ── Render mode popover (#95 P3 / #117 redesign) ────────────────────────── */
+.rm-popover {
+  position: fixed;
+  z-index: 200;
   background: var(--panel-bg);
   border: 1px solid var(--hairline);
   border-radius: var(--r);
   box-shadow: 0 4px 12px rgba(0,0,0,0.18);
-  min-width: 120px;
+  min-width: 130px;
   overflow: hidden;
+  font-family: var(--mono);
+  font-size: 10px;
 }
-.rm-dropdown--hidden { display: none; }
+.rm-popover--hidden { display: none; }
 .rm-mode-list { padding: 4px 0; }
 .rm-mode-item {
   display: flex; align-items: center; gap: 6px;
@@ -1625,9 +1607,10 @@ html[data-mode="night"] .paper-stage {
   color: var(--ink-faint);
   font-family: var(--mono);
   font-size: 9px;
-  padding: 2px 5px;
+  padding: 2px 6px;
   cursor: pointer;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 .rm-lt-btn:hover, .rm-lw-btn:hover { background: var(--paper-3); color: var(--ink); }
 .rm-lt-btn--active, .rm-lw-btn--active {

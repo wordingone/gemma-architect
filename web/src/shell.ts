@@ -1,5 +1,6 @@
 import { iconSVG } from "./icons.js";
 import { dispatchSync } from "./commands/dispatch.js";
+import { buildPhoneSlider } from "./phone-slider.js";
 
 // Shell chrome — design-handoff #171.
 //
@@ -154,7 +155,11 @@ function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab
         el.classList.toggle("active", active);
         el.setAttribute("aria-selected", active ? "true" : "false");
       });
-      dispatchSync("setViewContext", { tab: t });
+      if (t === "RENDER") {
+        window.dispatchEvent(new CustomEvent("render-mode-toggle", { detail: { rect: tab.getBoundingClientRect() } }));
+      } else {
+        dispatchSync("setViewContext", { tab: t });
+      }
     });
     tabsEl.appendChild(tab);
   }
@@ -198,6 +203,17 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
   }
 }
 
+// Append the ARCH|COMP toggle into the ribbon tabs strip (MODEL mode only).
+function appendArchCompSlider(tabsEl: HTMLElement) {
+  const { root } = buildPhoneSlider({
+    initial: "ARCH",
+    onChange: (tab) => {
+      window.dispatchEvent(new CustomEvent("ribbon:section-tab", { detail: { tab } }));
+    },
+  });
+  tabsEl.appendChild(root);
+}
+
 export function setRibbonMode(mode: "model" | "layout" | "research") {
   if (!_ribbonTabsEl || !_ribbonToolsEl) return;
   if (mode === "layout") {
@@ -209,6 +225,7 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   } else {
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, TOOL_GROUPS);
+    appendArchCompSlider(_ribbonTabsEl);
   }
 }
 
@@ -447,6 +464,7 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
   // Fill with model ribbon content initially.
   fillRibbonTabs(tabsEl, RIBBON_TABS, RIBBON_TABS[0]);
   fillRibbonTools(toolsEl, TOOL_GROUPS);
+  appendArchCompSlider(tabsEl);
 
   // .ribbon-right — quick actions (palette + export + viewport split).
   const rightEl = document.createElement("div");

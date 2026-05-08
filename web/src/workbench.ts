@@ -13,7 +13,6 @@
 // keeps working without changes.
 
 import { iconSVG, axesGizmoSVG } from "./icons";
-import { buildPhoneSlider, type SliderTab } from "./phone-slider";
 import {
   setRenderMode, setLineType, setLineWeight, getRenderMode, getLineType, getLineWeight,
   type RenderMode, type LineType, type LineWeight,
@@ -174,23 +173,9 @@ const COMP_SECTION_IDX = 4;
 function buildPalette(host: HTMLElement) {
   host.innerHTML = "";
 
-  let sliderSetTab: ((t: SliderTab) => void) | null = null;
   const sectionEls: HTMLElement[] = [];
 
   for (let i = 0; i < PALETTE_SECTIONS.length; i++) {
-    // Insert phone-slider before ARCH/COMP sections.
-    if (i === ARCH_SECTION_IDX) {
-      const { root: sliderRoot, setTab } = buildPhoneSlider({
-        initial: "ARCH",
-        onChange: (tab) => {
-          showSectionTab(tab);
-          window.dispatchEvent(new CustomEvent("ribbon:section-tab", { detail: { tab } }));
-        },
-      });
-      sliderSetTab = setTab;
-      host.appendChild(sliderRoot);
-    }
-
     const section = PALETTE_SECTIONS[i];
     const sec = el("div", "palette-section");
     if (i === COMP_SECTION_IDX) sec.classList.add("palette-section--hidden");
@@ -205,17 +190,16 @@ function buildPalette(host: HTMLElement) {
     sectionEls[i] = sec;
   }
 
-  function showSectionTab(tab: SliderTab) {
+  function showSectionTab(tab: "ARCH" | "COMP") {
     const showArch = tab === "ARCH";
     sectionEls[ARCH_SECTION_IDX]?.classList.toggle("palette-section--hidden", !showArch);
     sectionEls[COMP_SECTION_IDX]?.classList.toggle("palette-section--hidden", showArch);
   }
 
   window.addEventListener("ribbon:section-tab", (rawEv) => {
-    const tab = (rawEv as CustomEvent<{ tab: SliderTab }>).detail?.tab;
+    const tab = (rawEv as CustomEvent<{ tab: string }>).detail?.tab;
     if (tab === "ARCH" || tab === "COMP") {
-      showSectionTab(tab);
-      sliderSetTab?.(tab);
+      showSectionTab(tab as "ARCH" | "COMP");
     }
   });
 }
@@ -1030,32 +1014,31 @@ function wireDockResize() {
   });
 }
 
-function buildRenderModeSelector(host: HTMLElement): void {
+function initRenderModePopover(): void {
   const MODES: RenderMode[] = ["shaded", "wireframe", "ghosted", "realistic", "technical"];
   const LINE_TYPES: LineType[] = ["solid", "dashed", "hidden", "centerline", "gridline", "dotted"];
   const LINE_WEIGHTS: LineWeight[] = ["thin", "medium", "thick"];
 
-  const wrap = el("div", "rm-selector");
-  const btn  = el("button", "rm-toggle-btn", { type: "button", title: "Render mode" });
-  const drop = el("div", "rm-dropdown rm-dropdown--hidden");
-  let open = false;
+  // Fixed-position popover appended to body — triggered by RENDER ribbon tab.
+  const popover = el("div", "rm-popover rm-popover--hidden");
+  document.body.appendChild(popover);
 
   // Mode list rows.
   const modeList = el("div", "rm-mode-list");
   for (const m of MODES) {
     const item = el("div", "rm-mode-item", { "data-mode": m });
     item.innerHTML = `<span class="rm-check">✓</span><span class="rm-label">${m.charAt(0).toUpperCase() + m.slice(1)}</span>`;
-    item.addEventListener("click", () => { setRenderMode(m); closeDrop(); });
+    item.addEventListener("click", () => { setRenderMode(m); closePopover(); });
     modeList.appendChild(item);
   }
-  drop.appendChild(modeList);
+  popover.appendChild(modeList);
 
   // Line type / weight sub-panel (shown only when TECHNICAL).
   const linePicker = el("div", "rm-line-picker rm-line-picker--hidden");
   const ltRow = el("div", "rm-lt-row");
   for (const lt of LINE_TYPES) {
     const b = el("button", "rm-lt-btn", { type: "button", "data-lt": lt, title: lt });
-    b.textContent = lt.slice(0, 3).toUpperCase();
+    b.textContent = lt.charAt(0).toUpperCase() + lt.slice(1);
     b.addEventListener("click", () => setLineType(lt));
     ltRow.appendChild(b);
   }
@@ -1068,18 +1051,19 @@ function buildRenderModeSelector(host: HTMLElement): void {
     lwRow.appendChild(b);
   }
   linePicker.appendChild(lwRow);
-  drop.appendChild(linePicker);
+  popover.appendChild(linePicker);
 
-  function closeDrop() {
+  let open = false;
+
+  function closePopover() {
     open = false;
-    drop.classList.add("rm-dropdown--hidden");
+    popover.classList.add("rm-popover--hidden");
   }
 
   function syncState() {
     const mode = getRenderMode();
     const lt   = getLineType();
     const lw   = getLineWeight();
-    btn.textContent = mode.toUpperCase();
     modeList.querySelectorAll<HTMLElement>(".rm-mode-item").forEach((item) => {
       item.classList.toggle("rm-mode-item--active", item.dataset.mode === mode);
     });
@@ -1092,17 +1076,23 @@ function buildRenderModeSelector(host: HTMLElement): void {
     });
   }
 
-  btn.addEventListener("click", (e) => {
-    e.stopPropagation();
+  // RENDER ribbon tab fires this event; position popover below the tab button.
+  window.addEventListener("render-mode-toggle", (rawEv) => {
+    const rect = (rawEv as CustomEvent<{ rect: DOMRect }>).detail?.rect;
     open = !open;
-    drop.classList.toggle("rm-dropdown--hidden", !open);
+    if (open && rect) {
+      popover.style.top  = `${rect.bottom + 4}px`;
+      popover.style.left = `${rect.left}px`;
+      popover.classList.remove("rm-popover--hidden");
+    } else {
+      closePopover();
+    }
   });
-  document.addEventListener("click", closeDrop);
+  document.addEventListener("click", (e) => {
+    if (open && !popover.contains(e.target as Node)) closePopover();
+  });
   window.addEventListener("render-mode-changed", () => syncState());
 
-  wrap.appendChild(btn);
-  wrap.appendChild(drop);
-  host.appendChild(wrap);
   syncState();
 }
 
@@ -1124,8 +1114,7 @@ export function buildWorkbench() {
   if (dockTabsHost && dockBodyHost) buildDock(dockTabsHost, dockBodyHost, promptPane, paramPanel);
   if (axesHost) axesHost.innerHTML = axesGizmoSVG();
 
-  const viewportAreaHost = document.getElementById("viewport-area-host");
-  if (viewportAreaHost) buildRenderModeSelector(viewportAreaHost);
+  initRenderModePopover();
 
   wireDockResize();
 }
