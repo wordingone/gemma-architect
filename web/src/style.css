@@ -2416,6 +2416,17 @@ html[data-mode="night"] .paper-stage {
 .chat-starter-chip {
   cursor: pointer;
 }
+.chat-perf-strip {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  font: 10px/1.4 var(--font-mono, monospace);
+  color: var(--text-muted, #888);
+  background: var(--surface-1, transparent);
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .chat-compose {
   display: flex;
   flex-shrink: 0;

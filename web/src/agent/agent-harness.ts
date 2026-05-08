@@ -23,6 +23,7 @@ import { listHandlers } from "../commands/dispatch";
 import { snapshotAsText } from "../scene-kg";
 import { captureViewport } from "../viewport-capture";
 import type { Skill } from "./skills-loader";
+import { recordTurn } from "../telemetry";
 
 export type AgentDispatch = {
   verb: string;
@@ -35,6 +36,7 @@ export type AgentRequest = {
   frames?: ImageBitmap[];
   maxTurns?: number;
   skills?: Skill[];
+  skillsTotal?: number; // total registered skills before keyword filtering
   model?: string;
   maxNewTokens?: number; // default 512; pass 1024 for plan turns
 };
@@ -449,11 +451,29 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     do_sample: false,
   });
   const tGen = performance.now();
-  console.debug(`[agent] proc=${Math.round(tProc - t0)}ms gen=${Math.round(tGen - tProc)}ms tokens=${req.maxNewTokens ?? 512}`);
 
   // Decode only the newly generated tokens (strip the prompt prefix).
   const inputLength: number = inputs.input_ids?.dims?.[1] ?? 0;
   const generated = inputLength > 0 ? (outputs as any).slice(null, [inputLength, null]) : outputs;
+  const tokensOut: number = (generated as any)?.dims?.[1] ?? 0;
+  const prefillMs = tProc - t0;
+  const decodeMs = tGen - tProc;
+  const tgTps = decodeMs > 0 ? tokensOut / (decodeMs / 1000) : 0;
+  const ppTps = prefillMs > 0 ? inputLength / (prefillMs / 1000) : 0;
+  console.debug(`[agent] prefill=${Math.round(prefillMs)}ms decode=${Math.round(decodeMs)}ms in=${inputLength} out=${tokensOut} tg=${tgTps.toFixed(1)}t/s`);
+  recordTurn({
+    ts: Date.now(),
+    prefill_ms: prefillMs,
+    decode_ms: decodeMs,
+    tokens_in: inputLength,
+    tokens_out: tokensOut,
+    system_prompt_chars: buildSystemPrompt(req.skills).length,
+    skills_total: req.skillsTotal ?? req.skills?.length ?? 0,
+    skills_matched: req.skills?.length ?? 0,
+    tg_tps: tgTps,
+    pp_tps: ppTps,
+  });
+
   const decoded: string[] = proc.batch_decode(generated, { skip_special_tokens: true });
   const responseText = decoded[0] ?? "";
 

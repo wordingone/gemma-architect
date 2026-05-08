@@ -8,7 +8,9 @@ import { runAgentTurn } from "./agent/agent-harness";
 import type { AgentDispatch, AgentResponse } from "./agent/agent-harness";
 import { invokeCommand } from "./commands/command-session";
 import type { Skill } from "./agent/skills-loader";
+import { findSkillsForPrompt } from "./agent/skills-loader";
 import { isSimplePlan } from "./plan";
+import { lastTurn } from "./telemetry";
 
 type Message = {
   role: "user" | "assistant";
@@ -31,6 +33,7 @@ export class ChatPanel {
   private _startersEl!: HTMLElement;
   private _inputEl!: HTMLTextAreaElement;
   private _sendBtn!: HTMLButtonElement;
+  private _perfStripEl!: HTMLElement;
   private _skills: Skill[] = [];
 
   constructor(private _root: HTMLElement) {
@@ -52,6 +55,7 @@ export class ChatPanel {
     this._root.innerHTML = `
       <div class="chat-list"></div>
       <div class="chat-starters"></div>
+      <div class="chat-perf-strip" style="display:none"></div>
       <div class="chat-compose">
         <textarea class="chat-input"
           placeholder="Ask Gemma·Architect — create geometry, inspect the scene, explain commands…"
@@ -61,8 +65,15 @@ export class ChatPanel {
     `;
     this._listEl    = this._root.querySelector(".chat-list")!;
     this._startersEl = this._root.querySelector(".chat-starters")!;
+    this._perfStripEl = this._root.querySelector(".chat-perf-strip")!;
     this._inputEl   = this._root.querySelector<HTMLTextAreaElement>(".chat-input")!;
     this._sendBtn   = this._root.querySelector<HTMLButtonElement>(".chat-send-btn")!;
+
+    window.addEventListener("debug:telemetry-toggle", () => {
+      const visible = this._perfStripEl.style.display !== "none";
+      this._perfStripEl.style.display = visible ? "none" : "block";
+      if (!visible) this._updatePerfStrip();
+    });
 
     for (const s of STARTER_PROMPTS) {
       const chip = document.createElement("span");
@@ -98,14 +109,18 @@ export class ChatPanel {
     const thinking = this._appendThinking();
 
     try {
+      const matchedSkills = this._skills.length > 0 ? findSkillsForPrompt(this._skills, text) : [];
+      const skillsToPass = matchedSkills.length > 0 ? matchedSkills : this._skills;
       const resp = await runAgentTurn({
         prompt: text,
         history: this._history.slice(0, -1),
-        skills: this._skills,
+        skills: skillsToPass,
+        skillsTotal: this._skills.length,
         maxNewTokens: 1024,
       });
 
       this._removeThinking(thinking);
+      this._updatePerfStrip();
 
       if (resp.dispatches.length === 0 || isSimplePlan(resp.dispatches)) {
         await this._executeAndPush(resp);
@@ -120,6 +135,14 @@ export class ChatPanel {
       this._sendBtn.disabled = false;
       this._sendBtn.textContent = "SEND";
     }
+  }
+
+  private _updatePerfStrip(): void {
+    if (this._perfStripEl.style.display === "none") return;
+    const t = lastTurn();
+    if (!t) { this._perfStripEl.textContent = "no data"; return; }
+    this._perfStripEl.textContent =
+      `tg ${t.tg_tps.toFixed(1)} t/s · pp ${t.pp_tps.toFixed(0)} t/s · in ${t.tokens_in} · out ${t.tokens_out} · prefill ${Math.round(t.prefill_ms)}ms · decode ${Math.round(t.decode_ms)}ms`;
   }
 
   private async _executeAndPush(resp: AgentResponse): Promise<void> {
