@@ -14,6 +14,10 @@
 
 import { iconSVG, axesGizmoSVG } from "./icons";
 import { buildPhoneSlider, type SliderTab } from "./phone-slider";
+import {
+  setRenderMode, setLineType, setLineWeight, getRenderMode, getLineType, getLineWeight,
+  type RenderMode, type LineType, type LineWeight,
+} from "./render-modes";
 import { generateGeometry, GenerateError } from "./ai-generate";
 import { ChatPanel } from "./chat-panel";
 import { compileDsl } from "./commands/dsl-eval";
@@ -1026,6 +1030,82 @@ function wireDockResize() {
   });
 }
 
+function buildRenderModeSelector(host: HTMLElement): void {
+  const MODES: RenderMode[] = ["shaded", "wireframe", "ghosted", "realistic", "technical"];
+  const LINE_TYPES: LineType[] = ["solid", "dashed", "hidden", "centerline", "gridline", "dotted"];
+  const LINE_WEIGHTS: LineWeight[] = ["thin", "medium", "thick"];
+
+  const wrap = el("div", "rm-selector");
+  const btn  = el("button", "rm-toggle-btn", { type: "button", title: "Render mode" });
+  const drop = el("div", "rm-dropdown rm-dropdown--hidden");
+  let open = false;
+
+  // Mode list rows.
+  const modeList = el("div", "rm-mode-list");
+  for (const m of MODES) {
+    const item = el("div", "rm-mode-item", { "data-mode": m });
+    item.innerHTML = `<span class="rm-check">✓</span><span class="rm-label">${m.charAt(0).toUpperCase() + m.slice(1)}</span>`;
+    item.addEventListener("click", () => { setRenderMode(m); closeDrop(); });
+    modeList.appendChild(item);
+  }
+  drop.appendChild(modeList);
+
+  // Line type / weight sub-panel (shown only when TECHNICAL).
+  const linePicker = el("div", "rm-line-picker rm-line-picker--hidden");
+  const ltRow = el("div", "rm-lt-row");
+  for (const lt of LINE_TYPES) {
+    const b = el("button", "rm-lt-btn", { type: "button", "data-lt": lt, title: lt });
+    b.textContent = lt.slice(0, 3).toUpperCase();
+    b.addEventListener("click", () => setLineType(lt));
+    ltRow.appendChild(b);
+  }
+  linePicker.appendChild(ltRow);
+  const lwRow = el("div", "rm-lw-row");
+  for (const lw of LINE_WEIGHTS) {
+    const b = el("button", "rm-lw-btn", { type: "button", "data-lw": lw, title: lw });
+    b.textContent = lw.charAt(0).toUpperCase() + lw.slice(1);
+    b.addEventListener("click", () => setLineWeight(lw));
+    lwRow.appendChild(b);
+  }
+  linePicker.appendChild(lwRow);
+  drop.appendChild(linePicker);
+
+  function closeDrop() {
+    open = false;
+    drop.classList.add("rm-dropdown--hidden");
+  }
+
+  function syncState() {
+    const mode = getRenderMode();
+    const lt   = getLineType();
+    const lw   = getLineWeight();
+    btn.textContent = mode.toUpperCase();
+    modeList.querySelectorAll<HTMLElement>(".rm-mode-item").forEach((item) => {
+      item.classList.toggle("rm-mode-item--active", item.dataset.mode === mode);
+    });
+    linePicker.classList.toggle("rm-line-picker--hidden", mode !== "technical");
+    ltRow.querySelectorAll<HTMLElement>(".rm-lt-btn").forEach((b) => {
+      b.classList.toggle("rm-lt-btn--active", b.dataset.lt === lt);
+    });
+    lwRow.querySelectorAll<HTMLElement>(".rm-lw-btn").forEach((b) => {
+      b.classList.toggle("rm-lw-btn--active", b.dataset.lw === lw);
+    });
+  }
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    open = !open;
+    drop.classList.toggle("rm-dropdown--hidden", !open);
+  });
+  document.addEventListener("click", closeDrop);
+  window.addEventListener("render-mode-changed", () => syncState());
+
+  wrap.appendChild(btn);
+  wrap.appendChild(drop);
+  host.appendChild(wrap);
+  syncState();
+}
+
 export function buildWorkbench() {
   const paletteHost = document.getElementById("palette-host");
   const dockTabsHost = document.getElementById("dock-tabs-host");
@@ -1043,6 +1123,9 @@ export function buildWorkbench() {
   if (sidebarHost) buildSidebar(sidebarHost, scenePanel);
   if (dockTabsHost && dockBodyHost) buildDock(dockTabsHost, dockBodyHost, promptPane, paramPanel);
   if (axesHost) axesHost.innerHTML = axesGizmoSVG();
+
+  const viewportAreaHost = document.getElementById("viewport-area-host");
+  if (viewportAreaHost) buildRenderModeSelector(viewportAreaHost);
 
   wireDockResize();
 }

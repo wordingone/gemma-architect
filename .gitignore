@@ -40,3 +40,6 @@ CLAUDE.md
 # Browser automation user-data + cdp artifacts
 .playwright-mcp/
 .shared-browser/
+
+# One-off browser AC scripts — run ad-hoc, not tracked or typechecked
+scripts/_ac-*.ts
