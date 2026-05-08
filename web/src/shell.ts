@@ -149,13 +149,14 @@ function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab
     tab.setAttribute("aria-selected", isActive ? "true" : "false");
     if (isActive) tab.classList.add("active");
     tab.textContent = t;
-    tab.addEventListener("click", () => {
+    tab.addEventListener("click", (e) => {
       tabsEl.querySelectorAll<HTMLElement>(".ribbon-tab").forEach((el) => {
         const active = el === tab;
         el.classList.toggle("active", active);
         el.setAttribute("aria-selected", active ? "true" : "false");
       });
       if (t === "RENDER") {
+        e.stopPropagation();
         window.dispatchEvent(new CustomEvent("render-mode-toggle", { detail: { rect: tab.getBoundingClientRect() } }));
       } else {
         dispatchSync("setViewContext", { tab: t });
