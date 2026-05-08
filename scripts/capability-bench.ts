@@ -211,6 +211,34 @@ async function waitAgentDone(): Promise<void> {
   throw new Error(`Agent did not complete within ${AGENT_TIMEOUT_MS / 1000}s`);
 }
 
+async function captureViewportSnapshot(promptId: string, sha: string): Promise<string | null> {
+  try {
+    const bbox = await evaluate(`
+      (function() {
+        const el = document.querySelector('#viewport-2');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.left, y: r.top, width: r.width, height: r.height };
+      })()
+    `) as { x: number; y: number; width: number; height: number } | null;
+    if (!bbox || bbox.width < 1 || bbox.height < 1) return null;
+
+    const result = await cdp("Page.captureScreenshot", {
+      format: "png",
+      clip: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height, scale: 1 },
+    });
+
+    const snapshotsDir = join(REPO, "web/public/snapshots");
+    await mkdir(snapshotsDir, { recursive: true });
+    const outPath = join(snapshotsDir, `${promptId}-${sha}.png`);
+    await writeFile(outPath, Buffer.from(result.data as string, "base64"));
+    return outPath;
+  } catch (e) {
+    console.error("    snapshot error:", (e as Error).message);
+    return null;
+  }
+}
+
 async function exportIFC(): Promise<string> {
   // Clean download dir
   try {
@@ -493,6 +521,7 @@ async function main() {
     let error: string | null = null;
     let checkResults: CheckResult[] = [];
     let ifcPath: string | null = null;
+    let snapPath: string | null = null;
 
     try {
       // Clear geometry from previous run (no page reload — preserves GPU/ONNX state).
@@ -518,6 +547,9 @@ async function main() {
       const savedIFCPath = join(ifcsDir, `${p.id}-${sha}.ifc`);
       await copyFile(ifcPath, savedIFCPath);
       console.log(`  saved: ${savedIFCPath}`);
+
+      snapPath = await captureViewportSnapshot(p.id, sha);
+      if (snapPath) console.log(`  snapshot: ${snapPath}`);
 
       console.log("  scoring...");
       checkResults = await scoreIFC(ifcPath, p.expected_checks);
@@ -550,6 +582,7 @@ async function main() {
       elapsed_s: elapsed,
       error,
       check_details: checkResults,
+      snapshot: snapPath ?? null,
     });
   }
 
