@@ -33,8 +33,8 @@ export type AgentDispatch = {
 export type AgentRequest = {
   prompt: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
-  frames?: ImageBitmap[];
-  userImage?: string; // data URL of user-attached image (D1 multimodal)
+  frames?: ImageBitmap[];   // in-browser WebGPU path (RawImage)
+  userImage?: string;       // remote path — pre-encoded data URL from chat-panel
   maxTurns?: number;
   skills?: Skill[];
   skillsTotal?: number; // total registered skills before keyword filtering
@@ -355,17 +355,22 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const MAX_HISTORY_MSGS = 20;
   const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
 
-  const userMsgContent: unknown = req.userImage
+  // Build user content — OpenAI vision format when a pre-encoded image is present.
+  type TextPart = { type: "text"; text: string };
+  type ImageURLPart = { type: "image_url"; image_url: { url: string } };
+  type RemoteContent = string | Array<TextPart | ImageURLPart>;
+
+  const userContent: RemoteContent = req.userImage
     ? [
-        { type: "image_url", image_url: { url: req.userImage } },
-        { type: "text", text: req.prompt },
+        { type: "image_url", image_url: { url: req.userImage } } satisfies ImageURLPart,
+        { type: "text", text: req.prompt } satisfies TextPart,
       ]
     : req.prompt;
 
   const messages = [
     { role: "system" as const, content: buildSystemPrompt(req.skills) },
     ...trimmedHistory.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user" as const, content: userMsgContent },
+    { role: "user" as const, content: userContent },
   ];
 
   updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  REMOTE ·  ⟳`);

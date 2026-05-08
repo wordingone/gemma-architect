@@ -47,8 +47,6 @@ export class ChatPanel {
   private _sendBtn!: HTMLButtonElement;
   private _perfStripEl!: HTMLElement;
   private _skills: Skill[] = [];
-  private _pendingImage: ImageBitmap | null = null;
-  private _imagePreviewEl!: HTMLElement;
 
   constructor(private _root: HTMLElement) {
     this._build();
@@ -70,56 +68,18 @@ export class ChatPanel {
       <div class="chat-list"></div>
       <div class="chat-starters"></div>
       <div class="chat-perf-strip" style="display:none"></div>
-      <div class="chat-image-preview" style="display:none">
-        <canvas class="chat-image-thumb" width="80" height="60"></canvas>
-        <button class="chat-image-remove" type="button" title="Remove image">✕</button>
-      </div>
       <div class="chat-compose">
         <textarea class="chat-input"
-          placeholder="Ask Gemma·Architect — paste or drop an image, then describe what to build…"
+          placeholder="Ask Gemma·Architect — create geometry, inspect the scene, explain commands…"
           rows="2"></textarea>
         <button class="btn btn-accent btn-sm chat-send-btn" type="button">SEND</button>
       </div>
     `;
-    this._listEl      = this._root.querySelector(".chat-list")!;
-    this._startersEl  = this._root.querySelector(".chat-starters")!;
+    this._listEl    = this._root.querySelector(".chat-list")!;
+    this._startersEl = this._root.querySelector(".chat-starters")!;
     this._perfStripEl = this._root.querySelector(".chat-perf-strip")!;
-    this._imagePreviewEl = this._root.querySelector<HTMLElement>(".chat-image-preview")!;
-    this._inputEl     = this._root.querySelector<HTMLTextAreaElement>(".chat-input")!;
-    this._sendBtn     = this._root.querySelector<HTMLButtonElement>(".chat-send-btn")!;
-
-    this._root.querySelector(".chat-image-remove")!.addEventListener("click", () => {
-      this._clearPendingImage();
-    });
-
-    // Image paste (Ctrl+V / ⌘+V with image on clipboard)
-    this._inputEl.addEventListener("paste", (e: ClipboardEvent) => {
-      const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith("image/"));
-      if (!item) return;
-      e.preventDefault();
-      const file = item.getAsFile();
-      if (file) void this._attachImageFile(file);
-    });
-
-    // Image drag-and-drop onto compose area
-    const compose = this._root.querySelector(".chat-compose")!;
-    compose.addEventListener("dragover", (e: Event) => {
-      const de = e as DragEvent;
-      if (Array.from(de.dataTransfer?.items ?? []).some((i) => i.type.startsWith("image/"))) {
-        de.preventDefault();
-        (compose as HTMLElement).classList.add("chat-compose--drag");
-      }
-    });
-    compose.addEventListener("dragleave", () => {
-      (compose as HTMLElement).classList.remove("chat-compose--drag");
-    });
-    compose.addEventListener("drop", (e: Event) => {
-      const de = e as DragEvent;
-      de.preventDefault();
-      (compose as HTMLElement).classList.remove("chat-compose--drag");
-      const file = Array.from(de.dataTransfer?.files ?? []).find((f) => f.type.startsWith("image/"));
-      if (file) void this._attachImageFile(file);
-    });
+    this._inputEl   = this._root.querySelector<HTMLTextAreaElement>(".chat-input")!;
+    this._sendBtn   = this._root.querySelector<HTMLButtonElement>(".chat-send-btn")!;
 
     window.addEventListener("debug:telemetry-toggle", () => {
       const visible = this._perfStripEl.style.display !== "none";
@@ -147,44 +107,13 @@ export class ChatPanel {
     });
   }
 
-  private async _attachImageFile(file: File): Promise<void> {
-    const bitmap = await createImageBitmap(file);
-    if (this._pendingImage) this._pendingImage.close();
-    this._pendingImage = bitmap;
-
-    // Draw thumbnail
-    const canvas = this._imagePreviewEl.querySelector<HTMLCanvasElement>(".chat-image-thumb")!;
-    const ctx = canvas.getContext("2d")!;
-    // Scale to fit 80×60 preserving aspect ratio
-    const scale = Math.min(canvas.width / bitmap.width, canvas.height / bitmap.height);
-    const w = Math.round(bitmap.width * scale);
-    const h = Math.round(bitmap.height * scale);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
-
-    this._imagePreviewEl.style.display = "flex";
-    this._inputEl.placeholder = "Describe what to build from this image…";
-    this._inputEl.focus();
-  }
-
-  private _clearPendingImage(): void {
-    if (this._pendingImage) { this._pendingImage.close(); this._pendingImage = null; }
-    this._imagePreviewEl.style.display = "none";
-    this._inputEl.placeholder = "Ask Gemma·Architect — paste or drop an image, then describe what to build…";
-  }
-
   private async _send(): Promise<void> {
     const text = this._inputEl.value.trim();
     if (!text || this._sendBtn.disabled) return;
     this._inputEl.value = "";
     this._startersEl.style.display = "none";
 
-    // Capture and clear pending image before async work
-    const pendingFrame = this._pendingImage;
-    this._clearPendingImage();
-
-    const userLabel = pendingFrame ? `🖼 ${text}` : text;
-    this._pushMsg({ role: "user", content: userLabel });
+    this._pushMsg({ role: "user", content: text });
     this._history.push({ role: "user", content: text });
 
     this._sendBtn.disabled = true;
@@ -200,7 +129,6 @@ export class ChatPanel {
         skills: skillsToPass,
         skillsTotal: this._skills.length,
         maxNewTokens: estimateMaxTokens(text),
-        ...(pendingFrame ? { frames: [pendingFrame] } : {}),
       });
 
       this._removeThinking(thinking);
