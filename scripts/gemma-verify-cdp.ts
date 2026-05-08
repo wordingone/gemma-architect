@@ -98,8 +98,10 @@ if (attachedViaCDP) {
   }
   page = canonical;
   console.log(`Canonical tab: ${page.url()}`);
-  // Reload to wipe prior-run JS state without closing the tab
-  await page.reload({ waitUntil: "load", timeout: 30000 });
+  // Navigate explicitly to DEV_URL so the SHA recorded in the output
+  // matches the actual page being tested. page.reload() would re-fetch
+  // whatever URL the tab is on; goto() pins it to the verified endpoint.
+  await page.goto(DEV_URL, { waitUntil: "load", timeout: 30000 });
 } else {
   page = await context.newPage();
   await page.goto(DEV_URL, { waitUntil: "load", timeout: 30000 });
