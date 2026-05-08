@@ -1,0 +1,12 @@
+# requirements-capability.txt — P8 capability bench + P8d round-trip judge
+#
+# Install with: pip install -r requirements-capability.txt
+#
+# Used by:
+#   web/test/capability/judge.ts  (via Python subprocess for ifcopenshell round-trip)
+#   web/test/capability/baselines/ (Prong C baseline runners)
+#
+# ifcopenshell — canonical IFC parsing/manipulation library.
+# Provides programmatic access to IFC entity trees, property sets, geometry.
+# Used as a deterministic validation oracle alongside the LLM judge.
+ifcopenshell>=0.7.0
