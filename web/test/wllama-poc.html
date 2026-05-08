@@ -11,10 +11,12 @@
   Expected outcome: either WASM loads OK (Gemma 4 GGUF path works) or fails
   at the model load step (architecture not registered in WASM build).
 
-  Result: post t/s here once measurement completes.
-  GO/NO-GO decision: compare to in-browser WebGPU baseline (~12-18 t/s).
-  CPU WASM will be significantly slower — expected NO-GO for production,
-  useful as an offline fallback measurement.
+  Result (2026-05-08): NO-GO — wllama v2.4.0 IMPORT-FAIL.
+  esm.run CDN dynamic import fails in browser (CSP or network block);
+  status stays "IMPORT-FAIL" regardless of model file availability.
+  Even if import succeeded, CPU WASM would be far below WebGPU baseline (~12-18 t/s)
+  and there is no MTP drafter path (llama.cpp PR #22738 closed unmerged 2026-05-06).
+  Prong B definitively closed. Server-side MTP (Prong A, PR #106) is the only viable path.
 -->
 <html lang="en">
 <head>
