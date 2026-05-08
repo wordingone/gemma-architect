@@ -4,7 +4,12 @@
 // Uses Gemma4ForConditionalGeneration + AutoProcessor directly — the
 // "image-text-to-text" pipeline task is not supported in transformers.js 4.2.0.
 //
-// Load sequence:
+// Remote path (Prong A, issue #99):
+//   Set VITE_GEMMA_AGENT_URL=http://localhost:8088 to route runAgentTurn()
+//   through serve_lora.py instead of loading the ONNX model in-browser.
+//   When the env var is unset, the original in-browser WebGPU path is used.
+//
+// Load sequence (in-browser path):
 //   1. First call to runAgentTurn() triggers model download (~2GB, cached by browser).
 //   2. Badge element (#ai-model-badge) shows download progress then "LIVE".
 //   3. Subsequent calls skip loading and go straight to inference.
@@ -39,7 +44,11 @@ export type AgentResponse = {
   raw?: unknown;
 };
 
-// ---- Model loading --------------------------------------------------------
+// ---- Remote endpoint (VITE_GEMMA_AGENT_URL) --------------------------------
+
+const REMOTE_URL: string = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
+
+// ---- Model loading (in-browser path) ---------------------------------------
 
 const MODEL_ID = "onnx-community/gemma-4-E2B-it-ONNX";
 const BADGE_ID = "ai-model-badge";
@@ -360,9 +369,47 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
   return { dispatches, text: text.trim() };
 }
 
+// ---- Remote inference path (serve_lora.py) --------------------------------
+
+async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
+  const MAX_HISTORY_MSGS = 20;
+  const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+
+  const messages = [
+    { role: "system" as const, content: buildSystemPrompt(req.skills) },
+    ...trimmedHistory.map((m) => ({ role: m.role, content: m.content })),
+    { role: "user" as const, content: req.prompt },
+  ];
+
+  updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  REMOTE ·  ⟳`);
+
+  const resp = await fetch(`${REMOTE_URL}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, max_tokens: 1024, temperature: 0.1 }),
+  });
+  if (!resp.ok) throw new Error(`remote agent: HTTP ${resp.status} from ${REMOTE_URL}`);
+
+  const json = (await resp.json()) as {
+    choices: Array<{ message: { role: string; content: string } }>;
+    _latency_ms?: number;
+    _tps?: number;
+    _mtp_enabled?: boolean;
+  };
+
+  const content = json.choices[0]?.message?.content ?? "";
+  const tpsLabel = json._tps != null ? ` · ${json._tps.toFixed(0)} t/s` : "";
+  const mtpLabel = json._mtp_enabled ? " · MTP" : "";
+  updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  REMOTE${mtpLabel}${tpsLabel}`);
+
+  const { dispatches, text } = parseDispatches(content);
+  return { dispatches, text: text || content, raw: json };
+}
+
 // ---- Public entry point --------------------------------------------------
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
+  if (REMOTE_URL) return runRemoteAgentTurn(req);
   const { model, processor } = await getModel();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const proc = processor as any;
