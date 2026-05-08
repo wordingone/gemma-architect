@@ -118,8 +118,9 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
 
         // Probe WebGPU for silent OrtRun buffer corruption (#128/#133).
         // onnxruntime-web 1.26.0-dev + Chrome 147 regression: from_pretrained
-        // succeeds but GPU buffers can be invalid; error only surfaces at
-        // generate()-time. A 1-token probe here catches it before we cache.
+        // succeeds but GPU buffers can be invalid; error only surfaces mid-decode
+        // (buffer download path not exercised on a 1-token run). Use 20 tokens
+        // to force the iterative decode path that triggers the failure.
         if (device === "webgpu") {
           try {
             const probeText = (processor as any).tokenizer.apply_chat_template(
@@ -127,7 +128,7 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
               { tokenize: false, add_generation_prompt: true },
             ) as string;
             const probeIn = await (processor as any)(probeText);
-            await (model as any).generate({ ...probeIn, max_new_tokens: 1 });
+            await (model as any).generate({ ...probeIn, max_new_tokens: 20 });
           } catch (probeErr) {
             console.warn(
               "[agent-harness] WebGPU probe failed — OrtRun buffer invalid (#128); falling back to CPU.",
