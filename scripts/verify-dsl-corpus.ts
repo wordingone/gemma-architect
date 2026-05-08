@@ -9,7 +9,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { compileDsl } from "../web/src/dsl-eval.js";
+import { compileDsl } from "../web/src/commands/dsl-eval.js";
 import { execute } from "../src/generate/execute.js";
 
 const corpus = (await readFile("data/dsl-demo-corpus.jsonl", "utf8"))

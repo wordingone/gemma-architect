@@ -19,7 +19,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-import { compileDsl } from "../web/src/dsl-eval.js";
+import { compileDsl } from "../web/src/commands/dsl-eval.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(here, "..");

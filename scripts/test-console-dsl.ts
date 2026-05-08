@@ -1,7 +1,7 @@
 // Verify the DSL examples shown in the CONSOLE-tab placeholder compile cleanly.
 // If a future placeholder change drifts away from valid DSL, this catches it.
 
-import { compileDsl } from "../web/src/dsl-eval.js";
+import { compileDsl } from "../web/src/commands/dsl-eval.js";
 import { execute } from "../src/generate/execute.js";
 
 const placeholderExamples = [

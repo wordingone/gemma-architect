@@ -503,6 +503,7 @@ registerHandler("SdSpline", (args) => {
   const obj = new THREE.Line(polylineToGeom(tess), curveMat());
   obj.userData.kind = "spline";
   obj.userData.creator = "SdSpline";
+  obj.userData.controlPoints = pts3.map(p => new THREE.Vector3(p.x, p.y, p.z));
   viewer.addMesh(obj, "mesh");
   return { created: "spline", points: pts3.map(p => ptToArray(p)) };
 });
