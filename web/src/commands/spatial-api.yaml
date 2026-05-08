@@ -498,9 +498,10 @@
   ifc4_class: IfcBeam
   kernel_op: makeBeam
   args:
-    - {name: start,    type: point3, required: true}
-    - {name: end,      type: point3, required: true}
-    - {name: profile,  type: polyline, required: true}
+    - {name: start,   type: point3,  required: false}
+    - {name: end,     type: point3,  required: false}
+    - {name: profile, type: polyline, required: false}
+    - {name: size,    type: number,  required: false, unit: m, default: 0.2}
   topology_role: host
   kg_predicates: [supports, connectedTo]
   synonyms: [beam, joist, girder]
@@ -526,10 +527,10 @@
   ifc4_class: IfcDoor
   kernel_op: makeDoor
   args:
-    - {name: hostWall, type: solid,  required: true}
-    - {name: position, type: point3, required: true}
-    - {name: width,    type: number, required: true, unit: m, default: 0.9}
-    - {name: height,   type: number, required: true, unit: m, default: 2.1}
+    - {name: hostWall, type: solid,  required: false}
+    - {name: position, type: point3, required: false}
+    - {name: width,    type: number, required: false, unit: m, default: 0.9}
+    - {name: height,   type: number, required: false, unit: m, default: 2.1}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [door, doorway, opening]
@@ -540,10 +541,10 @@
   ifc4_class: IfcWindow
   kernel_op: makeWindow
   args:
-    - {name: hostWall, type: solid,  required: true}
-    - {name: position, type: point3, required: true}
-    - {name: width,    type: number, required: true, unit: m, default: 1.2}
-    - {name: height,   type: number, required: true, unit: m, default: 1.4}
+    - {name: hostWall, type: solid,  required: false}
+    - {name: position, type: point3, required: false}
+    - {name: width,    type: number, required: false, unit: m, default: 1.2}
+    - {name: height,   type: number, required: false, unit: m, default: 1.4}
     - {name: sillH,    type: number, required: false, unit: m, default: 0.9}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
@@ -574,6 +575,141 @@
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [space, room, zone]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcFoundation
+  ifc4_class: IfcFooting
+  kernel_op: makeFoundation
+  args:
+    - {name: position,  type: point3, required: false}
+    - {name: width,     type: number, required: false, unit: m, default: 6.0}
+    - {name: depth,     type: number, required: false, unit: m, default: 6.0}
+    - {name: thickness, type: number, required: false, unit: m, default: 0.5}
+  topology_role: host
+  kg_predicates: [supports, containedIn]
+  synonyms: [foundation, footing, pile cap, slab on grade, pad footing]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcCeiling
+  ifc4_class: IfcCovering
+  kernel_op: makeCeiling
+  args:
+    - {name: position,  type: point3, required: false}
+    - {name: width,     type: number, required: false, unit: m, default: 5.0}
+    - {name: depth,     type: number, required: false, unit: m, default: 4.0}
+    - {name: thickness, type: number, required: false, unit: m, default: 0.05}
+    - {name: elevation, type: number, required: false, unit: m, default: 2.8}
+  topology_role: hosted
+  kg_predicates: [containedIn, bounds]
+  synonyms: [ceiling, soffit, suspended ceiling, dropped ceiling]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcCurtainWall
+  ifc4_class: IfcCurtainWall
+  kernel_op: makeCurtainWall
+  args:
+    - {name: position, type: point3, required: false}
+    - {name: length,   type: number, required: false, unit: m, default: 6.0}
+    - {name: height,   type: number, required: false, unit: m, default: 3.0}
+  topology_role: host
+  kg_predicates: [containedIn, bounds]
+  synonyms: [curtain wall, glass facade, glazed wall, glass wall, curtainwall]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcSkylight
+  ifc4_class: IfcOpeningElement
+  kernel_op: makeSkylight
+  args:
+    - {name: position,  type: point3, required: false}
+    - {name: width,     type: number, required: false, unit: m, default: 1.2}
+    - {name: depth,     type: number, required: false, unit: m, default: 1.2}
+    - {name: elevation, type: number, required: false, unit: m, default: 3.0}
+  topology_role: hosted
+  kg_predicates: [hosts, bounds]
+  synonyms: [skylight, rooflight, roof window, velux, overhead glazing]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcOpening
+  ifc4_class: IfcOpeningElement
+  kernel_op: makeOpening
+  args:
+    - {name: position, type: point3, required: false}
+    - {name: width,    type: number, required: false, unit: m, default: 1.0}
+    - {name: height,   type: number, required: false, unit: m, default: 2.0}
+  topology_role: hosted
+  kg_predicates: [hosts, containedIn]
+  synonyms: [opening, void, cutout, aperture, wall opening]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcRamp
+  ifc4_class: IfcRamp
+  kernel_op: makeRamp
+  args:
+    - {name: start,     type: point3, required: false}
+    - {name: end,       type: point3, required: false}
+    - {name: width,     type: number, required: false, unit: m, default: 1.2}
+    - {name: thickness, type: number, required: false, unit: m, default: 0.15}
+  topology_role: host
+  kg_predicates: [containedIn, connectedTo]
+  synonyms: [ramp, slope, incline, accessibility ramp, ramped surface]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcRailing
+  ifc4_class: IfcRailing
+  kernel_op: makeRailing
+  args:
+    - {name: start,  type: point3, required: false}
+    - {name: end,    type: point3, required: false}
+    - {name: height, type: number, required: false, unit: m, default: 1.0}
+  topology_role: hosted
+  kg_predicates: [containedIn, connectedTo]
+  synonyms: [railing, handrail, balustrade, guardrail, banister]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcGrid
+  ifc4_class: IfcGrid
+  kernel_op: makeGrid
+  args:
+    - {name: spacing,  type: number, required: false, unit: m, default: 5.0}
+    - {name: count,    type: number, required: false, default: 4}
+    - {name: position, type: point3, required: false}
+  topology_role: system
+  kg_predicates: []
+  synonyms: [grid, structural grid, column grid, reference grid, building grid]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcLevel
+  ifc4_class: IfcBuildingStorey
+  kernel_op: makeLevel
+  args:
+    - {name: elevation, type: number, required: false, unit: m, default: 0.0}
+    - {name: extent,    type: number, required: false, unit: m, default: 10.0}
+    - {name: name,      type: string, required: false}
+  topology_role: system
+  kg_predicates: [containedIn]
+  synonyms: [level, floor level, storey, building level, datum level, floor plate]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: IfcDatum
+  ifc4_class: IfcAnnotation
+  kernel_op: makeDatum
+  args:
+    - {name: position,  type: point3, required: false}
+    - {name: elevation, type: number, required: false, unit: m}
+    - {name: label,     type: string, required: false}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [datum, elevation marker, benchmark, survey point, reference point]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 

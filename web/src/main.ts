@@ -323,6 +323,294 @@ registerHandler("IfcColumn", (args) => {
   return { created: "column", height: h };
 });
 
+// ── IFC Tier 2: Beam / Stair / Door / Window / Roof / Space ─────────────────
+
+registerHandler("IfcBeam", (args) => {
+  const s  = (args.start as number[] | undefined) ?? [0, 0, 3];
+  const e  = (args.end   as number[] | undefined) ?? [4, 0, 3];
+  const dx = e[0] - s[0], dy = e[1] - s[1], dz = (e[2] ?? 0) - (s[2] ?? 0);
+  const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 4;
+  const bw = (args.size as number | undefined) ?? 0.2;
+  const geom = new THREE.BoxGeometry(len, bw, bw);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xa0856a, roughness: 0.6, metalness: 0.1 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, (s[2] + e[2]) / 2 || 3);
+  mesh.rotation.z = Math.atan2(dy, dx);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcBeam";
+  viewer.addMesh(mesh, "brep");
+  return { created: "beam", length: len };
+});
+
+registerHandler("IfcStair", (args) => {
+  const s    = (args.start as number[] | undefined) ?? [0, 0, 0];
+  const e    = (args.end   as number[] | undefined) ?? [3, 0, 0];
+  const w    = (args.width as number | undefined) ?? 1;
+  const rise = (args.riser as number | undefined) ?? 0.18;
+  const tread = (args.tread as number | undefined) ?? 0.27;
+  const dx   = e[0] - s[0], dy = e[1] - s[1];
+  const run  = Math.sqrt(dx * dx + dy * dy) || 3;
+  const steps = Math.max(2, Math.round(run / tread));
+  const totalH = steps * rise;
+  const geom = new THREE.BoxGeometry(run, w, totalH);
+  geom.translate(run / 2, 0, totalH / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xb89968, roughness: 0.6, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(s[0], s[1], 0);
+  mesh.rotation.z = Math.atan2(dy, dx);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcStair";
+  viewer.addMesh(mesh, "brep");
+  return { created: "stair", steps, run, height: totalH };
+});
+
+registerHandler("IfcDoor", (args) => {
+  const w = (args.width  as number | undefined) ?? 0.9;
+  const h = (args.height as number | undefined) ?? 2.1;
+  const t = 0.2;
+  const geom = new THREE.BoxGeometry(w, t, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff5c5c, transparent: true, opacity: 0.4 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos = args.position as number[] | undefined;
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcDoor";
+  viewer.addMesh(mesh, "brep");
+  return { created: "door", width: w, height: h };
+});
+
+registerHandler("IfcWindow", (args) => {
+  const w    = (args.width  as number | undefined) ?? 1.2;
+  const h    = (args.height as number | undefined) ?? 1.4;
+  const sill = (args.sillH  as number | undefined) ?? 0.9;
+  const t    = 0.2;
+  const geom = new THREE.BoxGeometry(w, t, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x5b8def, transparent: true, opacity: 0.4 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos = args.position as number[] | undefined;
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? sill);
+  else mesh.position.z = sill;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcWindow";
+  viewer.addMesh(mesh, "brep");
+  return { created: "window", width: w, height: h, sillH: sill };
+});
+
+registerHandler("IfcRoof", (args) => {
+  const pitch   = (args.pitchDeg    as number | undefined) ?? 30;
+  const fp      = args.footprint as number[][] | undefined;
+  let w = 8, d = 10;
+  if (fp && fp.length >= 2) {
+    const xs = fp.map((p) => p[0]);
+    const ys = fp.map((p) => p[1]);
+    w = (Math.max(...xs) - Math.min(...xs)) || 8;
+    d = (Math.max(...ys) - Math.min(...ys)) || 10;
+  }
+  const ridgeH = (args.ridgeHeight as number | undefined) ?? (Math.min(w, d) / 2 * Math.tan((pitch * Math.PI) / 180));
+  const geom   = new THREE.BoxGeometry(w, d, Math.max(0.2, ridgeH));
+  geom.translate(0, 0, Math.max(0.2, ridgeH) / 2);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const elev = (args.elevation as number | undefined) ?? 3;
+  mesh.position.z = elev;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcRoof";
+  viewer.addMesh(mesh, "brep");
+  return { created: "roof", width: w, depth: d, ridgeHeight: ridgeH };
+});
+
+registerHandler("IfcSpace", (args) => {
+  const h  = (args.height as number | undefined) ?? 2.8;
+  const fp = args.footprint as number[][] | undefined;
+  let w = 5, d = 4;
+  if (fp && fp.length >= 2) {
+    const xs = fp.map((p) => p[0]);
+    const ys = fp.map((p) => p[1]);
+    w = (Math.max(...xs) - Math.min(...xs)) || 5;
+    d = (Math.max(...ys) - Math.min(...ys)) || 4;
+  }
+  const geom = new THREE.BoxGeometry(w, d, h);
+  geom.translate(0, 0, h / 2);
+  const mat  = new THREE.MeshBasicMaterial({ color: 0x90c8ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcSpace";
+  if (args.name) mesh.userData.spaceName = args.name as string;
+  viewer.addMesh(mesh, "brep");
+  return { created: "space", width: w, depth: d, height: h };
+});
+
+// ── IFC Tier 3: Foundation / Ceiling / CurtainWall / Skylight / Opening / Ramp / Railing / Grid / Level / Datum ──
+
+registerHandler("IfcFoundation", (args) => {
+  const w = (args.width     as number | undefined) ?? 6;
+  const d = (args.depth     as number | undefined) ?? 6;
+  const t = (args.thickness as number | undefined) ?? 0.5;
+  const geom = new THREE.BoxGeometry(w, d, t);
+  geom.translate(0, 0, -t / 2);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0x8a7563, roughness: 0.85, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos  = args.position as number[] | undefined;
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcFoundation";
+  viewer.addMesh(mesh, "brep");
+  return { created: "foundation", width: w, depth: d };
+});
+
+registerHandler("IfcCeiling", (args) => {
+  const w    = (args.width     as number | undefined) ?? 5;
+  const d    = (args.depth     as number | undefined) ?? 4;
+  const t    = (args.thickness as number | undefined) ?? 0.05;
+  const elev = (args.elevation as number | undefined) ?? 2.8;
+  const geom = new THREE.BoxGeometry(w, d, t);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0xfaf5ec, roughness: 0.5, metalness: 0.02 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos  = args.position as number[] | undefined;
+  mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, elev);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcCeiling";
+  viewer.addMesh(mesh, "brep");
+  return { created: "ceiling", width: w, depth: d, elevation: elev };
+});
+
+registerHandler("IfcCurtainWall", (args) => {
+  const wallLen = (args.length as number | undefined) ?? 6;
+  const h  = (args.height as number | undefined) ?? 3;
+  const t  = 0.02;
+  const geom = new THREE.BoxGeometry(wallLen, t, h);
+  geom.translate(0, 0, h / 2);
+  const mat  = new THREE.MeshBasicMaterial({ color: 0xaadcff, transparent: true, opacity: 0.35 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos  = args.position as number[] | undefined;
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcCurtainWall";
+  viewer.addMesh(mesh, "brep");
+  return { created: "curtainwall", length: wallLen, height: h };
+});
+
+registerHandler("IfcSkylight", (args) => {
+  const w    = (args.width     as number | undefined) ?? 1.2;
+  const d    = (args.depth     as number | undefined) ?? 1.2;
+  const elev = (args.elevation as number | undefined) ?? 3;
+  const geom = new THREE.BoxGeometry(w, d, 0.04);
+  const mat  = new THREE.MeshBasicMaterial({ color: 0xeef5ff, transparent: true, opacity: 0.6 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos  = args.position as number[] | undefined;
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elev);
+  else mesh.position.z = elev;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcSkylight";
+  viewer.addMesh(mesh, "brep");
+  return { created: "skylight", width: w, depth: d };
+});
+
+registerHandler("IfcOpening", (args) => {
+  const w = (args.width  as number | undefined) ?? 1;
+  const h = (args.height as number | undefined) ?? 2;
+  const t = 0.25;
+  const geom = new THREE.BoxGeometry(w, t, h);
+  geom.translate(0, 0, h / 2);
+  const mat  = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, wireframe: true });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos  = args.position as number[] | undefined;
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcOpening";
+  viewer.addMesh(mesh, "brep");
+  return { created: "opening", width: w, height: h };
+});
+
+registerHandler("IfcRamp", (args) => {
+  const s   = (args.start as number[] | undefined) ?? [0, 0, 0];
+  const e   = (args.end   as number[] | undefined) ?? [4, 0, 0];
+  const w   = (args.width as number | undefined) ?? 1.2;
+  const dx  = e[0] - s[0], dy = e[1] - s[1];
+  const run = Math.sqrt(dx * dx + dy * dy) || 4;
+  const geom = new THREE.BoxGeometry(run, w, 0.15);
+  geom.translate(run / 2, 0, 0);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.65, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(s[0], s[1], s[2] ?? 0);
+  mesh.rotation.z = Math.atan2(dy, dx);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcRamp";
+  viewer.addMesh(mesh, "brep");
+  return { created: "ramp", run, width: w };
+});
+
+registerHandler("IfcRailing", (args) => {
+  const s   = (args.start  as number[] | undefined) ?? [0, 0, 0];
+  const e   = (args.end    as number[] | undefined) ?? [3, 0, 0];
+  const h   = (args.height as number | undefined) ?? 1;
+  const dx  = e[0] - s[0], dy = e[1] - s[1];
+  const len = Math.sqrt(dx * dx + dy * dy) || 3;
+  const geom = new THREE.BoxGeometry(len, 0.05, h);
+  geom.translate(0, 0, h / 2);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.4, metalness: 0.6 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, s[2] ?? 0);
+  mesh.rotation.z = Math.atan2(dy, dx);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcRailing";
+  viewer.addMesh(mesh, "brep");
+  return { created: "railing", length: len, height: h };
+});
+
+registerHandler("IfcGrid", (args) => {
+  const spacing = (args.spacing as number | undefined) ?? 5;
+  const count   = Math.max(2, Math.min(10, Math.trunc((args.count as number | undefined) ?? 4)));
+  const extent  = spacing * (count - 1);
+  const half    = extent / 2;
+  const t       = 0.02;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x888899, transparent: true, opacity: 0.5 });
+  for (let i = 0; i < count; i++) {
+    const offset = -half + i * spacing;
+    const gv = new THREE.BoxGeometry(t, extent, t);
+    const mv = new THREE.Mesh(gv, mat);
+    mv.position.set(offset, 0, 0);
+    mv.userData.kind = "brep"; mv.userData.creator = "IfcGrid";
+    viewer.addMesh(mv, "brep");
+    const gh = new THREE.BoxGeometry(extent, t, t);
+    const mh = new THREE.Mesh(gh, mat);
+    mh.position.set(0, offset, 0);
+    mh.userData.kind = "brep"; mh.userData.creator = "IfcGrid";
+    viewer.addMesh(mh, "brep");
+  }
+  return { created: "grid", count, spacing };
+});
+
+registerHandler("IfcLevel", (args) => {
+  const elev   = (args.elevation as number | undefined) ?? 0;
+  const extent = (args.extent    as number | undefined) ?? 10;
+  const geom   = new THREE.BoxGeometry(extent, extent, 0.02);
+  const mat    = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+  const mesh   = new THREE.Mesh(geom, mat);
+  mesh.position.z = elev;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcLevel";
+  if (args.name) mesh.userData.levelName = args.name as string;
+  viewer.addMesh(mesh, "brep");
+  return { created: "level", elevation: elev };
+});
+
+registerHandler("IfcDatum", (args) => {
+  const pos  = (args.position as number[] | undefined);
+  const elev = (args.elevation as number | undefined) ?? pos?.[2] ?? 0;
+  const geom = new THREE.SphereGeometry(0.15, 8, 8);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0x33bb66, roughness: 0.3, metalness: 0.2 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, elev);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcDatum";
+  if (args.label) mesh.userData.label = args.label as string;
+  viewer.addMesh(mesh, "brep");
+  return { created: "datum", elevation: elev };
+});
+
 // ── Tier 1 handlers: SdPoint / SdLine / SdRectangle / SdPolyline (#64) ───────
 // These replace the fan-out shims installed by installDefaultHandlers() below.
 // Render using THREE line/point primitives (not mesh geometry) per Jun's

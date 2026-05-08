@@ -88,6 +88,18 @@ export function iconSVG(name: string, size = 16): string {
     case "volume-dim":        return `<svg ${attr}><path d="M4 16l7-3 7 3v-7l-7-4-7 4z"/><path d="M4 9l7 3 7-3M11 12v7"/></svg>`;
     case "label":             return `<svg ${attr}><path d="M3 8h11l4 4-4 4H3z"/></svg>`;
     case "transient-measure": return `<svg ${attr}><path d="M3 12h18" stroke-dasharray="3 2"/><path d="M5 8v8M19 8v8"/></svg>`;
+    case "beam":         return `<svg ${attr}><path d="M7 4h10M7 20h10M9 4v16M15 4v16"/></svg>`;
+    case "roof":         return `<svg ${attr}><path d="M2 17l10-12 10 12H2z"/></svg>`;
+    case "space":        return `<svg ${attr}><rect x="3" y="5" width="18" height="14" stroke-dasharray="4 2"/><path d="M8 12h8" stroke-width="0.9"/></svg>`;
+    case "foundation":   return `<svg ${attr}><rect x="4" y="11" width="16" height="5"/><path d="M4 16l2 3M8 16l2 3M12 16l2 3M16 16l2 3"/></svg>`;
+    case "ceiling":      return `<svg ${attr}><path d="M3 7h18M3 11h18"/><path d="M7 7v4M12 7v4M17 7v4" stroke-width="0.9"/></svg>`;
+    case "curtainwall":  return `<svg ${attr}><rect x="3" y="3" width="18" height="18"/><path d="M3 10h18M3 17h18M12 3v18" stroke-width="0.9"/></svg>`;
+    case "skylight":     return `<svg ${attr}><rect x="6" y="6" width="12" height="12"/><path d="M6 6l-3-3M18 6l3-3M6 18l-3 3M18 18l3 3M12 6v-2M12 18v2M6 12h-2M18 12h2" stroke-width="0.9"/></svg>`;
+    case "opening":      return `<svg ${attr}><rect x="4" y="4" width="16" height="16"/><rect x="8" y="8" width="8" height="8" stroke-dasharray="2 1.5"/></svg>`;
+    case "ramp":         return `<svg ${attr}><path d="M4 20h16M4 20L20 7"/><path d="M14 7h6v5"/></svg>`;
+    case "railing":      return `<svg ${attr}><path d="M3 8h18M3 15h18"/><path d="M7 8v7M12 8v7M17 8v7"/></svg>`;
+    case "level":        return `<svg ${attr}><path d="M3 13h18"/><path d="M17 9v8M20 9l-3-2-3 2" stroke-width="0.9"/></svg>`;
+    case "datum":        return `<svg ${attr}><path d="M12 5l8 13H4z"/><path d="M4 18h16"/></svg>`;
     default:        return `<svg ${attr}><rect x="4" y="4" width="16" height="16"/></svg>`;
   }
 }

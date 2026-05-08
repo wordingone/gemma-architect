@@ -40,6 +40,11 @@ const DEFAULT_STAIR_TREAD = 0.28;
 const DEFAULT_STAIR_WIDTH = 1.0;
 const DEFAULT_POLYGON_SIDES = 6;
 const DEFAULT_EXTRUDE_HEIGHT = 2.5;
+const DEFAULT_BEAM_SIZE = 0.2;
+const DEFAULT_FOUNDATION_T = 0.5;
+const DEFAULT_CEILING_T = 0.05;
+const DEFAULT_RAMP_WIDTH = 1.2;
+const DEFAULT_RAILING_H = 1.0;
 
 // Append-only construction sequence.
 const _createSequence: string[] = [];
@@ -420,6 +425,205 @@ function buildBox(
   return { mesh, chain };
 }
 
+function buildBeam(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const s = DEFAULT_BEAM_SIZE;
+  const h = DEFAULT_COLUMN_HEIGHT;
+  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const geom = new THREE.BoxGeometry(len, s, s);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xa0856a, roughness: 0.6, metalness: 0.1 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, h);
+  mesh.rotation.z = (angDeg * Math.PI) / 180;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "beam";
+  const chain = `const beam = makeBox(${round(len)}, ${round(s)}, ${round(s)}).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round((a.x + b.x) / 2)}, ${round((a.y + b.y) / 2)}, ${round(h)}]);`;
+  return { mesh, chain };
+}
+
+function buildRoof(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = Math.abs(b.x - a.x) || 1;
+  const d = Math.abs(b.y - a.y) || 1;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const ridgeH = Math.max(0.5, Math.min(w, d) * 0.3);
+  const geom = new THREE.BoxGeometry(w, d, ridgeH);
+  geom.translate(0, 0, ridgeH / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, DEFAULT_WALL_HEIGHT);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "roof";
+  const chain = `const roof = makeBox(${round(w)}, ${round(d)}, ${round(ridgeH)}).translate([${round(cx)}, ${round(cy)}, ${round(DEFAULT_WALL_HEIGHT)}]);`;
+  return { mesh, chain };
+}
+
+function buildSpace(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = Math.abs(b.x - a.x) || 1;
+  const d = Math.abs(b.y - a.y) || 1;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const h = DEFAULT_RECT_HEIGHT;
+  const geom = new THREE.BoxGeometry(w, d, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x90c8ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "space";
+  const chain = `const space = makeBox(${round(w)}, ${round(d)}, ${round(h)}).translate([${round(cx)}, ${round(cy)}, 0]);`;
+  return { mesh, chain };
+}
+
+function buildFoundation(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = Math.abs(b.x - a.x) || 1;
+  const d = Math.abs(b.y - a.y) || 1;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const t = DEFAULT_FOUNDATION_T;
+  const geom = new THREE.BoxGeometry(w, d, t);
+  geom.translate(0, 0, -t / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x8a7563, roughness: 0.85, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "foundation";
+  const chain = `const foundation = makeBox(${round(w)}, ${round(d)}, ${round(t)}).translate([${round(cx)}, ${round(cy)}, ${round(-t / 2)}]);`;
+  return { mesh, chain };
+}
+
+function buildCeiling(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = Math.abs(b.x - a.x) || 1;
+  const d = Math.abs(b.y - a.y) || 1;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const t = DEFAULT_CEILING_T;
+  const elev = DEFAULT_WALL_HEIGHT;
+  const geom = new THREE.BoxGeometry(w, d, t);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xfaf5ec, roughness: 0.5, metalness: 0.02 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, elev);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "ceiling";
+  const chain = `const ceiling = makeBox(${round(w)}, ${round(d)}, ${round(t)}).translate([${round(cx)}, ${round(cy)}, ${round(elev)}]);`;
+  return { mesh, chain };
+}
+
+function buildCurtainWall(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const t = 0.02;
+  const h = DEFAULT_WALL_HEIGHT;
+  const geom = new THREE.BoxGeometry(len, t, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xaadcff, transparent: true, opacity: 0.35 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
+  mesh.rotation.z = (angDeg * Math.PI) / 180;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "curtainwall";
+  const chain = `const cw = makeBox(${round(len)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round((a.x + b.x) / 2)}, ${round((a.y + b.y) / 2)}, 0]);`;
+  return { mesh, chain };
+}
+
+function buildSkylight(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = Math.abs(b.x - a.x) || 0.5;
+  const d = Math.abs(b.y - a.y) || 0.5;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const elev = DEFAULT_WALL_HEIGHT;
+  const geom = new THREE.BoxGeometry(w, d, 0.04);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xeef5ff, transparent: true, opacity: 0.6 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, elev);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "skylight";
+  const chain = `const skylight = makeBox(${round(w)}, ${round(d)}, 0.04).translate([${round(cx)}, ${round(cy)}, ${round(elev)}]);`;
+  return { mesh, chain };
+}
+
+function buildOpening(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = 1, h = 2, t = 0.25;
+  const geom = new THREE.BoxGeometry(w, t, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, wireframe: true });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(p.x, p.y, 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "opening";
+  const chain = `// opening: ${round(w)}×${round(h)} void at [${round(p.x)}, ${round(p.y)}, 0]`;
+  return { mesh, chain };
+}
+
+function buildRamp(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const run = Math.sqrt(dx * dx + dy * dy) || 1;
+  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const w = DEFAULT_RAMP_WIDTH;
+  const totalH = run / 12;
+  const geom = new THREE.BoxGeometry(run, w, 0.15);
+  geom.translate(run / 2, 0, totalH / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.65, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(a.x, a.y, 0);
+  mesh.rotation.z = (angDeg * Math.PI) / 180;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "ramp";
+  const chain = `const ramp = makeBox(${round(run)}, ${round(w)}, 0.15).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round(a.x)}, ${round(a.y)}, 0]);`;
+  return { mesh, chain };
+}
+
+function buildRailing(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const h = DEFAULT_RAILING_H;
+  const geom = new THREE.BoxGeometry(len, 0.05, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.4, metalness: 0.6 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
+  mesh.rotation.z = (angDeg * Math.PI) / 180;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "railing";
+  const chain = `const railing = makeBox(${round(len)}, 0.05, ${round(h)}).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round((a.x + b.x) / 2)}, ${round((a.y + b.y) / 2)}, 0]);`;
+  return { mesh, chain };
+}
+
+function buildRefGrid(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = Math.abs(b.x - a.x) || 5;
+  const d = Math.abs(b.y - a.y) || 5;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const geom = new THREE.BoxGeometry(w, d, 0.02);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x8888aa, transparent: true, opacity: 0.3, wireframe: true });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "grid";
+  const chain = `// ref-grid: ${round(w)}×${round(d)} at [${round(cx)}, ${round(cy)}]`;
+  return { mesh, chain };
+}
+
+function buildLevel(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const extent = 10;
+  const geom = new THREE.BoxGeometry(extent, extent, 0.02);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(p.x, p.y, 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "level";
+  const chain = `// level: datum plane at [${round(p.x)}, ${round(p.y)}, 0]`;
+  return { mesh, chain };
+}
+
+function buildDatum(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+  const geom = new THREE.SphereGeometry(0.15, 8, 8);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x33bb66, roughness: 0.3, metalness: 0.2 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(p.x, p.y, 0);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "datum";
+  const chain = `// datum: marker at [${round(p.x)}, ${round(p.y)}, 0]`;
+  return { mesh, chain };
+}
+
 type ToolHandler = {
   // Number of clicks to auto-commit. -1 = unlimited: collect until Enter.
   clicks: number;
@@ -444,7 +648,20 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   polyline: { clicks: 4, handler: (pts) => buildPolyline(pts) },
   curve:    { clicks: -1, handler: (pts) => buildCurve(pts) },
   point:    { clicks: 1, handler: ([p]) => buildPoint(p) },
-  extrude:  { clicks: 3, handler: ([c1, c2, c3]) => buildBox(c1, c2, c3) },
+  extrude:      { clicks: 3, handler: ([c1, c2, c3]) => buildBox(c1, c2, c3) },
+  beam:         { clicks: 2, handler: ([a, b]) => buildBeam(a, b) },
+  roof:         { clicks: 2, handler: ([a, b]) => buildRoof(a, b) },
+  space:        { clicks: 2, handler: ([a, b]) => buildSpace(a, b) },
+  foundation:   { clicks: 2, handler: ([a, b]) => buildFoundation(a, b) },
+  ceiling:      { clicks: 2, handler: ([a, b]) => buildCeiling(a, b) },
+  curtainwall:  { clicks: 2, handler: ([a, b]) => buildCurtainWall(a, b) },
+  skylight:     { clicks: 2, handler: ([a, b]) => buildSkylight(a, b) },
+  opening:      { clicks: 1, handler: ([p]) => buildOpening(p) },
+  ramp:         { clicks: 2, handler: ([a, b]) => buildRamp(a, b) },
+  railing:      { clicks: 2, handler: ([a, b]) => buildRailing(a, b) },
+  grid:         { clicks: 2, handler: ([a, b]) => buildRefGrid(a, b) },
+  level:        { clicks: 1, handler: ([p]) => buildLevel(p) },
+  datum:        { clicks: 1, handler: ([p]) => buildDatum(p) },
 };
 
 const TOOL_TODOS: Record<string, string> = {
