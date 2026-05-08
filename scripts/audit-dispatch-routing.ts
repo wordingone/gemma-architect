@@ -24,10 +24,10 @@ import { join, resolve } from "path";
 const REPO_ROOT = resolve(import.meta.dir, "..");
 const SHELL_TS = join(REPO_ROOT, "web/src/shell.ts");
 const WORKBENCH_TS = join(REPO_ROOT, "web/src/workbench.ts");
-const VIEWER_TS = join(REPO_ROOT, "web/src/viewer.ts");
+const VIEWER_TS = join(REPO_ROOT, "web/src/viewer/viewer.ts");
 const INDEX_HTML = join(REPO_ROOT, "web/index.html");
 const STYLE_CSS = join(REPO_ROOT, "web/src/style.css");
-const DSL_EVAL_TS = join(REPO_ROOT, "web/src/dsl-eval.ts");
+const DSL_EVAL_TS = join(REPO_ROOT, "web/src/commands/dsl-eval.ts");
 const LAYOUT_TS = join(REPO_ROOT, "web/src/layout.ts");
 
 type Violation = { file: string; line: number; rule: string; detail: string };
