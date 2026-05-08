@@ -118,7 +118,7 @@ type LayoutRibbonTab = typeof LAYOUT_RIBBON_TABS[number];
 
 const LAYOUT_TOOL_GROUPS: ToolGroup[] = [
   { label: "NAVIGATE",  tools: ["Select", "Pan", "Zoom"] },
-  { label: "VIEWPORT",  tools: ["Frame", "Scale", "Align", "Detail"] },
+  { label: "VIEWPORT",  tools: ["Viewport", "Frame", "Scale", "Align", "Detail"] },
   { label: "ANNOTATE",  tools: ["Text", "Leader", "Callout"] },
   { label: "DRAW",      tools: ["Line", "Rect", "Circle"] },
   { label: "DIMENSION", tools: ["Ruler", "Compass"] },

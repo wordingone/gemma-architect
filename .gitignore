@@ -31,3 +31,12 @@ __pycache__/
 # accumulate per run and per HEAD, not source-of-truth artifacts.
 state/
 plans/
+
+# Agent persona — local-only, not shared via git
+.claude/
+CLAUDE.md
+.mcp.json
+
+# Browser automation user-data + cdp artifacts
+.playwright-mcp/
+.shared-browser/

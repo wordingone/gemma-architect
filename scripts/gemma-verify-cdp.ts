@@ -331,6 +331,9 @@ function record(result: SurfaceResult) {
     return { passed: !!input && visible, evidence: { inputFound: !!input, inputClass: input?.className, inputPH: (input as HTMLInputElement | null)?.placeholder, visible } };
   });
   record({ name: "cmdk-dialog-opens", ...r as any });
+  // Teardown: close any open dialog so subsequent surfaces start from a clean state.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
 }
 
 // --- Surface 10: layout-tab-functional ---
@@ -348,16 +351,23 @@ function record(result: SurfaceResult) {
     const a1Aspect = 594 / 841;
     const aspectMatches = Math.abs(aspectRatio - a1Aspect) < 0.05 || Math.abs(aspectRatio - 1 / a1Aspect) < 0.05;
     if (!aspectMatches) return { passed: false, evidence: { reason: "wrong aspect ratio", aspect: aspectRatio, expected: a1Aspect } };
-    const beforePanels = sheet.querySelectorAll("[data-panel-id]").length;
+    // Verify click-without-tool does NOT add a panel (Bug B regression check).
+    const beforeNoTool = sheet.querySelectorAll("[data-panel-id]").length;
     const cx = rect.left + rect.width * 0.25;
     const cy = rect.top + rect.height * 0.25;
-    sheet.dispatchEvent(new PointerEvent("pointerdown", { clientX: cx, clientY: cy, bubbles: true, pointerId: 1, pointerType: "mouse", button: 0, buttons: 1 }));
-    sheet.dispatchEvent(new PointerEvent("pointerup",   { clientX: cx, clientY: cy, bubbles: true, pointerId: 1, pointerType: "mouse", button: 0 }));
-    sheet.dispatchEvent(new MouseEvent("click",         { clientX: cx, clientY: cy, bubbles: true, button: 0 }));
+    sheet.dispatchEvent(new MouseEvent("click", { clientX: cx, clientY: cy, bubbles: true, button: 0 }));
+    await new Promise(res => setTimeout(res, 300));
+    const afterNoTool = sheet.querySelectorAll("[data-panel-id]").length;
+    const gateHeld = afterNoTool === beforeNoTool;
+    // Activate the viewport tool, then click to add a panel.
+    window.dispatchEvent(new CustomEvent("ribbon:tool-click", { detail: { tool: "viewport" } }));
+    await new Promise(res => setTimeout(res, 100));
+    const beforePanels = sheet.querySelectorAll("[data-panel-id]").length;
+    sheet.dispatchEvent(new MouseEvent("click", { clientX: cx, clientY: cy, bubbles: true, button: 0 }));
     await new Promise(res => setTimeout(res, 500));
     const afterPanels = sheet.querySelectorAll("[data-panel-id]").length;
     const panelAdded = afterPanels > beforePanels;
-    return { passed: aspectMatches && panelAdded, evidence: { sheetDims: { w: rect.width, h: rect.height, aspect: aspectRatio }, a1Aspect, aspectMatches, beforePanels, afterPanels, panelAdded } };
+    return { passed: aspectMatches && gateHeld && panelAdded, evidence: { sheetDims: { w: rect.width, h: rect.height, aspect: aspectRatio }, a1Aspect, aspectMatches, gateHeld, beforePanels, afterPanels, panelAdded } };
   });
   record({ name: "layout-tab-functional", ...r as any });
 }

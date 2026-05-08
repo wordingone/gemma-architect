@@ -330,6 +330,9 @@ class LayoutController {
       if (ce.detail.tool === "detail") {
         this.activeTool = "detail";
         this.sheetEl.style.cursor = "crosshair";
+      } else if (ce.detail.tool === "viewport") {
+        this.activeTool = "viewport";
+        this.sheetEl.style.cursor = "crosshair";
       } else {
         this.activeTool = null;
         this.sheetEl.style.cursor = "";
@@ -560,10 +563,12 @@ class LayoutController {
   // --- Drag-to-create ----
 
   private onSheetMouseDown(e: MouseEvent): void {
+    if (e.button !== 0) return;
     if (this.activeTool === "detail") {
       this.startDetailDrag(e);
       return;
     }
+    if (this.activeTool !== "viewport") return;
     // Ignore clicks that originate in panels / titleblock — those have their
     // own click handlers (selection / contenteditable).
     const tgt = e.target as HTMLElement | null;
@@ -582,6 +587,7 @@ class LayoutController {
   }
 
   private startDetailDrag(e: MouseEvent): void {
+    if (e.button !== 0) return;
     const tgt = e.target as HTMLElement | null;
     if (tgt?.closest(".paper-toolbar")) return;
     const cellEl = tgt?.closest<HTMLElement>("[data-panel-id]");
@@ -671,10 +677,14 @@ class LayoutController {
     if (w < 30 || h < 30) return; // tiny drags — let click handler add default-size panel
     this._dragCompleted = true; // suppress click-to-add for this pointer sequence
     this.addPanel({ x, y, w, h, viewport: "top", scale: "1:100" });
+    this.activeTool = null;
+    this.sheetEl.style.cursor = "";
+    window.dispatchEvent(new CustomEvent("layout:tool-deactivated", { detail: { tool: "viewport" } }));
   }
 
   private onSheetClick(e: MouseEvent): void {
     if (this._dragCompleted) { this._dragCompleted = false; return; }
+    if (this.activeTool !== "viewport") return;
     const tgt = e.target as HTMLElement | null;
     if (tgt && tgt.closest(".paper-cell, .paper-titleblock, .paper-toolbar")) return;
     const rect = this.sheetEl.getBoundingClientRect();
@@ -684,6 +694,9 @@ class LayoutController {
     const w = Math.round(200 * MM_TO_PX);
     const h = Math.round(150 * MM_TO_PX);
     this.addPanel({ x: Math.max(0, cx - w / 2), y: Math.max(0, cy - h / 2), w, h, viewport: "top", scale: "1:100" });
+    this.activeTool = null;
+    this.sheetEl.style.cursor = "";
+    window.dispatchEvent(new CustomEvent("layout:tool-deactivated", { detail: { tool: "viewport" } }));
   }
 
   private finishDetailDrag(): void {
