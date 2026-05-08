@@ -51,6 +51,7 @@ import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
 import { tessellateSurface } from "./nurbs-surfaces";
 import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "./nurbs-surface-algorithms";
 import { addToMultiSelected, clearMultiSelected, getFilters, getSelected, topologyAllowed } from "./viewer/selection-state";
+import { initRenderModes, setRenderMode, type RenderMode } from "./render-modes";
 import * as THREE from "three";
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -104,6 +105,7 @@ paramCollapseBtn.addEventListener("click", () => {
 const viewer = new Viewer(canvas, viewportAreaEl);
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
+initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
   const deleted = viewer.deleteSelected();
@@ -115,6 +117,12 @@ initCreateMode(viewer);
 // Undo/Redo handlers (#55): route SdUndo and SdRedo to the history module.
 registerHandler("SdUndo", () => { undo(viewer); });
 registerHandler("SdRedo", () => { redo(viewer); });
+
+registerHandler("SdRenderMode", (args) => {
+  const mode = (args.mode as string | undefined) ?? "shaded";
+  setRenderMode(mode as RenderMode);
+  return { mode };
+});
 
 registerHandler("SdMove", (args) => {
   const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();

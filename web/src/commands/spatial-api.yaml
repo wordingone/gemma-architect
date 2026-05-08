@@ -905,6 +905,16 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdRenderMode
+  kernel_op: setRenderMode
+  args:
+    - {name: mode, type: string, required: false, default: shaded}
+  topology_role: view
+  kg_predicates: []
+  synonyms: [render_mode, rendermode, display_mode, displaymode, shading, shaded, wireframe, ghosted, realistic, technical]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §12 Analysis
 # ============================================================
