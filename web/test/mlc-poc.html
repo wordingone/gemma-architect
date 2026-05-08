@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!--
+  mlc-poc.html — MLC-LLM / web-llm engine evaluation POC (#99 Prong B)
+
+  Status as of 2026-05-08: Gemma 4 NOT SUPPORTED by web-llm.
+  Issue https://github.com/mlc-ai/web-llm/issues/810 open, unassigned.
+  No prebuilt MLC model for gemma-4-E2B-it exists in mlc-ai HF org.
+
+  This page demonstrates the intended integration shape for when support
+  lands. Currently it fails at model fetch with a 404 (no model files).
+  When Gemma 4 support ships: update MODEL_ID to the mlc-ai prebuilt ID
+  and re-measure t/s.
+
+  Result: NO-GO (May 2026). Re-evaluate when mlc-ai/web-llm#810 resolves.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MLC-LLM Gemma 4 POC — #99 Prong B</title>
+  <style>
+    body { font-family: monospace; margin: 2rem; background: #0a0a0a; color: #e0e0e0; }
+    h1   { color: #aaa; font-size: 1rem; letter-spacing: 0.1em; }
+    #log { margin-top: 1rem; white-space: pre-wrap; font-size: 0.85rem; }
+    .ok  { color: #6cf; }
+    .err { color: #f66; }
+    .note{ color: #999; }
+    button { margin-top: 1rem; padding: 0.4rem 1rem; background: #222; color: #ccc;
+             border: 1px solid #444; cursor: pointer; font-family: monospace; }
+    button:hover { background: #333; }
+  </style>
+</head>
+<body>
+  <h1>MLC-LLM / web-llm — GEMMA·4·E2B — ENGINE EVALUATION</h1>
+  <div id="status" class="note">⬤ IDLE</div>
+  <button onclick="runProbe()">RUN PROBE</button>
+  <div id="log"></div>
+
+  <script type="module">
+    // MODEL_ID to update when mlc-ai/web-llm#810 resolves and a prebuilt exists.
+    // Expected format: "mlc-ai/gemma-4-E2B-it-q4f16_1-MLC"
+    const MODEL_ID = "mlc-ai/gemma-4-E2B-it-q4f16_1-MLC";  // does not exist yet
+    const PROMPT   = "Create a box 4m wide, 3m tall, 2m deep.";
+
+    const statusEl = document.getElementById("status");
+    const logEl    = document.getElementById("log");
+
+    function log(msg, cls = "") {
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      logEl.appendChild(line);
+    }
+
+    window.runProbe = async function () {
+      logEl.innerHTML = "";
+      statusEl.textContent = "⬤ RUNNING";
+      statusEl.className = "";
+
+      log(`[poc] Model ID: ${MODEL_ID}`);
+      log(`[poc] Prompt: ${PROMPT}`);
+
+      // Attempt to import web-llm via CDN.
+      let CreateMLCEngine;
+      try {
+        const webllm = await import("https://esm.run/@mlc-ai/web-llm@0.2.79/src/index.ts");
+        CreateMLCEngine = webllm.CreateMLCEngine;
+        log("[webllm] module imported OK", "ok");
+      } catch (e) {
+        log(`[webllm] import FAILED: ${e.message}`, "err");
+        log("Likely cause: CDN package mismatch or ESM path error. Try the npm build.", "note");
+        log("\nVERDICT: NO-GO — module import failed. Gemma 4 support absent.", "err");
+        statusEl.textContent = "⬤ NO-GO";
+        statusEl.className = "err";
+        return;
+      }
+
+      // Attempt engine creation. Will fail with 404 / model-not-found when
+      // the MLC prebuilt for Gemma 4 doesn't exist.
+      let engine;
+      const t0 = Date.now();
+      try {
+        engine = await CreateMLCEngine(MODEL_ID, {
+          initProgressCallback: (p) => {
+            statusEl.textContent = `⬤ LOADING ${p.text}`;
+          },
+        });
+        log(`[webllm] engine created in ${Date.now() - t0}ms`, "ok");
+      } catch (e) {
+        log(`[webllm] engine creation FAILED: ${e.message}`, "err");
+        if (e.message?.includes("404") || e.message?.includes("not found")) {
+          log("Expected failure: no Gemma 4 prebuilt in mlc-ai HF org.", "note");
+          log("Track: https://github.com/mlc-ai/web-llm/issues/810", "note");
+        }
+        log("\nVERDICT: NO-GO — model not available. Re-evaluate when mlc-ai/web-llm#810 resolves.", "err");
+        statusEl.textContent = "⬤ NO-GO";
+        statusEl.className = "err";
+        return;
+      }
+
+      // Inference timing (only reached if model exists).
+      const t1 = Date.now();
+      const reply = await engine.chat.completions.create({
+        messages: [{ role: "user", content: PROMPT }],
+        max_tokens: 128,
+        stream: false,
+      });
+      const elapsed = (Date.now() - t1) / 1000;
+      const nTok = reply.usage?.completion_tokens ?? 0;
+      const tps = nTok > 0 ? (nTok / elapsed).toFixed(1) : "?";
+
+      log(`[webllm] completion: ${nTok} tokens in ${elapsed.toFixed(2)}s → ${tps} t/s`, "ok");
+      log(`[webllm] text: ${reply.choices[0]?.message?.content ?? "(empty)"}`, "ok");
+      log(`\nVERDICT: GO — ${tps} t/s. Compare to in-browser baseline and decide.`, "ok");
+      statusEl.textContent = `⬤ DONE — ${tps} t/s`;
+      statusEl.className = "ok";
+    };
+
+    log("[poc] Page ready. Click RUN PROBE to start.", "note");
+    log("[poc] Expected outcome (May 2026): NO-GO — Gemma 4 not in MLC model zoo.", "note");
+    log("[poc] Track upstream: https://github.com/mlc-ai/web-llm/issues/810", "note");
+  </script>
+</body>
+</html>

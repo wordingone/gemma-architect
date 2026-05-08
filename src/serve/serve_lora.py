@@ -96,6 +96,7 @@ FastModel.for_inference(model)
 print(f"[serve_lora] loaded in {time.time() - t0:.1f}s", flush=True)
 
 _drafter = None
+_vocab_mismatch = False
 if USE_MTP:
     print(f"[serve_lora] MTP enabled — loading drafter {DRAFTER_MODEL_ID}", flush=True)
     t1 = time.time()
@@ -106,6 +107,19 @@ if USE_MTP:
             torch_dtype=torch.bfloat16,
         )
         print(f"[serve_lora] drafter loaded in {time.time() - t1:.1f}s", flush=True)
+        # Vocab mismatch between drafter and target produces garbled speculative output.
+        # Disable MTP instead of silently corrupting results.
+        target_vocab = getattr(model.config, "vocab_size", None)
+        drafter_vocab = getattr(_drafter.config, "vocab_size", None)
+        if target_vocab is not None and drafter_vocab is not None and drafter_vocab != target_vocab:
+            print(
+                f"[serve_lora] WARNING: drafter vocab {drafter_vocab} != target vocab {target_vocab}; "
+                "disabling MTP to prevent garbled output",
+                file=sys.stderr,
+                flush=True,
+            )
+            _drafter = None
+            _vocab_mismatch = True
     except Exception as exc:
         print(
             f"[serve_lora] WARNING: drafter load failed ({exc}); running without MTP",
@@ -138,7 +152,12 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "adapter": str(ADAPTER), "mtp_enabled": _drafter is not None}
+    return {
+        "status": "ok",
+        "adapter": str(ADAPTER),
+        "mtp_enabled": _drafter is not None,
+        "vocab_mismatch": _vocab_mismatch,
+    }
 
 
 @app.post("/v1/chat/completions")

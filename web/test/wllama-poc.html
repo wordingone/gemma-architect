@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<!--
+  wllama-poc.html — wllama (llama.cpp WASM) engine evaluation POC (#99 Prong B)
+
+  wllama wraps llama.cpp compiled to WASM. llama.cpp supports Gemma 4 base
+  in its native build, but browser WASM support for Gemma 4 is unconfirmed
+  as of May 2026 (wllama v2.4.0, 2026-04-27). CPU-only; no MTP drafter
+  (PR #22738 closed unmerged 2026-05-06).
+
+  This page attempts to load a GGUF Gemma 4 E2B model and run a timing test.
+  Expected outcome: either WASM loads OK (Gemma 4 GGUF path works) or fails
+  at the model load step (architecture not registered in WASM build).
+
+  Result: post t/s here once measurement completes.
+  GO/NO-GO decision: compare to in-browser WebGPU baseline (~12-18 t/s).
+  CPU WASM will be significantly slower — expected NO-GO for production,
+  useful as an offline fallback measurement.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>wllama Gemma 4 POC — #99 Prong B</title>
+  <style>
+    body { font-family: monospace; margin: 2rem; background: #0a0a0a; color: #e0e0e0; }
+    h1   { color: #aaa; font-size: 1rem; letter-spacing: 0.1em; }
+    #log { margin-top: 1rem; white-space: pre-wrap; font-size: 0.85rem; }
+    .ok  { color: #6cf; }
+    .err { color: #f66; }
+    .note{ color: #999; }
+    button { margin-top: 1rem; padding: 0.4rem 1rem; background: #222; color: #ccc;
+             border: 1px solid #444; cursor: pointer; font-family: monospace; }
+    button:hover { background: #333; }
+  </style>
+</head>
+<body>
+  <h1>wllama / llama.cpp WASM — GEMMA·4·E2B — ENGINE EVALUATION</h1>
+  <div id="status" class="note">⬤ IDLE</div>
+  <button onclick="runProbe()">RUN PROBE</button>
+  <div id="log"></div>
+
+  <script type="module">
+    // Gemma 4 2B GGUF — smallest quantization for POC speed test.
+    // Requires CORS headers on the server (vite dev server adds them by default).
+    // Replace with a locally-served GGUF if the CDN URL is inaccessible.
+    //
+    // NOTE: no HF-hosted Gemma 4 GGUF at a known stable CDN URL as of 2026-05-08.
+    // Swap MODEL_URL for a local path: e.g. "http://localhost:5175/models/gemma4-e2b.Q4_K_M.gguf"
+    // after downloading from https://huggingface.co/ggml-org/gemma-4-2b-GGUF
+    const MODEL_URL  = "http://localhost:5175/models/gemma4-e2b-Q4_K_M.gguf";  // serve locally
+    const PROMPT     = "Create a box 4m wide, 3m tall, 2m deep.";
+    const MAX_TOKENS = 128;
+
+    const statusEl = document.getElementById("status");
+    const logEl    = document.getElementById("log");
+
+    function log(msg, cls = "") {
+      const line = document.createElement("div");
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      logEl.appendChild(line);
+    }
+
+    window.runProbe = async function () {
+      logEl.innerHTML = "";
+      statusEl.textContent = "⬤ RUNNING";
+      statusEl.className = "";
+
+      log(`[poc] Model URL: ${MODEL_URL}`);
+      log(`[poc] Prompt: ${PROMPT}`);
+      log(`[poc] wllama v2.4.0 — llama.cpp WASM, CPU-only`);
+
+      let Wllama;
+      try {
+        const mod = await import("https://esm.run/@wllama/wllama@2.4.0");
+        Wllama = mod.Wllama;
+        log("[wllama] module imported OK", "ok");
+      } catch (e) {
+        log(`[wllama] import FAILED: ${e.message}`, "err");
+        log("Try: npx serve web/ and reload at localhost:3000/test/wllama-poc.html", "note");
+        statusEl.textContent = "⬤ IMPORT-FAIL";
+        statusEl.className = "err";
+        return;
+      }
+
+      const wllama = new Wllama({
+        "single-thread/wllama.wasm": "https://esm.run/@wllama/wllama@2.4.0/src/single-thread/wllama.wasm",
+      });
+
+      log("[wllama] loading model (CPU WASM — expect 30-120s for 2B Q4)…");
+      const t0 = Date.now();
+      try {
+        await wllama.loadModelFromUrl(MODEL_URL, {
+          n_ctx: 2048,
+          progressCallback: ({ loaded, total }) => {
+            const pct = total > 0 ? Math.round((loaded / total) * 100) : "?";
+            statusEl.textContent = `⬤ DOWNLOADING ${pct}%`;
+          },
+        });
+        log(`[wllama] model loaded in ${((Date.now() - t0) / 1000).toFixed(1)}s`, "ok");
+      } catch (e) {
+        log(`[wllama] model load FAILED: ${e.message}`, "err");
+        if (e.message?.includes("fetch") || e.message?.includes("404")) {
+          log("No local GGUF found. Download gemma-4-2b-Q4_K_M.gguf and serve at /models/.", "note");
+          log("Source: https://huggingface.co/ggml-org/gemma-4-2b-GGUF", "note");
+        } else if (e.message?.includes("architecture") || e.message?.includes("unsupported")) {
+          log("Architecture not supported in this WASM build.", "err");
+          log("wllama may not include Gemma 4 in its WASM compilation as of v2.4.0.", "note");
+        }
+        log("\nVERDICT: NO-GO — model load failed.", "err");
+        statusEl.textContent = "⬤ NO-GO";
+        statusEl.className = "err";
+        return;
+      }
+
+      // Inference timing
+      log(`[wllama] running inference (${MAX_TOKENS} tokens max)…`);
+      const t1 = Date.now();
+      let outputTokens = 0;
+      let outputText = "";
+      try {
+        outputText = await wllama.createCompletion(PROMPT, {
+          nPredict: MAX_TOKENS,
+          sampling: { temp: 0.1 },
+          onNewToken: () => { outputTokens++; },
+        });
+      } catch (e) {
+        log(`[wllama] inference FAILED: ${e.message}`, "err");
+        statusEl.textContent = "⬤ INFER-FAIL";
+        statusEl.className = "err";
+        return;
+      }
+      const elapsed = (Date.now() - t1) / 1000;
+      const tps = outputTokens > 0 ? (outputTokens / elapsed).toFixed(1) : "?";
+
+      log(`[wllama] ${outputTokens} tokens in ${elapsed.toFixed(2)}s → ${tps} t/s (CPU)`, "ok");
+      log(`[wllama] text: ${outputText.slice(0, 200)}`, "ok");
+      log("", "");
+      log(`In-browser WebGPU baseline: ~12-18 t/s (from P6 measurements).`, "note");
+      log(`CPU WASM result: ${tps} t/s.`, "note");
+      const tpsNum = parseFloat(tps);
+      const verdict = tpsNum >= 10
+        ? `MARGINAL-GO — ${tps} t/s (close to WebGPU baseline; worth as offline fallback)`
+        : `NO-GO — ${tps} t/s (too slow vs WebGPU baseline; not worth the swap)`;
+      log(`\nVERDICT: ${verdict}`, tpsNum >= 10 ? "ok" : "err");
+      statusEl.textContent = `⬤ DONE — ${tps} t/s CPU`;
+      statusEl.className = tpsNum >= 10 ? "ok" : "err";
+
+      await wllama.exit();
+    };
+
+    log("[poc] Page ready. Click RUN PROBE to start.", "note");
+    log("[poc] Prerequisites:", "note");
+    log("  1. Download gemma-4-2b-Q4_K_M.gguf from ggml-org/gemma-4-2b-GGUF on HF", "note");
+    log("  2. Place at web/public/models/gemma4-e2b-Q4_K_M.gguf", "note");
+    log("  3. Run: VITE_GEMMA_AGENT_URL='' bun run dev  (so dev server serves the file)", "note");
+    log("  4. Visit http://localhost:5173/test/wllama-poc.html", "note");
+  </script>
+</body>
+</html>
