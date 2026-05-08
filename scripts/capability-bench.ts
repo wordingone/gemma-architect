@@ -4,6 +4,8 @@
 // Drives the Gemma·Architect NL agent via CDP chat path with 10 architect-grade
 // prompts, exports the resulting IFC, scores against expected_checks, and writes
 // a receipt to state/capability-bench-<sha>-<ts>.json.
+// Exported IFCs are also saved to state/ifcs/<prompt-id>-<sha>.ifc for the
+// P8d round-trip judge (bun run judge).
 //
 // Usage:
 //   bun scripts/capability-bench.ts
@@ -11,8 +13,28 @@
 //   bun scripts/capability-bench.ts --dry-run                   # skip CDP/IFC, check infra
 //
 // Prerequisite: shared browser must be up (bun run shared-browser:start).
+//
+// ─── Runtime with LoRA endpoint (serve_lora.py) ───────────────────────────────
+// To run with fine-tuned LoRA inference instead of in-browser WebGPU:
+//
+//   # 1. Start FastAPI OpenAI-compat server (port 8088)
+//   #    ADAPTER_DIR = path to your fine-tuned LoRA adapter directory
+//   ADAPTER_DIR=<path> USE_MTP=1 python src/serve/serve_lora.py
+//
+//   # 2. Start Vite dev server pointing at the remote agent
+//   VITE_GEMMA_AGENT_URL=http://localhost:8088 bun run web:dev
+//
+//   # 3. Run bench (shared browser must be open at localhost:5175)
+//   bun run capability-bench
+//
+//   # 4. Run P8d judge over the exported IFCs
+//   bun run judge
+//
+// Without VITE_GEMMA_AGENT_URL, the app falls back to in-browser WebGPU
+// (Gemma 4 E2B via @huggingface/transformers). Bench output is identical;
+// only the inference path differs.
 
-import { readdir, readFile, writeFile, mkdir, rm } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, rm, copyFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 import WebSocket from "ws";
@@ -489,6 +511,13 @@ async function main() {
       console.log("  exporting IFC...");
       ifcPath = await exportIFC();
       console.log(`  downloaded: ${ifcPath}`);
+
+      // Persist IFC for judge.ts (P8d round-trip judge)
+      const ifcsDir = join(STATE_DIR, "ifcs");
+      await mkdir(ifcsDir, { recursive: true });
+      const savedIFCPath = join(ifcsDir, `${p.id}-${sha}.ifc`);
+      await copyFile(ifcPath, savedIFCPath);
+      console.log(`  saved: ${savedIFCPath}`);
 
       console.log("  scoring...");
       checkResults = await scoreIFC(ifcPath, p.expected_checks);
