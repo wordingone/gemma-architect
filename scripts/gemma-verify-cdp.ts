@@ -28,13 +28,9 @@ const isolated = process.argv.includes("--isolated");
 // --- Resolve SHA ---
 function getSHA(): string {
   try {
-    return execSync("git -C B:/M/gemma-architect-master rev-parse --short HEAD", { encoding: "utf8" }).trim();
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8", cwd: process.cwd() }).trim();
   } catch {
-    try {
-      return execSync("git -C B:/M/gemma-architect rev-parse --short HEAD", { encoding: "utf8" }).trim();
-    } catch {
-      return "unknown";
-    }
+    return "unknown";
   }
 }
 
