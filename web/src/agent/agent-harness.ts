@@ -114,6 +114,28 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
           progress_callback: progressCb,
         });
         const processor = await AutoProcessor.from_pretrained(MODEL_ID);
+
+        // Probe WebGPU for silent OrtRun buffer corruption (#128/#133).
+        // onnxruntime-web 1.26.0-dev + Chrome 147 regression: from_pretrained
+        // succeeds but GPU buffers can be invalid; error only surfaces at
+        // generate()-time. A 1-token probe here catches it before we cache.
+        if (device === "webgpu") {
+          try {
+            const probeText = (processor as any).tokenizer.apply_chat_template(
+              [{ role: "user", content: "test" }],
+              { tokenize: false, add_generation_prompt: true },
+            ) as string;
+            const probeIn = await (processor as any)(probeText);
+            await (model as any).generate({ ...probeIn, max_new_tokens: 1 });
+          } catch (probeErr) {
+            console.warn(
+              "[agent-harness] WebGPU probe failed — OrtRun buffer invalid (#128); falling back to CPU.",
+              (probeErr as Error).message.slice(0, 120),
+            );
+            continue; // skip assignment; next backend (CPU) will be tried
+          }
+        }
+
         _model = model;
         _processor = processor;
         updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · ${label}`);
