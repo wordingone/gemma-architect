@@ -24,7 +24,10 @@
     "verify:cdp": "node --experimental-strip-types scripts/gemma-verify-cdp.ts",
     "cdp": "node --experimental-strip-types scripts/cdp.ts",
     "capability-bench": "bun scripts/capability-bench.ts",
-    "judge": "bun web/test/capability/judge.ts"
+    "judge": "bun web/test/capability/judge.ts",
+    "baseline:bare-gemma": "bun web/test/capability/baselines/bare-gemma.ts",
+    "baseline:blender-mcp": "bun web/test/capability/baselines/blender-mcp.ts",
+    "baseline:compare": "bun web/test/capability/baselines/post-comparison.ts"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
