@@ -5,8 +5,7 @@
 // persists to localStorage. Canvas serializes to/from P4 SavedSkill via
 // "Compile to skill" → saveSkill().
 //
-// P5a scope: manual wiring, linear compile/run. Topological sort + agent
-// graph emit are P5b.
+// P5a scope: manual wiring, topo-sorted run/compile. Agent graph emit is P5b.
 
 import { dispatchSync, type DispatchArgs } from "./commands/dispatch";
 import { saveSkill, type SkillStep } from "./skill-store";
