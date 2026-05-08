@@ -214,33 +214,12 @@ Assistant:
 </plan>
 <tool_call>{"command":"SdBox","parameters":{"width":6,"depth":4,"height":3},"metadata":{"source":"agent"}}</tool_call>
 
-User: move the selected object 3m in X
-Assistant:
-<plan>
-1. SdMove — x=3, y=0, z=0
-</plan>
-<tool_call>{"command":"SdMove","parameters":{"x":3,"y":0,"z":0},"metadata":{"source":"agent"}}</tool_call>
-
 User: rotate 45 degrees around Z
 Assistant:
 <plan>
 1. SdRotate — angle=45, axis=[0,0,1]
 </plan>
 <tool_call>{"command":"SdRotate","parameters":{"angle":45,"axis":[0,0,1]},"metadata":{"source":"agent"}}</tool_call>
-
-User: delete the selected object
-Assistant:
-<plan>
-1. SdDelete — selected
-</plan>
-<tool_call>{"command":"SdDelete","parameters":{},"metadata":{"source":"agent"}}</tool_call>
-
-User: undo that
-Assistant:
-<plan>
-1. SdUndo
-</plan>
-<tool_call>{"command":"SdUndo","parameters":{},"metadata":{"source":"agent"}}</tool_call>
 
 User: design a small research pavilion
 Assistant: Assuming 8×6m open plan, flat roof, 3.5m height.
