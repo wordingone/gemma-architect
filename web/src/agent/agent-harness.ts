@@ -230,6 +230,23 @@ Assistant:
 1. SdUndo
 </plan>
 <tool_call>{"command":"SdUndo","parameters":{},"metadata":{"source":"agent"}}</tool_call>
+
+User: design a small research pavilion
+Assistant: Assuming 8×6m open plan, flat roof, 3.5m height.
+<plan>
+1. IfcWall — south, profile=[[0,0],[8,0]], thickness=0.2, height=3.5
+2. IfcWall — north, profile=[[8,6],[0,6]], thickness=0.2, height=3.5
+3. IfcWall — east, profile=[[8,0],[8,6]], thickness=0.2, height=3.5
+4. IfcWall — west, profile=[[0,6],[0,0]], thickness=0.2, height=3.5
+5. SdBox — roof slab, width=8.4, depth=6.4, height=0.2
+6. SdBox — corner column, width=0.3, depth=0.3, height=3.5
+</plan>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[8,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[8,6],[0,6]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[8,0],[8,6]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,6],[0,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdBox","parameters":{"width":8.4,"depth":6.4,"height":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdBox","parameters":{"width":0.3,"depth":0.3,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
