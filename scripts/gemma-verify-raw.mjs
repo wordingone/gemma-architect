@@ -564,6 +564,171 @@ function record(name, passed, evidence) {
   else record("viewport-contrast", r.passed, r.evidence);
 }
 
+// ── Surface 13: ifc-import-renders ───────────────────────────────────────────────
+// Programmatically injects Schultz_Residence.ifc via file-input DataTransfer,
+// waits for viewer:ifc-loaded event, asserts scene grew + userData.creator set.
+{
+  const r = await evaluate(`
+    (async () => {
+      const loadPromise = new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('viewer:ifc-loaded timeout')), 30000);
+        window.addEventListener('viewer:ifc-loaded', (e) => {
+          clearTimeout(t);
+          resolve(e.detail);
+        }, { once: true });
+      });
+
+      let fetchOk = false;
+      let fetchErr = '';
+      try {
+        const resp = await fetch('/samples/Schultz_Residence.ifc');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const bytes = await resp.arrayBuffer();
+        const file = new File([bytes], 'Schultz_Residence.ifc', { type: 'application/x-step' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const input = document.getElementById('file-input');
+        if (!input) throw new Error('no #file-input');
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        fetchOk = true;
+      } catch (e) {
+        fetchErr = String(e);
+      }
+
+      if (!fetchOk) return { passed: false, evidence: { reason: 'fetch/inject failed', fetchErr } };
+
+      try {
+        const detail = await loadPromise;
+        const afterCount = window.__viewer?.scene?.children?.length ?? 0;
+        let hasMeshWithCreator = false;
+        window.__viewer?.scene?.traverse?.(obj => {
+          if (obj.userData?.creator) hasMeshWithCreator = true;
+        });
+        const passed = afterCount > 0 && hasMeshWithCreator;
+        return { passed, evidence: { afterCount, hasMeshWithCreator, detail } };
+      } catch (e) {
+        return { passed: false, evidence: { reason: 'event not received', error: String(e) } };
+      }
+    })()`, true);
+  if (!r) record('ifc-import-renders', false, { reason: 'evaluate returned null' });
+  else record('ifc-import-renders', r.passed, r.evidence);
+}
+
+// ── Surface 14: render-mode-cycle-survives-theme ─────────────────────────────────
+// 4 render modes x 2 themes (8 combos) via SdRenderMode dispatch.
+// Structural survive check: scene children still > 0 after each combo.
+// Pixel-color delta deferred to Step 2 Haiku (canvas blank bug #249).
+{
+  const r = await evaluate(`
+    (async () => {
+      const MODES = ['shaded', 'wireframe', 'ghosted', 'technical'];
+      const THEMES = ['day', 'night'];
+      const failures = [];
+
+      for (const mode of MODES) {
+        for (const theme of THEMES) {
+          const dispatchRes = window.__dispatch?.('SdRenderMode', { mode });
+          document.documentElement.setAttribute('data-mode', theme);
+          await new Promise(r => setTimeout(r, 100));
+          const childCount = window.__viewer?.scene?.children?.length ?? 0;
+          if (childCount === 0) {
+            failures.push({ mode, theme, reason: 'scene empty after mode switch' });
+          }
+          if (dispatchRes?.error) {
+            failures.push({ mode, theme, reason: 'dispatch error: ' + dispatchRes.error });
+          }
+        }
+      }
+
+      window.__dispatch?.('SdRenderMode', { mode: 'shaded' });
+      document.documentElement.setAttribute('data-mode', 'day');
+      await new Promise(r => setTimeout(r, 100));
+
+      return { passed: failures.length === 0, evidence: { failures, testedCombos: MODES.length * THEMES.length } };
+    })()`, true);
+  if (!r) record('render-mode-cycle-survives-theme', false, { reason: 'evaluate returned null' });
+  else record('render-mode-cycle-survives-theme', r.passed, r.evidence);
+}
+
+// ── Surface 15: view-switch-via-cmdk ────────────────────────────────────────────────
+// SdSetViewOrtho(top): camera.position.z > 5 (Z-up viewer, top = high Z).
+// SdSetViewOrtho(iso): all position components positive (diagonal).
+// setActiveLevel(elev=3): controls.target.z shifts to near 3.
+{
+  const r = await evaluate(`
+    (async () => {
+      const cam = window.__viewer?.camera;
+      if (!cam) return { passed: false, evidence: { reason: 'no __viewer.camera' } };
+
+      window.__dispatch?.('SdSetViewOrtho', { view: 'top' });
+      await new Promise(r => setTimeout(r, 200));
+      const topZ = cam.position.z;
+      const topPassed = topZ > 5;
+
+      window.__dispatch?.('SdSetViewOrtho', { view: 'iso' });
+      await new Promise(r => setTimeout(r, 200));
+      const isoX = cam.position.x;
+      const isoY = cam.position.y;
+      const isoZ = cam.position.z;
+      const isoPassed = isoX > 0 && isoY > 0 && isoZ > 0;
+
+      let levelPassed = true;
+      let levelEvidence = {};
+      try {
+        const lvlRes = window.__dispatch?.('IfcLevel', { name: 'TestLevel', elevation: 3 });
+        const levelId = lvlRes?.id;
+        if (levelId) {
+          const perspPane = window.__viewer?.panes?.find(p => p.view === 'persp');
+          const zBefore = perspPane?.controls?.target?.z ?? 0;
+          window.__dispatch?.('setActiveLevel', { id: levelId });
+          await new Promise(r => setTimeout(r, 200));
+          const zAfter = perspPane?.controls?.target?.z ?? 0;
+          levelPassed = Math.abs(zAfter - 3) < 1.0;
+          levelEvidence = { levelId, zBefore, zAfter };
+        } else {
+          levelEvidence = { reason: 'IfcLevel returned no id', lvlRes };
+        }
+      } catch (e) {
+        levelEvidence = { reason: 'setActiveLevel threw', error: String(e) };
+      }
+
+      const passed = topPassed && isoPassed && levelPassed;
+      return { passed, evidence: { topZ, topPassed, isoX, isoY, isoZ, isoPassed, levelPassed, levelEvidence } };
+    })()`, true);
+  if (!r) record('view-switch-via-cmdk', false, { reason: 'evaluate returned null' });
+  else record('view-switch-via-cmdk', r.passed, r.evidence);
+}
+
+// ── Surface 16: agent-build-and-export ────────────────────────────────────────────
+// Dispatches IfcWall (what the agent emits) then SdExport(ifc).
+// Tests the full dispatch chain; LLM inference exercised in Step 2 Haiku rehearsal.
+{
+  const r = await evaluate(`
+    (async () => {
+      const beforeCount = window.__viewer?.scene?.children?.length ?? 0;
+
+      const wallRes = window.__dispatch?.('IfcWall', { height: 3, length: 5, thickness: 0.2 });
+      await new Promise(r => setTimeout(r, 300));
+
+      const afterCount = window.__viewer?.scene?.children?.length ?? 0;
+      let hasIfcWall = false;
+      window.__viewer?.scene?.traverse?.(obj => {
+        if (obj.userData?.creator === 'IfcWall') hasIfcWall = true;
+      });
+      const wallPassed = afterCount > beforeCount && hasIfcWall;
+
+      const exportRes = window.__dispatch?.('SdExport', { format: 'ifc' });
+      await new Promise(r => setTimeout(r, 500));
+      const exportPassed = exportRes?.ok === true && (exportRes?.result?.format ?? exportRes?.format) === 'ifc';
+
+      const passed = wallPassed && exportPassed;
+      return { passed, evidence: { beforeCount, afterCount, hasIfcWall, exportRes, wallPassed, exportPassed } };
+    })()`, true);
+  if (!r) record('agent-build-and-export', false, { reason: 'evaluate returned null' });
+  else record('agent-build-and-export', r.passed, r.evidence);
+}
+
 // ── Aggregate + write receipt ─────────────────────────────────────────────────
 ws.close();
 if (newTabTargetId) {

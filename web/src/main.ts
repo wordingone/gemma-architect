@@ -1563,7 +1563,10 @@ async function handleFile(file: File): Promise<void> {
       const id = nextId++;
       workerCallbacks.set(id, (msg) => {
         if (msg.type === "load-ifc-ok") {
-          buildIfcMesh(msg, file.name).then((scene) => finalizeFileLoad(scene, file.name));
+          buildIfcMesh(msg, file.name).then((scene) => {
+            finalizeFileLoad(scene, file.name);
+            window.dispatchEvent(new CustomEvent("viewer:ifc-loaded", { detail: { filename: file.name } }));
+          });
         } else if (msg.type === "load-ifc-error") {
           setStatus(`IFC parse failed: ${msg.error}`, "err");
         }
