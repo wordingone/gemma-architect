@@ -734,6 +734,13 @@ async function main() {
       check_details: checkResults,
       snapshot: snapPath ?? null,
     });
+
+    // P10-3: 8s cooldown between prompts — lets GPU driver release transient buffer
+    // state between OrtRun invocations, reducing cascading VRAM pressure.
+    if (!DRY_RUN && i < prompts.length - 1) {
+      console.log("  cooldown 8s...");
+      await sleep(8000);
+    }
   }
 
   const totalPassed = results.filter(r => r.pass).length;
