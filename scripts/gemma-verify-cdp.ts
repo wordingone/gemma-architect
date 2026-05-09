@@ -337,7 +337,7 @@ function record(result: SurfaceResult) {
     "SdBooleanUnion","SdBooleanDifference","SdBooleanIntersection","SdFillet","SdChamfer",
     "SdOffset","SdTrim","SdExtend","SdSplit","SdShell","SdMove","SdRotate","SdScale","SdMirror",
     "SdArray","IfcWall","IfcSlab","IfcColumn","IfcBeam","IfcMember","IfcStair","IfcDoor","IfcWindow",
-    "IfcRoof","IfcSpace","IfcAnnotationDimension","SdLeader","SdText","SdGroup","SdUngroup",
+    "IfcRoof","IfcPlate","IfcSpace","IfcAnnotationDimension","SdLeader","SdText","SdGroup","SdUngroup",
     "SdLayer","SdLock","SdHide","SdSelect","SdSelectAll","SdDeselect","SdIsolate","SdZoomExtents",
     "SdZoomSelected","SdSetViewOrtho","SdSetViewPerspective","SdMeasure","SdArea","SdVolume",
     "SdImport","SdExport","SdSave","SdOpen","setActiveTool",

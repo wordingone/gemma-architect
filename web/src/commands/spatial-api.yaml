@@ -662,8 +662,8 @@
   topology_role: host
   kg_predicates: [bounds, containedIn]
   synonyms: [plate, cladding panel, facade panel, cassette, glazing infill, panel]
-  kernel: three
-  alias_source: ifc_standard_vocabulary
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
 
 - canonical_name: IfcSkylight
   ifc4_class: IfcOpeningElement
