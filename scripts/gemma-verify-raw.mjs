@@ -287,7 +287,7 @@ function record(name, passed, evidence) {
     "SdBox","SdCylinder","SdSphere","SdCone","SdPrism","SdExtrude","SdRevolve","SdSweep","SdLoft",
     "SdBooleanUnion","SdBooleanDifference","SdBooleanIntersection","SdFillet","SdChamfer",
     "SdOffset","SdTrim","SdExtend","SdSplit","SdShell","SdMove","SdRotate","SdScale","SdMirror",
-    "SdArray","IfcWall","IfcSlab","IfcColumn","IfcBeam","IfcStair","IfcDoor","IfcWindow",
+    "SdArray","IfcWall","IfcSlab","IfcColumn","IfcBeam","IfcMember","IfcStair","IfcDoor","IfcWindow",
     "IfcRoof","IfcSpace","IfcAnnotationDimension","SdLeader","SdText","SdGroup","SdUngroup",
     "SdLayer","SdLock","SdHide","SdSelect","SdSelectAll","SdDeselect","SdIsolate","SdZoomExtents",
     "SdZoomSelected","SdSetViewOrtho","SdSetViewPerspective","SdMeasure","SdArea","SdVolume",
