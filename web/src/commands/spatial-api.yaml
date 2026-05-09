@@ -809,7 +809,7 @@
     - {name: orientation, type: number,  required: false, unit: deg, default: 0, description: "Rotation about Z-axis in degrees"}
     - {name: level,       type: string,  required: false, description: "Storey name; default ground"}
     - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
-  topology_role: hosted
+  topology_role: solid
   kg_predicates: [containedIn]
   synonyms: [furnishing, furniture, desk, chair, counter, cabinet, fixture, medical cabinet, reception]
   kernel: replicad
