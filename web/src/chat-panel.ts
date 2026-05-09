@@ -204,7 +204,8 @@ export class ChatPanel {
       } else if (out.status === "needs_input") {
         // Agent path has no interactive picker — surface as error so the agent can self-correct.
         fired.push(`${d.verb}(err)`);
-        errors.push(out.summary ?? `Failed ${d.verb}: missing required args.`);
+        const missingList = out.missing?.join(", ") ?? "required args";
+        errors.push(`Failed ${d.verb}: missing ${missingList}.`);
       } else {
         fired.push(`${d.verb}(err)`);
         errors.push(out.summary ?? `Failed ${d.verb}.`);
