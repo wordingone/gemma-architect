@@ -17,7 +17,7 @@
     "audit:stubs": "bun scripts/audit-stubs.ts",
     "audit:parity": "bun scripts/audit-zip-parity.ts",
     "audit:dispatch": "bun scripts/audit-dispatch-routing.ts",
-    "verify": "bun run typecheck && bun run web:typecheck && bun run audit:stubs && bun run audit:parity && bun run audit:dispatch",
+    "verify": "bun run typecheck && bun run web:typecheck && bun run audit:stubs && bun run audit:parity && bun run audit:dispatch && bun test web/",
     "verify:deploy": "bun scripts/validate-deploy.ts",
     "shared-browser:start": "powershell -File scripts/shared-browser/start.ps1",
     "shared-browser:stop": "powershell -File scripts/shared-browser/stop.ps1",
