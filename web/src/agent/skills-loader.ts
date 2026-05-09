@@ -25,6 +25,8 @@
 // They are imported dynamically so the module is safe to bundle for the browser,
 // where loadSkills is never called.
 
+export type SkillStep = { verb: string; args: Record<string, unknown> };
+
 export type Skill = {
   name: string;
   version: string;
@@ -33,6 +35,7 @@ export type Skill = {
   examples: string[];
   eval_id: string;
   body: string;
+  steps?: SkillStep[];
 };
 
 // ---------------------------------------------------------------------------

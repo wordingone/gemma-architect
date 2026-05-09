@@ -9,7 +9,7 @@ export type CommandSessionState =
   | "execute"
   | "summarize";
 
-export type InvocationSource = "console" | "palette" | "agent" | "compat";
+export type InvocationSource = "console" | "palette" | "agent" | "skill" | "compat";
 
 export type CommandEnvelope = {
   command: string;
