@@ -75,6 +75,9 @@ function send(method, params = {}) {
 await send("Runtime.enable");
 await send("Page.enable");
 
+// Bring tab to front so WebGL renders real frames (background tabs throttle rAF/canvas).
+await send("Page.bringToFront");
+
 async function evaluate(expression, returnByValue = true) {
   const res = await send("Runtime.evaluate", { expression, returnByValue, awaitPromise: true });
   if (res?.result?.exceptionDetails) return null; // expression threw — callers must null-check
