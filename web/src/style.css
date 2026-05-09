@@ -14,6 +14,10 @@
   --paper-tint:   oklch(0.940 0.015 85 / 0.65);
   --paper-solid:  oklch(0.972 0.007 85);
   --paper-2-solid:oklch(0.955 0.009 85);
+  /* #260: WebGL clear color — matches paper-solid so canvas blends with
+     surrounding vellum UI (panels composite glass tint over paper-base
+     yielding ~0.970 effective lightness; paper-solid = 0.972 is close). */
+  --canvas-bg:    oklch(0.972 0.007 85);
 
   --ink:          oklch(0.26 0.012 250);
   --ink-soft:     oklch(0.40 0.010 250);
@@ -116,6 +120,7 @@ html[data-mode="night"] {
   --paper-tint:   oklch(0.28 0.075 248 / 0.65);
   --paper-solid:  oklch(0.24 0.065 248);
   --paper-2-solid:oklch(0.22 0.068 248);
+  --canvas-bg:    oklch(0.28 0.068 248); /* blueprint: same as paper-base — glass overlay is subtle here */
 
   /* night mode lineweight inks — same softened ramp, blueprint hues */
   --ink-construction: oklch(0.55 0.040 235 / 0.32);
@@ -4348,6 +4353,26 @@ footer span { margin: 0 0.55rem; color: var(--border); }
 #scene-panel.collapsed .sp-list,
 #scene-panel.collapsed .sp-empty { display: none; }
 
+/* W2.x / #258: when scene-panel is embedded in the sidebar tab it must
+   flow inline, not float over other content. Override the legacy
+   floating-panel chrome (position, bg, blur, shadow) entirely. */
+#scene-panel.scene-panel-embed {
+  position: static;
+  top: auto;
+  left: auto;
+  width: auto;
+  max-height: none;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  overflow: visible;
+  transition: none;
+}
+
 .sp-header {
   display: flex;
   align-items: center;
@@ -4475,7 +4500,7 @@ footer span { margin: 0 0.55rem; color: var(--border); }
 }
 
 @container viewer (max-width: 520px) {
-  #scene-panel {
+  #scene-panel:not(.scene-panel-embed) {
     width: clamp(180px, 38cqw, 240px);
     top: 0.5rem;
     left: 0.5rem;

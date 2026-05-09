@@ -681,7 +681,7 @@ export class Viewer {
     // Read the theme's paper-base color from CSS and use it as the opaque
     // clear color so the canvas owns the background (instead of .viewport CSS).
     const dummy = document.createElement("span");
-    dummy.style.cssText = "position:fixed;left:-9999px;background:var(--paper-base)";
+    dummy.style.cssText = "position:fixed;left:-9999px;background:var(--canvas-bg)";
     document.body.appendChild(dummy);
     const bg = getComputedStyle(dummy).backgroundColor;
     document.body.removeChild(dummy);
