@@ -175,6 +175,7 @@ export class ChatPanel {
         : (resp.text.trim() || (fired.length > 0 ? `Dispatched: ${fired.join(", ")}` : "(no response)"));
     this._pushMsg({ role: "assistant", content: assistantText, dispatches: resp.dispatches });
     this._history.push({ role: "assistant", content: assistantText });
+    (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
   }
 
   private _pushPlanMsg(resp: AgentResponse): void {

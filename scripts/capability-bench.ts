@@ -223,6 +223,9 @@ async function captureViewportSnapshot(promptId: string, sha: string): Promise<s
     `) as { x: number; y: number; width: number; height: number } | null;
     if (!bbox || bbox.width < 1 || bbox.height < 1) return null;
 
+    await evaluate("window.__viewer?.frameAllVisible?.()");
+    await sleep(400);
+
     const result = await cdp("Page.captureScreenshot", {
       format: "png",
       clip: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height, scale: 1 },
