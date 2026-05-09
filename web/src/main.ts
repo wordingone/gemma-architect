@@ -18,6 +18,7 @@ import { Viewer } from "./viewer/viewer";
 import { ScenePanel, type SceneSummary } from "./scene-panel";
 import { applyDrafting, removeDrafting, isDrafting } from "./drafting";
 import { DEMOS, applyParams, type DemoPrompt, type Param } from "./demo-prompts";
+import { getLayerForCreator } from "./layers";
 import { buildIfc, ifcRoundTrip } from "./ifc";
 import {
   detectFormat,
@@ -105,6 +106,8 @@ paramCollapseBtn.addEventListener("click", () => {
 const viewer = new Viewer(canvas, viewportAreaEl);
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
+// Expose dispatchSync for CDP-driven verification scripts.
+(window as unknown as { __dispatch: typeof dispatchSync }).__dispatch = dispatchSync;
 initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
@@ -297,6 +300,7 @@ registerHandler("IfcWall", (args) => {
   }
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcWall";
+  mesh.userData.layerId = getLayerForCreator("IfcWall");
   viewer.addMesh(mesh, "brep");
   return { created: "wall", length: len, thickness: t, height: wallH };
 });
@@ -312,6 +316,7 @@ registerHandler("IfcSlab", (args) => {
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcSlab";
+  mesh.userData.layerId = getLayerForCreator("IfcSlab");
   viewer.addMesh(mesh, "brep");
   return { created: "slab", width: w, depth: d };
 });
@@ -327,6 +332,7 @@ registerHandler("IfcColumn", (args) => {
   if (p) mesh.position.set(p[0], p[1], 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcColumn";
+  mesh.userData.layerId = getLayerForCreator("IfcColumn");
   viewer.addMesh(mesh, "brep");
   return { created: "column", height: h };
 });
@@ -346,6 +352,7 @@ registerHandler("IfcBeam", (args) => {
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcBeam";
+  mesh.userData.layerId = getLayerForCreator("IfcBeam");
   viewer.addMesh(mesh, "brep");
   return { created: "beam", length: len };
 });
@@ -368,6 +375,7 @@ registerHandler("IfcStair", (args) => {
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcStair";
+  mesh.userData.layerId = getLayerForCreator("IfcStair");
   viewer.addMesh(mesh, "brep");
   return { created: "stair", steps, run, height: totalH };
 });
@@ -384,6 +392,7 @@ registerHandler("IfcDoor", (args) => {
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcDoor";
+  mesh.userData.layerId = getLayerForCreator("IfcDoor");
   viewer.addMesh(mesh, "brep");
   return { created: "door", width: w, height: h };
 });
@@ -402,6 +411,7 @@ registerHandler("IfcWindow", (args) => {
   else mesh.position.z = sill;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcWindow";
+  mesh.userData.layerId = getLayerForCreator("IfcWindow");
   viewer.addMesh(mesh, "brep");
   return { created: "window", width: w, height: h, sillH: sill };
 });
@@ -425,6 +435,7 @@ registerHandler("IfcRoof", (args) => {
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcRoof";
+  mesh.userData.layerId = getLayerForCreator("IfcRoof");
   viewer.addMesh(mesh, "brep");
   return { created: "roof", width: w, depth: d, ridgeHeight: ridgeH };
 });
@@ -445,6 +456,7 @@ registerHandler("IfcSpace", (args) => {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcSpace";
+  mesh.userData.layerId = getLayerForCreator("IfcSpace");
   if (args.name) mesh.userData.spaceName = args.name as string;
   viewer.addMesh(mesh, "brep");
   return { created: "space", width: w, depth: d, height: h };
@@ -464,6 +476,7 @@ registerHandler("IfcFoundation", (args) => {
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcFoundation";
+  mesh.userData.layerId = getLayerForCreator("IfcFoundation");
   viewer.addMesh(mesh, "brep");
   return { created: "foundation", width: w, depth: d };
 });
@@ -480,6 +493,7 @@ registerHandler("IfcCeiling", (args) => {
   mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, elev);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcCeiling";
+  mesh.userData.layerId = getLayerForCreator("IfcCeiling");
   viewer.addMesh(mesh, "brep");
   return { created: "ceiling", width: w, depth: d, elevation: elev };
 });
@@ -496,6 +510,7 @@ registerHandler("IfcCurtainWall", (args) => {
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcCurtainWall";
+  mesh.userData.layerId = getLayerForCreator("IfcCurtainWall");
   viewer.addMesh(mesh, "brep");
   return { created: "curtainwall", length: wallLen, height: h };
 });
@@ -512,6 +527,7 @@ registerHandler("IfcSkylight", (args) => {
   else mesh.position.z = elev;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcSkylight";
+  mesh.userData.layerId = getLayerForCreator("IfcSkylight");
   viewer.addMesh(mesh, "brep");
   return { created: "skylight", width: w, depth: d };
 });
@@ -528,6 +544,7 @@ registerHandler("IfcOpening", (args) => {
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcOpening";
+  mesh.userData.layerId = getLayerForCreator("IfcOpening");
   viewer.addMesh(mesh, "brep");
   return { created: "opening", width: w, height: h };
 });
@@ -546,6 +563,7 @@ registerHandler("IfcRamp", (args) => {
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcRamp";
+  mesh.userData.layerId = getLayerForCreator("IfcRamp");
   viewer.addMesh(mesh, "brep");
   return { created: "ramp", run, width: w };
 });
@@ -564,6 +582,7 @@ registerHandler("IfcRailing", (args) => {
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcRailing";
+  mesh.userData.layerId = getLayerForCreator("IfcRailing");
   viewer.addMesh(mesh, "brep");
   return { created: "railing", length: len, height: h };
 });
