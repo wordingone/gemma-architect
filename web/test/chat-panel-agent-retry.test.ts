@@ -8,7 +8,7 @@
 // @huggingface/transformers, which fails in happy-dom during module init). Instead,
 // test two layers:
 //
-//   1. classifyDispatchResult (extracted helper) — tests the routing decision.
+//   1. classifyDispatchResult (real production module) — tests the routing decision.
 //      Before PR #270: needs_input fell through to the success path.
 //      After PR #270: needs_input produces fired="Verb(err)" + error message.
 //
@@ -22,34 +22,15 @@
 
 import { describe, test, expect } from "bun:test";
 import { buildDispatchSummary } from "../src/chat-dispatch-summary";
-
-// ── Layer 1: routing helper (inline — mirrors _runDispatches logic) ───────
-// This is the exact logic from chat-panel.ts _runDispatches after PR #270.
-// If _runDispatches changes, this helper must be kept in sync.
-type InvokeResult = {
-  status: "success" | "needs_input" | "error";
-  summary?: string;
-  missing?: string[];
-};
-function classifyDispatchResult(
-  verb: string,
-  result: InvokeResult
-): { fired: string; error?: string } {
-  if (result.status === "success") {
-    return { fired: verb };
-  } else if (result.status === "needs_input") {
-    const missingList = result.missing?.join(", ") ?? "required args";
-    return { fired: `${verb}(err)`, error: `Failed ${verb}: missing ${missingList}.` };
-  } else {
-    return { fired: `${verb}(err)`, error: result.summary ?? `Failed ${verb}.` };
-  }
-}
+import { classifyDispatchResult } from "../src/chat-dispatch-routing";
 
 describe("#271 — agent self-correct loop regression net", () => {
   describe("Layer 1: dispatch routing (classifyDispatchResult)", () => {
     test("needs_input → fired ends with (err), error contains missing args", () => {
       const result = classifyDispatchResult("SdRectangle", {
         status: "needs_input",
+        state: "idle",
+        summary: "",
         missing: ["width", "height"],
       });
       expect(result.fired).toBe("SdRectangle(err)");
@@ -61,6 +42,7 @@ describe("#271 — agent self-correct loop regression net", () => {
     test("needs_input with no missing[] → falls back to 'required args'", () => {
       const result = classifyDispatchResult("SdExport", {
         status: "needs_input",
+        state: "idle",
         summary: "waiting…",
       });
       expect(result.fired).toBe("SdExport(err)");
@@ -68,7 +50,7 @@ describe("#271 — agent self-correct loop regression net", () => {
     });
 
     test("success → fired = verb, no error", () => {
-      const result = classifyDispatchResult("IfcWall", { status: "success" });
+      const result = classifyDispatchResult("IfcWall", { status: "success", state: "idle", summary: "" });
       expect(result.fired).toBe("IfcWall");
       expect(result.error).toBeUndefined();
     });
@@ -76,6 +58,7 @@ describe("#271 — agent self-correct loop regression net", () => {
     test("error status → fired ends with (err), forwards summary", () => {
       const result = classifyDispatchResult("SdBox", {
         status: "error",
+        state: "idle",
         summary: "geometry is degenerate",
       });
       expect(result.fired).toBe("SdBox(err)");

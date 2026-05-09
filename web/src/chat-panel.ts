@@ -12,6 +12,7 @@ import { findSkillsForPrompt } from "./agent/skills-loader";
 import { isSimplePlan } from "./plan";
 import { lastTurn } from "./telemetry";
 import { buildDispatchSummary } from "./chat-dispatch-summary";
+import { classifyDispatchResult } from "./chat-dispatch-routing";
 import { setPickerHint } from "./viewer/create-mode";
 
 type Message = {
@@ -198,18 +199,10 @@ export class ChatPanel {
         parameters: d.args,
         metadata: { source: "agent" },
       });
-      if (out.status === "success") {
-        fired.push(d.verb);
-        setPickerHint(null);
-      } else if (out.status === "needs_input") {
-        // Agent path has no interactive picker — surface as error so the agent can self-correct.
-        fired.push(`${d.verb}(err)`);
-        const missingList = out.missing?.join(", ") ?? "required args";
-        errors.push(`Failed ${d.verb}: missing ${missingList}.`);
-      } else {
-        fired.push(`${d.verb}(err)`);
-        errors.push(out.summary ?? `Failed ${d.verb}.`);
-      }
+      const cls = classifyDispatchResult(d.verb, out);
+      fired.push(cls.fired);
+      if (out.status === "success") setPickerHint(null);
+      if (cls.error) errors.push(cls.error);
     }
     const summary = resp.dispatches.length === 0
       ? (resp.text.trim() || "(no response)")
