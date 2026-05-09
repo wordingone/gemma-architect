@@ -111,6 +111,8 @@ await delay(2000);
 
 // ── Test hook ─────────────────────────────────────────────────────────────────
 await evaluate(`(window.__gemmaTest = { events: {}, surfaceResults: [] }, true)`);
+// Enable test mode: SdExport short-circuits to prevent real Downloads pollution (#262).
+await evaluate(`(window.__testMode = true, true)`);
 await delay(1000);
 
 // ── Surface recording ─────────────────────────────────────────────────────────
@@ -388,6 +390,21 @@ function record(name, passed, evidence) {
     })()`);
   if (!r) record("console-vocab-runs", false, { reason: "evaluate returned null — expression threw or timed out" });
   else record("console-vocab-runs", r.passed, r.evidence);
+
+  // Teardown: clear any orphaned picker-bridge sessions (#259).
+  // Verbs like SdLine leave a collecting_args session that blocks OrbitControls.
+  await evaluate(`(window.__clearCommandSession?.(), true)`);
+  await delay(100);
+
+  // Assert session cleared and picker-prompt gone — prevents false-green on session leak.
+  const sessionClean = await evaluate(`(function() {
+    const sess = window.__getActiveCommandSession?.();
+    const pickerVisible = !!document.querySelector('.picker-prompt.visible');
+    return { sessionNull: sess === null, pickerVisible };
+  })()`);
+  if (sessionClean && (!sessionClean.sessionNull || sessionClean.pickerVisible)) {
+    console.log(`    warn: post-teardown session leak — sessionNull=${sessionClean.sessionNull} pickerVisible=${sessionClean.pickerVisible}`);
+  }
 }
 
 // ── Surface 8: console-verb-produces-output ───────────────────────────────────

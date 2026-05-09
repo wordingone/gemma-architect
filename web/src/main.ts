@@ -47,6 +47,7 @@ import { syncToolActiveClass, getState, setState } from "./app-state";
 import { initCreateMode } from "./viewer/create-mode";
 import { undo, redo } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
+import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
 import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs-primitives";
 import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePointAt, domain as curveDomain } from "./nurbs-curves";
 import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
@@ -109,6 +110,9 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
 // Expose dispatchSync for CDP-driven verification scripts.
 (window as unknown as { __dispatch: typeof dispatchSync }).__dispatch = dispatchSync;
+// Expose command-session control for test teardown (prevents picker-bridge session leak).
+(window as unknown as { __clearCommandSession: typeof clearCommandSession }).__clearCommandSession = clearCommandSession;
+(window as unknown as { __getActiveCommandSession: typeof getActiveCommandSession }).__getActiveCommandSession = getActiveCommandSession;
 // Expose gridStore for CDP probes.
 (window as unknown as { __gridStore: typeof gridStore }).__gridStore = gridStore;
 initRenderModes(viewer);
@@ -160,6 +164,8 @@ registerHandler("SdZoomSelected", () => {
 registerHandler("SdExport", (args) => {
   const fmt = args.format as string | undefined;
   if (!fmt) return { error: "format required (ifc|glb|gltf|obj|stl|step|svg|dxf|pdf|usdz)" };
+  // Skip real download in test mode to prevent file pollution in Downloads.
+  if ((window as unknown as { __testMode?: boolean }).__testMode) return { ok: true, format: fmt, testMode: true };
   handleExport(fmt).catch((e) => console.warn("[SdExport]", e));
   return { ok: true, format: fmt };
 });
