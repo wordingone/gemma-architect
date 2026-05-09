@@ -1000,6 +1000,31 @@ function record(name, passed, evidence) {
   else record('research-mode-chrome', r.passed, r.evidence);
 }
 
+// ── Surface 22: grid-level-datum-pick ────────────────────────────────────────
+// Dispatch IfcGrid + IfcLevel + IfcDatum via DSL and confirm 3 typed scene objects visible.
+{
+  const r = await evaluate(`(async () => {
+    const dispatch = window.__dispatch;
+    if (!dispatch) return { passed: false, evidence: { reason: 'no window.__dispatch' } };
+    const beforeCount = window.__viewer?.scene?.children?.length ?? 0;
+    // Dispatch 3 different architectural annotation types.
+    const rGrid  = dispatch('IfcGrid',  { origin: [10, 10], spacing: 5, count: 3, name: 'VerifyGrid' });
+    const rLevel = dispatch('IfcLevel', { elevation: 0, name: 'VerifyLevel', height: 3.0 });
+    const rDatum = dispatch('IfcDatum', { position: [5, 5, 0], label: 'VerifyDatum' });
+    await new Promise(r => setTimeout(r, 200));
+    const children = Array.from(window.__viewer?.scene?.children ?? []);
+    const afterCount = children.length;
+    const hasGrid  = children.some(c => c.userData?.creator === 'IfcGrid'  || c.userData?.kind === 'grid');
+    const hasLevel = children.some(c => c.userData?.creator === 'IfcLevel' || c.userData?.kind === 'brep' && c.userData?.levelId);
+    const hasDatum = children.some(c => c.userData?.creator === 'IfcDatum');
+    const passed = hasGrid && hasLevel && hasDatum && afterCount > beforeCount;
+    return { passed, evidence: { beforeCount, afterCount, hasGrid, hasLevel, hasDatum,
+      gridOk: rGrid?.ok, levelOk: rLevel?.ok, datumOk: rDatum?.ok } };
+  })()`, true);
+  if (!r) record('grid-level-datum-pick', false, { reason: 'evaluate returned null' });
+  else record('grid-level-datum-pick', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

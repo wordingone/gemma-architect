@@ -24,6 +24,8 @@ import { dispatchSync } from "../commands/dispatch";
 import { snapPoint } from "./snap-state";
 import { pushAction } from "../history";
 import { getActiveCommandSession, provideSessionPick, clearCommandSession } from "../commands/command-session";
+import { gridStore } from "../grids";
+import { levelStore } from "../levels";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -600,40 +602,60 @@ function buildRailing(a: { x: number; y: number }, b: { x: number; y: number }):
   return { mesh, chain };
 }
 
-function buildRefGrid(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+function buildRefGrid(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
   const w = Math.abs(b.x - a.x) || 5;
   const d = Math.abs(b.y - a.y) || 5;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-  const geom = new THREE.BoxGeometry(w, d, 0.02);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x8888aa, transparent: true, opacity: 0.3, wireframe: true });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(cx, cy, 0);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "grid";
-  const chain = `// ref-grid: ${round(w)}×${round(d)} at [${round(cx)}, ${round(cy)}]`;
-  return { mesh, chain };
+  const spacing = 5;
+  const count = Math.max(2, Math.min(10, Math.round(Math.max(w, d) / spacing) + 1));
+  const name = `Grid ${gridStore.all().length + 1}`;
+  const grid = gridStore.add({ name, spacing, count, rotation: 0, origin: [cx, cy], visible: true });
+  const extent = spacing * (count - 1);
+  const half = extent / 2;
+  const t = 0.02;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x888899, transparent: true, opacity: 0.5 });
+  const group = new THREE.Group();
+  group.position.set(cx, cy, 0);
+  group.userData.kind = "grid";
+  group.userData.gridId = grid.id;
+  group.userData.creator = "IfcGrid";
+  for (let i = 0; i < count; i++) {
+    const offset = -half + i * spacing;
+    const mv = new THREE.Mesh(new THREE.BoxGeometry(t, extent + spacing, t), mat);
+    mv.position.set(offset, 0, 0);
+    group.add(mv);
+    const mh = new THREE.Mesh(new THREE.BoxGeometry(extent + spacing, t, t), mat);
+    mh.position.set(0, offset, 0);
+    group.add(mh);
+  }
+  const chain = `IfcGrid({origin:[${round(cx)},${round(cy)}],spacing:${spacing},count:${count},name:"${name}"})`;
+  return { mesh: group, chain };
 }
 
-function buildLevel(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+function buildLevel(p: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
+  const elevation = 0; // initial elevation; user adjusts via inline chip
+  const name = `Level ${levelStore.all().length}`;
+  const level = levelStore.findOrCreate(name, elevation, 3.0);
   const extent = 10;
   const geom = new THREE.BoxGeometry(extent, extent, 0.02);
   const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(p.x, p.y, 0);
+  mesh.position.set(p.x, p.y, elevation);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "level";
-  const chain = `// level: datum plane at [${round(p.x)}, ${round(p.y)}, 0]`;
+  mesh.userData.creator = "IfcLevel";
+  mesh.userData.levelId = level.id;
+  const chain = `IfcLevel({elevation:${elevation},name:"${name}",height:3.0})`;
   return { mesh, chain };
 }
 
-function buildDatum(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+function buildDatum(p: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
   const geom = new THREE.SphereGeometry(0.15, 8, 8);
   const mat = new THREE.MeshStandardMaterial({ color: 0x33bb66, roughness: 0.3, metalness: 0.2 });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(p.x, p.y, 0);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "datum";
-  const chain = `// datum: marker at [${round(p.x)}, ${round(p.y)}, 0]`;
+  mesh.userData.creator = "IfcDatum";
+  const chain = `IfcDatum({position:[${round(p.x)},${round(p.y)},0]})`;
   return { mesh, chain };
 }
 
