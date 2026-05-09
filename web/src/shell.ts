@@ -315,6 +315,8 @@ function buildMenubar(host: HTMLElement) {
       row.className = "menu-row";
       row.setAttribute("role", "menuitem");
       if (e.stub) row.dataset.stub = "true";
+      if (e.toolId) row.dataset.toolId = e.toolId;
+      if (e.canonical) row.dataset.canonical = e.canonical;
 
       const label = document.createElement("span");
       label.className = "menu-row-label";
