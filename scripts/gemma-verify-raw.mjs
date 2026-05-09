@@ -108,7 +108,18 @@ async function canvasBpp(label = '') {
   return { bpp, pixels: Math.round(pixels), label };
 }
 
+// Tab + WS cleanup — always runs even if a surface throws.
+async function cleanup() {
+  try { ws.close(); } catch { /* ignore */ }
+  if (newTabTargetId) {
+    await fetch(`http://localhost:9222/json/close/${newTabTargetId}`).catch(() => {});
+  }
+}
+
 // ── Reload to clean state ─────────────────────────────────────────────────────
+let surfaces = [];
+try {
+
 await send("Page.reload", { waitForNavigation: false });
 await delay(2000);
 
@@ -119,7 +130,6 @@ await evaluate(`(window.__testMode = true, true)`);
 await delay(1000);
 
 // ── Surface recording ─────────────────────────────────────────────────────────
-const surfaces = [];
 function record(name, passed, evidence) {
   surfaces.push({ name, passed, evidence });
   const icon = passed ? "✓" : "✗";
@@ -928,11 +938,11 @@ function record(name, passed, evidence) {
   else record('menubar-coverage', r.passed, r.evidence);
 }
 
-// ── Aggregate + write receipt ─────────────────────────────────────────────────
-ws.close();
-if (newTabTargetId) {
-  await fetch(`http://localhost:9222/json/close/${newTabTargetId}`).catch(() => {});
+} finally {
+  await cleanup();
 }
+
+// ── Aggregate + write receipt ─────────────────────────────────────────────────
 
 const allPassed  = surfaces.every(s => s.passed);
 const passCount  = surfaces.filter(s => s.passed).length;
