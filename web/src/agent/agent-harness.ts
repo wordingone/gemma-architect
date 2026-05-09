@@ -230,6 +230,11 @@ function buildSceneContext(): string {
 const FEW_SHOT_EXAMPLES = `
 Examples — copy verb names EXACTLY; always emit <plan> before tool_call tags:
 
+DIMENSION RULES (CRITICAL — always apply):
+- Perimeter walls: south=[[0,0],[W,0]], east=[[W,0],[W,D]], north=[[W,D],[0,D]], west=[[0,D],[0,0]] where W=footprint width, D=footprint depth. Never place all walls at the same origin.
+- Multi-story height: multiply floor count × ceiling height (e.g. 2 stories × 2.7m = 5.4m). NEVER emit height=0 for any volumetric element.
+- Stated footprint dimensions map directly to wall profile endpoints and SdBox width/depth.
+
 User: draw a 5m wall, 0.2m thick, 2.8m tall
 Assistant:
 <plan>
@@ -251,22 +256,62 @@ Assistant:
 </plan>
 <tool_call>{"command":"SdRotate","parameters":{"angle":45,"axis":[0,0,1]},"metadata":{"source":"agent"}}</tool_call>
 
-User: design a small research pavilion
-Assistant: Assuming 8×6m open plan, flat roof, 3.5m height.
+User: Design a 6m × 8m single-story cabin, 3m ceiling, with bedroom and living area.
+Assistant: 6×8m footprint, 3m ceiling. Perimeter walls: W=6, D=8.
 <plan>
-1. IfcWall — south, profile=[[0,0],[8,0]], thickness=0.2, height=3.5
-2. IfcWall — north, profile=[[8,6],[0,6]], thickness=0.2, height=3.5
-3. IfcWall — east, profile=[[8,0],[8,6]], thickness=0.2, height=3.5
-4. IfcWall — west, profile=[[0,6],[0,0]], thickness=0.2, height=3.5
-5. SdBox — roof slab, width=8.4, depth=6.4, height=0.2
-6. SdBox — corner column, width=0.3, depth=0.3, height=3.5
+1. IfcWall — south, profile=[[0,0],[6,0]], thickness=0.2, height=3
+2. IfcWall — east,  profile=[[6,0],[6,8]], thickness=0.2, height=3
+3. IfcWall — north, profile=[[6,8],[0,8]], thickness=0.2, height=3
+4. IfcWall — west,  profile=[[0,8],[0,0]], thickness=0.2, height=3
+5. SdBox — roof slab, width=6.4, depth=8.4, height=0.2
+6. IfcSpace — bedroom, origin=[0,0,0], width=3, depth=8, height=3
+7. IfcSpace — living, origin=[3,0,0], width=3, depth=8, height=3
 </plan>
-<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[8,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"IfcWall","parameters":{"profile":[[8,6],[0,6]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"IfcWall","parameters":{"profile":[[8,0],[8,6]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,6],[0,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdBox","parameters":{"width":8.4,"depth":6.4,"height":0.2},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdBox","parameters":{"width":0.3,"depth":0.3,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[6,0]],"thickness":0.2,"height":3},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[6,0],[6,8]],"thickness":0.2,"height":3},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[6,8],[0,8]],"thickness":0.2,"height":3},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.2,"height":3},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdBox","parameters":{"width":6.4,"depth":8.4,"height":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"name":"bedroom","origin":[0,0,0],"width":3,"depth":8,"height":3},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"name":"living","origin":[3,0,0],"width":3,"depth":8,"height":3},"metadata":{"source":"agent"}}</tool_call>
+
+User: Design a 2-story office building: 15m × 10m footprint, 3.2m floor-to-floor height.
+Assistant: 15×10m footprint. 2 floors × 3.2m = 6.4m total wall height. Perimeter: W=15, D=10.
+<plan>
+1. IfcWall — south, profile=[[0,0],[15,0]], thickness=0.25, height=6.4
+2. IfcWall — east,  profile=[[15,0],[15,10]], thickness=0.25, height=6.4
+3. IfcWall — north, profile=[[15,10],[0,10]], thickness=0.25, height=6.4
+4. IfcWall — west,  profile=[[0,10],[0,0]], thickness=0.25, height=6.4
+5. SdBox — ground floor slab, width=15, depth=10, height=0.3
+6. SdBox — upper floor slab, width=15, depth=10, height=0.3
+7. IfcLevel — ground floor, elevation=0
+8. IfcLevel — upper floor, elevation=3.2
+</plan>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[15,0]],"thickness":0.25,"height":6.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[15,0],[15,10]],"thickness":0.25,"height":6.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[15,10],[0,10]],"thickness":0.25,"height":6.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,10],[0,0]],"thickness":0.25,"height":6.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdBox","parameters":{"width":15,"depth":10,"height":0.3},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdBox","parameters":{"width":15,"depth":10,"height":0.3,"elevation":3.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Ground Floor","elevation":0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Second Floor","elevation":3.2},"metadata":{"source":"agent"}}</tool_call>
+
+User: Single fire station truck bay: 7m wide, 12m deep, 5m clear ceiling height.
+Assistant: 7×12m bay, 5m ceiling. Perimeter: W=7, D=12.
+<plan>
+1. IfcWall — south, profile=[[0,0],[7,0]], thickness=0.3, height=5
+2. IfcWall — east,  profile=[[7,0],[7,12]], thickness=0.3, height=5
+3. IfcWall — north, profile=[[7,12],[0,12]], thickness=0.3, height=5
+4. IfcWall — west,  profile=[[0,12],[0,0]], thickness=0.3, height=5
+5. SdBox — roof slab, width=7.6, depth=12.6, height=0.25
+6. IfcSpace — truck bay, name=truck bay, origin=[0,0,0], width=7, depth=12, height=5
+</plan>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[7,0]],"thickness":0.3,"height":5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[7,0],[7,12]],"thickness":0.3,"height":5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[7,12],[0,12]],"thickness":0.3,"height":5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,12],[0,0]],"thickness":0.3,"height":5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdBox","parameters":{"width":7.6,"depth":12.6,"height":0.25},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"name":"truck bay","origin":[0,0,0],"width":7,"depth":12,"height":5},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

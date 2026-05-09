@@ -606,6 +606,11 @@ export class Viewer {
           return;
         }
       }
+      if (e.key === "f" || e.key === "F") {
+        this.frameAllVisible();
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         // Ignore Delete while in sub-object mode — ESC back to parent first.
         if (this.subTargetObject) return;
@@ -1865,6 +1870,33 @@ export class Viewer {
     const perspPane = this.panes.find(p => p.view === "persp");
     if (perspPane) {
       perspPane.controls.target.set(cx, cy, cz);
+      perspPane.controls.update();
+    }
+  }
+
+  frameAllVisible(): void {
+    this.scene.updateMatrixWorld(true);
+    const box = new THREE.Box3();
+    this.scene.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      const ud = (obj as any).userData as Record<string, unknown>;
+      if (ud?.kind !== "brep" && ud?.kind !== "compound") return;
+      box.expandByObject(obj);
+    });
+    if (box.isEmpty()) box.setFromObject(this.scene);
+    if (box.isEmpty() || !isFinite(box.min.x) || !isFinite(box.max.x)) return;
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z, 0.5);
+    const dist = (maxDim / 2) / Math.tan((this.camera.fov / 2) * (Math.PI / 180)) * 1.4;
+    const dir = new THREE.Vector3(1, 1, 1.5).normalize();
+    this.camera.position.set(center.x + dir.x * dist, center.y + dir.y * dist, center.z + dir.z * dist);
+    this.camera.updateProjectionMatrix();
+    const perspPane = this.panes.find(p => p.view === "persp");
+    if (perspPane) {
+      perspPane.controls.target.set(center.x, center.y, center.z);
       perspPane.controls.update();
     }
   }

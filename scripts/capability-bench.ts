@@ -223,6 +223,9 @@ async function captureViewportSnapshot(promptId: string, sha: string): Promise<s
     `) as { x: number; y: number; width: number; height: number } | null;
     if (!bbox || bbox.width < 1 || bbox.height < 1) return null;
 
+    await evaluate("window.__viewer?.frameAllVisible?.()");
+    await sleep(400);
+
     const result = await cdp("Page.captureScreenshot", {
       format: "png",
       clip: { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height, scale: 1 },
@@ -239,26 +242,175 @@ async function captureViewportSnapshot(promptId: string, sha: string): Promise<s
   }
 }
 
-async function exportIFC(): Promise<string> {
-  // Clean download dir
-  try {
-    const prev = await readdir(DOWNLOAD_TMP);
-    await Promise.all(prev.filter(f => f.endsWith(".ifc")).map(f => rm(join(DOWNLOAD_TMP, f))));
-  } catch { /* dir may be empty */ }
+// ─── Brep-scene IFC export ────────────────────────────────────────────────────
+// The OpenCascade ".exp-btn[data-fmt=ifc]" export button always exports the
+// demo-wall geometry that auto-runs on page load (5.5×0.2×2.8m). Agent geometry
+// lives in the THREE.js brep viewer (userData.kind="brep"). We collect it via
+// CDP evaluate() and serialize to IFC STEP-21 in-process.
 
-  await evaluate("document.querySelector('.exp-btn[data-fmt=\"ifc\"]')?.click()");
+interface BrepMeshInfo {
+  creator: string;
+  spaceName: string | null;
+  levelName: string | null;
+  label: string | null;
+  bbox: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
+}
 
-  // Poll for new .ifc file
-  const deadline = Date.now() + DOWNLOAD_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    await sleep(500);
-    try {
-      const files = await readdir(DOWNLOAD_TMP);
-      const ifc = files.find(f => f.endsWith(".ifc") && !f.endsWith(".crdownload"));
-      if (ifc) return join(DOWNLOAD_TMP, ifc);
-    } catch { /* ignore */ }
+async function collectBrepMeshes(): Promise<BrepMeshInfo[]> {
+  const json = await evaluate(`(function() {
+    if (!window.__viewer || !window.__viewer.scene) return '[]';
+    window.__viewer.scene.updateMatrixWorld(true);
+    var results = [];
+    window.__viewer.scene.traverse(function(obj) {
+      if (!obj.isMesh) return;
+      var ud = obj.userData || {};
+      if (ud.kind !== 'brep' && ud.kind !== 'compound') return;
+      if (!obj.geometry) return;
+      obj.geometry.computeBoundingBox();
+      var lb = obj.geometry.boundingBox;
+      if (!lb || !isFinite(lb.min.x)) return;
+      var m = obj.matrixWorld.elements;
+      function t(x,y,z){return{x:m[0]*x+m[4]*y+m[8]*z+m[12],y:m[1]*x+m[5]*y+m[9]*z+m[13],z:m[2]*x+m[6]*y+m[10]*z+m[14]};}
+      var cs=[t(lb.min.x,lb.min.y,lb.min.z),t(lb.max.x,lb.min.y,lb.min.z),t(lb.min.x,lb.max.y,lb.min.z),t(lb.max.x,lb.max.y,lb.min.z),
+              t(lb.min.x,lb.min.y,lb.max.z),t(lb.max.x,lb.min.y,lb.max.z),t(lb.min.x,lb.max.y,lb.max.z),t(lb.max.x,lb.max.y,lb.max.z)];
+      var mnX=1e9,mnY=1e9,mnZ=1e9,mxX=-1e9,mxY=-1e9,mxZ=-1e9;
+      cs.forEach(function(c){if(c.x<mnX)mnX=c.x;if(c.x>mxX)mxX=c.x;if(c.y<mnY)mnY=c.y;if(c.y>mxY)mxY=c.y;if(c.z<mnZ)mnZ=c.z;if(c.z>mxZ)mxZ=c.z;});
+      results.push({creator:ud.creator||'Unknown',spaceName:ud.spaceName||null,levelName:ud.levelName||null,label:ud.label||null,
+                    bbox:{minX:mnX,maxX:mxX,minY:mnY,maxY:mxY,minZ:mnZ,maxZ:mxZ}});
+    });
+    return JSON.stringify(results);
+  })()`);
+  try { return JSON.parse(json ?? "[]"); } catch { return []; }
+}
+
+function buildMultiEntityIFC(meshes: BrepMeshInfo[]): string {
+  const L: string[] = [];
+  let n = 0;
+  const nid = () => `#${++n}`;
+  const sf = (v: number) => !isFinite(v) ? "0." : Number.isInteger(v) ? v.toFixed(1) : String(+v.toFixed(6));
+  const ss = (s: string) => `'${s.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+  const gg = () => { const a="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$"; let o=""; for(let i=0;i<22;i++) o+=a[Math.floor(Math.random()*64)]; return o; };
+
+  const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "");
+  L.push("ISO-10303-21;","HEADER;",
+    `FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'),'2;1');`,
+    `FILE_NAME('gemma-bench-brep.ifc',${ss(ts)},(${ss("gemma-architect")}),(${ss("gemma-architect")}),${ss("bench-brep-emitter/0.1")},${ss("gemma-architect/0.1")},'');`,
+    "FILE_SCHEMA(('IFC4'));","ENDSEC;","DATA;");
+
+  const per=nid(); L.push(`${per}=IFCPERSON($,$,${ss("gemma-architect")},$,$,$,$,$);`);
+  const org=nid(); L.push(`${org}=IFCORGANIZATION($,${ss("gemma-architect")},$,$,$);`);
+  const pao=nid(); L.push(`${pao}=IFCPERSONANDORGANIZATION(${per},${org},$);`);
+  const apl=nid(); L.push(`${apl}=IFCAPPLICATION(${org},${ss("0.1")},${ss("gemma-architect bench")},${ss("gemma-bench")});`);
+  const oh=nid(); const epoch=Math.floor(Date.now()/1000);
+  L.push(`${oh}=IFCOWNERHISTORY(${pao},${apl},$,.ADDED.,${epoch},${pao},${apl},${epoch});`);
+
+  const dz=nid(); L.push(`${dz}=IFCDIRECTION((0.,0.,1.));`);
+  const dx=nid(); L.push(`${dx}=IFCDIRECTION((1.,0.,0.));`);
+  const o0=nid(); L.push(`${o0}=IFCCARTESIANPOINT((0.,0.,0.));`);
+  const ax=nid(); L.push(`${ax}=IFCAXIS2PLACEMENT3D(${o0},${dz},${dx});`);
+  const cx=nid(); L.push(`${cx}=IFCGEOMETRICREPRESENTATIONCONTEXT($,${ss("Model")},3,1.0E-5,${ax},$);`);
+  const lu=nid(); L.push(`${lu}=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);`);
+  const au=nid(); L.push(`${au}=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);`);
+  const aru=nid(); L.push(`${aru}=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);`);
+  const vu=nid(); L.push(`${vu}=IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.);`);
+  const ua=nid(); L.push(`${ua}=IFCUNITASSIGNMENT((${lu},${au},${aru},${vu}));`);
+
+  const lp=nid(); L.push(`${lp}=IFCLOCALPLACEMENT($,${ax});`);
+  const proj=nid(); L.push(`${proj}=IFCPROJECT(${ss(gg())},${oh},${ss("GemmaArchitect Bench")},$,$,$,$,(${cx}),${ua});`);
+  const site=nid(); L.push(`${site}=IFCSITE(${ss(gg())},${oh},${ss("Site")},$,$,${lp},$,$,.ELEMENT.,$,$,$,$,$);`);
+  const bld=nid(); L.push(`${bld}=IFCBUILDING(${ss(gg())},${oh},${ss("Building")},$,$,${lp},$,$,.ELEMENT.,$,$,$);`);
+
+  // Storeys: one per IfcLevel mesh, or one default ground storey
+  const levelMeshes = meshes.filter(m => m.creator === "IfcLevel");
+  const storeyIds: string[] = [];
+  if (levelMeshes.length === 0) {
+    const s=nid(); L.push(`${s}=IFCBUILDINGSTOREY(${ss(gg())},${oh},${ss("Ground Floor")},$,$,${lp},$,$,.ELEMENT.,0.);`);
+    storeyIds.push(s);
+  } else {
+    for (const lm of levelMeshes) {
+      const elev = lm.bbox.minZ;
+      const nm = lm.levelName ?? (elev < 0.1 ? "Ground Floor" : `Level ${elev.toFixed(1)}m`);
+      const s=nid(); L.push(`${s}=IFCBUILDINGSTOREY(${ss(gg())},${oh},${ss(nm)},$,$,${lp},$,$,.ELEMENT.,${sf(elev)});`);
+      storeyIds.push(s);
+    }
   }
-  throw new Error(`IFC download did not appear in ${DOWNLOAD_TMP} within ${DOWNLOAD_TIMEOUT_MS / 1000}s`);
+  const pa=nid(); L.push(`${pa}=IFCRELAGGREGATES(${ss(gg())},${oh},$,$,${proj},(${site}));`);
+  const sa=nid(); L.push(`${sa}=IFCRELAGGREGATES(${ss(gg())},${oh},$,$,${site},(${bld}));`);
+  const ba=nid(); L.push(`${ba}=IFCRELAGGREGATES(${ss(gg())},${oh},$,$,${bld},(${storeyIds.join(",")}));`);
+
+  const contained: string[] = [];
+
+  // Build box geometry from world-space bounding box → IFCFACETEDBREP
+  function boxGeom(b: BrepMeshInfo["bbox"]) {
+    const {minX,maxX,minY,maxY,minZ,maxZ} = b;
+    const pts = [[minX,minY,minZ],[maxX,minY,minZ],[maxX,maxY,minZ],[minX,maxY,minZ],
+                 [minX,minY,maxZ],[maxX,minY,maxZ],[maxX,maxY,maxZ],[minX,maxY,maxZ]];
+    const pids = pts.map(([x,y,z]) => { const p=nid(); L.push(`${p}=IFCCARTESIANPOINT((${sf(x)},${sf(y)},${sf(z)}));`); return p; });
+    const tris = [[0,1,2],[0,2,3],[4,6,5],[4,7,6],[0,4,5],[0,5,1],[2,6,7],[2,7,3],[0,3,7],[0,7,4],[1,5,6],[1,6,2]];
+    const faces = tris.map(([a,b,c]) => {
+      const pl=nid(); L.push(`${pl}=IFCPOLYLOOP((${pids[a]},${pids[b]},${pids[c]}));`);
+      const fb=nid(); L.push(`${fb}=IFCFACEOUTERBOUND(${pl},.T.);`);
+      const fc=nid(); L.push(`${fc}=IFCFACE((${fb}));`); return fc;
+    });
+    const sh=nid(); L.push(`${sh}=IFCCLOSEDSHELL((${faces.join(",")}));`);
+    const br=nid(); L.push(`${br}=IFCFACETEDBREP(${sh});`);
+    const sr=nid(); L.push(`${sr}=IFCSHAPEREPRESENTATION(${cx},${ss("Body")},${ss("Brep")},(${br}));`);
+    const ps=nid(); L.push(`${ps}=IFCPRODUCTDEFINITIONSHAPE($,$,(${sr}));`);
+    const ep=nid(); L.push(`${ep}=IFCLOCALPLACEMENT(${lp},${ax});`);
+    return { shape: ps, place: ep };
+  }
+
+  for (const m of meshes) {
+    if (m.creator === "IfcLevel") continue;
+    const { shape, place } = boxGeom(m.bbox);
+    const eid=nid();
+    const nm = m.spaceName ?? m.levelName ?? m.label ?? m.creator;
+    const g = ss(gg());
+    switch (m.creator) {
+      case "IfcWall":
+        L.push(`${eid}=IFCWALL(${g},${oh},${ss("Wall")},$,$,${place},${shape},$,.STANDARD.);`); break;
+      case "IfcSlab":
+        L.push(`${eid}=IFCSLAB(${g},${oh},${ss("Slab")},$,$,${place},${shape},$,.FLOOR.);`); break;
+      case "IfcColumn":
+        L.push(`${eid}=IFCCOLUMN(${g},${oh},${ss("Column")},$,$,${place},${shape},$,.COLUMN.);`); break;
+      case "IfcBeam":
+        L.push(`${eid}=IFCBEAM(${g},${oh},${ss("Beam")},$,$,${place},${shape},$,.BEAM.);`); break;
+      case "IfcStair":
+        L.push(`${eid}=IFCSTAIR(${g},${oh},${ss("Stair")},$,$,${place},${shape},$,.STRAIGHT_RUN_STAIR.);`); break;
+      case "IfcRoof":
+        L.push(`${eid}=IFCROOF(${g},${oh},${ss("Roof")},$,$,${place},${shape},$,.FLAT_ROOF.);`); break;
+      case "IfcSpace":
+        L.push(`${eid}=IFCSPACE(${g},${oh},${ss(nm)},$,$,${place},${shape},$,.INTERNAL.,$,$);`); break;
+      case "IfcDoor": {
+        const w=sf(m.bbox.maxX-m.bbox.minX); const h=sf(m.bbox.maxZ-m.bbox.minZ);
+        L.push(`${eid}=IFCDOOR(${g},${oh},${ss("Door")},$,$,${place},${shape},$,.NOTDEFINED.,${h},${w});`); break;
+      }
+      case "IfcWindow": {
+        const w=sf(m.bbox.maxX-m.bbox.minX); const h=sf(m.bbox.maxZ-m.bbox.minZ);
+        L.push(`${eid}=IFCWINDOW(${g},${oh},${ss("Window")},$,$,${place},${shape},$,.NOTDEFINED.,${h},${w});`); break;
+      }
+      case "IfcFoundation":
+        L.push(`${eid}=IFCFOOTING(${g},${oh},${ss("Footing")},$,$,${place},${shape},$,.PAD_FOOTING.);`); break;
+      default:
+        L.push(`${eid}=IFCBUILDINGELEMENTPROXY(${g},${oh},${ss(m.creator)},$,$,${place},${shape},$,.NOTDEFINED.);`); break;
+    }
+    contained.push(eid);
+  }
+
+  if (contained.length > 0) {
+    const ci=nid(); L.push(`${ci}=IFCRELCONTAINEDINSPATIALSTRUCTURE(${ss(gg())},${oh},$,$,(${contained.join(",")}),${storeyIds[0]});`);
+  }
+  L.push("ENDSEC;","END-ISO-10303-21;");
+  return L.join("\n");
+}
+
+async function exportIFC(): Promise<string> {
+  await mkdir(DOWNLOAD_TMP, { recursive: true });
+  const meshes = await collectBrepMeshes();
+  const ifcText = buildMultiEntityIFC(meshes);
+  const outPath = join(DOWNLOAD_TMP, "agent-brep.ifc");
+  await writeFile(outPath, ifcText);
+  return outPath;
 }
 
 // ─── IFC check types ──────────────────────────────────────────────────────────
@@ -525,10 +677,8 @@ async function main() {
 
     try {
       // Clear geometry from previous run (no page reload — preserves GPU/ONNX state).
-      if (i > 0) {
-        console.log("  clearing scene...");
-        await clearScene();
-      }
+      console.log("  clearing scene...");
+      await clearScene();
 
       console.log("  sending prompt...");
       await sendChatPrompt(p.prompt);

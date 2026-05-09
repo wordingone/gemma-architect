@@ -369,6 +369,7 @@ export class SkillCanvas {
       await new Promise(r => setTimeout(r, 80));
       el?.classList.remove("node-running");
     }
+    (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
