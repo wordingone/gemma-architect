@@ -488,9 +488,9 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
     onSplitMode?.("quad");
   });
 
-  rightEl.querySelector("#ribbon-palette-btn")?.addEventListener("click", () => {
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
-  });
+  // ribbon-palette-btn click is owned by cmdk.ts (document.getElementById binding).
+  // Do NOT add a second handler here — two handlers conflict: cmdk.ts opens the
+  // overlay, then a simulated ctrlKey+k from shell.ts immediately closes it (#197).
 
   // When layout signals tool deactivation, clear active state on ribbon buttons.
   window.addEventListener("layout:tool-deactivated", () => {
