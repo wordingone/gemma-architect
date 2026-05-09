@@ -8,7 +8,7 @@ import * as WebIFC from "web-ifc";
 // @ts-ignore
 import webIfcWasmUrl from "web-ifc/web-ifc.wasm?url";
 
-export { buildIfc, type IfcMesh } from "./ifc-build.js";
+export { buildIfc, buildIfcScene, type IfcMesh, type IfcSceneElement } from "./ifc-build.js";
 
 // --- Round-trip verification via web-ifc -------------------------------------
 
@@ -34,30 +34,36 @@ export async function getIfcApi(): Promise<WebIFC.IfcAPI> {
 export type RoundTripResult = {
   ok: boolean;
   schema: string | null;
-  productCount: number;
+  productCount: number;  // legacy: proxy count (kept for compat)
   byteSize: number;
+  counts: { wall: number; slab: number; column: number; beam: number; proxy: number; total: number };
   error?: string;
 };
 
 export async function ifcRoundTrip(bytes: Uint8Array): Promise<RoundTripResult> {
+  const zero = { wall: 0, slab: 0, column: 0, beam: 0, proxy: 0, total: 0 };
   try {
     const api = await getIfcApi();
     const modelID = api.OpenModel(bytes, {});
     if (modelID < 0) {
-      return { ok: false, schema: null, productCount: 0, byteSize: bytes.byteLength, error: "OpenModel returned -1" };
+      return { ok: false, schema: null, productCount: 0, byteSize: bytes.byteLength, counts: zero, error: "OpenModel returned -1" };
     }
     const schema = api.GetModelSchema(modelID);
-    // Count IfcBuildingElementProxy entities — confirms the geometry round-tripped.
-    const proxies = api.GetLineIDsWithType(modelID, WebIFC.IFCBUILDINGELEMENTPROXY);
-    const productCount = proxies.size();
+    const wall   = api.GetLineIDsWithType(modelID, WebIFC.IFCWALL).size();
+    const slab   = api.GetLineIDsWithType(modelID, WebIFC.IFCSLAB).size();
+    const column = api.GetLineIDsWithType(modelID, WebIFC.IFCCOLUMN).size();
+    const beam   = api.GetLineIDsWithType(modelID, WebIFC.IFCBEAM).size();
+    const proxy  = api.GetLineIDsWithType(modelID, WebIFC.IFCBUILDINGELEMENTPROXY).size();
     api.CloseModel(modelID);
-    return { ok: true, schema, productCount, byteSize: bytes.byteLength };
+    const counts = { wall, slab, column, beam, proxy, total: wall + slab + column + beam + proxy };
+    return { ok: true, schema, productCount: proxy, byteSize: bytes.byteLength, counts };
   } catch (e) {
     return {
       ok: false,
       schema: null,
       productCount: 0,
       byteSize: bytes.byteLength,
+      counts: zero,
       error: (e as Error).message,
     };
   }

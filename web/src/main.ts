@@ -21,7 +21,7 @@ import { DEMOS, applyParams, type DemoPrompt, type Param } from "./demo-prompts"
 import { getLayerForCreator, layerStore } from "./layers";
 import { levelStore, getActiveLevelId } from "./levels";
 import { gridStore } from "./grids";
-import { buildIfc, ifcRoundTrip } from "./ifc";
+import { buildIfc, buildIfcScene, ifcRoundTrip, type IfcSceneElement } from "./ifc";
 import {
   detectFormat,
   loadMainThreadFormat,
@@ -1731,25 +1731,86 @@ function sanitizeStem(filename: string): string {
   return filename.replace(/\.[a-z0-9]+$/i, "").replace(/[^A-Za-z0-9_\-]+/g, "_") || "export";
 }
 
+// Creator tags that are spatial/structural only — skip in IFC element export.
+const IFC_SKIP_CREATORS = new Set(["IfcGrid", "IfcLevel", "IfcDatum"]);
+
+function sceneElementsForExport(): IfcSceneElement[] {
+  const elements: IfcSceneElement[] = [];
+  const scene = viewer.getScene();
+  const tmp = new THREE.Vector3();
+  scene.traverse((obj) => {
+    const creator = obj.userData.creator as string | undefined;
+    if (!creator || IFC_SKIP_CREATORS.has(creator)) return;
+    // Only process top-level creator objects (not their mesh children).
+    if (obj.parent && obj.parent.userData.creator) return;
+
+    const verts: number[] = [];
+    const idx: number[] = [];
+    obj.updateMatrixWorld(true);
+    obj.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const g = mesh.geometry as THREE.BufferGeometry;
+      const pos = g.attributes.position?.array as Float32Array | undefined;
+      if (!pos) return;
+      const baseIndex = verts.length / 3;
+      for (let i = 0; i < pos.length; i += 3) {
+        tmp.set(pos[i], pos[i + 1], pos[i + 2]);
+        tmp.applyMatrix4(mesh.matrixWorld);
+        verts.push(tmp.x, tmp.y, tmp.z);
+      }
+      const indexAttr = g.index;
+      if (indexAttr) {
+        for (let j = 0; j < indexAttr.array.length; j++) idx.push(indexAttr.array[j] + baseIndex);
+      } else {
+        for (let j = 0; j < Math.floor(pos.length / 3); j++) idx.push(baseIndex + j);
+      }
+    });
+    if (verts.length > 0) {
+      elements.push({
+        mesh: { vertices: new Float32Array(verts), indices: new Uint32Array(idx) },
+        creator,
+        label: creator,
+      });
+    }
+  });
+  return elements;
+}
+
 async function exportIfc(stem: string): Promise<void> {
-  const data = viewer.getActiveMeshData();
-  if (!data) {
-    setStatus("No mesh data available to export as IFC.", "warn");
-    return;
-  }
   setStatus("Building IFC + verifying round-trip via web-ifc...", "info");
   try {
-    const label =
-      currentSource.kind === "prompt"
-        ? currentDemo.label
-        : currentSource.kind === "file"
-          ? `Imported ${currentSource.filename}`
-          : "GemmaArchitect Element";
-    const bytes = buildIfc({ vertices: data.vertices, indices: data.indices }, label);
+    let bytes: Uint8Array;
+    const sceneElements = sceneElementsForExport();
+    if (sceneElements.length > 0) {
+      bytes = buildIfcScene(sceneElements);
+    } else {
+      // Fallback: kernel BREP mesh for single-object scenes (replicad / file import).
+      const data = viewer.getActiveMeshData();
+      if (!data) {
+        setStatus("No geometry to export as IFC.", "warn");
+        return;
+      }
+      const label =
+        currentSource.kind === "prompt"
+          ? currentDemo.label
+          : currentSource.kind === "file"
+            ? `Imported ${currentSource.filename}`
+            : "GemmaArchitect Element";
+      bytes = buildIfc({ vertices: data.vertices, indices: data.indices }, label);
+    }
     const result = await ifcRoundTrip(bytes);
     if (result.ok) {
+      const { wall, slab, column, beam, proxy, total } = result.counts;
+      const detail = [
+        wall   && `${wall}w`,
+        slab   && `${slab}s`,
+        column && `${column}c`,
+        beam   && `${beam}b`,
+        proxy  && `${proxy}x`,
+      ].filter(Boolean).join(" ") || "0 elements";
       setStatus(
-        `IFC4 ${(result.byteSize / 1024).toFixed(1)} KB · ${result.productCount} proxy · ${result.schema} round-trip OK`,
+        `IFC4 ${(result.byteSize / 1024).toFixed(1)} KB · ${total} elements (${detail}) · ${result.schema} OK`,
         "ok",
       );
     } else {
