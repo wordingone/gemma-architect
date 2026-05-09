@@ -154,6 +154,10 @@ export class Viewer {
   // Offscreen renderer for layout thumbnail panels.
   private _thumbCanvas: HTMLCanvasElement | null = null;
   private _thumbRenderer: THREE.WebGLRenderer | null = null;
+  // Cached override materials for displayMode thumbnails — allocated once, reused every frame.
+  private _thumbMatWireframe: THREE.MeshBasicMaterial | null = null;
+  private _thumbMatGhosted: THREE.MeshBasicMaterial | null = null;
+  private _thumbMatTechnical: THREE.MeshBasicMaterial | null = null;
   // Sub-object handle selection: set when the gumball is attached to a CP handle.
   private subTargetObject: THREE.Object3D | null = null;
 
@@ -2077,11 +2081,14 @@ export class Viewer {
     }
     const prevOverride = this.scene.overrideMaterial;
     if (displayMode === "wireframe") {
-      this.scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0x2a2a3a, wireframe: true });
+      if (!this._thumbMatWireframe) this._thumbMatWireframe = new THREE.MeshBasicMaterial({ color: 0x2a2a3a, wireframe: true });
+      this.scene.overrideMaterial = this._thumbMatWireframe;
     } else if (displayMode === "ghosted") {
-      this.scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0x9ec5d8, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
+      if (!this._thumbMatGhosted) this._thumbMatGhosted = new THREE.MeshBasicMaterial({ color: 0x9ec5d8, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
+      this.scene.overrideMaterial = this._thumbMatGhosted;
     } else if (displayMode === "technical") {
-      this.scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      if (!this._thumbMatTechnical) this._thumbMatTechnical = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      this.scene.overrideMaterial = this._thumbMatTechnical;
     }
     this._thumbRenderer.render(this.scene, cam);
     this.scene.overrideMaterial = prevOverride;
@@ -2092,5 +2099,8 @@ export class Viewer {
   dispose(): void {
     this._themeObserver?.disconnect();
     this._themeObserver = null;
+    this._thumbMatWireframe?.dispose();
+    this._thumbMatGhosted?.dispose();
+    this._thumbMatTechnical?.dispose();
   }
 }
