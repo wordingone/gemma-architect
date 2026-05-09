@@ -1916,3 +1916,8 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
 setStatus("Loading OpenCascade WebAssembly...", "info");
 runBtn.disabled = true;
 refreshExportButtons(true);
+// Disconnect the theme MutationObserver on Vite HMR so the old Viewer
+// instance doesn't keep the document element alive across hot-reloads.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => viewer.dispose());
+}

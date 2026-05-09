@@ -78,6 +78,7 @@ export class Viewer {
   private pivotMatrixBeforeDrag: THREE.Matrix4 = new THREE.Matrix4();
   private targetMatrixBeforeDrag: THREE.Matrix4 = new THREE.Matrix4();
   private relocateBadge: HTMLElement | null = null;
+  private _themeObserver: MutationObserver | null = null;
   // Cursor-follow relocate: when active, normal gumball drag is disabled
   // and pointer-move updates the pivot directly until the user clicks to
   // exit. Mode + axis are captured at the dblclick that entered the mode.
@@ -169,7 +170,8 @@ export class Viewer {
     this.renderer.autoClear = false;
     this._applyClearColor();
     // Re-sync clear color when theme toggles (data-mode attribute changes).
-    new MutationObserver(() => this._applyClearColor()).observe(document.documentElement, {
+    this._themeObserver = new MutationObserver(() => this._applyClearColor());
+    this._themeObserver.observe(document.documentElement, {
       attributes: true, attributeFilter: ["data-mode"],
     });
 
@@ -2067,5 +2069,10 @@ export class Viewer {
     this._thumbRenderer.render(this.scene, cam);
     const ctx = dest.getContext("2d");
     if (ctx) ctx.drawImage(this._thumbCanvas!, 0, 0, w, h);
+  }
+
+  dispose(): void {
+    this._themeObserver?.disconnect();
+    this._themeObserver = null;
   }
 }
