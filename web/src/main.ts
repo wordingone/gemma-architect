@@ -411,6 +411,32 @@ registerHandler("IfcBeam", (args) => {
   return { created: "beam", length: len };
 });
 
+registerHandler("IfcMember", (args) => {
+  const length   = (args.length as number | undefined) ?? 3;
+  const axisRaw  = args.axis_curve as [number, number, number] | undefined;
+  const axis     = axisRaw ?? [0, 0, 1];
+  const rawProfile = args.profile as [number, number][] | undefined;
+  const pts: [number, number][] = Array.isArray(rawProfile) && rawProfile.length >= 3
+    ? (rawProfile as [number, number][])
+    : [[-0.05, -0.05], [0.05, -0.05], [0.05, 0.05], [-0.05, 0.05]];
+  const shape = new THREE.Shape();
+  shape.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
+  shape.closePath();
+  const geom = new THREE.ExtrudeGeometry(shape, { depth: length, bevelEnabled: false });
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7a8fa6, roughness: 0.5, metalness: 0.2 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const up = new THREE.Vector3(0, 0, 1);
+  const dir = new THREE.Vector3(axis[0], axis[1], axis[2]).normalize();
+  if (Math.abs(dir.dot(up)) < 0.9999) mesh.quaternion.setFromUnitVectors(up, dir);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcMember";
+  mesh.userData.layerId = resolveLayerId("IfcMember", args);
+  mesh.userData.levelId = getActiveLevelId();
+  viewer.addMesh(mesh, "brep");
+  return { created: "member", length, profile_points: pts.length };
+});
+
 registerHandler("IfcStair", (args) => {
   const s    = (args.start as number[] | undefined) ?? [0, 0, 0];
   const e    = (args.end   as number[] | undefined) ?? [3, 0, 0];

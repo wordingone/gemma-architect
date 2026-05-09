@@ -515,6 +515,21 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: IfcMember
+  ifc4_class: IfcMember
+  kernel_op: makeMember
+  args:
+    - {name: profile,    type: polyline, required: false, description: "2D cross-section point array [x,y][], default 0.1×0.1 rectangle"}
+    - {name: length,     type: number,  required: false, unit: m, default: 3}
+    - {name: axis_curve, type: vector3, required: false, description: "Unit direction vector [x,y,z], default [0,0,1] vertical"}
+    - {name: level,      type: string,  required: false, description: "Storey name; default ground"}
+    - {name: layer,      type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  topology_role: member
+  kg_predicates: [supports, connectedTo]
+  synonyms: [member, mullion, purlin, secondary steel, facade member]
+  kernel: three
+  alias_source: ifc_standard_vocabulary
+
 - canonical_name: IfcStair
   ifc4_class: IfcStair
   kernel_op: makeStair
