@@ -202,8 +202,9 @@ export class ChatPanel {
         fired.push(d.verb);
         setPickerHint(null);
       } else if (out.status === "needs_input") {
-        fired.push(d.verb);
-        setPickerHint(out.summary ?? `Click to place ${d.verb}.`);
+        // Agent path has no interactive picker — surface as error so the agent can self-correct.
+        fired.push(`${d.verb}(err)`);
+        errors.push(out.summary ?? `Failed ${d.verb}: missing required args.`);
       } else {
         fired.push(`${d.verb}(err)`);
         errors.push(out.summary ?? `Failed ${d.verb}.`);
