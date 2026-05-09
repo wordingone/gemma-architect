@@ -795,7 +795,28 @@
   alias_source: generic_cad_vocabulary
 
 # ============================================================
-# §8 Annotation (IFC4 IfcAnnotation)
+# §8 Furniture & Fixtures
+# ============================================================
+
+- canonical_name: IfcFurnishingElement
+  ifc4_class: IfcFurnishingElement
+  kernel_op: makeFurnishingElement
+  args:
+    - {name: width,       type: number,  required: false, unit: m, default: 0.8}
+    - {name: depth,       type: number,  required: false, unit: m, default: 0.6}
+    - {name: height,      type: number,  required: false, unit: m, default: 0.75}
+    - {name: position,    type: point3,  required: false, description: "[x,y,z] plan placement; default origin"}
+    - {name: orientation, type: number,  required: false, unit: deg, default: 0, description: "Rotation about Z-axis in degrees"}
+    - {name: level,       type: string,  required: false, description: "Storey name; default ground"}
+    - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  topology_role: hosted
+  kg_predicates: [containedIn]
+  synonyms: [furnishing, furniture, desk, chair, counter, cabinet, fixture, medical cabinet, reception]
+  kernel: three
+  alias_source: ifc_standard_vocabulary
+
+# ============================================================
+# §9 Annotation (IFC4 IfcAnnotation)
 # ============================================================
 
 - canonical_name: IfcAnnotationDimension

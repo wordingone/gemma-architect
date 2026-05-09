@@ -821,6 +821,26 @@ registerHandler("IfcDatum", (args) => {
   return { created: "datum", elevation: elev };
 });
 
+registerHandler("IfcFurnishingElement", (args) => {
+  const w    = (args.width       as number | undefined) ?? 0.8;
+  const d    = (args.depth       as number | undefined) ?? 0.6;
+  const h    = (args.height      as number | undefined) ?? 0.75;
+  const rotDeg = (args.orientation as number | undefined) ?? 0;
+  const geom = new THREE.BoxGeometry(w, d, h);
+  geom.translate(0, 0, h / 2);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0xd4b896, roughness: 0.8, metalness: 0.0 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const pos  = args.position as number[] | undefined;
+  mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, pos?.[2] ?? getActiveLevelElevation());
+  if (rotDeg) mesh.rotation.z = (rotDeg * Math.PI) / 180;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcFurnishingElement";
+  mesh.userData.layerId = resolveLayerId("IfcFurnishingElement", args);
+  mesh.userData.levelId = getActiveLevelId();
+  viewer.addMesh(mesh, "brep");
+  return { created: "furnishing", width: w, depth: d, height: h };
+});
+
 // ── Tier 1 handlers: SdPoint / SdLine / SdRectangle / SdPolyline (#64) ───────
 // These replace the fan-out shims installed by installDefaultHandlers() below.
 // Render using THREE line/point primitives (not mesh geometry) per Jun's
