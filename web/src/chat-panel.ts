@@ -12,6 +12,7 @@ import { findSkillsForPrompt } from "./agent/skills-loader";
 import { isSimplePlan } from "./plan";
 import { lastTurn } from "./telemetry";
 import { buildDispatchSummary } from "./chat-dispatch-summary";
+import { setPickerHint } from "./viewer/create-mode";
 
 type Message = {
   role: "user" | "assistant";
@@ -199,6 +200,10 @@ export class ChatPanel {
       });
       if (out.status === "success") {
         fired.push(d.verb);
+        setPickerHint(null);
+      } else if (out.status === "needs_input") {
+        fired.push(d.verb);
+        setPickerHint(out.summary ?? `Click to place ${d.verb}.`);
       } else {
         fired.push(`${d.verb}(err)`);
         errors.push(out.summary ?? `Failed ${d.verb}.`);

@@ -23,6 +23,7 @@ import { setState } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { snapPoint } from "./snap-state";
 import { pushAction } from "../history";
+import { getActiveCommandSession, provideSessionPick, clearCommandSession } from "../commands/command-session";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -66,6 +67,18 @@ let _markerMesh: THREE.Points | null = null;
 let _cursorDot: HTMLElement | null = null;
 // Viewer reference set once by initCreateMode — used by resetPending.
 let _viewer: Viewer | null = null;
+
+let _pickerPromptEl: HTMLElement | null = null;
+
+export function setPickerHint(msg: string | null): void {
+  if (!_pickerPromptEl) return;
+  if (msg) {
+    _pickerPromptEl.textContent = msg;
+    _pickerPromptEl.classList.add("visible");
+  } else {
+    _pickerPromptEl.classList.remove("visible");
+  }
+}
 
 function readActiveTool(): string | null {
   const btn = document.querySelector<HTMLElement>(".palette-btn.active");
@@ -870,12 +883,28 @@ export function initCreateMode(viewer: Viewer): void {
     document.querySelector<HTMLElement>("#viewport-2 .vp-body") ??
     viewer.getCanvas();
 
+  _pickerPromptEl = document.createElement("div");
+  _pickerPromptEl.className = "picker-prompt";
+  vpBody.appendChild(_pickerPromptEl);
+
   // Capture-phase listener — runs before the viewer's own pointerdown so we
-  // can swallow the event when a create-tool is active.
+  // can swallow the event when a create-tool is active or a session needs picks.
   vpBody.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     const tool = readActiveTool();
-    if (!tool) return;
+    if (!tool) {
+      const session = getActiveCommandSession();
+      if (session?.state === "collecting_args") {
+        const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
+        if (!world) return;
+        ev.stopImmediatePropagation();
+        const snapped = snapPoint(world.x, world.y);
+        void provideSessionPick([snapped.x, snapped.y]).then((result) => {
+          setPickerHint(result.status === "needs_input" ? (result.summary ?? null) : null);
+        });
+      }
+      return;
+    }
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
     if (!world) return;
     ev.stopImmediatePropagation();
@@ -904,11 +933,17 @@ export function initCreateMode(viewer: Viewer): void {
 
   // Esc cancels; Enter commits unlimited tools (curve).
   window.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && _pending.length > 0) {
-      clearTemporary(viewer);
-      hideCursorDot();
-      _pending = [];
-      dispatchSync("setActiveTool", { toolId: "select" });
+    if (ev.key === "Escape") {
+      if (_pending.length > 0) {
+        clearTemporary(viewer);
+        hideCursorDot();
+        _pending = [];
+        dispatchSync("setActiveTool", { toolId: "select" });
+      }
+      if (getActiveCommandSession()?.state === "collecting_args") {
+        clearCommandSession();
+        setPickerHint(null);
+      }
       return;
     }
     if (ev.key === "Enter") {
