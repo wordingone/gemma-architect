@@ -1487,7 +1487,7 @@ html[data-mode="night"] .paper-stage {
 
 .viewport {
   position: relative;
-  background: var(--paper-base);
+  background: transparent;
   overflow: hidden;
   display: flex;
   flex-direction: column;

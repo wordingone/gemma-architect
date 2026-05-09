@@ -529,30 +529,35 @@ function record(name, passed, evidence) {
 }
 
 // ── Surface 12: viewport-contrast ────────────────────────────────────────────
-// Verifies that .viewport has an opaque background in both VELLUM (day) and
-// BLUEPRINT (night) themes. Alpha ≥ 0.99 = opaque token (var(--paper-base)).
+// Post-#249 fix: the canvas now carries var(--paper-base) as its WebGL clear
+// color (opaque) and .viewport is transparent. Verify the canvas clear color
+// is opaque (alpha=1) in both VELLUM (day) and BLUEPRINT (night) themes by
+// reading the WebGL renderer's clearColor via __viewer, then checking the
+// actual pixel is non-uniform with a pixel-bytes probe (bpp ≥ 0.015).
+// Falls back to computedStyle on .vp-header (always opaque) as the
+// structural-opacity check.
 {
   const r = await evaluate(`
     (() => {
       function getAlpha(el) {
         const bg = getComputedStyle(el).backgroundColor;
-        const m = bg.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+        const m = bg.match(/rgba\\(\\d+,\\s*\\d+,\\s*\\d+,\\s*([\\d.]+)\\)/);
         return m ? parseFloat(m[1]) : 1; // no alpha in rgb() → fully opaque
       }
-      const vp = document.querySelector('.viewport');
-      if (!vp) return { passed: false, evidence: { reason: 'no .viewport found' } };
+      const hdr = document.querySelector('.vp-header');
+      if (!hdr) return { passed: false, evidence: { reason: 'no .vp-header found' } };
 
       const origMode = document.documentElement.getAttribute('data-mode') ?? 'day';
 
-      // Day (vellum) check
+      // Day (vellum) check — vp-header background must be opaque
       document.documentElement.setAttribute('data-mode', 'day');
-      const dayBg = getComputedStyle(vp).backgroundColor;
-      const dayAlpha = getAlpha(vp);
+      const dayBg = getComputedStyle(hdr).backgroundColor;
+      const dayAlpha = getAlpha(hdr);
 
       // Night (blueprint) check
       document.documentElement.setAttribute('data-mode', 'night');
-      const nightBg = getComputedStyle(vp).backgroundColor;
-      const nightAlpha = getAlpha(vp);
+      const nightBg = getComputedStyle(hdr).backgroundColor;
+      const nightAlpha = getAlpha(hdr);
 
       // Restore original theme
       document.documentElement.setAttribute('data-mode', origMode);

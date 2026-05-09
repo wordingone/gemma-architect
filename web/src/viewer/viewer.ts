@@ -165,9 +165,13 @@ export class Viewer {
       preserveDrawingBuffer: true, // needed for canvas.toDataURL() in viewport capture
     });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setClearColor(0x000000, 0);
     this.renderer.shadowMap.enabled = false;
     this.renderer.autoClear = false;
+    this._applyClearColor();
+    // Re-sync clear color when theme toggles (data-mode attribute changes).
+    new MutationObserver(() => this._applyClearColor()).observe(document.documentElement, {
+      attributes: true, attributeFilter: ["data-mode"],
+    });
 
     this.scene = new THREE.Scene();
 
@@ -671,6 +675,17 @@ export class Viewer {
     }
     (this.grid as unknown as { __lastSize?: number }).__lastSize = sceneSize;
     this.scene.add(this.grid);
+  }
+
+  private _applyClearColor(): void {
+    // Read the theme's paper-base color from CSS and use it as the opaque
+    // clear color so the canvas owns the background (instead of .viewport CSS).
+    const dummy = document.createElement("span");
+    dummy.style.cssText = "position:fixed;left:-9999px;background:var(--paper-base)";
+    document.body.appendChild(dummy);
+    const bg = getComputedStyle(dummy).backgroundColor;
+    document.body.removeChild(dummy);
+    this.renderer.setClearColor(new THREE.Color(bg), 1.0);
   }
 
   private handleResize(): void {
