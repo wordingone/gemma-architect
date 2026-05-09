@@ -65,20 +65,12 @@ await send("Page.enable");
 console.log("Waiting for page load + WASM init...");
 await delay(8000);
 
-// ── A: Check debug globals (confirm _buildTimeSkills ran) ─────────────────────
-const skillCount = await evaluate(`window.__debugSkillCount ?? -1`);
-const skillNames = await evaluate(`(window.__debugSkillNames ?? []).join(",")`);
-console.log(`  __debugSkillCount = ${skillCount}`);
-console.log(`  __debugSkillNames = ${skillNames}`);
-
 const checks = [];
 function record(name, passed, evidence) {
   checks.push({ name, passed, evidence });
   console.log(`  ${passed ? "✓" : "✗"} ${name}`);
   if (!passed) console.log("    evidence:", JSON.stringify(evidence).slice(0, 400));
 }
-
-record("build-time-skills-loaded", skillCount > 0, { skillCount, skillNames });
 
 // ── B: Activate PROMPT mode + confirm chat input ──────────────────────────────
 const chatReady = await evaluate(`
