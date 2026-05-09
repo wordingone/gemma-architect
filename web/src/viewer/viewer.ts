@@ -867,6 +867,15 @@ export class Viewer {
     const removed = this.targetObject;
     if (!removed) return false;
     this.scene.remove(removed);
+    removed.traverse((child) => {
+      const c = child as THREE.Mesh;
+      if (!c.geometry) return;
+      c.geometry.dispose();
+      const mat = c.material;
+      if (!mat) return;
+      if (Array.isArray(mat)) mat.forEach((m: THREE.Material) => m.dispose());
+      else (mat as THREE.Material).dispose();
+    });
     this.pivotOffsetByUuid.delete(removed.uuid);
     this.targetObject = null;
     this.pivotOffset.identity();
