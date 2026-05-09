@@ -83,6 +83,28 @@ async function evaluate(expression, returnByValue = true) {
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Capture #viewer-canvas bytes-per-pixel via CDP clip screenshot.
+// bpp ≥ 0.025 = normally-rendered scene; bpp ≤ 0.018 = blank/occluded canvas.
+async function canvasBpp(label = '') {
+  const rect = await evaluate(`(function() {
+    const c = document.getElementById('viewer-canvas');
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    return { x: r.left, y: r.top, width: r.width, height: r.height };
+  })()`);
+  if (!rect || rect.width < 1 || rect.height < 1)
+    return { bpp: 0, label, reason: 'canvas not found or zero-size' };
+  const snap = await send('Page.captureScreenshot', {
+    format: 'jpeg', quality: 85,
+    clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: 1 },
+  });
+  const b64 = snap?.result?.data ?? '';
+  const bytes = b64.length * 0.75;
+  const pixels = rect.width * rect.height;
+  const bpp = pixels > 0 ? Math.round((bytes / pixels) * 1000) / 1000 : 0;
+  return { bpp, pixels: Math.round(pixels), label };
+}
+
 // ── Reload to clean state ─────────────────────────────────────────────────────
 await send("Page.reload", { waitForNavigation: false });
 await delay(2000);
@@ -616,8 +638,15 @@ function record(name, passed, evidence) {
         return { passed: false, evidence: { reason: 'event not received', error: String(e) } };
       }
     })()`, true);
-  if (!r) record('ifc-import-renders', false, { reason: 'evaluate returned null' });
-  else record('ifc-import-renders', r.passed, r.evidence);
+  if (!r) {
+    record('ifc-import-renders', false, { reason: 'evaluate returned null' });
+  } else if (!r.passed) {
+    record('ifc-import-renders', false, r.evidence);
+  } else {
+    const bpp = await canvasBpp('ifc-loaded');
+    const BPP_MIN = 0.025;
+    record('ifc-import-renders', bpp.bpp >= BPP_MIN, { ...r.evidence, ...bpp, bppMin: BPP_MIN });
+  }
 }
 
 // ── Surface 14: render-mode-cycle-survives-theme ─────────────────────────────────
@@ -652,8 +681,16 @@ function record(name, passed, evidence) {
 
       return { passed: failures.length === 0, evidence: { failures, testedCombos: MODES.length * THEMES.length } };
     })()`, true);
-  if (!r) record('render-mode-cycle-survives-theme', false, { reason: 'evaluate returned null' });
-  else record('render-mode-cycle-survives-theme', r.passed, r.evidence);
+  if (!r) {
+    record('render-mode-cycle-survives-theme', false, { reason: 'evaluate returned null' });
+  } else if (!r.passed) {
+    record('render-mode-cycle-survives-theme', false, r.evidence);
+  } else {
+    // Canvas bpp after restore to shaded/day — catches blank canvas that scene-children check misses
+    const bpp = await canvasBpp('shaded-day');
+    const BPP_MIN = 0.025;
+    record('render-mode-cycle-survives-theme', bpp.bpp >= BPP_MIN, { ...r.evidence, ...bpp, bppMin: BPP_MIN });
+  }
 }
 
 // ── Surface 15: view-switch-via-cmdk ────────────────────────────────────────────────
