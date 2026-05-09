@@ -185,9 +185,6 @@ const SIDEBAR_TABS: SidebarTab[] = [
   { id: "scene",   label: "SCENE" },
   { id: "inspect", label: "INSPECT" },
   { id: "assets",  label: "ASSETS" },
-  { id: "levels",  label: "LEVELS" },
-  { id: "layers",  label: "LAYERS" },
-  { id: "grids",   label: "GRIDS" },
 ];
 
 const SAMPLE_ASSETS = [
@@ -327,14 +324,49 @@ function buildSnapDock(): HTMLElement {
 }
 
 function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
-  const wrap = el("div", "tab-body scene-tab");
+  const wrap = el("div", "tab-body hier-tab");
   if (scenePanel) {
-    // Move existing scene-panel into here so main.ts wiring keeps working.
     scenePanel.classList.add("scene-panel-embed");
     wrap.appendChild(scenePanel);
   } else {
-    wrap.innerHTML = `<div class="empty-hint">No scene loaded — drop an IFC/GLB or pick a sample.</div>`;
+    const hint = el("div");
+    hint.style.cssText = "padding:8px 10px; font-size:11px; color:var(--ink-faint);";
+    hint.textContent = "No scene — drop IFC/GLB or pick a sample.";
+    wrap.appendChild(hint);
   }
+
+  // Collapsible sub-section divider: title bar + body.
+  function addSubsection(title: string, body: HTMLElement): void {
+    const hdr = el("div");
+    hdr.style.cssText =
+      "display:flex; align-items:center; gap:5px; padding:5px 10px 4px;" +
+      " border-top:1px solid var(--hairline-soft); cursor:pointer; user-select:none;";
+    const arrow = el("span");
+    arrow.textContent = "▾";
+    arrow.style.cssText = "font-size:9px; color:var(--ink-faint);";
+    const label = el("span");
+    label.textContent = title;
+    label.style.cssText =
+      "font-family:var(--mono); font-size:9px; letter-spacing:0.12em;" +
+      " text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
+    hdr.appendChild(arrow);
+    hdr.appendChild(label);
+    let open = true;
+    hdr.addEventListener("click", () => {
+      open = !open;
+      body.style.display = open ? "" : "none";
+      arrow.textContent = open ? "▾" : "▸";
+    });
+    wrap.appendChild(hdr);
+    wrap.appendChild(body);
+  }
+
+  addSubsection("BUILDING LAYERS", buildLayersTab());
+  const refBody = el("div");
+  refBody.appendChild(buildLevelsTab());
+  refBody.appendChild(buildGridsTab());
+  addSubsection("REFERENCE GEOMETRY", refBody);
+
   return wrap;
 }
 
@@ -804,9 +836,6 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }
     }),
-    levels:  buildLevelsTab(),
-    layers:  buildLayersTab(),
-    grids:   buildGridsTab(),
   };
 
   for (const t of SIDEBAR_TABS) {
