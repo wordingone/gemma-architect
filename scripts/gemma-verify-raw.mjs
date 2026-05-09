@@ -938,6 +938,33 @@ function record(name, passed, evidence) {
   else record('menubar-coverage', r.passed, r.evidence);
 }
 
+// ── Surface 21: research-mode-chrome ─────────────────────────────────────────
+// Click RESEARCH mode tab → ribbon shows CORPUS/FINDINGS/EXPORT, not model groups.
+// Revert to MODEL and confirm tool groups restore.
+{
+  const r = await evaluate(`(async () => {
+    const researchTab = document.querySelector('.mode-tab[data-mode="research"]');
+    if (!researchTab) return { passed: false, evidence: { reason: 'no .mode-tab[data-mode=research]' } };
+    researchTab.click();
+    await new Promise(r => setTimeout(r, 500));
+    const labels = Array.from(document.querySelectorAll('.tool-group-label')).map(el => el.textContent.trim());
+    const hasCorpus   = labels.includes('CORPUS');
+    const hasFindings = labels.includes('FINDINGS');
+    const noTransform = !labels.includes('TRANSFORM');
+    const noSolid     = !labels.includes('SOLID');
+    const modelTab = document.querySelector('.mode-tab[data-mode="model"]');
+    if (modelTab) { modelTab.click(); await new Promise(r => setTimeout(r, 300)); }
+    const afterLabels = Array.from(document.querySelectorAll('.tool-group-label')).map(el => el.textContent.trim());
+    const restored = afterLabels.includes('TRANSFORM');
+    return {
+      passed: hasCorpus && hasFindings && noTransform && noSolid && restored,
+      evidence: { researchLabels: labels, hasCorpus, hasFindings, noTransform, noSolid, afterLabels, restored }
+    };
+  })()`, true);
+  if (!r) record('research-mode-chrome', false, { reason: 'evaluate returned null' });
+  else record('research-mode-chrome', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

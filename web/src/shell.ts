@@ -111,6 +111,12 @@ const LAYOUT_TOOL_GROUPS: ToolGroup[] = [
   { label: "MEASURE",   tools: ["Ruler", "Compass", "Text", "Leader", "Callout", "Aligned-Dim", "Angular-Dim", "Area-Dim"] },
 ];
 
+const RESEARCH_TOOL_GROUPS: ToolGroup[] = [
+  { label: "CORPUS",   tools: ["Search", "Import", "Globe"] },
+  { label: "FINDINGS", tools: ["Sparkle", "Link"] },
+  { label: "EXPORT",   tools: ["Export"] },
+];
+
 type ModeDef = { key: string; num: string; label: string };
 const MODES: ModeDef[] = [
   { key: "model",    num: "01", label: "MODEL" },
@@ -216,8 +222,8 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
     fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, LAYOUT_RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);
   } else if (mode === "research") {
-    fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
-    fillRibbonTools(_ribbonToolsEl, TOOL_GROUPS);
+    fillRibbonTabs(_ribbonTabsEl, [], "");
+    fillRibbonTools(_ribbonToolsEl, RESEARCH_TOOL_GROUPS);
   } else {
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, TOOL_GROUPS);
