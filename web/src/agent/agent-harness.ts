@@ -53,6 +53,11 @@ export type AgentResponse = {
 
 const REMOTE_URL: string = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
 
+// P10-2: session-level flag; set on first OrtRun failure during inference.
+// When true, all subsequent runAgentTurn() calls route to remote regardless of
+// whether the model loaded successfully in-browser.
+let _webgpuFallbackEngaged = false;
+
 // ---- Model loading (in-browser path) ---------------------------------------
 
 const MODEL_ID = "onnx-community/gemma-4-E2B-it-ONNX";
@@ -73,6 +78,29 @@ type ProgressInfo = {
   name?: string;
   progress?: number;
 };
+
+// P10-4: VRAM ceiling pre-check. Gemma 4 E2B q4f16 needs ~2GB GPU memory.
+// If the adapter reports less usable headroom, skip in-browser load and force remote.
+const VRAM_FLOOR_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+
+async function checkVramCeiling(): Promise<boolean> {
+  try {
+    if (!navigator.gpu) return false; // no WebGPU, will fall back to CPU
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return false;
+    // limits.maxBufferSize is not a free-VRAM probe but is a hard device ceiling.
+    // Adapters below 2GB maxBufferSize cannot fit E2B weights regardless of free memory.
+    const maxBuf: number = (adapter.limits as Record<string, number>).maxBufferSize ?? 0;
+    if (maxBuf < VRAM_FLOOR_BYTES) {
+      console.warn(`[agent-harness] P10-4 VRAM ceiling: maxBufferSize=${maxBuf} < ${VRAM_FLOOR_BYTES} — forcing remote.`);
+      window.dispatchEvent(new CustomEvent("agent:telemetry", { detail: { event: "vram_ceiling_exceeded", maxBufferSize: maxBuf } }));
+      return true; // ceiling exceeded — force remote
+    }
+    return false; // OK to run in-browser
+  } catch {
+    return false; // probe failed; let normal load attempt decide
+  }
+}
 
 // Try WebGPU first (q4f16 quantization); fall back through device:"auto"
 // (onnxruntime-web selects WebGL then WASM-SIMD automatically). Model files
@@ -168,7 +196,15 @@ export function prefetchModel(): void {
     updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE`);
     return;
   }
-  getModel().catch(() => { /* errors surface on first runAgentTurn */ });
+  // P10-4: run VRAM ceiling check before starting the heavy model load.
+  checkVramCeiling().then((ceilingExceeded) => {
+    if (ceilingExceeded) {
+      updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  VRAM LIMIT — REMOTE REQUIRED`);
+      _webgpuFallbackEngaged = true; // re-use P10-2 flag to force remote routing
+      return;
+    }
+    getModel().catch(() => { /* errors surface on first runAgentTurn */ });
+  });
 }
 
 // ---- System prompt --------------------------------------------------------
@@ -408,6 +444,8 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 // ---- Public entry point --------------------------------------------------
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
+  // P10-2: if a prior OrtRun failure engaged the session-level fallback, route remote.
+  if (REMOTE_URL && _webgpuFallbackEngaged) return runRemoteAgentTurn(req);
   if (REMOTE_URL) return runRemoteAgentTurn(req);
   const { model, processor } = await getModel();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -474,11 +512,24 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const tProc = performance.now();
 
   // Generate — greedy decoding for deterministic function-call JSON.
-  const outputs = await model.generate({
-    ...inputs,
-    max_new_tokens: req.maxNewTokens ?? 1024,
-    do_sample: false,
-  });
+  // P10-2: catch OrtRun failures that slip past the load-time probe (#128/#133).
+  // On first failure: engage session-level fallback flag, retry via remote if available.
+  let outputs: unknown;
+  try {
+    outputs = await model.generate({
+      ...inputs,
+      max_new_tokens: req.maxNewTokens ?? 1024,
+      do_sample: false,
+    });
+  } catch (ortErr) {
+    const msg = (ortErr as Error).message ?? "";
+    console.warn("[agent-harness] OrtRun failure during generation — engaging remote fallback.", msg.slice(0, 120));
+    _webgpuFallbackEngaged = true;
+    window.dispatchEvent(new CustomEvent("agent:telemetry", { detail: { event: "webgpu_fallback_engaged", reason: msg.slice(0, 120) } }));
+    updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE (fallback)`);
+    if (REMOTE_URL) return runRemoteAgentTurn(req);
+    throw new Error(`WebGPU OrtRun failed and no REMOTE_URL configured: ${msg.slice(0, 200)}`);
+  }
   const tGen = performance.now();
 
   // Decode only the newly generated tokens (strip the prompt prefix).

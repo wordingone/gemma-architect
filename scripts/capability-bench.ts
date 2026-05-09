@@ -665,6 +665,27 @@ async function main() {
     }
     console.log("Remote inference confirmed — safe to bench.");
 
+    // P10-5: Bench/chat mutual exclusion — warn (not refuse) if a chat session
+    // is currently active (send button enabled or model is processing).
+    // Concurrent in-browser inference + bench drives double GPU memory pressure.
+    const chatBusy = await evaluate(`(() => {
+      const sendBtn = document.querySelector('.chat-send-btn');
+      const thinking = document.querySelector('.chat-thinking, .chat-plan-pending');
+      const disabled = sendBtn?.disabled ?? false;
+      // send-btn disabled during inference; thinking spinner present
+      return !disabled && !!thinking;
+    })()`);
+    if (chatBusy) {
+      console.warn(
+        "[P10-5] WARNING: An active chat inference session was detected. " +
+        "Concurrent bench + chat may cause VRAM pressure. " +
+        "Complete or cancel the chat turn before benching to avoid GPU buffer corruption."
+      );
+      window?.dispatchEvent?.(new CustomEvent("bench:warning", { detail: { event: "concurrent_chat_session" } }));
+    } else {
+      console.log("P10-5: No concurrent chat session detected — safe to proceed.");
+    }
+
     // Ensure chat mode is active for the whole bench run.
     await ensureChatMode();
   }
