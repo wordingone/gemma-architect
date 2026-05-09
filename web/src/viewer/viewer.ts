@@ -1936,6 +1936,16 @@ export class Viewer {
     }
   }
 
+  setTargetElevation(z: number): void {
+    const perspPane = this.panes.find(p => p.view === "persp");
+    if (!perspPane) return;
+    const dz = z - perspPane.controls.target.z;
+    perspPane.controls.target.z = z;
+    this.camera.position.z += dz;
+    perspPane.controls.update();
+    this.camera.updateProjectionMatrix();
+  }
+
   splitMode(mode: "single" | "quad"): void {
     const area = this.canvas.parentElement;
     if (!area) return;

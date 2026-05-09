@@ -991,10 +991,11 @@
 
 - canonical_name: SdSetViewOrtho
   kernel_op: setViewOrtho
-  args: []
+  args:
+    - {name: view, type: string, required: false, default: top, enum: [top, bottom, front, back, left, right, iso]}
   topology_role: view
   kg_predicates: []
-  synonyms: [ortho, orthographic, parallel]
+  synonyms: [ortho, orthographic, parallel, "view top", "view front", "view right", "view left", "view back", "view bottom", "view iso", "view isometric"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
@@ -1003,7 +1004,7 @@
   args: []
   topology_role: view
   kg_predicates: []
-  synonyms: [perspective, persp]
+  synonyms: [perspective, persp, "view perspective", "view 3d"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
@@ -1106,11 +1107,11 @@
 - canonical_name: SdExport
   kernel_op: exportFile
   args:
-    - {name: format, type: enum_format, required: true}
-    - {name: target, type: any,         required: false}
+    - {name: format, type: enum_format, required: true, enum: [ifc, glb, gltf, obj, stl, step, svg, dxf, pdf, usdz]}
+    - {name: target, type: string,      required: false, default: scene, enum: [active, scene, selection]}
   topology_role: system
   kg_predicates: []
-  synonyms: [export, save, write]
+  synonyms: [export, save, write, "export ifc", "export glb", "save as ifc", "download ifc"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 

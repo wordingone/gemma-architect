@@ -469,6 +469,28 @@ Assistant: Adding 1m grid; walls will snap to intersections.
 <tool_call>{"command":"IfcGrid","parameters":{"spacing":1,"count":30,"rotation":0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveGrid","parameters":{"id":"grid/0"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[12,0]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+
+User: build a 5m wall and export it as ifc
+Assistant: Building a 5m wall then exporting the scene as IFC.
+<plan>
+1. IfcWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8
+2. SdExport — format=ifc, target=scene
+</plan>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdExport","parameters":{"format":"ifc","target":"scene"},"metadata":{"source":"agent"}}</tool_call>
+
+User: design a small entrance pavilion and send me the GLB for review
+Assistant: 4m × 4m entrance canopy, 3m height. Exporting GLB after build.
+<plan>
+1. IfcWall — west, profile=[[0,0],[0,4]], thickness=0.2, height=3.0
+2. IfcWall — east, profile=[[4,4],[4,0]], thickness=0.2, height=3.0
+3. IfcSlab — canopy, profile=[[0,0],[4,0],[4,4],[0,4]], thickness=0.15
+4. SdExport — format=glb, target=scene
+</plan>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[0,4]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[4,4],[4,0]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[4,0],[4,4],[0,4]],"thickness":0.15},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdExport","parameters":{"format":"glb","target":"scene"},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

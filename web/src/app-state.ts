@@ -10,6 +10,7 @@
 // lives in the dedicated module that owns it.
 
 export type LayoutMode = "single" | "hsplit" | "vsplit" | "quad";
+export type ViewName = "top" | "bottom" | "front" | "back" | "left" | "right" | "iso" | "perspective";
 
 export interface AppState {
   activeTool: string;          // e.g. "select", "wall", "extrude"
@@ -18,6 +19,7 @@ export interface AppState {
   layout: LayoutMode;          // viewport split layout
   night: boolean;              // BLUEPRINT (true) / VELLUM (false)
   selectedId: string | null;   // current selection uuid, or null
+  currentView: ViewName;       // active single-pane view
 }
 
 const DEFAULT_STATE: AppState = {
@@ -27,6 +29,7 @@ const DEFAULT_STATE: AppState = {
   layout: "single",            // current TS port runs single-viewport by default
   night: false,
   selectedId: null,
+  currentView: "perspective",
 };
 
 type Listener<K extends keyof AppState> = (value: AppState[K]) => void;

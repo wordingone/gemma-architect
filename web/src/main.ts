@@ -44,7 +44,7 @@ import {
 } from "./exporters";
 import { SAMPLES } from "./sample-files";
 import type { WorkerOut } from "./worker";
-import { syncToolActiveClass } from "./app-state";
+import { syncToolActiveClass, getState, setState } from "./app-state";
 import { initCreateMode } from "./viewer/create-mode";
 import { undo, redo } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
@@ -129,6 +129,40 @@ registerHandler("SdRenderMode", (args) => {
   const mode = (args.mode as string | undefined) ?? "shaded";
   setRenderMode(mode as RenderMode);
   return { mode };
+});
+
+const ORTHO_VIEWS = ["top", "bottom", "front", "back", "left", "right", "iso"] as const;
+type OrthoView = typeof ORTHO_VIEWS[number];
+
+registerHandler("SdSetViewOrtho", (args) => {
+  const raw = (args.view as string | undefined) ?? "top";
+  const view: OrthoView = (ORTHO_VIEWS as readonly string[]).includes(raw) ? raw as OrthoView : "top";
+  viewer.setView(view);
+  setState("currentView", view);
+  return { ok: true, view };
+});
+
+registerHandler("SdSetViewPerspective", () => {
+  viewer.frameAllVisible();
+  setState("currentView", "perspective");
+  return { ok: true, view: "perspective" };
+});
+
+registerHandler("SdZoomExtents", () => {
+  viewer.frameAllVisible();
+  return { ok: true };
+});
+
+registerHandler("SdZoomSelected", () => {
+  viewer.frameAllVisible();
+  return { ok: true };
+});
+
+registerHandler("SdExport", (args) => {
+  const fmt = args.format as string | undefined;
+  if (!fmt) return { error: "format required (ifc|glb|gltf|obj|stl|step|svg|dxf|pdf|usdz)" };
+  handleExport(fmt).catch((e) => console.warn("[SdExport]", e));
+  return { ok: true, format: fmt };
 });
 
 registerHandler("SdMove", (args) => {
@@ -791,7 +825,10 @@ registerHandler("setActiveLevel", (args) => {
   const id = args.id as string | undefined;
   if (!id) return { error: "id required" };
   const ok = levelStore.setActive(id);
-  return ok ? { ok: true, activeLevel: id } : { error: `level not found: ${id}` };
+  if (!ok) return { error: `level not found: ${id}` };
+  const level = levelStore.get(id);
+  if (level) viewer.setTargetElevation(level.elevation);
+  return { ok: true, activeLevel: id, elevation: level?.elevation };
 });
 
 registerHandler("setLevelVisible", (args) => {
