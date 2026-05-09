@@ -1667,8 +1667,13 @@ function initRenderModePopover(): void {
   const LINE_TYPES: LineType[] = ["solid", "dashed", "hidden", "centerline", "gridline", "dotted"];
   const LINE_WEIGHTS: LineWeight[] = ["thin", "medium", "thick"];
 
+  // Backdrop captures click-outside; sits below the popover in z-order.
+  const backdrop = el("div", "rm-popover-backdrop rm-popover-backdrop--hidden");
+  document.body.appendChild(backdrop);
+
   // Fixed-position popover appended to body — triggered by RENDER ribbon tab.
   const popover = el("div", "rm-popover rm-popover--hidden");
+  popover.setAttribute("tabindex", "-1");
   document.body.appendChild(popover);
 
   // Mode list rows.
@@ -1702,10 +1707,23 @@ function initRenderModePopover(): void {
   popover.appendChild(linePicker);
 
   let open = false;
+  let focusedIdx = -1;
+
+  function setFocusedIdx(idx: number): void {
+    focusedIdx = idx;
+    modeList.querySelectorAll<HTMLElement>(".rm-mode-item").forEach((item, i) => {
+      item.classList.toggle("rm-mode-item--focused", i === idx);
+    });
+  }
 
   function closePopover() {
     open = false;
+    focusedIdx = -1;
     popover.classList.add("rm-popover--hidden");
+    backdrop.classList.add("rm-popover-backdrop--hidden");
+    modeList.querySelectorAll<HTMLElement>(".rm-mode-item").forEach((item) => {
+      item.classList.remove("rm-mode-item--focused");
+    });
   }
 
   function syncState() {
@@ -1724,20 +1742,56 @@ function initRenderModePopover(): void {
     });
   }
 
+  // Keyboard: Escape closes; ArrowUp/Down cycles modes; Enter applies focused mode.
+  popover.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closePopover(); e.preventDefault(); return; }
+    const items = MODES;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setFocusedIdx((focusedIdx + 1) % items.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setFocusedIdx((focusedIdx - 1 + items.length) % items.length);
+    } else if (e.key === "Enter" && focusedIdx >= 0) {
+      e.preventDefault();
+      const m = MODES[focusedIdx];
+      if (m) { setRenderMode(m); closePopover(); }
+    }
+  });
+
   // RENDER ribbon tab fires this event; position popover below the tab button.
   window.addEventListener("render-mode-toggle", (rawEv) => {
     const rect = (rawEv as CustomEvent<{ rect: DOMRect }>).detail?.rect;
     open = !open;
     if (open && rect) {
-      popover.style.top  = `${rect.bottom + 4}px`;
+      // Initial position
       popover.style.left = `${rect.left}px`;
+      popover.style.top  = `${rect.bottom + 4}px`;
       popover.classList.remove("rm-popover--hidden");
+      backdrop.classList.remove("rm-popover-backdrop--hidden");
+      // Edge-collision clamp after layout
+      const pw = popover.offsetWidth;
+      const ph = popover.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      let left = rect.left;
+      let top  = rect.bottom + 4;
+      if (left + pw > vw - 10) left = Math.max(0, rect.right - pw);
+      if (top  + ph > vh - 10) top  = rect.top - ph - 4;
+      popover.style.left = `${left}px`;
+      popover.style.top  = `${top}px`;
+      // Focus on currently-active mode
+      const activeIdx = MODES.indexOf(getRenderMode());
+      setFocusedIdx(activeIdx >= 0 ? activeIdx : 0);
+      syncState();
+      popover.focus();
     } else {
       closePopover();
     }
   });
+  backdrop.addEventListener("click", closePopover);
   document.addEventListener("click", (e) => {
-    if (open && !popover.contains(e.target as Node)) closePopover();
+    if (open && !popover.contains(e.target as Node) && e.target !== backdrop) closePopover();
   });
   window.addEventListener("render-mode-changed", () => syncState());
 

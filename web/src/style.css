@@ -1620,10 +1620,16 @@ html[data-mode="night"] .paper-stage {
 .history-args { color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Render mode popover (#95 P3 / #117 redesign) ────────────────────────── */
+.rm-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+}
+.rm-popover-backdrop--hidden { display: none; }
 .rm-popover {
   position: fixed;
   z-index: 200;
-  background: var(--panel-bg);
+  background: var(--paper-base);
   border: 1px solid var(--hairline);
   border-radius: var(--r);
   box-shadow: 0 4px 12px rgba(0,0,0,0.18);
@@ -1631,6 +1637,7 @@ html[data-mode="night"] .paper-stage {
   overflow: hidden;
   font-family: var(--mono);
   font-size: 10px;
+  outline: none;
 }
 .rm-popover--hidden { display: none; }
 .rm-mode-list { padding: 4px 0; }
@@ -1645,6 +1652,7 @@ html[data-mode="night"] .paper-stage {
 }
 .rm-mode-item:hover { background: var(--paper-3); color: var(--ink); }
 .rm-mode-item--active { color: var(--ink); }
+.rm-mode-item--focused { background: var(--paper-3); color: var(--ink); }
 .rm-check {
   width: 10px;
   color: var(--sanguine);

@@ -771,6 +771,48 @@ function record(name, passed, evidence) {
   else record('agent-build-and-export', r.passed, r.evidence);
 }
 
+// ── Surface 17: render-popover-keyboard ──────────────────────────────────────
+// Opens RENDER popover via render-mode-toggle event, navigates with ArrowDown 2x
+// starting from 'ghosted' (index 2) → 'technical' (index 4), asserts mode applied.
+{
+  const r = await evaluate(`
+    (async () => {
+      // Start at ghosted (index 2) so ArrowDown 2x lands on technical (index 4).
+      window.__dispatch?.('SdRenderMode', { mode: 'ghosted' });
+      await new Promise(r => setTimeout(r, 60));
+
+      // Fire render-mode-toggle to open the popover (simulates RENDER tab click).
+      const header = document.querySelector('.vp-header');
+      if (!header) return { passed: false, evidence: { reason: 'no .vp-header for rect' } };
+      const rect = header.getBoundingClientRect();
+      window.dispatchEvent(new CustomEvent('render-mode-toggle', { detail: { rect } }));
+      await new Promise(r => setTimeout(r, 60));
+
+      const popover = document.querySelector('.rm-popover');
+      if (!popover || popover.classList.contains('rm-popover--hidden'))
+        return { passed: false, evidence: { reason: 'popover not visible after toggle' } };
+
+      // ArrowDown 2x: ghosted(2) → realistic(3) → technical(4), then Enter.
+      const kOpts = { bubbles: true, cancelable: true };
+      popover.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, ...kOpts }));
+      popover.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, ...kOpts }));
+      popover.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, ...kOpts }));
+      await new Promise(r => setTimeout(r, 80));
+
+      // Popover closed; check active mode item (syncState runs on render-mode-changed).
+      const activeItem = document.querySelector('.rm-mode-item--active');
+      const activeMode = activeItem?.dataset?.mode ?? null;
+      const passed = activeMode === 'technical';
+      return { passed, evidence: { activeMode, expected: 'technical' } };
+    })()`, true);
+  if (!r) record('render-popover-keyboard', false, { reason: 'evaluate returned null' });
+  else record('render-popover-keyboard', r.passed, r.evidence);
+
+  // Restore shaded after keyboard test.
+  await evaluate(`window.__dispatch?.('SdRenderMode', { mode: 'shaded' })`);
+  await new Promise(r => setTimeout(r, 60));
+}
+
 // ── Aggregate + write receipt ─────────────────────────────────────────────────
 ws.close();
 if (newTabTargetId) {
