@@ -350,6 +350,17 @@ Assistant: Overriding auto-routing; placing slab on Annotations layer as request
 1. IfcSlab — width=6, depth=4, thickness=0.2, layer=Annotations
 </plan>
 <tool_call>{"command":"IfcSlab","parameters":{"width":6,"depth":4,"thickness":0.2,"layer":"Annotations"},"metadata":{"source":"agent"}}</tool_call>
+
+User: add a 1m grid and snap walls to it
+Assistant: Adding 1m grid; walls will snap to intersections.
+<plan>
+1. IfcGrid — spacing=1, count=30, rotation=0
+2. setActiveGrid — id from IfcGrid return
+3. IfcWall — south, profile=[[0,0],[12,0]], thickness=0.2, height=3.0
+</plan>
+<tool_call>{"command":"IfcGrid","parameters":{"spacing":1,"count":30,"rotation":0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"setActiveGrid","parameters":{"id":"grid/0"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[12,0]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

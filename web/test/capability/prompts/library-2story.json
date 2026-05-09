@@ -42,6 +42,20 @@
       "type": "z_extent",
       "min": 6.5,
       "max": 8.5
+    },
+    {
+      "id": "level_elevation_ground",
+      "description": "Ground storey at 0m",
+      "type": "storey_elevation",
+      "elevation": 0,
+      "tolerance": 0.15
+    },
+    {
+      "id": "level_elevation_upper",
+      "description": "Upper storey at 3.5m (one floor height)",
+      "type": "storey_elevation",
+      "elevation": 3.5,
+      "tolerance": 0.2
     }
   ]
 }

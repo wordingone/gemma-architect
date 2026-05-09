@@ -41,6 +41,34 @@
       "description": "All doors ≥ 0.91m wide (ADA ground-floor unit requirement)",
       "type": "door_width",
       "min_width": 0.91
+    },
+    {
+      "id": "level_elevation_ground",
+      "description": "Ground storey at 0m",
+      "type": "storey_elevation",
+      "elevation": 0,
+      "tolerance": 0.15
+    },
+    {
+      "id": "level_elevation_floor2",
+      "description": "2nd storey at 3m (3m floor-to-floor)",
+      "type": "storey_elevation",
+      "elevation": 3.0,
+      "tolerance": 0.2
+    },
+    {
+      "id": "level_elevation_floor3",
+      "description": "3rd storey at 6m",
+      "type": "storey_elevation",
+      "elevation": 6.0,
+      "tolerance": 0.2
+    },
+    {
+      "id": "level_elevation_floor4",
+      "description": "4th storey at 9m",
+      "type": "storey_elevation",
+      "elevation": 9.0,
+      "tolerance": 0.2
     }
   ]
 }

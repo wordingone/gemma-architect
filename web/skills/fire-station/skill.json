@@ -7,6 +7,7 @@
   "eval_id": "skill-fire-station-v01",
   "steps": [
     {"verb": "IfcLevel", "args": {"elevation": 0, "extent": 24, "name": "Ground Floor"}},
+    {"verb": "IfcGrid", "args": {"spacing": 1, "count": 30, "rotation": 0}},
     {"verb": "IfcSlab", "args": {"profile": [[0,0],[24,0],[24,25],[0,25]], "thickness": 0.2}},
     {"verb": "IfcWall", "args": {"length": 24, "thickness": 0.3, "height": 4.5}},
     {"verb": "IfcWall", "args": {"length": 24, "thickness": 0.3, "height": 4.5}},

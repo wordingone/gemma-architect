@@ -421,7 +421,7 @@ async function exportIFC(): Promise<string> {
 type CheckSpec = {
   id: string;
   description: string;
-  type: "count" | "dimension" | "area" | "z_extent" | "presence" | "door_width";
+  type: "count" | "dimension" | "area" | "z_extent" | "presence" | "door_width" | "storey_elevation";
   target?: string;
   tag_contains?: string;
   axis?: "X" | "Y" | "Z";
@@ -429,6 +429,8 @@ type CheckSpec = {
   max?: number;
   exact?: number;
   min_width?: number;
+  elevation?: number;    // storey_elevation: expected elevation in metres
+  tolerance?: number;    // storey_elevation: tolerance (default 0.15m)
 };
 
 type CheckResult = {
@@ -545,6 +547,23 @@ function scoreDoorWidth(c: CheckSpec, text: string): CheckResult {
   return { id: c.id, pass: allPass, actual: v, reason: `min door width=${v}m; required≥${minW}; ${count} door(s)` };
 }
 
+function scoreStoreyElevation(c: CheckSpec, text: string): CheckResult {
+  // Parse elevation (last numeric arg) from each IFCBUILDINGSTOREY line.
+  // IFC4 format: IFCBUILDINGSTOREY('GUID',#H,'Name',$,$,#P,$,$,.ELEMENT.,0.);
+  const re = /IFCBUILDINGSTOREY\([^;]+,([+-]?(?:\d+\.?\d*|\.\d+))\s*\)/g;
+  const elevations: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const v = parseFloat(m[1]);
+    if (isFinite(v)) elevations.push(v);
+  }
+  const target = c.elevation ?? 0;
+  const tol = c.tolerance ?? 0.15;
+  const pass = elevations.some(e => Math.abs(e - target) <= tol);
+  const found = elevations.map(e => e.toFixed(2)).join(", ");
+  return { id: c.id, pass, actual: elevations.length, reason: `storeys at [${found || "none"}]; expected ≈${target}m ±${tol}` };
+}
+
 // ─── Bounding box via web-ifc ─────────────────────────────────────────────────
 type BBox = { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 
@@ -603,9 +622,10 @@ async function scoreIFC(ifcPath: string, checks: CheckSpec[]): Promise<CheckResu
       case "presence":   return scorePresence(c, text);
       case "dimension":  return scoreDimension(c, bbox);
       case "area":       return scoreArea(c, text, bbox);
-      case "z_extent":   return scoreZExtent(c, bbox);
-      case "door_width": return scoreDoorWidth(c, text);
-      default:           return { id: c.id, pass: false, actual: null, reason: `unknown check type: ${(c as any).type}` };
+      case "z_extent":         return scoreZExtent(c, bbox);
+      case "door_width":       return scoreDoorWidth(c, text);
+      case "storey_elevation": return scoreStoreyElevation(c, text);
+      default:                 return { id: c.id, pass: false, actual: null, reason: `unknown check type: ${(c as any).type}` };
     }
   });
 }
