@@ -650,6 +650,21 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: IfcPlate
+  ifc4_class: IfcPlate
+  kernel_op: makePlate
+  args:
+    - {name: profile,     type: polyline, required: false, description: "2D point array [x,y][] for panel outline; default 1×1 rectangle"}
+    - {name: thickness,   type: number,  required: false, unit: m, default: 0.05}
+    - {name: orientation, type: vector3, required: false, description: "Unit normal of plate face [x,y,z], default [0,1,0] = panel in XZ plane"}
+    - {name: level,       type: string,  required: false, description: "Storey name; default ground"}
+    - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  topology_role: host
+  kg_predicates: [bounds, containedIn]
+  synonyms: [plate, cladding panel, facade panel, cassette, glazing infill, panel]
+  kernel: three
+  alias_source: ifc_standard_vocabulary
+
 - canonical_name: IfcSkylight
   ifc4_class: IfcOpeningElement
   kernel_op: makeSkylight

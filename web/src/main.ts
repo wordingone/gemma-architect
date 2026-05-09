@@ -607,6 +607,32 @@ registerHandler("IfcCurtainWall", (args) => {
   return { created: "curtainwall", length: wallLen, height: h };
 });
 
+registerHandler("IfcPlate", (args) => {
+  const thickness = (args.thickness as number | undefined) ?? 0.05;
+  const normRaw   = args.orientation as [number, number, number] | undefined;
+  const norm      = normRaw ?? [0, 1, 0];
+  const rawProfile = args.profile as [number, number][] | undefined;
+  const pts: [number, number][] = Array.isArray(rawProfile) && rawProfile.length >= 3
+    ? (rawProfile as [number, number][])
+    : [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const shape = new THREE.Shape();
+  shape.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
+  shape.closePath();
+  const geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
+  const mat  = new THREE.MeshStandardMaterial({ color: 0xc8d8e8, roughness: 0.4, metalness: 0.1 });
+  const mesh = new THREE.Mesh(geom, mat);
+  const up  = new THREE.Vector3(0, 0, 1);
+  const dir = new THREE.Vector3(norm[0], norm[1], norm[2]).normalize();
+  if (Math.abs(dir.dot(up)) < 0.9999) mesh.quaternion.setFromUnitVectors(up, dir);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "IfcPlate";
+  mesh.userData.layerId = resolveLayerId("IfcPlate", args);
+  mesh.userData.levelId = getActiveLevelId();
+  viewer.addMesh(mesh, "brep");
+  return { created: "plate", thickness, profile_points: pts.length };
+});
+
 registerHandler("IfcSkylight", (args) => {
   const w    = (args.width     as number | undefined) ?? 1.2;
   const d    = (args.depth     as number | undefined) ?? 1.2;
