@@ -313,7 +313,9 @@ function record(name, passed, evidence) {
   record("delete-propagation", r.passed, r.evidence);
 }
 
-// ── Surface 7: console-vocab-coverage ────────────────────────────────────────
+// ── Surface 7: console-vocab-runs ─────────────────────────────────────────────
+// Renamed from console-vocab-coverage (#241): also fails on ArgValidationError,
+// not just "unknown verb" — verbs with required geometry args are RED until W2.4 (#233).
 {
   await evaluate(`
     (async () => {
@@ -351,15 +353,19 @@ function record(name, passed, evidence) {
           input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
           await new Promise(r => setTimeout(r, 60));
           const lines = [...document.querySelectorAll("#console-history .console-line")].slice(before).map(l => l.textContent);
-          if (lines.some(l => /unknown verb/i.test(l ?? ""))) failedVerbs.push({ verb: v, output: lines.join(" | ") });
+          const isUnknown  = lines.some(l => /unknown verb/i.test(l ?? ""));
+          const isArgError = lines.some(l => /ArgValidationError/i.test(l ?? ""));
+          if (isUnknown || isArgError) {
+            failedVerbs.push({ verb: v, output: lines.join(" | "), error: isUnknown ? "unknown_verb" : "arg_validation_error" });
+          }
         }
         return { passed: failedVerbs.length === 0, evidence: { tested: verbs.length, failed_verbs: failedVerbs } };
       } catch (e) {
         return { passed: false, evidence: { reason: "caught: " + String(e) } };
       }
     })()`);
-  if (!r) record("console-vocab-coverage", false, { reason: "evaluate returned null — expression threw or timed out" });
-  else record("console-vocab-coverage", r.passed, r.evidence);
+  if (!r) record("console-vocab-runs", false, { reason: "evaluate returned null — expression threw or timed out" });
+  else record("console-vocab-runs", r.passed, r.evidence);
 }
 
 // ── Surface 8: console-verb-produces-output ───────────────────────────────────

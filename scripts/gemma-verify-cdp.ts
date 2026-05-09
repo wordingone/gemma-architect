@@ -320,7 +320,9 @@ function record(result: SurfaceResult) {
   record({ name: "delete-propagation", ...r as any });
 }
 
-// --- Surface 7: console-vocab-coverage (prompt tab + mode-pill) ---
+// --- Surface 7: console-vocab-runs (prompt tab + mode-pill) ---
+// Renamed from console-vocab-coverage (#241): also fails on ArgValidationError,
+// not just "unknown verb" — verbs with required geometry args are RED until W2.4 (#233).
 {
   await page.evaluate(() => {
     const tab = document.querySelector("[data-tab=prompt]") as HTMLElement | null;
@@ -358,13 +360,16 @@ function record(result: SurfaceResult) {
       input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
       await new Promise(res => setTimeout(res, 60));
       const lines = Array.from(document.querySelectorAll("#console-history .console-line")).slice(before).map(l => l.textContent);
-      const isUnknown = lines.some(l => /unknown verb/i.test(l ?? ""));
+      const isUnknown  = lines.some(l => /unknown verb/i.test(l ?? ""));
+      const isArgError = lines.some(l => /ArgValidationError/i.test(l ?? ""));
       testedVerbs.push(v);
-      if (isUnknown) failedVerbs.push({ verb: v, output: lines.join(" | ") });
+      if (isUnknown || isArgError) {
+        failedVerbs.push({ verb: v, output: lines.join(" | "), error: isUnknown ? "unknown_verb" : "arg_validation_error" });
+      }
     }
     return { passed: failedVerbs.length === 0, evidence: { tested_verbs: testedVerbs, failed_verbs: failedVerbs, total: testedVerbs.length } };
   }, verbs);
-  record({ name: "console-vocab-coverage", ...r as any });
+  record({ name: "console-vocab-runs", ...r as any });
 }
 
 // --- Surface 8: console-verb-produces-output ---
