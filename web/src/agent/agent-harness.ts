@@ -267,6 +267,39 @@ Assistant: Assuming 8×6m open plan, flat roof, 3.5m height.
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,6],[0,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdBox","parameters":{"width":8.4,"depth":6.4,"height":0.2},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdBox","parameters":{"width":0.3,"depth":0.3,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+
+User: design a 2-story library, 12m × 8m
+Assistant: Assuming 3.0m ground-floor height, 3.0m upper-floor height, concrete slab at +3.0m.
+<plan>
+1. IfcLevel — name="Ground", elevation=0, height=3.0
+2. IfcLevel — name="2nd Floor", elevation=3.0, height=3.0
+3. setActiveLevel — id from Ground IfcLevel return
+4. IfcWall — south ground, profile=[[0,0],[12,0]], thickness=0.3, height=3.0
+5. IfcWall — north ground, profile=[[12,8],[0,8]], thickness=0.3, height=3.0
+6. IfcWall — east ground, profile=[[12,0],[12,8]], thickness=0.3, height=3.0
+7. IfcWall — west ground, profile=[[0,8],[0,0]], thickness=0.3, height=3.0
+8. IfcSlab — ground floor slab at elev=3.0, profile=[[0,0],[12,0],[12,8],[0,8]]
+9. setActiveLevel — id from 2nd Floor IfcLevel return
+10. IfcWall — south upper, profile=[[0,0],[12,0]], thickness=0.3, height=3.0
+11. IfcWall — north upper, profile=[[12,8],[0,8]], thickness=0.3, height=3.0
+12. IfcWall — east upper, profile=[[12,0],[12,8]], thickness=0.3, height=3.0
+13. IfcWall — west upper, profile=[[0,8],[0,0]], thickness=0.3, height=3.0
+14. IfcSlab — roof slab at elev=6.0, profile=[[0,0],[12,0],[12,8],[0,8]]
+</plan>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Ground","elevation":0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"2nd Floor","elevation":3.0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[12,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[12,8],[0,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[12,0],[12,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[12,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[12,8],[0,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[12,0],[12,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

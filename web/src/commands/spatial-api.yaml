@@ -461,6 +461,7 @@
     - {name: length,    type: number,   required: false, unit: m, default: 4.0}
     - {name: thickness, type: number,   required: false, unit: m, default: 0.2}
     - {name: height,    type: number,   required: false, unit: m, default: 3.0}
+    - {name: level,     type: string,   required: false, description: "Level ID or name. Overrides active level."}
   topology_role: host
   kg_predicates: [hosts, containedIn, bounds]
   synonyms: [wall, makewall, drawwall, w]
@@ -474,6 +475,7 @@
   args:
     - {name: profile,   type: polyline, required: true}
     - {name: thickness, type: number,   required: true, unit: m, default: 0.2}
+    - {name: level,     type: string,   required: false, description: "Level ID or name."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [slab, floor, plate, s]
@@ -488,6 +490,7 @@
     - {name: position, type: point3, required: true}
     - {name: profile,  type: polyline_or_circle, required: true}
     - {name: height,   type: number, required: true, unit: m, default: 4.0}
+    - {name: level,    type: string, required: false, description: "Level ID or name."}
   topology_role: host
   kg_predicates: [supports, containedIn]
   synonyms: [column, post, pillar]
@@ -692,6 +695,7 @@
   kernel_op: makeLevel
   args:
     - {name: elevation, type: number, required: false, unit: m, default: 0.0}
+    - {name: height,    type: number, required: false, unit: m, default: 3.0}
     - {name: extent,    type: number, required: false, unit: m, default: 10.0}
     - {name: name,      type: string, required: false}
   topology_role: system
@@ -1059,5 +1063,26 @@
   topology_role: system
   kg_predicates: []
   synonyms: [setTool, activateTool, selectTool]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: setActiveLevel
+  kernel_op: setActiveLevel
+  args:
+    - {name: id, type: string, required: true, description: "Level ID (from IfcLevel dispatch return)"}
+  topology_role: system
+  kg_predicates: []
+  synonyms: [activateLevel, switchLevel, goToLevel]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: setLevelVisible
+  kernel_op: setLevelVisible
+  args:
+    - {name: id,      type: string,  required: true}
+    - {name: visible, type: boolean, required: true}
+  topology_role: system
+  kg_predicates: []
+  synonyms: [showLevel, hideLevel, toggleLevel]
   kernel: replicad
   alias_source: generic_cad_vocabulary

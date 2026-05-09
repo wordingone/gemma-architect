@@ -24,6 +24,7 @@ import { dispatchSync, type DispatchArgs } from "./commands/dispatch";
 import { setState } from "./app-state";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./viewer/snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
+import { levelStore, type Level } from "./levels";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./viewer/selection-state";
 import { getCreateSequence } from "./viewer/create-mode";
@@ -149,6 +150,7 @@ const SIDEBAR_TABS: SidebarTab[] = [
   { id: "scene",   label: "SCENE" },
   { id: "inspect", label: "INSPECT" },
   { id: "assets",  label: "ASSETS" },
+  { id: "levels",  label: "LEVELS" },
 ];
 
 const SAMPLE_ASSETS = [
@@ -466,6 +468,97 @@ function buildAssetsTab(onPickSample: (v: string) => void): HTMLElement {
   return wrap;
 }
 
+function buildLevelsTab(): HTMLElement {
+  const wrap = el("div", "tab-body levels-tab");
+
+  function renderRow(lvl: Level, list: HTMLElement) {
+    const row = el("div", "level-row");
+    row.style.cssText = `display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px; cursor:pointer; background:${lvl.active ? "var(--accent-subtle, rgba(80,140,255,0.12))" : "transparent"};`;
+
+    const eye = el("button", "level-eye");
+    eye.innerHTML = lvl.visible
+      ? `<svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/></svg>`
+      : `<svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6z" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.35"/><line x1="2" y1="10" x2="10" y2="2" stroke="currentColor" stroke-width="1.2"/></svg>`;
+    eye.style.cssText = "border:none; background:transparent; cursor:pointer; padding:0; color:var(--ink-body); flex-shrink:0;";
+    eye.title = lvl.visible ? "Hide level" : "Show level";
+    eye.addEventListener("click", (e) => {
+      e.stopPropagation();
+      (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("setLevelVisible", { id: lvl.id, visible: !lvl.visible });
+    });
+
+    const nameEl = el("div");
+    nameEl.textContent = lvl.name;
+    nameEl.style.cssText = "flex:1; font-size:11px; color:var(--ink-body);";
+
+    const elevEl = el("div");
+    elevEl.textContent = `+${lvl.elevation.toFixed(1)}m`;
+    elevEl.style.cssText = "font-size:9px; color:var(--ink-dim); white-space:nowrap;";
+
+    const chip = el("div", "level-active-chip");
+    chip.textContent = "ACTIVE";
+    chip.style.cssText = `font-size:8px; padding:1px 4px; border-radius:2px; background:var(--accent,#5080ff); color:#fff; display:${lvl.active ? "block" : "none"};`;
+
+    row.appendChild(eye);
+    row.appendChild(nameEl);
+    row.appendChild(elevEl);
+    row.appendChild(chip);
+
+    row.addEventListener("click", () => {
+      (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("setActiveLevel", { id: lvl.id });
+    });
+
+    list.appendChild(row);
+  }
+
+  function render() {
+    wrap.innerHTML = "";
+
+    const header = el("div", "levels-header");
+    header.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 6px;";
+    const title = el("div");
+    title.style.cssText = "font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
+    title.textContent = "BUILDING LEVELS";
+    const addBtn = el("button", "levels-add-btn");
+    addBtn.textContent = "+";
+    addBtn.style.cssText = "font-size:12px; padding:0 6px; cursor:pointer; background:var(--chrome-secondary); border:none; color:var(--ink-body); border-radius:3px;";
+    header.appendChild(title);
+    header.appendChild(addBtn);
+    wrap.appendChild(header);
+
+    const list = el("div", "levels-list");
+    list.style.cssText = "display:flex; flex-direction:column; gap:2px;";
+    for (const lvl of levelStore.all()) renderRow(lvl, list);
+    wrap.appendChild(list);
+
+    addBtn.addEventListener("click", () => {
+      const existing = wrap.querySelector(".level-form");
+      if (existing) { existing.remove(); return; }
+      const form = el("div", "level-form");
+      form.style.cssText = "display:flex; flex-direction:column; gap:4px; padding:6px; background:var(--chrome-secondary); border-radius:4px; margin-top:6px;";
+      form.innerHTML = `
+        <input class="level-name-input" placeholder="Level name (e.g. 2nd Floor)" style="font-size:11px; padding:3px 5px; background:var(--input-bg,var(--chrome)); border:1px solid var(--hairline); color:var(--ink-body); border-radius:3px;"/>
+        <input class="level-elev-input" placeholder="Elevation (m)" type="number" step="0.1" style="font-size:11px; padding:3px 5px; background:var(--input-bg,var(--chrome)); border:1px solid var(--hairline); color:var(--ink-body); border-radius:3px;"/>
+        <button class="level-create-btn" style="font-size:10px; padding:3px; background:var(--accent,#5080ff); color:#fff; border:none; border-radius:3px; cursor:pointer;">Create Level</button>
+      `;
+      wrap.appendChild(form);
+      const createBtn = form.querySelector<HTMLButtonElement>(".level-create-btn")!;
+      createBtn.addEventListener("click", () => {
+        const nameIn = (form.querySelector<HTMLInputElement>(".level-name-input")!).value.trim();
+        const elevIn = parseFloat((form.querySelector<HTMLInputElement>(".level-elev-input")!).value);
+        if (!nameIn || isNaN(elevIn)) return;
+        (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("IfcLevel", { name: nameIn, elevation: elevIn });
+        form.remove();
+      });
+    });
+  }
+
+  render();
+  // Re-render on levelStore changes (active level switch, visibility toggle, new level added).
+  levelStore.subscribe(render);
+
+  return wrap;
+}
+
 function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
   host.innerHTML = "";
 
@@ -485,6 +578,7 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }
     }),
+    levels:  buildLevelsTab(),
   };
 
   for (const t of SIDEBAR_TABS) {
