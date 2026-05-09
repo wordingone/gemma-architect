@@ -462,6 +462,7 @@
     - {name: thickness, type: number,   required: false, unit: m, default: 0.2}
     - {name: height,    type: number,   required: false, unit: m, default: 3.0}
     - {name: level,     type: string,   required: false, description: "Level ID or name. Overrides active level."}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [hosts, containedIn, bounds]
   synonyms: [wall, makewall, drawwall, w]
@@ -476,6 +477,7 @@
     - {name: profile,   type: polyline, required: true}
     - {name: thickness, type: number,   required: true, unit: m, default: 0.2}
     - {name: level,     type: string,   required: false, description: "Level ID or name."}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [slab, floor, plate, s]
@@ -491,6 +493,7 @@
     - {name: profile,  type: polyline_or_circle, required: true}
     - {name: height,   type: number, required: true, unit: m, default: 4.0}
     - {name: level,    type: string, required: false, description: "Level ID or name."}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [supports, containedIn]
   synonyms: [column, post, pillar]
@@ -505,6 +508,7 @@
     - {name: end,     type: point3,  required: false}
     - {name: profile, type: polyline, required: false}
     - {name: size,    type: number,  required: false, unit: m, default: 0.2}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [supports, connectedTo]
   synonyms: [beam, joist, girder]
@@ -520,6 +524,7 @@
     - {name: width,      type: number,  required: true, unit: m, default: 1.0}
     - {name: riser,      type: number,  required: false, unit: m, default: 0.18}
     - {name: tread,      type: number,  required: false, unit: m, default: 0.27}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, connectedTo]
   synonyms: [stair, stairs, steps, staircase]
@@ -534,6 +539,7 @@
     - {name: position, type: point3, required: false}
     - {name: width,    type: number, required: false, unit: m, default: 0.9}
     - {name: height,   type: number, required: false, unit: m, default: 2.1}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [door, doorway, opening]
@@ -549,6 +555,7 @@
     - {name: width,    type: number, required: false, unit: m, default: 1.2}
     - {name: height,   type: number, required: false, unit: m, default: 1.4}
     - {name: sillH,    type: number, required: false, unit: m, default: 0.9}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [window]
@@ -562,6 +569,7 @@
     - {name: footprint,  type: polyline, required: true}
     - {name: pitchDeg,   type: number,   required: false, default: 30, unit: deg}
     - {name: ridgeHeight,type: number,   required: false, unit: m}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [roof, gable, hip]
@@ -575,6 +583,7 @@
     - {name: footprint, type: polyline, required: true}
     - {name: height,    type: number,   required: true, unit: m}
     - {name: name,      type: string,   required: false}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [space, room, zone]
@@ -589,6 +598,7 @@
     - {name: width,     type: number, required: false, unit: m, default: 6.0}
     - {name: depth,     type: number, required: false, unit: m, default: 6.0}
     - {name: thickness, type: number, required: false, unit: m, default: 0.5}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [supports, containedIn]
   synonyms: [foundation, footing, pile cap, slab on grade, pad footing]
@@ -604,6 +614,7 @@
     - {name: depth,     type: number, required: false, unit: m, default: 4.0}
     - {name: thickness, type: number, required: false, unit: m, default: 0.05}
     - {name: elevation, type: number, required: false, unit: m, default: 2.8}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [containedIn, bounds]
   synonyms: [ceiling, soffit, suspended ceiling, dropped ceiling]
@@ -617,6 +628,7 @@
     - {name: position, type: point3, required: false}
     - {name: length,   type: number, required: false, unit: m, default: 6.0}
     - {name: height,   type: number, required: false, unit: m, default: 3.0}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [curtain wall, glass facade, glazed wall, glass wall, curtainwall]
@@ -631,6 +643,7 @@
     - {name: width,     type: number, required: false, unit: m, default: 1.2}
     - {name: depth,     type: number, required: false, unit: m, default: 1.2}
     - {name: elevation, type: number, required: false, unit: m, default: 3.0}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, bounds]
   synonyms: [skylight, rooflight, roof window, velux, overhead glazing]
@@ -644,6 +657,7 @@
     - {name: position, type: point3, required: false}
     - {name: width,    type: number, required: false, unit: m, default: 1.0}
     - {name: height,   type: number, required: false, unit: m, default: 2.0}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [opening, void, cutout, aperture, wall opening]
@@ -658,6 +672,7 @@
     - {name: end,       type: point3, required: false}
     - {name: width,     type: number, required: false, unit: m, default: 1.2}
     - {name: thickness, type: number, required: false, unit: m, default: 0.15}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, connectedTo]
   synonyms: [ramp, slope, incline, accessibility ramp, ramped surface]
@@ -671,6 +686,7 @@
     - {name: start,  type: point3, required: false}
     - {name: end,    type: point3, required: false}
     - {name: height, type: number, required: false, unit: m, default: 1.0}
+    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [containedIn, connectedTo]
   synonyms: [railing, handrail, balustrade, guardrail, banister]

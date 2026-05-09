@@ -336,6 +336,20 @@ Assistant: Assuming 3.0m ground-floor height, 3.0m upper-floor height, concrete 
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[12,0],[12,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+
+User: put this wall on the Construction layer instead
+Assistant: Assuming the wall profile and dimensions from context; overriding layer to Construction.
+<plan>
+1. IfcWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8, layer=Construction
+</plan>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8,"layer":"Construction"},"metadata":{"source":"agent"}}</tool_call>
+
+User: add a slab but put it on the Annotations layer for now
+Assistant: Overriding auto-routing; placing slab on Annotations layer as requested.
+<plan>
+1. IfcSlab — width=6, depth=4, thickness=0.2, layer=Annotations
+</plan>
+<tool_call>{"command":"IfcSlab","parameters":{"width":6,"depth":4,"thickness":0.2,"layer":"Annotations"},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
