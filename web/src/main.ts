@@ -20,6 +20,7 @@ import { applyDrafting, removeDrafting, isDrafting } from "./drafting";
 import { DEMOS, applyParams, type DemoPrompt, type Param } from "./demo-prompts";
 import { getLayerForCreator, layerStore } from "./layers";
 import { levelStore, getActiveLevelId } from "./levels";
+import { gridStore } from "./grids";
 import { buildIfc, ifcRoundTrip } from "./ifc";
 import {
   detectFormat,
@@ -109,6 +110,8 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
 // Expose dispatchSync for CDP-driven verification scripts.
 (window as unknown as { __dispatch: typeof dispatchSync }).__dispatch = dispatchSync;
+// Expose gridStore for CDP probes.
+(window as unknown as { __gridStore: typeof gridStore }).__gridStore = gridStore;
 initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
@@ -278,6 +281,10 @@ function resolveLayerId(creator: string, args: Record<string, unknown>): string 
   return getLayerForCreator(creator);
 }
 
+function getActiveLevelElevation(): number {
+  return levelStore.get(getActiveLevelId())?.elevation ?? 0;
+}
+
 registerHandler("IfcWall", (args) => {
   const rawProfile = args.profile as [number, number][] | undefined;
   const wallLen = (args.length as number | undefined) ?? 4;
@@ -302,7 +309,7 @@ registerHandler("IfcWall", (args) => {
   if (profile.length >= 2) {
     const dx = profile[profile.length - 1][0] - profile[0][0];
     const dy = profile[profile.length - 1][1] - profile[0][1];
-    mesh.position.set((profile[0][0] + profile[profile.length - 1][0]) / 2, (profile[0][1] + profile[profile.length - 1][1]) / 2, 0);
+    mesh.position.set((profile[0][0] + profile[profile.length - 1][0]) / 2, (profile[0][1] + profile[profile.length - 1][1]) / 2, getActiveLevelElevation());
     mesh.rotation.z = Math.atan2(dy, dx);
   }
   mesh.userData.kind = "brep";
@@ -317,7 +324,7 @@ registerHandler("IfcSlab", (args) => {
   const w = (args.width as number | undefined) ?? (args.length as number | undefined) ?? 4;
   const d = (args.depth as number | undefined) ?? (args.width as number | undefined) ?? 4;
   const t = (args.thickness as number | undefined) ?? 0.2;
-  const elev = (args.elevation as number | undefined) ?? 0;
+  const elev = (args.elevation as number | undefined) ?? getActiveLevelElevation();
   const geom = new THREE.BoxGeometry(w, d, t);
   const mat = new THREE.MeshStandardMaterial({ color: 0xa8a097, roughness: 0.7, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
@@ -338,7 +345,8 @@ registerHandler("IfcColumn", (args) => {
   const mat = new THREE.MeshStandardMaterial({ color: 0xd1c5b0, roughness: 0.6, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
   const p = args.position as [number, number] | undefined;
-  if (p) mesh.position.set(p[0], p[1], 0);
+  if (p) mesh.position.set(p[0], p[1], getActiveLevelElevation());
+  else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcColumn";
   mesh.userData.layerId = resolveLayerId("IfcColumn", args);
@@ -382,7 +390,7 @@ registerHandler("IfcStair", (args) => {
   geom.translate(run / 2, 0, totalH / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0xb89968, roughness: 0.6, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(s[0], s[1], 0);
+  mesh.position.set(s[0], s[1], (s[2] as number | undefined) ?? getActiveLevelElevation());
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcStair";
@@ -401,7 +409,8 @@ registerHandler("IfcDoor", (args) => {
   const mat = new THREE.MeshBasicMaterial({ color: 0xff5c5c, transparent: true, opacity: 0.4 });
   const mesh = new THREE.Mesh(geom, mat);
   const pos = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
+  else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcDoor";
   mesh.userData.layerId = resolveLayerId("IfcDoor", args);
@@ -420,8 +429,8 @@ registerHandler("IfcWindow", (args) => {
   const mat = new THREE.MeshBasicMaterial({ color: 0x5b8def, transparent: true, opacity: 0.4 });
   const mesh = new THREE.Mesh(geom, mat);
   const pos = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? sill);
-  else mesh.position.z = sill;
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? (getActiveLevelElevation() + sill));
+  else mesh.position.z = getActiveLevelElevation() + sill;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcWindow";
   mesh.userData.layerId = resolveLayerId("IfcWindow", args);
@@ -445,7 +454,7 @@ registerHandler("IfcRoof", (args) => {
   geom.translate(0, 0, Math.max(0.2, ridgeH) / 2);
   const mat  = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02 });
   const mesh = new THREE.Mesh(geom, mat);
-  const elev = (args.elevation as number | undefined) ?? 3;
+  const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 3);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcRoof";
@@ -469,6 +478,7 @@ registerHandler("IfcSpace", (args) => {
   geom.translate(0, 0, h / 2);
   const mat  = new THREE.MeshBasicMaterial({ color: 0x90c8ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcSpace";
   mesh.userData.layerId = resolveLayerId("IfcSpace", args);
@@ -489,7 +499,8 @@ registerHandler("IfcFoundation", (args) => {
   const mat  = new THREE.MeshStandardMaterial({ color: 0x8a7563, roughness: 0.85, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
   const pos  = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
+  else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcFoundation";
   mesh.userData.layerId = resolveLayerId("IfcFoundation", args);
@@ -502,7 +513,7 @@ registerHandler("IfcCeiling", (args) => {
   const w    = (args.width     as number | undefined) ?? 5;
   const d    = (args.depth     as number | undefined) ?? 4;
   const t    = (args.thickness as number | undefined) ?? 0.05;
-  const elev = (args.elevation as number | undefined) ?? 2.8;
+  const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 2.8);
   const geom = new THREE.BoxGeometry(w, d, t);
   const mat  = new THREE.MeshStandardMaterial({ color: 0xfaf5ec, roughness: 0.5, metalness: 0.02 });
   const mesh = new THREE.Mesh(geom, mat);
@@ -525,7 +536,8 @@ registerHandler("IfcCurtainWall", (args) => {
   const mat  = new THREE.MeshBasicMaterial({ color: 0xaadcff, transparent: true, opacity: 0.35 });
   const mesh = new THREE.Mesh(geom, mat);
   const pos  = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
+  else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcCurtainWall";
   mesh.userData.layerId = resolveLayerId("IfcCurtainWall", args);
@@ -537,7 +549,7 @@ registerHandler("IfcCurtainWall", (args) => {
 registerHandler("IfcSkylight", (args) => {
   const w    = (args.width     as number | undefined) ?? 1.2;
   const d    = (args.depth     as number | undefined) ?? 1.2;
-  const elev = (args.elevation as number | undefined) ?? 3;
+  const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 3);
   const geom = new THREE.BoxGeometry(w, d, 0.04);
   const mat  = new THREE.MeshBasicMaterial({ color: 0xeef5ff, transparent: true, opacity: 0.6 });
   const mesh = new THREE.Mesh(geom, mat);
@@ -561,7 +573,8 @@ registerHandler("IfcOpening", (args) => {
   const mat  = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, wireframe: true });
   const mesh = new THREE.Mesh(geom, mat);
   const pos  = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
+  else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcOpening";
   mesh.userData.layerId = resolveLayerId("IfcOpening", args);
@@ -580,7 +593,7 @@ registerHandler("IfcRamp", (args) => {
   geom.translate(run / 2, 0, 0);
   const mat  = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.65, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(s[0], s[1], s[2] ?? 0);
+  mesh.position.set(s[0], s[1], (s[2] as number | undefined) ?? getActiveLevelElevation());
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcRamp";
@@ -600,7 +613,7 @@ registerHandler("IfcRailing", (args) => {
   geom.translate(0, 0, h / 2);
   const mat  = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.4, metalness: 0.6 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, s[2] ?? 0);
+  mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, (s[2] as number | undefined) ?? getActiveLevelElevation());
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcRailing";
@@ -611,26 +624,62 @@ registerHandler("IfcRailing", (args) => {
 });
 
 registerHandler("IfcGrid", (args) => {
-  const spacing = (args.spacing as number | undefined) ?? 5;
-  const count   = Math.max(2, Math.min(10, Math.trunc((args.count as number | undefined) ?? 4)));
-  const extent  = spacing * (count - 1);
-  const half    = extent / 2;
-  const t       = 0.02;
-  const mat = new THREE.MeshBasicMaterial({ color: 0x888899, transparent: true, opacity: 0.5 });
+  const spacing  = (args.spacing  as number         | undefined) ?? 5;
+  const count    = Math.max(2, Math.min(10, Math.trunc((args.count as number | undefined) ?? 4)));
+  const name     = (args.name     as string         | undefined) ?? `Grid ${gridStore.all().length + 1}`;
+  const rotDeg   = (args.rotation as number         | undefined) ?? 0;
+  const origin   = (args.origin   as [number,number]| undefined) ?? [0, 0];
+
+  const grid = gridStore.add({ name, spacing, count, rotation: (rotDeg * Math.PI) / 180, origin, visible: true });
+
+  const extent = spacing * (count - 1);
+  const half   = extent / 2;
+  const t      = 0.02;
+  const mat    = new THREE.MeshBasicMaterial({ color: 0x888899, transparent: true, opacity: 0.5 });
+  const group  = new THREE.Group();
+  group.rotation.z = grid.rotation;
+  group.position.set(origin[0], origin[1], 0);
+  group.userData.kind = "grid";
+  group.userData.gridId = grid.id;
+
   for (let i = 0; i < count; i++) {
     const offset = -half + i * spacing;
-    const gv = new THREE.BoxGeometry(t, extent, t);
+    const gv = new THREE.BoxGeometry(t, extent + spacing, t);
     const mv = new THREE.Mesh(gv, mat);
     mv.position.set(offset, 0, 0);
-    mv.userData.kind = "brep"; mv.userData.creator = "IfcGrid";
-    viewer.addMesh(mv, "brep");
-    const gh = new THREE.BoxGeometry(extent, t, t);
+    group.add(mv);
+    const gh = new THREE.BoxGeometry(extent + spacing, t, t);
     const mh = new THREE.Mesh(gh, mat);
     mh.position.set(0, offset, 0);
-    mh.userData.kind = "brep"; mh.userData.creator = "IfcGrid";
-    viewer.addMesh(mh, "brep");
+    group.add(mh);
   }
-  return { created: "grid", count, spacing };
+
+  viewer.addMesh(group, "grid");
+  return { created: "grid", gridId: grid.id, count, spacing, name };
+});
+
+registerHandler("setGridVisible", (args) => {
+  const id      = args.id as string;
+  const visible = args.visible as boolean;
+  const ok = gridStore.setVisible(id, visible);
+  if (!ok) return { error: `no grid with id "${id}"` };
+  viewer.forEachSceneChild((obj) => { if (obj.userData.gridId === id) obj.visible = visible; });
+  return { gridId: id, visible };
+});
+
+registerHandler("setGridSpacing", (args) => {
+  const id      = args.id as string;
+  const spacing = args.spacing as number;
+  const ok = gridStore.setSpacing(id, spacing);
+  if (!ok) return { error: `invalid id or spacing for grid "${id}"` };
+  return { gridId: id, spacing };
+});
+
+registerHandler("setActiveGrid", (args) => {
+  const id = args.id as string;
+  const ok = gridStore.setActive(id);
+  if (!ok) return { error: `no grid with id "${id}"` };
+  return { activeGridId: id };
 });
 
 registerHandler("IfcLevel", (args) => {

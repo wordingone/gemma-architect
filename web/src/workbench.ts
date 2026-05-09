@@ -27,6 +27,7 @@ import { setState } from "./app-state";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./viewer/snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import { levelStore, type Level } from "./levels";
+import { gridStore, type Grid } from "./grids";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./viewer/selection-state";
 import { getCreateSequence } from "./viewer/create-mode";
@@ -154,6 +155,7 @@ const SIDEBAR_TABS: SidebarTab[] = [
   { id: "assets",  label: "ASSETS" },
   { id: "levels",  label: "LEVELS" },
   { id: "layers",  label: "LAYERS" },
+  { id: "grids",   label: "GRIDS" },
 ];
 
 const SAMPLE_ASSETS = [
@@ -690,6 +692,67 @@ function buildLayersTab(): HTMLElement {
   return wrap;
 }
 
+function buildGridsTab(): HTMLElement {
+  const wrap = el("div", "tab-body grids-tab");
+
+  const header = el("div", "grids-header");
+  header.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 6px;";
+  const title = el("div");
+  title.style.cssText = "font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
+  title.textContent = "REFERENCE GRIDS";
+  header.appendChild(title);
+  wrap.appendChild(header);
+
+  const list = el("div", "grid-list");
+  wrap.appendChild(list);
+
+  function getViewer(): { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; visible: boolean }) => void) => void } | undefined {
+    return (window as unknown as { __viewer?: { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; visible: boolean }) => void) => void } }).__viewer;
+  }
+
+  function renderList(): void {
+    list.innerHTML = "";
+    const activeId = gridStore.getActiveId();
+    for (const grid of gridStore.all()) {
+      const row = el("div", "layer-row");
+      row.style.cssText = "display:flex; align-items:center; gap:6px; padding:3px 2px; border-bottom:1px solid var(--hairline); cursor:pointer;";
+      if (grid.id === activeId) row.style.fontWeight = "600";
+
+      const visBtn = el("button") as HTMLButtonElement;
+      visBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:12px; color:var(--ink); padding:0 2px;";
+      visBtn.textContent = grid.visible ? "●" : "○";
+      visBtn.title = grid.visible ? "Hide grid" : "Show grid";
+      visBtn.dataset.gridId = grid.id;
+      visBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const ok = gridStore.setVisible(grid.id, !grid.visible);
+        if (ok) {
+          const v = getViewer();
+          if (v) v.forEachSceneChild((obj) => { if (obj.userData.gridId === grid.id) obj.visible = grid.visible; });
+        }
+      });
+
+      const nameEl = el("span");
+      nameEl.style.cssText = "flex:1; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+      nameEl.textContent = grid.name;
+
+      const spacingEl = el("span");
+      spacingEl.style.cssText = "font-size:10px; color:var(--ink-dim);";
+      spacingEl.textContent = `${grid.spacing}m`;
+
+      row.appendChild(visBtn);
+      row.appendChild(nameEl);
+      row.appendChild(spacingEl);
+      row.addEventListener("click", () => { gridStore.setActive(grid.id); renderList(); });
+      list.appendChild(row);
+    }
+  }
+
+  gridStore.subscribe(renderList);
+  renderList();
+  return wrap;
+}
+
 function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
   host.innerHTML = "";
 
@@ -711,6 +774,7 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
     }),
     levels:  buildLevelsTab(),
     layers:  buildLayersTab(),
+    grids:   buildGridsTab(),
   };
 
   for (const t of SIDEBAR_TABS) {

@@ -2,6 +2,8 @@
 // Driven by the snap-dock widget in workbench.ts; consumed by create-mode.ts
 // (sketch-click quantising) and viewer.ts (gumball drag quantising).
 
+import { gridStore } from "../grids";
+
 export interface SnapState {
   snapOn: boolean;       // master toggle — when off, all other snap flags inert
   orthoOn: boolean;      // axis-only constraint (gumball already does this per-handle)
@@ -47,11 +49,31 @@ export function getAngleStep(): number { return _state.angleStep; }
 export function setAngleStep(deg: number): void { _state.angleStep = Math.max(0.1, deg); emit(); }
 
 // Quantise a world-space XY point.
-// When master snap + grid both on: rounds to nearest step increment.
-// Otherwise: still rounds to 1mm to avoid floating-point noise.
+// When master snap + grid both on: snaps to the active GridStore grid's
+// intersection; falls back to the fixed step when no active grid exists.
+// Applies grid origin offset and rotation. Snap radius ~0.15 m.
 export function snapPoint(x: number, y: number): { x: number; y: number } {
   if (_state.snapOn && _state.gridOn) {
-    const s = _state.step;
+    const activeGrid = gridStore.getActive();
+    const s = (activeGrid?.spacing ?? _state.step);
+
+    if (activeGrid && activeGrid.visible) {
+      // Transform point into grid-local space (subtract origin, un-rotate).
+      const ox = activeGrid.origin[0], oy = activeGrid.origin[1];
+      const cos = Math.cos(-activeGrid.rotation), sin = Math.sin(-activeGrid.rotation);
+      const lx = (x - ox) * cos - (y - oy) * sin;
+      const ly = (x - ox) * sin + (y - oy) * cos;
+      // Snap in grid-local space.
+      const snappedLx = Math.round(lx / s) * s;
+      const snappedLy = Math.round(ly / s) * s;
+      // Transform back to world space.
+      const cos2 = Math.cos(activeGrid.rotation), sin2 = Math.sin(activeGrid.rotation);
+      return {
+        x: ox + snappedLx * cos2 - snappedLy * sin2,
+        y: oy + snappedLx * sin2 + snappedLy * cos2,
+      };
+    }
+
     return { x: Math.round(x / s) * s, y: Math.round(y / s) * s };
   }
   return { x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 };

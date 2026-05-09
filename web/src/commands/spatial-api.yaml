@@ -697,13 +697,41 @@
   ifc4_class: IfcGrid
   kernel_op: makeGrid
   args:
-    - {name: spacing,  type: number, required: false, unit: m, default: 5.0}
-    - {name: count,    type: number, required: false, default: 4}
-    - {name: position, type: point3, required: false}
+    - {name: spacing,   type: number,  required: false, unit: m,  default: 5.0, description: "Distance between grid lines in metres."}
+    - {name: count,     type: number,  required: false,            default: 4,   description: "Number of grid lines per axis (2-10)."}
+    - {name: name,      type: string,  required: false,                          description: "Grid name; defaults to a generated id."}
+    - {name: rotation,  type: number,  required: false, unit: deg, default: 0,   description: "Grid rotation in degrees."}
+    - {name: origin,    type: point2,  required: false,                          description: "World XY origin of the grid."}
   topology_role: system
   kg_predicates: []
   synonyms: [grid, structural grid, column grid, reference grid, building grid]
   kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: setGridVisible
+  ifc4_class: null
+  kernel_op: setGridVisible
+  args:
+    - {name: id,      type: string,  required: true,  description: "Grid id to toggle."}
+    - {name: visible, type: boolean, required: true,  description: "True to show, false to hide."}
+  synonyms: [show grid, hide grid, toggle grid visibility]
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: setGridSpacing
+  ifc4_class: null
+  kernel_op: setGridSpacing
+  args:
+    - {name: id,      type: string, required: true,  description: "Grid id to update."}
+    - {name: spacing, type: number, required: true,  unit: m, description: "New spacing in metres."}
+  synonyms: [grid spacing, change grid size, adjust grid]
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: setActiveGrid
+  ifc4_class: null
+  kernel_op: setActiveGrid
+  args:
+    - {name: id, type: string, required: true, description: "Grid id to make active for snap."}
+  synonyms: [activate grid, use grid, snap to grid]
   alias_source: generic_cad_vocabulary
 
 - canonical_name: IfcLevel
