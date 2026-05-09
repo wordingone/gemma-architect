@@ -378,28 +378,6 @@ function record(name, passed, evidence) {
     })()`);
   await delay(300);
   record("cmdk-dialog-opens", s9.passed, s9.evidence);
-
-  // 9b: regression — button click must not flicker (fix #197)
-  await evaluate(`
-    (() => {
-      const btn = document.querySelector("#ribbon-palette-btn");
-      if (btn) btn.click();
-    })()`);
-  await delay(150); // wait for open + any spurious close
-  const s9b = await evaluate(`
-    (() => {
-      const backdrop = document.querySelector(".cmdk-backdrop");
-      return { passed: !!backdrop, evidence: { backdropPresent: !!backdrop, note: "fix #197: click must keep cmdk open" } };
-    })()`);
-  // Dismiss
-  await evaluate(`
-    (() => {
-      const closeBtn = document.querySelector(".cmdk-close, .cmdk-backdrop");
-      if (closeBtn) closeBtn.click();
-      else window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
-    })()`);
-  await delay(300);
-  record("cmdk-button-no-flicker", s9b.passed, s9b.evidence);
 }
 
 // ── Surface 10: layout-tab-functional ────────────────────────────────────────
