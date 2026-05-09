@@ -522,6 +522,42 @@ function record(name, passed, evidence) {
   record("ortho-grid-z-order", r.passed, r.evidence);
 }
 
+// ── Surface 12: viewport-contrast ────────────────────────────────────────────
+// Verifies that .viewport has an opaque background in both VELLUM (day) and
+// BLUEPRINT (night) themes. Alpha ≥ 0.99 = opaque token (var(--paper-base)).
+{
+  const r = await evaluate(`
+    (() => {
+      function getAlpha(el) {
+        const bg = getComputedStyle(el).backgroundColor;
+        const m = bg.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+        return m ? parseFloat(m[1]) : 1; // no alpha in rgb() → fully opaque
+      }
+      const vp = document.querySelector('.viewport');
+      if (!vp) return { passed: false, evidence: { reason: 'no .viewport found' } };
+
+      const origMode = document.documentElement.getAttribute('data-mode') ?? 'day';
+
+      // Day (vellum) check
+      document.documentElement.setAttribute('data-mode', 'day');
+      const dayBg = getComputedStyle(vp).backgroundColor;
+      const dayAlpha = getAlpha(vp);
+
+      // Night (blueprint) check
+      document.documentElement.setAttribute('data-mode', 'night');
+      const nightBg = getComputedStyle(vp).backgroundColor;
+      const nightAlpha = getAlpha(vp);
+
+      // Restore original theme
+      document.documentElement.setAttribute('data-mode', origMode);
+
+      const passed = dayAlpha >= 0.99 && nightAlpha >= 0.99;
+      return { passed, evidence: { dayBg, dayAlpha, nightBg, nightAlpha } };
+    })()`);
+  if (!r) record("viewport-contrast", false, { reason: "evaluate returned null" });
+  else record("viewport-contrast", r.passed, r.evidence);
+}
+
 // ── Aggregate + write receipt ─────────────────────────────────────────────────
 ws.close();
 if (newTabTargetId) {
