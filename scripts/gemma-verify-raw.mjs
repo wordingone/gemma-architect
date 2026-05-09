@@ -844,12 +844,13 @@ function record(name, passed, evidence) {
 }
 
 // ── Surface 20: menubar-coverage ─────────────────────────────────────────────
-// Opens each top-level menu and clicks every non-stub .menu-row.
-// Asserts: each row produces either a dispatch call or a DOM mutation (class/data-mode change).
-// Rows with data-stub="true" (file-picker, save, reset-layout, alert) are skipped.
-// Regression-net for PR #256 W2.1 menubar wiring.
+// Per-entry-type effect assertions. Replaces the dormant-green mutation approach
+// where closeMenu() always fired DOM mutations making every row pass trivially.
+//   toolId rows  → [data-tool="X"].active after setActiveTool dispatch
+//   canonical    → window.__dispatch confirms verb is in registry (not UnknownVerb)
+//   onAction     → per-label targeted DOM element presence / active-class checks
+// data-toolId and data-canonical attributes added to rows in shell.ts (#266).
 {
-  // Ensure we're in MODEL mode so all menus are rendered.
   await evaluate(`(function() {
     const tab = document.querySelector('.mode-tab[data-mode="model"]');
     if (tab) tab.click();
@@ -858,80 +859,114 @@ function record(name, passed, evidence) {
 
   const r = await evaluate(`
     (async () => {
-      // Install dispatch recorder (wraps window.__dispatch).
-      const origDispatch = window.__dispatch;
-      const dispatchLog = [];
-      if (origDispatch) {
-        window.__dispatch = (name, args) => {
-          dispatchLog.push(name);
-          return origDispatch(name, args);
-        };
-      }
-
-      // MutationObserver tracks class/attribute changes.
-      let mutCount = 0;
-      const observer = new MutationObserver(recs => { mutCount += recs.length; });
-      observer.observe(document.body, {
-        childList: true, subtree: true,
-        attributes: true, attributeFilter: ['class', 'data-mode', 'aria-selected', 'style']
-      });
-
-      const menuItems = Array.from(document.querySelectorAll('.menubar-items .menu-item'));
-      const silentStubs = [];
-      const testedRows = [];
-
       function closeMenu() {
         document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       }
 
-      for (const item of menuItems) {
-        const menuLabel = item.dataset.menu || item.textContent?.trim() || '?';
+      function checkEntry({ label, toolId, canonical }) {
+        if (toolId) {
+          const el = document.querySelector('[data-tool="' + toolId + '"]');
+          if (!el) return { ok: false, reason: '[data-tool="' + toolId + '"] absent from DOM' };
+          return el.classList.contains('active')
+            ? { ok: true }
+            : { ok: false, reason: '[data-tool="' + toolId + '"] not .active after setActiveTool dispatch' };
+        }
+        if (canonical) {
+          const res = window.__dispatch?.(canonical, {});
+          return (!res || res.error === 'UnknownVerb' || res.canonical === null)
+            ? { ok: false, reason: canonical + ' not in dispatch registry: ' + JSON.stringify(res) }
+            : { ok: true };
+        }
+        // onAction rows: per-label targeted checks
+        if (/^Mode · /.test(label)) {
+          const mode = label.slice(7).toLowerCase();
+          const t = document.querySelector('.mode-tab[data-mode="' + mode + '"]');
+          return !t ? { ok: false, reason: '.mode-tab[data-mode="' + mode + '"] absent' }
+            : (t.classList.contains('active') || t.getAttribute('aria-selected') === 'true')
+              ? { ok: true } : { ok: false, reason: 'mode-tab ' + mode + ' not active after click' };
+        }
+        const dockMap = { 'Prompt': 'prompt', 'Node graph': 'nodes', 'Parameters': 'parameters', 'History': 'history' };
+        if (dockMap[label]) {
+          const t = document.querySelector('.dock-tab[data-tab="' + dockMap[label] + '"]');
+          return !t ? { ok: false, reason: '.dock-tab[data-tab="' + dockMap[label] + '"] absent' }
+            : (t.classList.contains('active') || t.getAttribute('aria-selected') === 'true')
+              ? { ok: true } : { ok: false, reason: 'dock-tab ' + label + ' not active after click' };
+        }
+        if (['Shaded', 'Wireframe', 'Ghosted', 'Technical', 'Realistic'].includes(label)) {
+          const res = window.__dispatch?.('SdRenderMode', { mode: label.toLowerCase() });
+          return res?.ok ? { ok: true } : { ok: false, reason: 'SdRenderMode/' + label.toLowerCase() + ' failed: ' + JSON.stringify(res) };
+        }
+        const targetMap = {
+          'Toggle theme': '#blueprint-toggle',
+          'Command palette…': '#ribbon-palette-btn',
+          'Keyboard shortcuts': '#ribbon-palette-btn',
+          'Render settings…': '.ribbon-tab[data-tab="RENDER"]',
+        };
+        if (targetMap[label]) {
+          return document.querySelector(targetMap[label])
+            ? { ok: true }
+            : { ok: false, reason: targetMap[label] + ' target element absent' };
+        }
+        return { ok: true, reason: 'no specific check for onAction: ' + label };
+      }
 
-        // First pass: collect row labels (skip seps and stubs).
+      const menuItems = Array.from(document.querySelectorAll('.menubar-items .menu-item'));
+      const failures = [];
+      const passed = [];
+
+      for (const item of menuItems) {
+        const menuLabel = item.dataset.menu ?? item.textContent?.trim() ?? '?';
+
+        // Collect row metadata in one pass (rows are recreated on each menu open).
         item.click();
         await new Promise(r => setTimeout(r, 120));
-        const firstDropdown = document.querySelector('.menu-dropdown');
-        if (!firstDropdown) continue;
-        const rowLabels = Array.from(firstDropdown.querySelectorAll('.menu-row'))
+        const dd0 = document.querySelector('.menu-dropdown');
+        if (!dd0) continue;
+        const rowMeta = Array.from(dd0.querySelectorAll('.menu-row'))
           .filter(row => !row.classList.contains('menu-sep') && row.dataset.stub !== 'true')
-          .map(row => row.querySelector('.menu-row-label')?.textContent?.trim() || '?');
+          .map(row => ({
+            label: row.querySelector('.menu-row-label')?.textContent?.trim() ?? '?',
+            toolId: row.dataset.toolId,
+            canonical: row.dataset.canonical,
+          }));
         closeMenu();
         await new Promise(r => setTimeout(r, 60));
 
-        // Second pass: click each row individually.
-        for (const rowLabel of rowLabels) {
+        for (const meta of rowMeta) {
           item.click();
           await new Promise(r => setTimeout(r, 120));
-          const dropdown = document.querySelector('.menu-dropdown');
-          if (!dropdown) break;
-
-          const row = Array.from(dropdown.querySelectorAll('.menu-row'))
-            .find(r => r.querySelector('.menu-row-label')?.textContent?.trim() === rowLabel);
-          if (!row || row.dataset.stub === 'true') { closeMenu(); await new Promise(r => setTimeout(r, 60)); continue; }
-
-          const dispBefore = dispatchLog.length;
-          const mutBefore = mutCount;
+          const dd = document.querySelector('.menu-dropdown');
+          if (!dd) continue;
+          const row = Array.from(dd.querySelectorAll('.menu-row'))
+            .find(r => r.querySelector('.menu-row-label')?.textContent?.trim() === meta.label && r.dataset.stub !== 'true');
+          if (!row) { closeMenu(); await new Promise(r => setTimeout(r, 60)); continue; }
 
           row.click();
           await new Promise(r => setTimeout(r, 250));
+          // Dismiss any modal that the click may have opened.
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          await new Promise(r => setTimeout(r, 50));
 
-          const dispatched = dispatchLog.length > dispBefore;
-          const mutated = mutCount > mutBefore;
-          const label = menuLabel + ' → ' + rowLabel;
-          testedRows.push({ label, dispatched, mutated });
-          if (!dispatched && !mutated) silentStubs.push(label);
+          const result = checkEntry(meta);
+          const fullLabel = menuLabel + ' → ' + meta.label;
+          if (result.ok) passed.push(fullLabel);
+          else failures.push({ label: fullLabel, reason: result.reason ?? '' });
 
-          closeMenu();
+          if (document.querySelector('.menu-dropdown')) closeMenu();
           await new Promise(r => setTimeout(r, 60));
+        }
+
+        // View menu switches modes; research mode clears ribbon tabs.
+        // Restore model mode so subsequent menus (Render) find their targets.
+        if (menuLabel === 'view') {
+          document.querySelector('.mode-tab[data-mode="model"]')?.click();
+          await new Promise(r => setTimeout(r, 200));
         }
       }
 
-      observer.disconnect();
-      if (origDispatch) window.__dispatch = origDispatch;
-
       return {
-        passed: silentStubs.length === 0,
-        evidence: { tested: testedRows.length, silentStubs, testedRows }
+        passed: failures.length === 0,
+        evidence: { tested: passed.length + failures.length, passed: passed.length, failures }
       };
     })()`, true);
   if (!r) record('menubar-coverage', false, { reason: 'evaluate returned null' });
