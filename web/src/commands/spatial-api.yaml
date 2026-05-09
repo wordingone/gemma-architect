@@ -659,7 +659,7 @@
     - {name: orientation, type: vector3, required: false, description: "Unit normal of plate face [x,y,z], default [0,1,0] = panel in XZ plane"}
     - {name: level,       type: string,  required: false, description: "Storey name; default ground"}
     - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
-  topology_role: host
+  topology_role: solid
   kg_predicates: [bounds, containedIn]
   synonyms: [plate, cladding panel, facade panel, cassette, glazing infill, panel]
   kernel: replicad
