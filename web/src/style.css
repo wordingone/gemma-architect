@@ -1305,7 +1305,7 @@ html[data-mode="night"] .paper-stage {
 
 .workbench {
   display: grid;
-  grid-template-columns: 80px 1fr 280px;
+  grid-template-columns: 80px 1fr var(--sidebar-w, 320px);
   min-height: 0;
   border-bottom: var(--lw-edge) solid var(--chrome-seam);
   background: transparent;
@@ -2110,6 +2110,22 @@ html[data-mode="night"] .paper-stage {
   box-shadow: inset 0.5px 0 0 0 var(--glass-edge-light);
   min-width: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: ew-resize;
+  z-index: 20;
+  transition: background 0.15s;
+}
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.dragging {
+  background: var(--ink-faint, rgba(128,128,128,0.4));
 }
 
 .snap-dock {

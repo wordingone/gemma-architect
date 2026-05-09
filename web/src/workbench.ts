@@ -494,6 +494,8 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
     tabs.appendChild(tab);
   }
 
+  const filterPanel = buildSelectionFiltersPanel();
+
   function activate(id: string) {
     tabs.querySelectorAll(".sb-tab").forEach((t) => {
       const isActive = (t as HTMLElement).dataset.tab === id;
@@ -501,14 +503,61 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
     });
     body.innerHTML = "";
     if (panes[id]) body.appendChild(panes[id]);
+    // filterPanel + snap persist inside scroll context across tab switches.
+    body.appendChild(filterPanel);
+    body.appendChild(snap);
   }
 
-  const filterPanel = buildSelectionFiltersPanel();
+  // Resize handle — drag left edge to widen/narrow sidebar.
+  const SIDEBAR_W_KEY = "gemma-sidebar-w";
+  const SIDEBAR_W_MIN = 240;
+  const SIDEBAR_W_MAX = 480;
+
+  const resizeHandle = el("div", "sidebar-resize-handle");
+  let resizing = false;
+  let resizeStartX = 0;
+  let resizeStartW = 0;
+
+  resizeHandle.addEventListener("pointerdown", (e: PointerEvent) => {
+    e.preventDefault();
+    resizing = true;
+    resizeHandle.classList.add("dragging");
+    resizeHandle.setPointerCapture(e.pointerId);
+    resizeStartX = e.clientX;
+    const wb = host.closest<HTMLElement>(".workbench");
+    resizeStartW = wb ? parseInt(getComputedStyle(wb).getPropertyValue("--sidebar-w").trim() || "320", 10) : 320;
+  });
+
+  resizeHandle.addEventListener("pointermove", (e: PointerEvent) => {
+    if (!resizing) return;
+    const dx = resizeStartX - e.clientX; // dragging left = wider
+    const newW = Math.min(SIDEBAR_W_MAX, Math.max(SIDEBAR_W_MIN, resizeStartW + dx));
+    const wb = host.closest<HTMLElement>(".workbench");
+    if (wb) wb.style.setProperty("--sidebar-w", `${newW}px`);
+  });
+
+  resizeHandle.addEventListener("pointerup", (e: PointerEvent) => {
+    if (!resizing) return;
+    resizing = false;
+    resizeHandle.classList.remove("dragging");
+    resizeHandle.releasePointerCapture(e.pointerId);
+    const wb = host.closest<HTMLElement>(".workbench");
+    if (wb) {
+      const current = wb.style.getPropertyValue("--sidebar-w");
+      if (current) try { localStorage.setItem(SIDEBAR_W_KEY, current); } catch {}
+    }
+  });
+
+  // Restore persisted width.
+  const savedW = localStorage.getItem(SIDEBAR_W_KEY);
+  if (savedW) {
+    const wb = host.closest<HTMLElement>(".workbench") ?? document.querySelector<HTMLElement>(".workbench");
+    if (wb) wb.style.setProperty("--sidebar-w", savedW);
+  }
 
   host.appendChild(tabs);
   host.appendChild(body);
-  host.appendChild(filterPanel);
-  host.appendChild(snap);
+  host.appendChild(resizeHandle);
   activate("scene");
 }
 
