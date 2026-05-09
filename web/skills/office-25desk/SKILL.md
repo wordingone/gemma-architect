@@ -1,26 +1,25 @@
 ---
 name: office-25desk
-version: 0.1.0
-description: 200m² open-plan office with 2 conference rooms, ADA restrooms, reception, and kitchenette on a 20×10m footprint.
-keywords: [office, 25 desk, open plan, conference room, restroom, reception, kitchenette, commercial]
+version: 0.2.0
+description: Multi-level commercial office (4 floors, 20×10m footprint per floor) with open-plan desking, 2 conference rooms, ADA restrooms, reception, and kitchenette.
+keywords: [office, 25 desk, open plan, conference room, restroom, reception, kitchenette, commercial, multi-level, 4 floor]
 examples:
   - "design a 25-desk office with 2 conference rooms and ADA restrooms"
   - "commercial office space, 200 sqm, open floor plan, reception, 2 meeting rooms, kitchenette, 2 bathrooms"
-eval_id: skill-office-25desk-v01
+eval_id: skill-office-25desk-v02
 ---
 
 ## When to use
 
-Prompt asks for a medium-sized commercial office with open-plan desking, conference rooms, restrooms, reception, and kitchen/kitchenette. Typical phrases: "25-desk office", "open-plan office with conference rooms", "commercial office 200m²".
+Prompt asks for a medium-sized commercial office with open-plan desking, conference rooms, restrooms, reception, and kitchen/kitchenette — single or multi-level. Typical phrases: "25-desk office", "open-plan office with conference rooms", "commercial office 200m²", "4-story office building".
 
 Do NOT use for:
 - Small single-room offices (use `room-from-prompt`)
-- Multi-floor office buildings
 - Residential home offices
 
 ## How it works
 
-Emits one IfcLevel at elevation 0, a 20×10m slab, four perimeter walls (3m height), then IfcSpace entities covering all required functional zones. The floor divides into two east-west rows.
+Emits 4 IfcLevel steps (0m, 3m, 6m, 9m), a 1m IfcGrid (25 cols), a 20×10m slab, four perimeter walls (3m height), then IfcSpace entities covering all required functional zones. The floor divides into two east-west rows.
 
 Reference footprint: 20m wide × 10m deep = 200m² gross
 
@@ -54,7 +53,11 @@ All doors ≥0.91m (ADA).
 Prompt: "Design a 25-desk office: open floor plan, 2 conference rooms, kitchenette, 2 ADA restrooms, reception. 200m² gross."
 
 ```
-IfcLevel   elevation=0, extent=20, name="Ground Floor"
+IfcLevel   elevation=0,   extent=20, name="Ground Floor"
+IfcLevel   elevation=3.0, extent=20, name="Floor 2"
+IfcLevel   elevation=6.0, extent=20, name="Floor 3"
+IfcLevel   elevation=9.0, extent=20, name="Floor 4"
+IfcGrid    spacing=1, count=25, rotation=0
 IfcSlab    profile=[[0,0],[20,0],[20,10],[0,10]], thickness=0.2
 IfcWall    length=20, thickness=0.2, height=3.0  (×2 north/south)
 IfcWall    length=10, thickness=0.2, height=3.0  (×2 east/west)
