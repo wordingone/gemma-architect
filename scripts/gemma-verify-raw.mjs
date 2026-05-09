@@ -18,7 +18,7 @@ import { execSync } from "child_process";
 
 // ── Connection ────────────────────────────────────────────────────────────────
 
-const DEV_URL   = "http://localhost:5175/";
+const DEV_URL   = process.env.GEMMA_DEV_URL ?? "http://localhost:5175/";
 const STATE_DIR = `${process.cwd()}/state`;
 
 function getSHA() {
@@ -31,14 +31,25 @@ const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(".", "")
 mkdirSync(STATE_DIR, { recursive: true });
 const outFile   = `${STATE_DIR}/gemma-verify-${sha}-${timestamp}.json`;
 
-// Find :5175 page target
-const targets = await fetch("http://localhost:9222/json").then(r => r.json());
-const target  = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
-if (!target) {
-  console.error("ERROR: no :5175 page target found in shared browser");
-  process.exit(1);
+// Find canonical :5175 tab, or open a new tab for GEMMA_DEV_URL
+const USE_NEW_TAB = !DEV_URL.includes("localhost:5175");
+let target;
+let newTabTargetId = null;
+
+if (USE_NEW_TAB) {
+  // Open a new tab in the shared browser — does NOT spawn a new window
+  target = await fetch(`http://localhost:9222/json/new?${encodeURIComponent(DEV_URL)}`, { method: "PUT" }).then(r => r.json());
+  newTabTargetId = target.id;
+  console.log(`New tab: ${target.url} (id: ${newTabTargetId})`);
+} else {
+  const targets = await fetch("http://localhost:9222/json").then(r => r.json());
+  target = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
+  if (!target) {
+    console.error("ERROR: no :5175 page target found in shared browser");
+    process.exit(1);
+  }
+  console.log(`Canonical tab: ${target.url}`);
 }
-console.log(`Canonical tab: ${target.url}`);
 
 // Open raw WS to PAGE target (not browser-level)
 const ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -482,6 +493,9 @@ function record(name, passed, evidence) {
 
 // ── Aggregate + write receipt ─────────────────────────────────────────────────
 ws.close();
+if (newTabTargetId) {
+  await fetch(`http://localhost:9222/json/close/${newTabTargetId}`).catch(() => {});
+}
 
 const allPassed  = surfaces.every(s => s.passed);
 const passCount  = surfaces.filter(s => s.passed).length;
