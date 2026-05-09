@@ -263,6 +263,15 @@ function buildSceneContext(): string {
 }
 
 
+const DIMENSION_RULES = `
+DIMENSION RULES — extract ALL numeric values BEFORE generating geometry. Never use default 5.5 × 2.8 × 0.2 when the prompt gives dimensions.
+- Width / length / depth: take EXACT values from prompt ("20m × 15m" → width=20, depth=15).
+- Height: floor_height × n_stories. "3-story, 3m floor height" → total=9m; use 3m per IfcLevel.
+- Footprint polygon: [[0,0],[W,0],[W,D],[0,D]] where W=width, D=depth.
+- Multi-story: one IfcLevel per floor, elevation = floor_index × floor_height. Default floor heights: 3.0m office/residential, 4.5m industrial/bay.
+- IfcSpace must include a descriptive name= param: name="lobby", name="apparatus bay 1", etc.
+`.trim();
+
 const FEW_SHOT_EXAMPLES = `
 Examples — copy verb names EXACTLY; always emit <plan> before tool_call tags:
 
@@ -351,6 +360,105 @@ Assistant: Overriding auto-routing; placing slab on Annotations layer as request
 </plan>
 <tool_call>{"command":"IfcSlab","parameters":{"width":6,"depth":4,"thickness":0.2,"layer":"Annotations"},"metadata":{"source":"agent"}}</tool_call>
 
+User: design a 12m × 8m single-story hospitality cabin, 2.4m ceiling
+Assistant: 12m wide, 8m deep, 1 floor × 2.4m. Footprint [[0,0],[12,0],[12,8],[0,8]].
+<plan>
+1. IfcLevel — name="Ground", elevation=0, extent=12
+2. IfcWall — south, profile=[[0,0],[12,0]], thickness=0.2, height=2.4
+3. IfcWall — north, profile=[[12,8],[0,8]], thickness=0.2, height=2.4
+4. IfcWall — east, profile=[[12,0],[12,8]], thickness=0.2, height=2.4
+5. IfcWall — west, profile=[[0,8],[0,0]], thickness=0.2, height=2.4
+6. IfcSlab — profile=[[0,0],[12,0],[12,8],[0,8]], thickness=0.2
+7. IfcSpace — footprint=[[1,1],[7,1],[7,7],[1,7]], height=2.4, name="main hall"
+8. IfcSpace — footprint=[[7,1],[11,1],[11,7],[7,7]], height=2.4, name="kitchenette"
+9. IfcDoor — width=0.91, height=2.1
+</plan>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Ground","elevation":0,"extent":12},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[12,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[12,8],[0,8]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[12,0],[12,8]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[1,1],[7,1],[7,7],[1,7]],"height":2.4,"name":"main hall"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[7,1],[11,1],[11,7],[7,7]],"height":2.4,"name":"kitchenette"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.91,"height":2.1},"metadata":{"source":"agent"}}</tool_call>
+
+User: design a 20m × 12m 2-story office building, 3.5m floor height
+Assistant: 20m wide, 12m deep, 2 floors × 3.5m = 7m total. Ground Floor at 0m, Floor 2 at 3.5m.
+<plan>
+1. IfcLevel — name="Ground Floor", elevation=0, extent=20
+2. IfcLevel — name="Floor 2", elevation=3.5, extent=20
+3. setActiveLevel — id=level/0
+4. IfcWall — south ground, profile=[[0,0],[20,0]], thickness=0.2, height=3.5
+5. IfcWall — north ground, profile=[[20,12],[0,12]], thickness=0.2, height=3.5
+6. IfcWall — east ground, profile=[[20,0],[20,12]], thickness=0.2, height=3.5
+7. IfcWall — west ground, profile=[[0,12],[0,0]], thickness=0.2, height=3.5
+8. IfcSlab — mid-floor at elev 3.5, profile=[[0,0],[20,0],[20,12],[0,12]]
+9. IfcSpace — name="reception", footprint=[[0,0],[6,0],[6,12],[0,12]], height=3.5
+10. IfcSpace — name="open office", footprint=[[6,0],[20,0],[20,12],[6,12]], height=3.5
+11. setActiveLevel — id=level/1
+12. IfcWall — south upper, profile=[[0,0],[20,0]], thickness=0.2, height=3.5
+13. IfcWall — north upper, profile=[[20,12],[0,12]], thickness=0.2, height=3.5
+14. IfcWall — east upper, profile=[[20,0],[20,12]], thickness=0.2, height=3.5
+15. IfcWall — west upper, profile=[[0,12],[0,0]], thickness=0.2, height=3.5
+16. IfcSlab — roof at elev 7.0, profile=[[0,0],[20,0],[20,12],[0,12]]
+17. IfcSpace — name="conference room", footprint=[[0,0],[10,0],[10,12],[0,12]], height=3.5
+18. IfcSpace — name="office suite", footprint=[[10,0],[20,0],[20,12],[10,12]], height=3.5
+</plan>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Ground Floor","elevation":0,"extent":20},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Floor 2","elevation":3.5,"extent":20},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[20,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[20,12],[0,12]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[20,0],[20,12]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,12],[0,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[20,0],[20,12],[0,12]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[0,0],[6,0],[6,12],[0,12]],"height":3.5,"name":"reception"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[6,0],[20,0],[20,12],[6,12]],"height":3.5,"name":"open office"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[20,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[20,12],[0,12]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[20,0],[20,12]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,12],[0,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[20,0],[20,12],[0,12]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[0,0],[10,0],[10,12],[0,12]],"height":3.5,"name":"conference room"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[10,0],[20,0],[20,12],[10,12]],"height":3.5,"name":"office suite"},"metadata":{"source":"agent"}}</tool_call>
+
+User: design a 24m × 25m fire station with 3 apparatus bays
+Assistant: 24m wide, 25m deep. Bay zone 24×9m at 4.5m height; living zone 24×16m at 2.8m height.
+<plan>
+1. IfcLevel — name="Ground", elevation=0, extent=24
+2. IfcWall — south, profile=[[0,0],[24,0]], thickness=0.3, height=4.5
+3. IfcWall — north, profile=[[24,25],[0,25]], thickness=0.3, height=4.5
+4. IfcWall — east, profile=[[24,0],[24,25]], thickness=0.3, height=4.5
+5. IfcWall — west, profile=[[0,25],[0,0]], thickness=0.3, height=4.5
+6. IfcSlab — profile=[[0,0],[24,0],[24,25],[0,25]], thickness=0.2
+7. IfcSpace — footprint=[[0,0],[8,0],[8,9],[0,9]], height=4.5, name="apparatus bay 1"
+8. IfcSpace — footprint=[[8,0],[16,0],[16,9],[8,9]], height=4.5, name="apparatus bay 2"
+9. IfcSpace — footprint=[[16,0],[24,0],[24,9],[16,9]], height=4.5, name="apparatus bay 3"
+10. IfcSpace — footprint=[[0,9],[12,9],[12,25],[0,25]], height=2.8, name="day room"
+11. IfcSpace — footprint=[[12,9],[24,9],[24,25],[12,25]], height=2.8, name="dormitory"
+12. IfcDoor — width=4.0, height=4.2
+13. IfcDoor — width=4.0, height=4.2
+14. IfcDoor — width=4.0, height=4.2
+15. IfcDoor — width=0.9, height=2.1
+</plan>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Ground","elevation":0,"extent":24},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[24,0]],"thickness":0.3,"height":4.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[24,25],[0,25]],"thickness":0.3,"height":4.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[24,0],[24,25]],"thickness":0.3,"height":4.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,25],[0,0]],"thickness":0.3,"height":4.5},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[24,0],[24,25],[0,25]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[0,0],[8,0],[8,9],[0,9]],"height":4.5,"name":"apparatus bay 1"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[8,0],[16,0],[16,9],[8,9]],"height":4.5,"name":"apparatus bay 2"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[16,0],[24,0],[24,9],[16,9]],"height":4.5,"name":"apparatus bay 3"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[0,9],[12,9],[12,25],[0,25]],"height":2.8,"name":"day room"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSpace","parameters":{"footprint":[[12,9],[24,9],[24,25],[12,25]],"height":2.8,"name":"dormitory"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":4.0,"height":4.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":4.0,"height":4.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":4.0,"height":4.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.9,"height":2.1},"metadata":{"source":"agent"}}</tool_call>
+
 User: add a 1m grid and snap walls to it
 Assistant: Adding 1m grid; walls will snap to intersections.
 <plan>
@@ -371,6 +479,7 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     'Preferred tool call format: <tool_call>{"command":"VerbName","parameters":{...},"metadata":{"source":"agent"}}</tool_call>',
     'Fallback format: ```json\n{"verb":"VerbName","args":{...}}\n```',
     "CRITICAL: Use ONLY the exact function names listed below. Any unknown name is silently dropped — nothing will be created.",
+    DIMENSION_RULES,
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene: ${buildSceneContext()}`,
