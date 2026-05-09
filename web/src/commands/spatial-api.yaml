@@ -812,8 +812,8 @@
   topology_role: hosted
   kg_predicates: [containedIn]
   synonyms: [furnishing, furniture, desk, chair, counter, cabinet, fixture, medical cabinet, reception]
-  kernel: three
-  alias_source: ifc_standard_vocabulary
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
 
 # ============================================================
 # §9 Annotation (IFC4 IfcAnnotation)
