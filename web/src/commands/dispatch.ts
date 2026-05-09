@@ -60,6 +60,13 @@ export type DispatchHandler = (
 
 const handlers = new Map<string, DispatchHandler>();
 
+// Dispatch context — set while a handler is executing so viewer.addMesh can
+// tag newly created meshes with the dispatch verb + args automatically.
+let _dispatchCtx: { canonical: string; args: DispatchArgs } | null = null;
+export function getCurrentDispatchCtx(): { canonical: string; args: DispatchArgs } | null {
+  return _dispatchCtx;
+}
+
 /** Register a dispatch handler. Last-wins for the canonical name. */
 export function registerHandler(canonical: string, fn: DispatchHandler): void {
   handlers.set(canonical, fn);
@@ -239,9 +246,12 @@ export async function dispatch(
   }
 
   try {
+    _dispatchCtx = { canonical, args };
     const result = await handler(args, entry);
+    _dispatchCtx = null;
     return { ok: true, canonical, result };
   } catch (e) {
+    _dispatchCtx = null;
     return {
       ok: false,
       canonical,
@@ -268,7 +278,9 @@ export function dispatchSync(verb: string, args: DispatchArgs = {}): DispatchRes
   const handler = handlers.get(canonical);
   if (!handler) return { ok: false, canonical, error: "NoHandler" };
   try {
+    _dispatchCtx = { canonical, args };
     const result = handler(args, entry);
+    _dispatchCtx = null;
     if (result instanceof Promise) {
       return {
         ok: false,
@@ -279,6 +291,7 @@ export function dispatchSync(verb: string, args: DispatchArgs = {}): DispatchRes
     }
     return { ok: true, canonical, result };
   } catch (e) {
+    _dispatchCtx = null;
     return {
       ok: false,
       canonical,

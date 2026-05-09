@@ -23,6 +23,7 @@ import { generateGeometry, GenerateError } from "./ai-generate";
 import { ChatPanel } from "./chat-panel";
 import { compileDsl } from "./commands/dsl-eval";
 import { dispatchSync, type DispatchArgs } from "./commands/dispatch";
+import { startCommandSession } from "./commands/command-session";
 import { setState } from "./app-state";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./viewer/snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
@@ -1061,55 +1062,69 @@ function buildConsoleInner(): HTMLElement {
       input.value = "";
       pushLine("cmd", src);
 
-      const isDeclCmd = src.startsWith(":");
-      const dslSrc = isDeclCmd ? src.slice(1).trim() : src;
+      void (async () => {
+        const isDeclCmd = src.startsWith(":");
+        const dslSrc = isDeclCmd ? src.slice(1).trim() : src;
 
-      if (isDeclCmd) {
-        const tokens = dslSrc.split(/\s+/);
-        const verb = tokens[0];
-        const dispArgs: DispatchArgs = {};
-        for (const t of tokens.slice(1)) {
-          const eq = t.indexOf("=");
-          if (eq > 0) {
-            const k = t.slice(0, eq);
-            const v = t.slice(eq + 1);
-            const n = Number(v);
-            dispArgs[k] = Number.isFinite(n) ? n : v;
+        if (isDeclCmd) {
+          const tokens = dslSrc.split(/\s+/);
+          const verb = tokens[0];
+          const dispArgs: DispatchArgs = {};
+          for (const t of tokens.slice(1)) {
+            const eq = t.indexOf("=");
+            if (eq > 0) {
+              const k = t.slice(0, eq);
+              const v = t.slice(eq + 1);
+              const n = Number(v);
+              dispArgs[k] = Number.isFinite(n) ? n : v;
+            }
+          }
+          const dr = dispatchSync(verb, dispArgs);
+          if (!dr.ok && dr.error === "ArgValidationError") {
+            const sr = await startCommandSession({ command: verb, parameters: dispArgs });
+            const hint = sr.status === "needs_input" ? sr.summary : null;
+            pushLine("info", `${verb} → needs_input${hint ? ": " + hint : ""}`);
+          } else {
+            pushLine(
+              dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
+              `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+            );
           }
         }
-        const dr = dispatchSync(verb, dispArgs);
-        pushLine(
-          dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
-          `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-        );
-      }
 
-      const c = compileDsl(dslSrc);
-      if (!c.ok) {
-        pushLine("err", `line ${c.line}: ${c.message}`);
-        return;
-      }
-      if (c.dispatches && c.dispatches.length > 0) {
-        for (const d of c.dispatches) {
-          const dr = dispatchSync(d.verb, d.args);
-          pushLine(
-            dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
-            `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
-          );
+        const c = compileDsl(dslSrc);
+        if (!c.ok) {
+          pushLine("err", `line ${c.line}: ${c.message}`);
+          return;
         }
-      }
-      if (c.js) {
-        const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
-        const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
-        if (jsSrc && runBtn) {
-          jsSrc.value = c.js;
-          jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
-          pushLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
-          runBtn.click();
-        } else {
-          pushLine("err", "kernel not ready (no #run-btn / #js-source)");
+        if (c.dispatches && c.dispatches.length > 0) {
+          for (const d of c.dispatches) {
+            const dr = dispatchSync(d.verb, d.args);
+            if (!dr.ok && dr.error === "ArgValidationError") {
+              const sr = await startCommandSession({ command: d.verb, parameters: d.args });
+              const hint = sr.status === "needs_input" ? sr.summary : null;
+              pushLine("info", `${d.verb} → needs_input${hint ? ": " + hint : ""}`);
+            } else {
+              pushLine(
+                dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
+                `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+              );
+            }
+          }
         }
-      }
+        if (c.js) {
+          const jsSrc = document.getElementById("js-source") as HTMLTextAreaElement | null;
+          const runBtn = document.getElementById("run-btn") as HTMLButtonElement | null;
+          if (jsSrc && runBtn) {
+            jsSrc.value = c.js;
+            jsSrc.dispatchEvent(new Event("input", { bubbles: true }));
+            pushLine("info", `compiled · ${c.solids.length} solid${c.solids.length === 1 ? "" : "s"} → kernel`);
+            runBtn.click();
+          } else {
+            pushLine("err", "kernel not ready (no #run-btn / #js-source)");
+          }
+        }
+      })();
     } else if (e.key === "ArrowUp") {
       if (buffer.length === 0) return;
       e.preventDefault();
@@ -1270,10 +1285,9 @@ function buildNodesTabBody(): HTMLElement {
   switcher.appendChild(listBtn);
   switcher.appendChild(canvasBtn);
 
-  // List pane
+  // List pane — _skillsWrap is the single render target (renderNodes removed #237).
   const listPane = document.createElement("div");
   listPane.style.cssText = "flex:1; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:4px;";
-  _nodesWrap = listPane;
   _skillsWrap = listPane;
 
   // Canvas pane (hidden by default)
@@ -1332,34 +1346,68 @@ function appendHistory(op: string, args: string): void {
   if (_historyEvents.length > HISTORY_CAP) _historyEvents.shift();
 }
 
+let _historyFilter = "";
+let _historyListEl: HTMLElement | null = null;
+
 function renderHistory(): void {
-  if (!_historyWrap) return;
-  let list = _historyWrap.querySelector<HTMLElement>(".history-list");
-  if (!list) {
-    list = document.createElement("div");
-    list.className = "history-list";
-    list.style.cssText = "padding:4px 0; font-family:var(--mono); font-size:11px; overflow-y:auto; height:100%;";
-    _historyWrap.appendChild(list);
-  }
-  if (_historyEvents.length === 0) {
-    list.innerHTML = `<div class="empty-hint" style="padding:24px; color:var(--ink-faint);">No ops yet — load a demo or type a prompt.</div>`;
+  if (!_historyListEl) return;
+  const q = _historyFilter.toLowerCase();
+  const visible = _historyEvents.filter((h) =>
+    !q || h.op.toLowerCase().includes(q) || h.args.toLowerCase().includes(q),
+  );
+
+  if (visible.length === 0) {
+    _historyListEl.innerHTML = `<div class="empty-hint">No ops yet — load a demo or type a prompt.</div>`;
     return;
   }
-  list.innerHTML = _historyEvents.map((h) => `
-    <div style="display:grid; grid-template-columns:58px 160px 1fr; align-items:center;
-      padding:4px 12px; gap:8px; border-bottom:1px solid var(--hairline-soft); color:var(--ink);">
-      <span style="color:var(--ink-faint); font-size:10px;">${escHtml(h.ts)}</span>
-      <span style="color:var(--sanguine); font-weight:600; letter-spacing:0.04em;">${escHtml(h.op)}</span>
-      <span style="color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(h.args)}</span>
-    </div>
-  `).join("");
-  list.scrollTop = list.scrollHeight;
+
+  _historyListEl.innerHTML = "";
+  for (const h of visible) {
+    const row = document.createElement("div");
+    row.className = "history-row";
+    row.dataset.op = h.op;
+    row.innerHTML = `
+      <span class="history-ts">${escHtml(h.ts)}</span>
+      <span class="history-op">${escHtml(h.op)}</span>
+      <span class="history-args">${escHtml(h.args)}</span>
+    `;
+    row.addEventListener("click", () => {
+      const viewer = (window as unknown as { __viewer?: { getScene(): THREE.Scene; selectObject(o: THREE.Object3D | null): void } }).__viewer;
+      if (!viewer) return;
+      viewer.getScene().traverse((obj) => {
+        if ((obj.userData.dispatchVerb ?? obj.userData.creator) === h.op) {
+          viewer.selectObject(obj);
+        }
+      });
+    });
+    _historyListEl.appendChild(row);
+  }
+  _historyListEl.scrollTop = _historyListEl.scrollHeight;
 }
 
 function buildHistoryTabBody(): HTMLElement {
   const wrap = el("div", "tab-body history-tab");
   wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden;";
   _historyWrap = wrap;
+
+  const filterBar = document.createElement("div");
+  filterBar.className = "history-filter-bar";
+  const filterInput = document.createElement("input");
+  filterInput.type = "text";
+  filterInput.placeholder = "Filter ops…";
+  filterInput.className = "history-filter-input";
+  filterInput.addEventListener("input", () => {
+    _historyFilter = filterInput.value;
+    renderHistory();
+  });
+  filterBar.appendChild(filterInput);
+  wrap.appendChild(filterBar);
+
+  const list = document.createElement("div");
+  list.className = "history-list";
+  _historyListEl = list;
+  wrap.appendChild(list);
+
   renderHistory();
   return wrap;
 }
@@ -1387,7 +1435,6 @@ function initLiveTabSubscriptions(): void {
     }
     appendHistory("generate", label);
     saveRecentEntry(label);
-    renderNodes();
     void renderSkillNodes();
     renderHistory();
   });
@@ -1415,7 +1462,6 @@ function initLiveTabSubscriptions(): void {
       .join(" ");
     appendHistory(id, argStr);
 
-    renderNodes();
     void renderSkillNodes();
     renderHistory();
   });
@@ -1434,15 +1480,103 @@ function initLiveTabSubscriptions(): void {
   });
 }
 
-function buildParametersTabBody(paramPanel: HTMLElement | null): HTMLElement {
-  const wrap = el("div", "tab-body parameters-tab");
-  if (paramPanel) {
-    paramPanel.classList.remove("hidden");
-    paramPanel.classList.add("param-panel-embed");
-    wrap.appendChild(paramPanel);
-  } else {
-    wrap.innerHTML = `<div class="empty-hint">No parameters — load a sample with sliders or run a prompt.</div>`;
+// Numeric arg slider min/max/step heuristics by suffix.
+function sliderBounds(name: string): [number, number, number] {
+  const n = name.toLowerCase();
+  if (n.includes("angle") || n.includes("rotation")) return [0, 360, 1];
+  if (n.includes("thickness") || n.includes("t")) return [0.01, 2, 0.01];
+  if (n.includes("radius") || n.includes("r")) return [0.05, 20, 0.05];
+  if (n.includes("height") || n.includes("h")) return [0.1, 20, 0.1];
+  return [0.05, 30, 0.05]; // width / length / depth / generic
+}
+
+let _paramsWrap: HTMLElement | null = null;
+
+function renderParameters(uuid: string | null): void {
+  if (!_paramsWrap) return;
+  _paramsWrap.innerHTML = "";
+
+  const viewer = (window as unknown as { __viewer?: { getScene(): { getObjectByUuid(u: string): import("three").Object3D | undefined }; removeObject(o: import("three").Object3D): boolean } }).__viewer;
+  const obj = uuid && viewer ? viewer.getScene().getObjectByUuid(uuid) : null;
+  const dispatchArgs = obj?.userData.dispatchArgs as Record<string, unknown> | undefined;
+  const dispatchVerb = (obj?.userData.dispatchVerb ?? obj?.userData.creator) as string | undefined;
+
+  if (!obj || !dispatchArgs || !dispatchVerb) {
+    _paramsWrap.innerHTML = `<div class="empty-hint">Select an object to inspect its parameters.</div>`;
+    return;
   }
+
+  const header = document.createElement("div");
+  header.className = "params-header";
+  header.textContent = dispatchVerb;
+  _paramsWrap.appendChild(header);
+
+  for (const [key, val] of Object.entries(dispatchArgs)) {
+    if (key.startsWith("_") || key === "uuid") continue;
+    if (typeof val !== "number" && typeof val !== "string" && typeof val !== "boolean") continue;
+
+    const row = document.createElement("div");
+    row.className = "params-row";
+
+    const label = document.createElement("label");
+    label.className = "params-label";
+    label.textContent = key;
+
+    if (typeof val === "number") {
+      const [min, max, step] = sliderBounds(key);
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.className = "params-slider";
+      slider.min = String(min);
+      slider.max = String(max);
+      slider.step = String(step);
+      slider.value = String(val);
+
+      const valueSpan = document.createElement("span");
+      valueSpan.className = "params-value";
+      valueSpan.textContent = val.toFixed(2);
+
+      slider.addEventListener("input", () => {
+        valueSpan.textContent = Number(slider.value).toFixed(2);
+      });
+
+      slider.addEventListener("change", () => {
+        if (!viewer || !obj) return;
+        const newVal = Number(slider.value);
+        const newArgs = { ...(obj.userData.dispatchArgs as Record<string, unknown>), [key]: newVal };
+        viewer.removeObject(obj);
+        dispatchSync(dispatchVerb, newArgs as DispatchArgs);
+      });
+
+      row.appendChild(label);
+      row.appendChild(slider);
+      row.appendChild(valueSpan);
+    } else {
+      const valEl = document.createElement("span");
+      valEl.className = "params-value params-value-static";
+      valEl.textContent = String(val);
+      row.appendChild(label);
+      row.appendChild(valEl);
+    }
+
+    _paramsWrap.appendChild(row);
+  }
+}
+
+function buildParametersTabBody(_paramPanel: HTMLElement | null): HTMLElement {
+  const wrap = el("div", "tab-body parameters-tab");
+  wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow-y:auto; padding:8px 12px;";
+  _paramsWrap = wrap;
+
+  // Render initial empty state.
+  renderParameters(null);
+
+  // Subscribe to selection changes.
+  window.addEventListener("viewer:select", (rawEv) => {
+    const uuid: string | null = (rawEv as CustomEvent<{ uuid: string | null }>).detail?.uuid ?? null;
+    renderParameters(uuid);
+  });
+
   return wrap;
 }
 

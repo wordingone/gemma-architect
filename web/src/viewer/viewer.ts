@@ -13,6 +13,7 @@ import { setSelected, clearSelected } from "./selection-state.js";
 import { emitChainFragment } from "./transforms.js";
 import { getSnap, subscribeSnap } from "./snap-state.js";
 import { showHandlesFor, clearHandles, isSubObjectHandle, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
+import { getCurrentDispatchCtx } from "../commands/dispatch.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -1697,6 +1698,11 @@ export class Viewer {
   }
 
   addMesh(mesh: THREE.Object3D, _kind?: string): void {
+    const ctx = getCurrentDispatchCtx();
+    if (ctx && mesh.userData.dispatchArgs === undefined) {
+      mesh.userData.dispatchVerb = ctx.canonical;
+      mesh.userData.dispatchArgs = { ...ctx.args };
+    }
     this.scene.add(mesh);
   }
 
