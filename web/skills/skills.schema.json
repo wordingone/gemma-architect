@@ -37,6 +37,20 @@
       "type": "string",
       "description": "Stable evaluation handle; lets a regression suite find the canonical fixtures for this skill.",
       "minLength": 1
+    },
+    "steps": {
+      "type": "array",
+      "description": "schema_version 2+: ordered dispatch sequence the agent executes to reproduce this skill's reference output. Each step is a single tool_call verb + args.",
+      "items": {
+        "type": "object",
+        "required": ["verb", "args"],
+        "additionalProperties": false,
+        "properties": {
+          "verb": { "type": "string", "description": "IfcWall / IfcSlab / IfcRoof / IfcSpace / IfcDoor / IfcLevel / etc." },
+          "args": { "type": "object", "description": "Args object passed verbatim to the command handler." }
+        }
+      },
+      "minItems": 1
     }
   }
 }

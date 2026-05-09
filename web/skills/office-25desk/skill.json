@@ -1,0 +1,29 @@
+{
+  "name": "office-25desk",
+  "version": "0.1.0",
+  "schema_version": 2,
+  "keywords": ["office", "25 desk", "open plan", "conference room", "restroom", "reception", "kitchenette", "commercial"],
+  "examples_count": 2,
+  "eval_id": "skill-office-25desk-v01",
+  "steps": [
+    {"verb": "IfcLevel", "args": {"elevation": 0, "extent": 20, "name": "Ground Floor"}},
+    {"verb": "IfcSlab", "args": {"profile": [[0,0],[20,0],[20,10],[0,10]], "thickness": 0.2}},
+    {"verb": "IfcWall", "args": {"length": 20, "thickness": 0.2, "height": 3.0}},
+    {"verb": "IfcWall", "args": {"length": 20, "thickness": 0.2, "height": 3.0}},
+    {"verb": "IfcWall", "args": {"length": 10, "thickness": 0.2, "height": 3.0}},
+    {"verb": "IfcWall", "args": {"length": 10, "thickness": 0.2, "height": 3.0}},
+    {"verb": "IfcSpace", "args": {"footprint": [[0,0],[4,0],[4,4],[0,4]], "height": 3.0, "name": "reception"}},
+    {"verb": "IfcSpace", "args": {"footprint": [[4,0],[10,0],[10,4],[4,4]], "height": 3.0, "name": "conference 1"}},
+    {"verb": "IfcSpace", "args": {"footprint": [[10,0],[14,0],[14,4],[10,4]], "height": 3.0, "name": "restroom 1"}},
+    {"verb": "IfcSpace", "args": {"footprint": [[14,0],[20,0],[20,4],[14,4]], "height": 3.0, "name": "restroom 2"}},
+    {"verb": "IfcSpace", "args": {"footprint": [[0,4],[8,4],[8,10],[0,10]], "height": 3.0, "name": "open office"}},
+    {"verb": "IfcSpace", "args": {"footprint": [[8,4],[14,4],[14,10],[8,10]], "height": 3.0, "name": "conference 2"}},
+    {"verb": "IfcSpace", "args": {"footprint": [[14,4],[20,4],[20,10],[14,10]], "height": 3.0, "name": "kitchenette"}},
+    {"verb": "IfcDoor", "args": {"width": 1.0, "height": 2.1}},
+    {"verb": "IfcDoor", "args": {"width": 0.91, "height": 2.1}},
+    {"verb": "IfcDoor", "args": {"width": 0.91, "height": 2.1}},
+    {"verb": "IfcDoor", "args": {"width": 0.91, "height": 2.1}},
+    {"verb": "IfcDoor", "args": {"width": 0.91, "height": 2.1}},
+    {"verb": "IfcDoor", "args": {"width": 0.91, "height": 2.1}}
+  ]
+}
