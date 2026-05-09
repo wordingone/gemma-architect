@@ -1997,7 +1997,7 @@ export class Viewer {
     return oc;
   }
 
-  renderThumbnailTo(view: ViewName, dest: HTMLCanvasElement, anchorX = 0, anchorY = 0, snapW = 0, snapH = 0): void {
+  renderThumbnailTo(view: ViewName, dest: HTMLCanvasElement, anchorX = 0, anchorY = 0, snapW = 0, snapH = 0, displayMode?: string): void {
     const pane = this.panes.find(p => p.view === view);
     if (!pane) return;
     if (!this._thumbRenderer) {
@@ -2075,7 +2075,16 @@ export class Viewer {
       tmp.updateProjectionMatrix();
       cam = tmp;
     }
+    const prevOverride = this.scene.overrideMaterial;
+    if (displayMode === "wireframe") {
+      this.scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0x2a2a3a, wireframe: true });
+    } else if (displayMode === "ghosted") {
+      this.scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0x9ec5d8, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
+    } else if (displayMode === "technical") {
+      this.scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    }
     this._thumbRenderer.render(this.scene, cam);
+    this.scene.overrideMaterial = prevOverride;
     const ctx = dest.getContext("2d");
     if (ctx) ctx.drawImage(this._thumbCanvas!, 0, 0, w, h);
   }

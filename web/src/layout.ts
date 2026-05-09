@@ -93,6 +93,24 @@ function parseScale(s: ScaleId): number {
   return 1;
 }
 
+// --- Display modes --------------------------------------------------------
+
+export type DisplayMode = "shaded" | "wireframe" | "ghosted" | "realistic" | "technical";
+const DISPLAY_MODES: DisplayMode[] = ["shaded", "wireframe", "ghosted", "realistic", "technical"];
+
+// --- Sheet presets (W3.1) -------------------------------------------------
+
+type SheetPresetId = "perspective" | "axonometric" | "plan" | "section" | "elevation" | "blank";
+interface SheetPresetDef { name: string; viewport: ViewportId; scale: ScaleId; displayMode: DisplayMode; }
+const SHEET_PRESET_DEFS: Record<Exclude<SheetPresetId, "blank">, SheetPresetDef> = {
+  perspective: { name: "Perspective", viewport: "perspective", scale: "NTS",   displayMode: "shaded" },
+  axonometric: { name: "Axonometric", viewport: "axonometric", scale: "1:50",  displayMode: "shaded" },
+  plan:        { name: "Plan",        viewport: "top",         scale: "1:100", displayMode: "shaded" },
+  section:     { name: "Section",     viewport: "front",       scale: "1:50",  displayMode: "shaded" },
+  elevation:   { name: "Elevation",   viewport: "front",       scale: "1:50",  displayMode: "shaded" },
+};
+const SHEET_PRESET_ORDER: Exclude<SheetPresetId, "blank">[] = ["perspective", "axonometric", "plan", "section", "elevation"];
+
 // --- Scene bounds provider ------------------------------------------------
 
 export interface SceneBounds {
@@ -147,6 +165,7 @@ export interface PanelInit {
   scale?: ScaleId;    // default "1:100"
   title?: string;
   border?: "thin" | "thick" | "none";
+  displayMode?: DisplayMode; // default "shaded"; detail panels default "technical"
   detailOf?: DetailRef;
 }
 
@@ -161,6 +180,7 @@ interface PanelState {
   scale: ScaleId;
   title: string;
   border: "thin" | "thick" | "none";
+  displayMode: DisplayMode;
   detailOf?: DetailRef;
 }
 
@@ -249,8 +269,8 @@ class LayoutController {
   private _detailLabelSeq = 0;
   // Selected panel (for toolbar interaction).
   private selectedPanelId: string | null = null;
-  // Live thumbnail canvases for detail panels: panelId → {canvas, viewName}.
-  private _thumbCanvases = new Map<string, { canvas: HTMLCanvasElement; viewName: "top" | "persp" | "front" | "right"; anchorX: number; anchorY: number; snapW: number; snapH: number }>();
+  // Live thumbnail canvases for detail panels: panelId → {canvas, viewName, displayMode}.
+  private _thumbCanvases = new Map<string, { canvas: HTMLCanvasElement; viewName: "top" | "persp" | "front" | "right"; anchorX: number; anchorY: number; snapW: number; snapH: number; displayMode: DisplayMode }>();
   private _thumbRAF = 0;
   // Set by onSheetMouseUp when a drag-to-create completes; suppresses the
   // subsequent click event so click-to-add doesn't fire a second addPanel.
@@ -268,21 +288,36 @@ class LayoutController {
 
   constructor(host: HTMLElement, opts: LayoutOptions) {
     this.host = host;
-    this.sheets = [{
+    const size = opts.size ?? "A1";
+    const orientation = opts.orientation ?? "landscape";
+    const customMm = opts.customMm ?? { ...DEFAULT_CUSTOM };
+    // 5 default sheets — one per canonical view type (W3.1).
+    this.sheets = SHEET_PRESET_ORDER.map((pid) => ({
       id: newSheetId(),
-      name: "Sheet 1",
-      size: opts.size ?? "A1",
-      orientation: opts.orientation ?? "landscape",
-      customMm: opts.customMm ?? { ...DEFAULT_CUSTOM },
+      name: SHEET_PRESET_DEFS[pid].name,
+      size,
+      orientation,
+      customMm: { ...customMm },
       panels: [],
-    }];
+    }));
     this.activeSheetIdx = 0;
     this.bounds = opts.bounds ?? DEFAULT_PROVIDER;
     this.title = { ...DEFAULT_TITLE, ...(opts.titleBlock ?? {}) };
     this._showTitleBlock = opts.showTitleBlock ?? false;
     this.build();
+    // Spawn preset panels for each sheet unless caller overrides sheet 0 via initialPanels.
+    if (opts.spawnDefault !== false) {
+      const hasInitial = (opts.initialPanels?.length ?? 0) > 0;
+      SHEET_PRESET_ORDER.forEach((pid, i) => {
+        if (i === 0 && hasInitial) return; // initialPanels fill sheet 0 instead
+        this.switchSheet(i);
+        const def = SHEET_PRESET_DEFS[pid];
+        this._spawnPresetPanel(def.viewport, def.scale, def.displayMode);
+      });
+      this.switchSheet(0);
+    }
+    // initialPanels go to the active (first) sheet.
     for (const p of opts.initialPanels ?? []) this.addPanel(p);
-    if (this.panels.length === 0 && opts.spawnDefault !== false) this._spawnDefaultPanel();
     // Re-fit whenever the stage changes size (covers mode-switch from display:none → flex).
     const stage = this.sheetEl.parentElement;
     if (stage && typeof ResizeObserver !== "undefined") {
@@ -386,7 +421,7 @@ class LayoutController {
     });
     tabStrip.appendChild(navR);
 
-    // Add-sheet button.
+    // Add-sheet button — shows preset picker.
     const addBtn = document.createElement("button");
     addBtn.type = "button";
     addBtn.className = "sheet-tab-add";
@@ -475,14 +510,28 @@ class LayoutController {
       tab.textContent = sheet.name;
       tab.title = sheet.name;
       tab.addEventListener("click", () => this.switchSheet(i));
-      // Double-click to rename.
+      // Double-click to rename — inline input (no window.prompt).
       tab.addEventListener("dblclick", (e) => {
         e.stopPropagation();
-        const name = window.prompt("Rename sheet:", sheet.name);
-        if (name && name.trim()) {
-          sheet.name = name.trim();
-          tab.textContent = sheet.name;
-        }
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "sheet-tab-rename-input";
+        input.value = sheet.name;
+        tab.textContent = "";
+        tab.appendChild(input);
+        input.focus();
+        input.select();
+        const commit = () => {
+          const v = input.value.trim();
+          if (v) sheet.name = v;
+          this.renderTabs();
+        };
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { ke.preventDefault(); commit(); }
+          else if (ke.key === "Escape") { ke.stopPropagation(); this.renderTabs(); }
+        });
+        input.addEventListener("click", (ie) => ie.stopPropagation());
       });
       c.appendChild(tab);
     });
@@ -507,17 +556,63 @@ class LayoutController {
     this.renderTabs();
   }
 
-  private addSheet(): void {
-    const n = this.sheets.length + 1;
+  private addSheet(presetId?: SheetPresetId): void {
+    if (!presetId) { this._showPresetPicker(); return; }
+    const def = presetId !== "blank" ? SHEET_PRESET_DEFS[presetId as Exclude<SheetPresetId, "blank">] : null;
     this.sheets.push({
       id: newSheetId(),
-      name: `Sheet ${n}`,
+      name: def ? def.name : `Sheet ${this.sheets.length + 1}`,
       size: this.size,
       orientation: this.orientation,
       customMm: { ...this.customMm },
       panels: [],
     });
     this.switchSheet(this.sheets.length - 1);
+    if (def) this._spawnPresetPanel(def.viewport, def.scale, def.displayMode);
+  }
+
+  private _spawnPresetPanel(viewport: ViewportId, scale: ScaleId, displayMode: DisplayMode): void {
+    const mm = sheetMm(this.size, this.orientation, this.customMm);
+    const r = 0.15;
+    this.addPanel({
+      x: Math.round(mm.w * MM_TO_PX * r),
+      y: Math.round(mm.h * MM_TO_PX * r),
+      w: Math.round(mm.w * MM_TO_PX * (1 - 2 * r)),
+      h: Math.round(mm.h * MM_TO_PX * (1 - 2 * r)),
+      viewport, scale, displayMode,
+    });
+  }
+
+  private _spawnDefaultPanel(): void {
+    this._spawnPresetPanel("perspective", "1:100", "shaded");
+  }
+
+  private _showPresetPicker(): void {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-preset-picker";
+    const dismiss = () => overlay.remove();
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) dismiss(); });
+    const presets: Array<{ id: SheetPresetId; label: string }> = [
+      { id: "perspective", label: "Perspective" },
+      { id: "axonometric", label: "Axonometric" },
+      { id: "plan",        label: "Plan" },
+      { id: "section",     label: "Section" },
+      { id: "elevation",   label: "Elevation" },
+      { id: "blank",       label: "Blank" },
+    ];
+    const grid = document.createElement("div");
+    grid.className = "sheet-preset-grid";
+    for (const p of presets) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sheet-preset-btn";
+      btn.dataset.preset = p.id;
+      btn.textContent = p.label;
+      btn.addEventListener("click", () => { dismiss(); this.addSheet(p.id); });
+      grid.appendChild(btn);
+    }
+    overlay.appendChild(grid);
+    this.host.appendChild(overlay);
   }
 
   private labelled(name: string, control: HTMLElement): HTMLElement {
@@ -575,47 +670,41 @@ class LayoutController {
     if (tgt && tgt.closest(".paper-cell, .paper-titleblock, .paper-toolbar")) return;
     const rect = this.sheetEl.getBoundingClientRect();
     const x = (e.clientX - rect.left) / this.zoomFactor;
-    const y = (e.clientY - rect.top) / this.zoomFactor;
+    const y = (e.clientY - rect.top)  / this.zoomFactor;
     const ghost = document.createElement("div");
     ghost.className = "paper-cell-ghost";
-    ghost.style.left = `${x}px`;
-    ghost.style.top  = `${y}px`;
-    ghost.style.width = "0px";
-    ghost.style.height = "0px";
+    ghost.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:0;height:0;border:1.5px dashed var(--ink,#1a1a22);pointer-events:none;z-index:100;`;
     this.sheetEl.appendChild(ghost);
     this.dragging = { startX: x, startY: y, el: ghost };
   }
 
   private startDetailDrag(e: MouseEvent): void {
-    if (e.button !== 0) return;
     const tgt = e.target as HTMLElement | null;
-    if (tgt?.closest(".paper-toolbar")) return;
-    const cellEl = tgt?.closest<HTMLElement>("[data-panel-id]");
+    const panelEl = tgt?.closest<HTMLElement>(".paper-cell");
+    const panelId = panelEl?.dataset.panelId ?? null;
+    const parent = panelId ? (this.panels.find((p) => p.id === panelId) ?? null) : null;
 
-    if (cellEl) {
-      // Panel-mode: user is drawing a region inside an existing panel.
-      const parentId = cellEl.dataset.panelId!;
-      const parent = this.panels.find((p) => p.id === parentId && !p.detailOf);
-      if (!parent) return;
-      const rect = cellEl.getBoundingClientRect();
-      const localX = (e.clientX - rect.left) / this.zoomFactor;
-      const localY = (e.clientY - rect.top) / this.zoomFactor;
-      const ghost = document.createElement("div");
-      ghost.className = "paper-cell-detail-ghost";
-      ghost.style.cssText = `left:${localX}px;top:${localY}px;width:0;height:0`;
-      cellEl.appendChild(ghost);
-      this._detailDrag = { mode: "panel", parentId, parentEl: cellEl, parent, startX: localX, startY: localY, ghost };
-    } else {
-      // Sheet-mode: user draws the detail panel rect directly on the paper.
-      const rect = this.sheetEl.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / this.zoomFactor;
-      const y = (e.clientY - rect.top) / this.zoomFactor;
-      const ghost = document.createElement("div");
-      ghost.className = "paper-cell-ghost";
-      ghost.style.cssText = `left:${x}px;top:${y}px;width:0;height:0`;
-      this.sheetEl.appendChild(ghost);
-      this._detailDrag = { mode: "sheet", parentId: null, parentEl: null, parent: null, startX: x, startY: y, ghost };
-    }
+    const rect = panelEl
+      ? panelEl.getBoundingClientRect()
+      : this.sheetEl.getBoundingClientRect();
+
+    const x = (e.clientX - rect.left) / this.zoomFactor;
+    const y = (e.clientY - rect.top)  / this.zoomFactor;
+
+    const ghost = document.createElement("div");
+    ghost.className = "paper-cell-ghost";
+    ghost.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:0;height:0;border:1.5px dashed var(--accent,#3d85c8);pointer-events:none;z-index:100;`;
+    (panelEl ?? this.sheetEl).appendChild(ghost);
+
+    this._detailDrag = {
+      mode: panelId ? "panel" : "sheet",
+      parentId: panelId,
+      parentEl: panelEl ?? null,
+      parent,
+      startX: x,
+      startY: y,
+      ghost,
+    };
   }
 
   private onSheetMouseMove(e: MouseEvent): void {
@@ -766,8 +855,8 @@ class LayoutController {
       if (this._thumbCanvases.size === 0) { this._thumbRAF = 0; return; }
       const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
       if (viewer) {
-        for (const { canvas, viewName, anchorX, anchorY, snapW, snapH } of this._thumbCanvases.values()) {
-          viewer.renderThumbnailTo(viewName, canvas, anchorX, anchorY, snapW, snapH);
+        for (const { canvas, viewName, anchorX, anchorY, snapW, snapH, displayMode } of this._thumbCanvases.values()) {
+          viewer.renderThumbnailTo(viewName, canvas, anchorX, anchorY, snapW, snapH, displayMode);
         }
       }
       this._thumbRAF = requestAnimationFrame(tick);
@@ -776,22 +865,6 @@ class LayoutController {
   }
 
   // --- Panel CRUD ----
-
-  private _spawnDefaultPanel(): void {
-    const mm = sheetMm(this.size, this.orientation, this.customMm);
-    // 30% margin on each side — panel occupies the centre 40% of the sheet.
-    // This leaves the outer border (0-30% and 70-100%) as empty clickable space
-    // so onSheetClick() can add panels without hitting the existing panel.
-    const r = 0.30;
-    this.addPanel({
-      x: Math.round(mm.w * MM_TO_PX * r),
-      y: Math.round(mm.h * MM_TO_PX * r),
-      w: Math.round(mm.w * MM_TO_PX * (1 - 2 * r)),
-      h: Math.round(mm.h * MM_TO_PX * (1 - 2 * r)),
-      viewport: "perspective",
-      scale: "1:100",
-    });
-  }
 
   private _enterNavigate(p: PanelState, canvas: HTMLCanvasElement): void {
     this._exitNavigate();
@@ -831,15 +904,16 @@ class LayoutController {
   addPanel(init: PanelInit): PanelState {
     const isDetail = !!init.detailOf;
     const p: PanelState = {
-      id:       newPanelId(),
-      x:        init.x,
-      y:        init.y,
-      w:        init.w,
-      h:        init.h,
-      viewport: init.viewport,
-      scale:    init.scale ?? "1:100",
-      title:    init.title ?? (isDetail ? `DETAIL ${init.detailOf!.label}` : VIEWPORT_LABELS[init.viewport]),
-      border:   init.border ?? (isDetail ? "thick" : "thin"),
+      id:          newPanelId(),
+      x:           init.x,
+      y:           init.y,
+      w:           init.w,
+      h:           init.h,
+      viewport:    init.viewport,
+      scale:       init.scale ?? "1:100",
+      title:       init.title ?? (isDetail ? `DETAIL ${init.detailOf!.label}` : VIEWPORT_LABELS[init.viewport]),
+      border:      init.border ?? (isDetail ? "thick" : "thin"),
+      displayMode: init.displayMode ?? (isDetail ? "technical" : "shaded"),
       ...(isDetail ? { detailOf: init.detailOf } : {}),
     };
     this.panels.push(p);
@@ -967,8 +1041,25 @@ class LayoutController {
       this.renderPanel(p);
     });
 
+    const dmSel = document.createElement("select");
+    dmSel.className = "paper-cell-select";
+    dmSel.setAttribute("aria-label", "Display mode");
+    for (const dm of DISPLAY_MODES) {
+      const opt = document.createElement("option");
+      opt.value = dm;
+      opt.textContent = dm.charAt(0).toUpperCase() + dm.slice(1);
+      if (dm === p.displayMode) opt.selected = true;
+      dmSel.appendChild(opt);
+    }
+    dmSel.addEventListener("change", () => {
+      p.displayMode = dmSel.value as DisplayMode;
+      const entry = this._thumbCanvases.get(p.id);
+      if (entry) entry.displayMode = p.displayMode;
+    });
+
     header.appendChild(vSel);
     header.appendChild(sSel);
+    header.appendChild(dmSel);
     el.appendChild(header);
 
     // Render the viewport content — live WebGL thumbnail for all panels.
@@ -984,7 +1075,7 @@ class LayoutController {
     thumbCanvas.height = Math.max(1, Math.round(p.h));
     thumbCanvas.style.cssText = "width:100%;height:100%;display:block;";
     renderWrap.appendChild(thumbCanvas);
-    this._thumbCanvases.set(p.id, { canvas: thumbCanvas, viewName, anchorX: 0, anchorY: 0, snapW: 0, snapH: 0 });
+    this._thumbCanvases.set(p.id, { canvas: thumbCanvas, viewName, anchorX: 0, anchorY: 0, snapW: 0, snapH: 0, displayMode: p.displayMode });
     this._startThumbLoop();
     el.appendChild(renderWrap);
 
