@@ -338,8 +338,8 @@ export function dispatchCoverage(): {
 // ============================================================
 //
 // Best-effort initial coverage. Each handler is a thin shim that emits
-// a `gemma:command` CustomEvent so existing UI listeners (palette.ts,
-// shell.ts, viewer.ts, etc.) stay reactive without dispatch having to
+// a `gemma:command` CustomEvent so existing UI listeners (shell.ts,
+// viewer.ts, etc.) stay reactive without dispatch having to
 // know about every subsystem. As specific subsystems acquire native
 // dispatch wiring (transforms.ts in T4 already binds via app-state),
 // they can registerHandler() to override the generic shim.

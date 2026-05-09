@@ -11,7 +11,7 @@ import { buildPhoneSlider } from "./phone-slider.js";
 // .app, .menubar, .modebar, .ribbon, .ribbon-tabs, .ribbon-tools, .statusbar,
 // .menu-item / .menu-dropdown / .menu-row / .menu-row-kbd / .menu-sep, etc.
 
-type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; toolId?: string } | { separator: true };
+type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; toolId?: string; onAction?: () => void } | { separator: true };
 type MenuItem = {
   label: string;
   entries: MenuEntry[];
@@ -19,59 +19,44 @@ type MenuItem = {
 
 const MENUS: MenuItem[] = [
   { label: "File", entries: [
-    { label: "New project",                shortcut: "⌘N" },
-    { label: "Open…",                      shortcut: "⌘O",  canonical: "SdOpen" },
-    { label: "Save",                       shortcut: "⌘S",  canonical: "SdSave" },
-    { label: "Save As…",                   shortcut: "⇧⌘S" },
+    { label: "Open / Import…",  shortcut: "⌘O", onAction: () => document.getElementById("file-pick-btn")?.click() },
+    { label: "Save project",    shortcut: "⌘S", onAction: () => saveProjectJson() },
     { separator: true },
-    { label: "Import IFC / STEP / OBJ…",                   canonical: "SdImport" },
-    { label: "Export…",                    shortcut: "⌘E",  canonical: "SdExport" },
-    { separator: true },
-    { label: "Quit",                       shortcut: "⌘Q" },
+    { label: "Export…",         shortcut: "⌘E", canonical: "SdExport" },
   ]},
   { label: "Edit", entries: [
-    { label: "Undo",         shortcut: "⌘Z" },
-    { label: "Redo",         shortcut: "⇧⌘Z" },
+    { label: "Undo",       shortcut: "⌘Z",   canonical: "SdUndo" },
+    { label: "Redo",       shortcut: "⇧⌘Z",  canonical: "SdRedo" },
     { separator: true },
-    { label: "Cut",          shortcut: "⌘X" },
-    { label: "Copy",         shortcut: "⌘C" },
-    { label: "Paste",        shortcut: "⌘V" },
-    { label: "Duplicate",    shortcut: "⌘D" },
-    { separator: true },
-    { label: "Select all",   shortcut: "⌘A",  canonical: "SdSelectAll" },
-    { label: "Deselect",     shortcut: "esc", canonical: "SdDeselect" },
+    { label: "Select all", shortcut: "⌘A",   canonical: "SdSelectAll" },
+    { label: "Deselect",   shortcut: "esc",  canonical: "SdDeselect" },
   ]},
   { label: "View", entries: [
-    { label: "Single viewport", shortcut: "⍐1" },
-    { label: "Side by side",    shortcut: "⍐2" },
-    { label: "Stacked",         shortcut: "⍐3" },
-    { label: "Quad · T/F/R/P",  shortcut: "⍐4" },
+    { label: "Mode · Model",    shortcut: "⌥1", onAction: () => (document.querySelector('.mode-tab[data-mode="model"]') as HTMLElement | null)?.click() },
+    { label: "Mode · Layout",   shortcut: "⌥2", onAction: () => (document.querySelector('.mode-tab[data-mode="layout"]') as HTMLElement | null)?.click() },
+    { label: "Mode · Research", shortcut: "⌥3", onAction: () => (document.querySelector('.mode-tab[data-mode="research"]') as HTMLElement | null)?.click() },
     { separator: true },
-    { label: "Mode · Model" },
-    { label: "Mode · Layout" },
-    { label: "Mode · Research" },
-    { separator: true },
-    { label: "Toggle theme" },
-    { label: "Command palette…", shortcut: "⌘K" },
+    { label: "Toggle theme",    shortcut: "⌃\\", onAction: () => document.getElementById("blueprint-toggle")?.click() },
+    { label: "Command palette…",shortcut: "⌘K",  onAction: () => document.getElementById("ribbon-palette-btn")?.click() },
   ]},
   { label: "Sketch", entries: [
-    { label: "Line",       shortcut: "L", toolId: "line" },
-    { label: "Rectangle",  shortcut: "R", toolId: "rect" },
-    { label: "Circle",     shortcut: "C", toolId: "circle" },
-    { label: "Polyline",                  toolId: "polyline" },
-    { label: "Polygon",                   toolId: "polygon" },
-    { label: "Arc",                       toolId: "arc" },
-    { label: "Spline",                    toolId: "spline" },
+    { label: "Line",      shortcut: "L", toolId: "line" },
+    { label: "Rectangle", shortcut: "R", toolId: "rect" },
+    { label: "Circle",    shortcut: "C", toolId: "circle" },
+    { label: "Polyline",               toolId: "polyline" },
+    { label: "Polygon",                toolId: "polygon" },
+    { label: "Arc",                    toolId: "arc" },
+    { label: "Spline",                 toolId: "spline" },
   ]},
   { label: "Solid", entries: [
-    { label: "Extrude",       shortcut: "E", toolId: "extrude" },
-    { label: "Revolve",                      toolId: "revolve" },
+    { label: "Extrude",      shortcut: "E", toolId: "extrude" },
+    { label: "Revolve",                     toolId: "revolve" },
     { separator: true },
-    { label: "Boolean union",               canonical: "SdBooleanUnion" },
-    { label: "Boolean cut",                 canonical: "SdBooleanDifference" },
+    { label: "Boolean union",              canonical: "SdBooleanUnion" },
+    { label: "Boolean cut",               canonical: "SdBooleanDifference" },
     { separator: true },
-    { label: "Fillet edges",                toolId: "fillet" },
-    { label: "Chamfer edges",               toolId: "chamfer" },
+    { label: "Fillet edges",               toolId: "fillet" },
+    { label: "Chamfer edges",              toolId: "chamfer" },
   ]},
   { label: "Arch", entries: [
     { label: "Wall",   shortcut: "W", toolId: "wall" },
@@ -82,26 +67,28 @@ const MENUS: MenuItem[] = [
     { label: "Window",               toolId: "window" },
   ]},
   { label: "Render", entries: [
-    { label: "Wireframe" },
-    { label: "Hidden line" },
-    { label: "Shaded" },
-    { label: "Rendered" },
+    { label: "Shaded",    onAction: () => dispatchSync("SdRenderMode", { mode: "shaded" }) },
+    { label: "Wireframe", onAction: () => dispatchSync("SdRenderMode", { mode: "wireframe" }) },
+    { label: "Ghosted",   onAction: () => dispatchSync("SdRenderMode", { mode: "ghosted" }) },
+    { label: "Technical", onAction: () => dispatchSync("SdRenderMode", { mode: "technical" }) },
+    { label: "Realistic", onAction: () => dispatchSync("SdRenderMode", { mode: "realistic" }) },
     { separator: true },
-    { label: "Render settings…" },
+    { label: "Render settings…", onAction: () => {
+      const tab = document.querySelector('.ribbon-tab[data-tab="RENDER"]') as HTMLElement | null;
+      if (tab) window.dispatchEvent(new CustomEvent("render-mode-toggle", { detail: { rect: tab.getBoundingClientRect() } }));
+    }},
   ]},
   { label: "Window", entries: [
-    { label: "Prompt" },
-    { label: "Console" },
-    { label: "Node graph" },
-    { label: "Parameters" },
-    { label: "History" },
+    { label: "Prompt",     onAction: () => (document.querySelector('.dock-tab[data-tab="prompt"]') as HTMLElement | null)?.click() },
+    { label: "Node graph", onAction: () => (document.querySelector('.dock-tab[data-tab="nodes"]') as HTMLElement | null)?.click() },
+    { label: "Parameters", onAction: () => (document.querySelector('.dock-tab[data-tab="parameters"]') as HTMLElement | null)?.click() },
+    { label: "History",    onAction: () => (document.querySelector('.dock-tab[data-tab="history"]') as HTMLElement | null)?.click() },
     { separator: true },
-    { label: "Reset layout" },
+    { label: "Reset layout", onAction: () => window.location.reload() },
   ]},
   { label: "Help", entries: [
-    { label: "Documentation" },
-    { label: "Keyboard shortcuts" },
-    { label: "About Gemma·Architect" },
+    { label: "Keyboard shortcuts",    shortcut: "⌘K", onAction: () => document.getElementById("ribbon-palette-btn")?.click() },
+    { label: "About Gemma·Architect",               onAction: () => alert("Gemma·Architect\n\nOpen-source architectural design environment.\ngithub.com/wordingone/gemma-architect") },
   ]},
 ];
 
@@ -317,7 +304,7 @@ function buildMenubar(host: HTMLElement) {
         panel.appendChild(sep);
         continue;
       }
-      const e = entry as { label: string; shortcut?: string; canonical?: string; toolId?: string };
+      const e = entry as { label: string; shortcut?: string; canonical?: string; toolId?: string; onAction?: () => void };
       const row = document.createElement("div");
       row.className = "menu-row";
       row.setAttribute("role", "menuitem");
@@ -339,6 +326,8 @@ function buildMenubar(host: HTMLElement) {
           dispatchSync("setActiveTool", { toolId: e.toolId });
         } else if (e.canonical) {
           dispatchSync(e.canonical, {});
+        } else if (e.onAction) {
+          e.onAction();
         }
         closeMenu();
       });

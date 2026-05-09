@@ -9,7 +9,6 @@
 // loaded-from-file) is queried via viewer.getActiveMeshData().
 
 import { initShellChrome, setRibbonMode } from "./shell";
-import { initPalette } from "./palette";
 import { buildWorkbench } from "./workbench";
 import { buildModes, activateMode } from "./modes";
 import { initCmdK } from "./cmdk";
@@ -1895,7 +1894,6 @@ initShellChrome({
   },
   onSplitMode: (mode) => viewer.splitMode(mode),
 });
-initPalette();
 buildWorkbench();
 if (workbenchEl) buildModes(workbenchEl);
 initCmdK();
