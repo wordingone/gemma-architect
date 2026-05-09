@@ -430,6 +430,10 @@ export function activateMode(key: string, workbench: HTMLElement | null) {
   const showResearch = key === "research";
   if (paperEl)    paperEl.style.display    = showPaper    ? "" : "none";
   if (researchEl) researchEl.style.display = showResearch ? "" : "none";
-  // Reset any accidental body scroll so the ribbon/modebar are never off-screen.
+  // Reset accumulated body scroll so the ribbon/modebar are never off-screen.
+  // Chrome keeps document.body.scrollTop independent from window.scrollY when
+  // html has overflow:hidden — must reset both explicitly.
   window.scrollTo(0, 0);
+  document.body.scrollTop = 0;
+  document.documentElement.scrollTop = 0;
 }
