@@ -674,6 +674,7 @@ html[data-mode="night"] .paper-stage {
   --iz: 1; /* inverse zoom — JS sets this in fitToStage() */
   background: var(--paper);
   position: relative;
+  flex-shrink: 0; /* prevent flex container from squashing the sheet's width */
   border: var(--lw-cut) solid var(--ink-cut);
   box-shadow: 4px 4px 0 oklch(0.86 0.014 80), 6px 6px 16px oklch(0.22 0.015 250 / 0.10);
   /* JS (applySheetDims) sets explicit width/height. No grid — panels are absolute. */
