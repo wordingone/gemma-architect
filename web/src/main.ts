@@ -275,6 +275,41 @@ registerHandler("SdCone", (args) => {
   return { created: "cone", radius: r, height: h };
 });
 
+// SdExtrude — extrude a closed 2D profile along a direction vector.
+// profile: list of [x,y] points (closed polyline). Defaults to 1×1 unit square.
+// distance: extrude depth in metres.
+// direction: extrude axis (default [0,0,1] = vertical).
+registerHandler("SdExtrude", (args) => {
+  const distance = (args.distance as number | undefined) ?? (args.height as number | undefined) ?? 1;
+  const rawProfile = args.profile as [number, number][] | undefined;
+  const dirRaw = args.direction as [number, number, number] | undefined;
+
+  // Build THREE.Shape from profile points
+  const pts: [number, number][] = Array.isArray(rawProfile) && rawProfile.length >= 3
+    ? (rawProfile as [number, number][])
+    : [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const shape = new THREE.Shape();
+  shape.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
+  shape.closePath();
+
+  const geom = new THREE.ExtrudeGeometry(shape, { depth: distance, bevelEnabled: false });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xb8c4d4, roughness: 0.5, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+
+  // Orient if direction differs from default Z-up
+  if (dirRaw && !(dirRaw[0] === 0 && dirRaw[1] === 0 && dirRaw[2] === 1)) {
+    const dir = new THREE.Vector3(...dirRaw).normalize();
+    const up = new THREE.Vector3(0, 0, 1);
+    mesh.quaternion.setFromUnitVectors(up, dir);
+  }
+
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "SdExtrude";
+  viewer.addMesh(mesh, "brep");
+  return { created: "extrude", profile_points: pts.length, distance };
+});
+
 function resolveLayerId(creator: string, args: Record<string, unknown>): string {
   const explicit = args.layer as string | undefined;
   if (explicit && layerStore.get(explicit)) return explicit;
