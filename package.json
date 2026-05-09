@@ -21,6 +21,8 @@
     "verify:deploy": "bun scripts/validate-deploy.ts",
     "shared-browser:start": "powershell -File scripts/shared-browser/start.ps1",
     "shared-browser:stop": "powershell -File scripts/shared-browser/stop.ps1",
+    "shared-browser:sweep": "node scripts/shared-browser-sweep.mjs",
+    "shared-browser:watch": "node scripts/shared-browser-watch.mjs",
     "verify:raw": "node scripts/gemma-verify-raw.mjs",
     "verify:cdp": "node -e \"process.stderr.write('DEPRECATED: verify:cdp removed — use: bun run verify:raw\\n'); process.exit(2);\"",
     "cdp": "node --experimental-strip-types scripts/cdp.ts",

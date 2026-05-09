@@ -105,3 +105,13 @@ Write-Host "  endpoint : $wsUrl"
 Write-Host "  pid      : $($proc.Id)"
 Write-Host "  cdp.json : $CDP_JSON"
 Write-Host "  profile  : $ChromeDataDir"
+
+# --- Start periodic tab sweep (every 10 min) ---
+$SweepScript = Join-Path $PSScriptRoot "..\shared-browser-watch.mjs"
+$SweepScript = [System.IO.Path]::GetFullPath($SweepScript)
+if (Test-Path $SweepScript) {
+    Start-Process -FilePath "node" -ArgumentList $SweepScript -WindowStyle Hidden
+    Write-Host "  tab-sweep: started (10 min interval)"
+} else {
+    Write-Host "  tab-sweep: script not found at $SweepScript (skipped)"
+}
