@@ -184,6 +184,43 @@ function record(result: SurfaceResult) {
   record({ name: "palette-tool-behavior", ...r as any });
 }
 
+// --- Pre-surface-4 setup: inject one clickable mesh at scene origin ---
+// Surfaces 4-6 (selection-roundtrip, transform-gizmo-attach, delete-propagation) require
+// at least one user-created mesh to be present. Before bae1c98 (#173) an auto-loaded demo
+// wall provided this implicitly; that wall was removed. This step creates a 1m box via the
+// DSL console so the surfaces are self-contained and deterministic.
+{
+  await page.evaluate(async () => {
+    const tab = document.querySelector("[data-tab=prompt]") as HTMLElement | null;
+    if (tab) tab.click();
+    await new Promise(res => setTimeout(res, 200));
+    const pill = document.querySelector(".mode-pill") as HTMLElement | null;
+    if (pill && pill.getAttribute("data-mode") !== "console") {
+      pill.click();
+      await new Promise(res => setTimeout(res, 200));
+    }
+  });
+  const setupResult = await page.evaluate(async () => {
+    const v = (window as any).__viewer;
+    if (!v) return { ok: false, reason: "__viewer not found" };
+    const before = v.scene.children.length;
+    const input = document.querySelector("#console-input") as HTMLInputElement | null;
+    if (!input) return { ok: false, reason: "no #console-input" };
+    input.value = "box (0 0) width=1 depth=1 height=1";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+    await new Promise(res => setTimeout(res, 800));
+    const after = v.scene.children.length;
+    return { ok: after > before, before, after };
+  });
+  if (!setupResult.ok) {
+    console.error("SETUP FAILED: test mesh not injected before Surface 4 —", JSON.stringify(setupResult));
+    process.exit(3);
+  }
+  console.log(`  setup: mesh injected (scene ${setupResult.before} → ${setupResult.after} children)`);
+}
+
 // --- Surface 4: selection-roundtrip (no dynamic imports) ---
 {
   const r = await page.evaluate(async () => {
