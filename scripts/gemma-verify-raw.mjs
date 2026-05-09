@@ -100,6 +100,35 @@ function record(name, passed, evidence) {
   if (!passed) console.log("    evidence:", JSON.stringify(evidence).slice(0, 300));
 }
 
+// ── Surface 0: initial-scene-clean (#218 regression guard) ───────────────────
+// Asserts: immediately after a fresh page reload, the viewer scene contains
+// no user-created building elements (no IfcWall, SdBox, etc.).
+// Excludes built-in scene objects: GridHelper, AxesHelper, lights, gumball handles.
+{
+  const r = await evaluate(`
+    (() => {
+      try {
+        const v = window.__viewer;
+        if (!v) return { passed: false, evidence: { reason: "__viewer not found" } };
+        const BUILTIN_NAMES = new Set(["X_shaft","X","Y_shaft","Y","Z_shaft","Z","XYZ","XY","YZ","XZ","XYZE","E"]);
+        const userMeshes = [];
+        v.scene.traverse(obj => {
+          if (!obj.isMesh && !obj.isGroup) return;
+          if (BUILTIN_NAMES.has(obj.name)) return;
+          if (obj.type === "GridHelper" || obj.type === "AxesHelper") return;
+          if (obj.userData?.kind || obj.userData?.creator || obj.userData?.layerId) {
+            userMeshes.push({ name: obj.name, kind: obj.userData?.kind, creator: obj.userData?.creator });
+          }
+        });
+        return { passed: userMeshes.length === 0, evidence: { userMeshCount: userMeshes.length, userMeshes } };
+      } catch (e) {
+        return { passed: false, evidence: { reason: "caught: " + String(e) } };
+      }
+    })()`);
+  if (!r) record("initial-scene-clean", false, { reason: "evaluate returned null" });
+  else record("initial-scene-clean", r.passed, r.evidence);
+}
+
 // ── Surface 1: ribbon-icons-rendered ─────────────────────────────────────────
 {
   const r = await evaluate(`
