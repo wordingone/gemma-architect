@@ -1340,6 +1340,12 @@ function setStatus(msg: string, kind: "ok" | "err" | "info" | "warn" | "" = "") 
 let workerReady = false;
 const pendingRuns: Array<() => void> = [];
 
+function terminateAndRecycle(): void {
+  worker.terminate();
+  workerReady = false;
+  workerCallbacks.clear();
+}
+
 worker.onmessage = (ev: MessageEvent<WorkerOut>) => {
   const msg = ev.data;
   if (msg.type === "ready") {
@@ -1919,5 +1925,8 @@ refreshExportButtons(true);
 // Disconnect the theme MutationObserver on Vite HMR so the old Viewer
 // instance doesn't keep the document element alive across hot-reloads.
 if (import.meta.hot) {
-  import.meta.hot.dispose(() => viewer.dispose());
+  import.meta.hot.dispose(() => {
+    viewer.dispose();
+    terminateAndRecycle();
+  });
 }
