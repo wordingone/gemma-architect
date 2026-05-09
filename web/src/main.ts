@@ -659,10 +659,8 @@ registerHandler("setLevelVisible", (args) => {
   const ok = levelStore.setVisible(id, visible);
   if (!ok) return { error: `level not found: ${id}` };
   // Toggle THREE.js meshes tagged with this levelId.
-  viewer.scene.children.forEach((child) => {
-    if ((child as THREE.Mesh).userData?.levelId === id) {
-      child.visible = visible;
-    }
+  viewer.forEachSceneChild((child) => {
+    if (child.userData?.levelId === id) child.visible = visible;
   });
   return { ok: true, levelId: id, visible };
 });

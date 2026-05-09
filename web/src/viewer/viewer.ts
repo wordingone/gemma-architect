@@ -1700,6 +1700,11 @@ export class Viewer {
     this.scene.add(mesh);
   }
 
+  /** Walk scene children; callback may mutate visible/material but not add/remove. */
+  forEachSceneChild(fn: (obj: THREE.Object3D) => void): void {
+    for (const child of this.scene.children) fn(child);
+  }
+
   removeObject(obj: THREE.Object3D): boolean {
     if (!this.scene.children.includes(obj)) return false;
     this.scene.remove(obj);
