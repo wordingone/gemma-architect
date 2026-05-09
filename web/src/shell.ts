@@ -11,7 +11,7 @@ import { buildPhoneSlider } from "./phone-slider.js";
 // .app, .menubar, .modebar, .ribbon, .ribbon-tabs, .ribbon-tools, .statusbar,
 // .menu-item / .menu-dropdown / .menu-row / .menu-row-kbd / .menu-sep, etc.
 
-type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; toolId?: string; onAction?: () => void } | { separator: true };
+type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; toolId?: string; onAction?: () => void; stub?: boolean } | { separator: true };
 type MenuItem = {
   label: string;
   entries: MenuEntry[];
@@ -19,8 +19,8 @@ type MenuItem = {
 
 const MENUS: MenuItem[] = [
   { label: "File", entries: [
-    { label: "Open / Import…",  shortcut: "⌘O", onAction: () => document.getElementById("file-pick-btn")?.click() },
-    { label: "Save project",    shortcut: "⌘S", onAction: () => saveProjectJson() },
+    { label: "Open / Import…",  shortcut: "⌘O", stub: true, onAction: () => document.getElementById("file-pick-btn")?.click() },
+    { label: "Save project",    shortcut: "⌘S", stub: true, onAction: () => saveProjectJson() },
     { separator: true },
     { label: "Export…",         shortcut: "⌘E", canonical: "SdExport" },
   ]},
@@ -84,11 +84,11 @@ const MENUS: MenuItem[] = [
     { label: "Parameters", onAction: () => (document.querySelector('.dock-tab[data-tab="parameters"]') as HTMLElement | null)?.click() },
     { label: "History",    onAction: () => (document.querySelector('.dock-tab[data-tab="history"]') as HTMLElement | null)?.click() },
     { separator: true },
-    { label: "Reset layout", onAction: () => window.location.reload() },
+    { label: "Reset layout", stub: true, onAction: () => window.location.reload() },
   ]},
   { label: "Help", entries: [
     { label: "Keyboard shortcuts",    shortcut: "⌘K", onAction: () => document.getElementById("ribbon-palette-btn")?.click() },
-    { label: "About Gemma·Architect",               onAction: () => alert("Gemma·Architect\n\nOpen-source architectural design environment.\ngithub.com/wordingone/gemma-architect") },
+    { label: "About Gemma·Architect", stub: true,    onAction: () => alert("Gemma·Architect\n\nOpen-source architectural design environment.\ngithub.com/wordingone/gemma-architect") },
   ]},
 ];
 
@@ -304,10 +304,11 @@ function buildMenubar(host: HTMLElement) {
         panel.appendChild(sep);
         continue;
       }
-      const e = entry as { label: string; shortcut?: string; canonical?: string; toolId?: string; onAction?: () => void };
+      const e = entry as { label: string; shortcut?: string; canonical?: string; toolId?: string; onAction?: () => void; stub?: boolean };
       const row = document.createElement("div");
       row.className = "menu-row";
       row.setAttribute("role", "menuitem");
+      if (e.stub) row.dataset.stub = "true";
 
       const label = document.createElement("span");
       label.className = "menu-row-label";

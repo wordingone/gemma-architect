@@ -833,6 +833,101 @@ function record(name, passed, evidence) {
   await new Promise(r => setTimeout(r, 60));
 }
 
+// ── Surface 20: menubar-coverage ─────────────────────────────────────────────
+// Opens each top-level menu and clicks every non-stub .menu-row.
+// Asserts: each row produces either a dispatch call or a DOM mutation (class/data-mode change).
+// Rows with data-stub="true" (file-picker, save, reset-layout, alert) are skipped.
+// Regression-net for PR #256 W2.1 menubar wiring.
+{
+  // Ensure we're in MODEL mode so all menus are rendered.
+  await evaluate(`(function() {
+    const tab = document.querySelector('.mode-tab[data-mode="model"]');
+    if (tab) tab.click();
+  })()`);
+  await delay(300);
+
+  const r = await evaluate(`
+    (async () => {
+      // Install dispatch recorder (wraps window.__dispatch).
+      const origDispatch = window.__dispatch;
+      const dispatchLog = [];
+      if (origDispatch) {
+        window.__dispatch = (name, args) => {
+          dispatchLog.push(name);
+          return origDispatch(name, args);
+        };
+      }
+
+      // MutationObserver tracks class/attribute changes.
+      let mutCount = 0;
+      const observer = new MutationObserver(recs => { mutCount += recs.length; });
+      observer.observe(document.body, {
+        childList: true, subtree: true,
+        attributes: true, attributeFilter: ['class', 'data-mode', 'aria-selected', 'style']
+      });
+
+      const menuItems = Array.from(document.querySelectorAll('.menubar-items .menu-item'));
+      const silentStubs = [];
+      const testedRows = [];
+
+      function closeMenu() {
+        document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      }
+
+      for (const item of menuItems) {
+        const menuLabel = item.dataset.menu || item.textContent?.trim() || '?';
+
+        // First pass: collect row labels (skip seps and stubs).
+        item.click();
+        await new Promise(r => setTimeout(r, 120));
+        const firstDropdown = document.querySelector('.menu-dropdown');
+        if (!firstDropdown) continue;
+        const rowLabels = Array.from(firstDropdown.querySelectorAll('.menu-row'))
+          .filter(row => !row.classList.contains('menu-sep') && row.dataset.stub !== 'true')
+          .map(row => row.querySelector('.menu-row-label')?.textContent?.trim() || '?');
+        closeMenu();
+        await new Promise(r => setTimeout(r, 60));
+
+        // Second pass: click each row individually.
+        for (const rowLabel of rowLabels) {
+          item.click();
+          await new Promise(r => setTimeout(r, 120));
+          const dropdown = document.querySelector('.menu-dropdown');
+          if (!dropdown) break;
+
+          const row = Array.from(dropdown.querySelectorAll('.menu-row'))
+            .find(r => r.querySelector('.menu-row-label')?.textContent?.trim() === rowLabel);
+          if (!row || row.dataset.stub === 'true') { closeMenu(); await new Promise(r => setTimeout(r, 60)); continue; }
+
+          const dispBefore = dispatchLog.length;
+          const mutBefore = mutCount;
+
+          row.click();
+          await new Promise(r => setTimeout(r, 250));
+
+          const dispatched = dispatchLog.length > dispBefore;
+          const mutated = mutCount > mutBefore;
+          const label = menuLabel + ' → ' + rowLabel;
+          testedRows.push({ label, dispatched, mutated });
+          if (!dispatched && !mutated) silentStubs.push(label);
+
+          closeMenu();
+          await new Promise(r => setTimeout(r, 60));
+        }
+      }
+
+      observer.disconnect();
+      if (origDispatch) window.__dispatch = origDispatch;
+
+      return {
+        passed: silentStubs.length === 0,
+        evidence: { tested: testedRows.length, silentStubs, testedRows }
+      };
+    })()`, true);
+  if (!r) record('menubar-coverage', false, { reason: 'evaluate returned null' });
+  else record('menubar-coverage', r.passed, r.evidence);
+}
+
 // ── Aggregate + write receipt ─────────────────────────────────────────────────
 ws.close();
 if (newTabTargetId) {
