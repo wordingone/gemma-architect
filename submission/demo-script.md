@@ -10,19 +10,19 @@ menubar / modebar / ribbon shell, dock tabs (PROMPT / NODES / PARAMETERS
 / HISTORY) — the PROMPT tab toggles between natural-language PROMPT mode
 and DSL CONSOLE mode via Shift+Tab. Plus Cmd-K palette, multi-format
 EXPORT drawer, drafting-style toggle (`D`), AI prompt → geometry pipeline
-(#176, cache + live LoRA paths), Schultz Residence hero demo (14-element
-multi-fuse).
+(#176, cache + live LoRA paths), SKILL NODES library (fire-station hero,
+#177 — 5 reference skills on master at f28dfa8).
 
 **Demo path order** is chosen to scale narrative scope:
-single element → parametric variation → AI typed-from-scratch → real-building
-hero shot. Each cut ends on a frame the next cut starts from cleanly.
+single element → parametric variation → AI typed-from-scratch → skill hero
+(multi-room building). Each cut ends on a frame the next cut starts from cleanly.
 
 | Cut | Range | What viewers see |
 | :-: | :---- | :--------------- |
 | 1 | 0:00–0:20 | hook + static title card |
 | 2 | 0:20–1:00 | demo 1 — wall (cached, parametric) |
 | 3 | 1:00–1:40 | demo 2 — typed-from-scratch prompt → AI generate (cache match) |
-| 4 | 1:40–2:30 | demo 3 — Schultz Residence (14-element hero) + drafting style |
+| 4 | 1:40–2:30 | demo 3 — fire-station skill run (18-step, multi-room) + drafting style |
 | 5 | 2:30–3:00 | export IFC + close out (impact line) |
 
 ---
@@ -93,33 +93,34 @@ title-block "GEMMA·ARCHITECT — UNTITLED.001 / SCALE 1:50 · IFC4 · METRIC".
 
 ---
 
-## 1:40 — 2:30 — Demo 3: Schultz Residence (hero, 14 elements + drafting style)
+## 1:40 — 2:30 — Demo 3: Fire-station skill run (18 steps, multi-room)
 
 **Screen:**
-1. Press `⌘K` to open command palette.
-2. Type "Schultz". Hit Enter on the matched command — the demo loads.
-3. PROMPT textarea fills with the long Schultz sentence (12×8m residence,
-   four walls, doorway, window, columns, roof). JS fills with 14 const lines.
-4. Click GENERATE. Status: `Running…` → `Ready (~120 tris).` Viewer
-   auto-frames. Visible: floor slab, four walls (south wall has a doorway
-   cut, north has a window cut), interior partition, two corner columns,
-   roof slab. ~30% of viewport (camera fudge fix #86b3a29).
-5. Press `D` (drafting style toggle). Viewer flips from solid shading to
-   ink-wobble drafting render. Title-block emphasizes the architect-feel.
+1. Clear the PROMPT textarea. Type live: `design a fire station`.
+2. Hit `⌘⏎`. Status shows skill match: `fire-station (keyword: "fire station")`.
+3. Dispatch fires 18 steps: IfcLevel → IfcSlab → 4×IfcWall → 3 apparatus
+   bays (8×9m each) → bathrooms → kitchen → dormitory → day room → garage
+   doors. Viewer auto-frames. Visible: a complete multi-room station
+   footprint, 24×25m plan.
+4. Press `D` (drafting style toggle). Viewer flips from solid shading to
+   ink-wobble drafting render showing the floor plan read.
 
 **VO (50s budget):**
 
-> "Hit Cmd-K. Type 'Schultz'. The Schultz Residence — a real
-> single-story house: twelve by eight meter footprint, four perimeter
-> walls two-eighty tall with a south doorway and north window, an
-> interior east-west partition, two corner columns, a flat roof. Click
-> GENERATE."
+> "Type _design a fire station_. Cmd-Enter. The page matches the keyword
+> against the saved-skills library — five reference buildings, pre-baked
+> as verified dispatch sequences. Eighteen steps fire in order: level,
+> slab, perimeter walls, three apparatus bays for the trucks, crew
+> spaces. No model inference on this path. Zero latency waiting for
+> a GPU."
 
-> "Fourteen replicad operations. Multi-fuse and boolean cuts. The
-> floor, the walls, the cuts for the doorway and window — all
-> composed from the model's output, executed locally. Press D for
-> drafting style — the same building, rendered as a hand-drawn
-> elevation. **Same geometry. Same IFC. Different aesthetic.**"
+> "Here is the honest truth about Gemma 4 E2B without fine-tuning: the
+> base model emits correct verb names but ignores dimensional args —
+> wrong sizes, wrong positions. That's K=0 'wrong-args' mode. The
+> saved-skills library routes around it by executing pre-verified
+> sequences directly. The model gets out of the way; the geometry is
+> correct. Press D — same building, architect's view. **Same IFC.
+> Different input path.**"
 
 **Cut beat:** drafting-style render fully painted. Hard cut at 2:30.
 
@@ -129,20 +130,21 @@ title-block "GEMMA·ARCHITECT — UNTITLED.001 / SCALE 1:50 · IFC4 · METRIC".
 
 **Screen:**
 1. Click **EXPORT** in the ribbon (or hit `⌘E`). Drawer slides in from the right.
-2. Click the **IFC4** tile. Browser downloads `schultz.ifc` (~25 KB, 566 entities).
-3. Optional B-roll: open the file in BlenderBIM. Show same building
-   loaded as IFC4 entities (slabs, walls, columns) in a different tool.
+2. Click the **IFC4** tile. Browser downloads the fire-station IFC file.
+3. Optional B-roll: open the file in BlenderBIM. Show the multi-room
+   building loaded as IFC4 entities (slabs, walls, spaces) in a
+   separate BIM tool.
 
 **VO (28s budget):**
 
-> "Click EXPORT. IFC4. Twenty-five kilobytes, five hundred entities.
-> **This is a real building file** — open it in Revit, ArchiCAD,
-> BlenderBIM, anything that reads IFC. The model isn't generating
-> pixels. It's generating a building."
+> "Click EXPORT. IFC4. **This is a real building file** — open it in
+> Revit, ArchiCAD, BlenderBIM, anything that reads IFC. Not pixels.
+> Not a JSON blob. A building."
 
-> "Less than a thousand sentences in the training set. One LoRA adapter.
-> One web page. Open-source, Apache-2.0. Take it, fine-tune your own,
-> serve your own users. **CAD just stopped being a subscription.**"
+> "Five reference skills on master. LoRA adapter for single-element
+> prompts. One web page. Open-source, Apache-2.0. Take it, add your
+> own skills, fine-tune your own adapter. **CAD just stopped being a
+> subscription.**"
 
 **Cut beat:** IFC4 tile click → file appears in Downloads. End card 1s.
 
@@ -166,8 +168,9 @@ title-block "GEMMA·ARCHITECT — UNTITLED.001 / SCALE 1:50 · IFC4 · METRIC".
 ## What viewers leave with
 
 In 3 minutes, they should have seen:
-- A wall, a column, a residence — three scope tiers covered.
-- Both the **demo path** (cached, instant) and the **typed-from-scratch path** (AI cache match).
+- A wall, a column, a fire station — three scope tiers covered.
+- Both the **AI cache path** (cached, instant, single-element) and the **skill path** (18-step, multi-room, no model inference).
+- K=0 honest framing: bare Gemma 4 E2B "wrong-args" mode vs. saved-skills workaround.
 - Drafting-style toggle (architectural aesthetic, not just CAD output).
 - IFC4 export to a real BIM-compatible file.
 - The narrative beat: **CAD just stopped being a subscription.**

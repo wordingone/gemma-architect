@@ -9,17 +9,26 @@
 
 ## TL;DR
 
-Open a web page. Type `"a wall, 5.5m long, 0.2m thick, 2.8m tall"`.
-Watch a 3D wall render. Drag sliders to change the dimensions live.
-Click **Export IFC** and download a file that opens in Revit, ArchiCAD,
-BlenderBIM, or any other BIM tool on the planet.
+Open a web page. Type `"design a fire station"`.
+A keyword match triggers an 18-step dispatch sequence: apparatus bays,
+dormitory, kitchen, bathrooms, day room — rendered as a coherent
+multi-room 3D building. Click **Export IFC** and download a file that
+opens in Revit, ArchiCAD, BlenderBIM, or any other BIM tool on the planet.
 
-That is the whole demo. 60 cached Gemma 4 LoRA outputs ship with the
-page; sub-100ms F1 fuzzy match is the default judge experience. The
-geometry kernel and IFC4 emitter do run in-browser via WebAssembly. Live
-LoRA inference is opt-in: `src/serve/serve_lora.py` (FastAPI + Unsloth)
-serves a 4090-resident adapter on port 8088 when `window.__loraUrl` is
-set.
+Five reference skills ship with the page: fire station, SF residence 2BR,
+25-desk office, hospitality cabin, research pavilion. Each is a
+pre-verified dispatch sequence that bypasses model limitations entirely.
+**Bare Gemma 4 E2B without fine-tuning emits correct verb names but
+ignores dimensional args (K=0 "wrong-args" mode).** The saved-skills
+library executes pre-baked verified sequences instead — the model gets
+out of the way, the geometry is correct.
+
+60 cached Gemma 4 LoRA outputs back the single-element prompt path;
+sub-100ms F1 fuzzy match is the default judge experience for one-liner
+prompts. The geometry kernel and IFC4 emitter run in-browser via
+WebAssembly. Live LoRA inference is opt-in: `src/serve/serve_lora.py`
+(FastAPI + Unsloth) serves a 4090-resident adapter on port 8088 when
+`window.__loraUrl` is set.
 
 The goal is to put parametric architectural design — the kind of tool you
 draw a building in before you build it — in front of people who can't
@@ -37,43 +46,46 @@ four tabs (PROMPT / NODES / PARAMETERS / HISTORY), 3D viewer in the
 center. The **PROMPT** tab hosts both natural-language input and a
 DSL console; **Shift+Tab** toggles between modes (PROMPT ⇄ CONSOLE).
 
-1. They open the **PROMPT** tab. A chip strip lists the canned demos.
-   They click `"Wall · 5.5×0.2×2.8m"`.
-2. The natural-language prompt fills the textarea; an F1-weighted fuzzy
-   match against 60 cached LoRA eval rows returns the closest replicad
-   source into a JS source pane. Either is editable. Live LoRA inference
-   is opt-in via `window.__loraUrl`. The PROMPT tab's inline console
-   logs `[ai-generate] cache · X.XX match · ~50ms`.
-3. They click **GENERATE** (or hit `⌘⏎`). A web worker boots
+1. They open the **PROMPT** tab. They type `"design a fire station"` and
+   hit `⌘⏎`. The page keyword-matches against the saved-skills library
+   and finds the `fire-station` skill (18 steps). The dispatch sequence
+   fires in order: IfcLevel → IfcSlab → 4×IfcWall → 3 apparatus bays →
+   crew spaces (kitchen, bathrooms, dormitory, day room) → garage doors.
+   three.js renders a complete multi-room building.
+2. They press `D` for drafting style — same geometry, ink-wobble
+   architectural render. They click **EXPORT** → **IFC4**. The page
+   hand-emits an IFC4 STEP-21 file and downloads it.
+
+That is the hero path. Five reference skills ship on master
+(f28dfa8): `fire-station`, `sf-residence-2br`, `office-25desk`,
+`hospitality-cabin`, `research-pavilion`. Each is a schema-version-2
+`skill.json` — an array of `{verb, args}` steps, keyword-indexed,
+dispatched directly without model inference.
+
+For single-element prompts that don't match a skill:
+
+3. The PROMPT tab also accepts one-liner prompts. A chip strip lists
+   canned demos. They click `"Wall · 5.5×0.2×2.8m"`. An F1-weighted
+   fuzzy match against 60 cached LoRA eval rows returns the closest
+   replicad source. The PROMPT tab's inline console logs
+   `[ai-generate] cache · X.XX match · ~50ms`.
+4. They click **GENERATE** (or hit `⌘⏎`). A web worker boots
    OpenCascade WebAssembly (replicad-opencascadejs), executes the
    source against the same Tier 1 tool surface the model was trained
-   on, and posts the resulting mesh back to the main thread. three.js
-   renders it in the viewer.
-4. They drag the **length** / **thickness** / **height** sliders in
-   the PARAMETERS tab. Each change debounces 90ms and re-runs the
-   worker — geometry updates live, no model re-inference needed.
-5. They click **EXPORT** (or hit `⌘E`). A drawer slides in offering
-   12 tiles in 3 sections — BIM·ARCHITECTURAL (IFC4, STEP, DWG),
-   3D·MESH (OBJ, STL, GLB, glTF, USDZ, FBX), 2D·DRAWING (SVG, DXF,
-   PDF). DWG and FBX are visible-but-not-yet-implemented. They pick
-   IFC4. The page hand-emits an IFC4 STEP-21 file (wrapping the mesh
-   in `IfcBuildingElementProxy` → `IfcFacetedBrep` → `IfcClosedShell`),
-   round-trips the bytes through web-ifc.OpenModel to verify the file
-   parses back, and downloads it.
+   on, and posts the resulting mesh back. three.js renders it.
+5. They drag **length** / **thickness** / **height** sliders in the
+   PARAMETERS tab. Each change debounces 90ms and re-runs the worker —
+   geometry updates live, no model re-inference needed.
 
-Nine demos ship in the page. Eight are picked from the held-out 40-row
-eval set (walls, columns, raised slabs, slabs with stair holes, walls
-with doorways, L-shape walls, four-walled rooms, stair-step structures).
-The ninth is a hero demo — the **Schultz Residence**: a single-story
-12×8m residence assembled from 14 replicad operations (multi-fuse + two
-boolean cuts for a doorway and a window). Each demo has 3–6 sliders that
-retrigger the worker.
+The same 12-tile EXPORT drawer (IFC4, STEP, OBJ, STL, GLB, glTF, USDZ,
+SVG, DXF, PDF — DWG and FBX visible-but-pending) serves both paths.
+Hand-emitted IFC4 STEP-21 round-trips through web-ifc.OpenModel for
+parse verification before download.
 
-A user can also **type their own prompt**. The textbox runs through a
-two-path AI pipeline (described under "AI prompt → geometry pipeline"
-below): cache-first for sub-100ms response on prompts close to the eval
-corpus, optional live LoRA inference when the user wants the actual
-model in the loop.
+Eight additional single-element demos ship from the held-out 40-row eval
+set (walls, columns, raised slabs, slabs with stair holes, walls with
+doorways, L-shape walls, four-walled rooms, stair-step structures). Each
+has 3–6 sliders that retrigger the worker.
 
 <!--
 At submission time, embed the 4×3 screenshot grid here. The grid is
@@ -87,23 +99,28 @@ Leave commented out until the PNG exists — Kaggle does not gracefully
 hide broken image refs.
 -->
 
-### Beyond prompt-to-geometry: three other input paths
+### Beyond prompt-to-geometry: three other entry points
 
 A non-CAD user has more than one way to start a building. The same
-worker → kernel → IFC pipeline accepts three other entry points:
+dispatch → kernel → IFC pipeline accepts three other entry points:
 
+- **Saved-skill dispatch.** Type a building type — `"design a fire
+  station"`, `"two-bedroom residence"`, `"25-desk open office"`. The
+  page keyword-matches the SKILL NODES library and fires a
+  pre-verified dispatch sequence directly. No model inference on this
+  path. Five reference skills ship on master (f28dfa8); users can
+  save their own via the SKILL NODES tab. Each skill is a
+  schema-version-2 `skill.json` with a `steps` array of `{verb, args}`
+  pairs validated against `web/skills/skills.schema.json`. This path
+  exists specifically because bare Gemma 4 E2B at K=0 ignores
+  dimensional args — saved skills route around that limitation by
+  executing verified sequences directly.
 - **Drag a hand-sketched floorplan PNG into the canvas.** A 2D→3D
   reconstruction agent runs Sobel edge detection + a Hough-lite
   pixel-run scanner, finds horizontal and vertical wall segments at a
   default 100 px/m scale, extrudes them at 2.8m, and emits IFC4. A
   pencil sketch becomes a loadable BIM file in one drop. Zero deps —
   Sobel and the Hough loop both ship as in-line OffscreenCanvas code.
-- **Multimodal agent path (in-progress).** The architecture wires
-  Gemma 4 multimodal function-calling to the same dispatch table
-  (`web/src/agent-harness.ts`), but dispatch handlers for geometry ops
-  are not yet registered — `makeWall`, `makeSlab`, etc. resolve to
-  `NoHandler` today. This is the next integration milestone (T6 + T11
-  in `silly-baking-yeti.md`).
 - **Type DSL in the PROMPT tab's CONSOLE mode** (Shift+Tab to toggle
   from natural-language PROMPT mode). A copyright-safe Rhino-style
   lexicon (~70 verbs hand-curated against IFC4 entity classes,
@@ -116,9 +133,8 @@ The implication: gemma-architect treats Gemma 4 not as a single
 prompt-completion endpoint but as a **routing function** over a
 dispatch table that's also exposed to human keystrokes, drag-drop, and
 clicks. Judges who score on tech depth will find this in
-`web/src/dispatch.ts`. The dispatch infrastructure is complete; handler
-registration for geometry ops (`makeWall`, `makeSlab`, etc.) is the
-open integration milestone that closes the human ↔ agent symmetry.
+`web/src/dispatch.ts`. The saved-skills library complements the
+AI-inference path rather than depending on it.
 
 ---
 
@@ -346,7 +362,9 @@ bun scripts/web-self-harness.ts
 
 - **GitHub repo**: `github.com/wordingone/gemma-architect` — Apache-2.0,
   full source, 18-day plan in `docs/plan-18-day.md`, training scripts in
-  `src/train/`, web app in `web/`.
+  `src/train/`, web app in `web/`. Five reference saved-skills at
+  `web/skills/` (fire-station, sf-residence-2br, office-25desk,
+  hospitality-cabin, research-pavilion — merged at f28dfa8).
 - **Hugging Face Hub adapter**: `gemma-architect/cad-lora-v2` is the
   intended path (LoRA on `gemma-4-E2B-it-unsloth-bnb-4bit`, Apache-2.0,
   model card with eval numbers + intended-use + limitations). Push is
@@ -363,6 +381,18 @@ bun scripts/web-self-harness.ts
 ## Limitations
 
 Honest about scope:
+
+- **Bare Gemma 4 E2B ignores dimensional args at K=0.** Without the LoRA
+  adapter loaded, the model emits correct verb names but produces
+  dimensionally incorrect sequences — walls come out at wrong sizes,
+  columns appear at wrong positions. This is "wrong-args" mode, not
+  hallucination. Two paths mitigate: (1) the LoRA-fine-tuned adapter
+  (`cad-lora-v2`) corrects arg handling and scores 100% runtime_pass on
+  the held-out eval; (2) the saved-skills library bypasses model inference
+  entirely for building-type queries, executing pre-baked verified sequences.
+  Judges who run the page without the LoRA adapter will see this limitation
+  on custom single-element prompts (the cache covers the 60 bundled examples
+  correctly regardless).
 
 - **Tier 1 vocabulary only** — schematic-design primitives. A user finishing
   a real project hands the IFC export to a CAD-trained collaborator for
