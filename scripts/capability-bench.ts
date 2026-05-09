@@ -149,6 +149,10 @@ async function ensureChatMode(): Promise<void> {
 
 async function sendChatPrompt(text: string): Promise<void> {
   // Use React-compatible value setter so the chat textarea's onChange fires.
+  // Guard against null el: if .chat-input is absent (e.g. mode is "console"),
+  // throw a clear error rather than the cryptic "Illegal invocation" from setter.call(null, …).
+  const elFound = await evaluate("!!document.querySelector('.chat-input')") as boolean;
+  if (!elFound) throw new Error("chat-input not found — mode may not be 'prompt'; call ensureChatMode() first");
   await evaluate(`
     (function() {
       const el = document.querySelector('.chat-input');
@@ -713,6 +717,9 @@ async function main() {
       // Clear geometry from previous run (no page reload — preserves GPU/ONNX state).
       console.log("  clearing scene...");
       await clearScene();
+
+      // Re-ensure chat mode per prompt — mode may reset to "console" after an agent error/timeout.
+      await ensureChatMode();
 
       console.log("  sending prompt...");
       await sendChatPrompt(p.prompt);
