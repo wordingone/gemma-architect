@@ -652,6 +652,19 @@ async function main() {
       console.log("Model ready.");
     }
 
+    // P10-1: Refuse to bench without remote inference — prevents in-browser WebGPU
+    // from exhausting VRAM and crashing the OS. Start dev server with
+    // VITE_GEMMA_AGENT_URL=http://localhost:8088 and verify serve_base.py is up.
+    const finalBadge = await evaluate("document.getElementById('ai-model-badge')?.textContent?.trim() ?? ''") as string;
+    if (!finalBadge.toUpperCase().includes("REMOTE")) {
+      throw new Error(
+        `Bench refused: model is running in-browser WebGPU (badge: "${finalBadge}"). ` +
+        "Start the dev server with VITE_GEMMA_AGENT_URL=http://localhost:8088 and ensure " +
+        "serve_base.py (or serve_lora.py) is running on that port before benching."
+      );
+    }
+    console.log("Remote inference confirmed — safe to bench.");
+
     // Ensure chat mode is active for the whole bench run.
     await ensureChatMode();
   }
