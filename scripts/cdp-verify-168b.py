@@ -5,7 +5,7 @@ import json, time, datetime, urllib.request, websocket, sys, os
 CDP_HOST = "http://localhost:9222"
 DEV_URL = "http://localhost:5175/"
 OUT_DIR = "B:/M/gemma-architect-master/state"
-SHA = "2b470e3"
+SHA = "4003c9a"
 
 def cdp_get_tabs():
     resp = urllib.request.urlopen(f"{CDP_HOST}/json", timeout=5)
