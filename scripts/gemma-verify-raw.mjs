@@ -64,6 +64,7 @@ await send("Page.enable");
 
 async function evaluate(expression, returnByValue = true) {
   const res = await send("Runtime.evaluate", { expression, returnByValue, awaitPromise: true });
+  if (res?.result?.exceptionDetails) return null; // expression threw — callers must null-check
   return res?.result?.result?.value;
 }
 
@@ -295,23 +296,28 @@ function record(name, passed, evidence) {
   ];
   const r = await evaluate(`
     (async () => {
-      const verbs = ${JSON.stringify(verbs)};
-      const input = document.querySelector("#console-input");
-      if (!input) return { passed: false, evidence: { reason: "no #console-input" } };
-      const failedVerbs = [];
-      for (const v of verbs) {
-        const before = document.querySelector("#console-history")?.children.length ?? 0;
-        input.value = v;
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
-        await new Promise(r => setTimeout(r, 60));
-        const lines = [...document.querySelectorAll("#console-history .console-line")].slice(before).map(l => l.textContent);
-        if (lines.some(l => /unknown verb/i.test(l ?? ""))) failedVerbs.push({ verb: v, output: lines.join(" | ") });
+      try {
+        const verbs = ${JSON.stringify(verbs)};
+        const input = document.querySelector("#console-input");
+        if (!input) return { passed: false, evidence: { reason: "no #console-input" } };
+        const failedVerbs = [];
+        for (const v of verbs) {
+          const before = document.querySelector("#console-history")?.children.length ?? 0;
+          input.value = v;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
+          await new Promise(r => setTimeout(r, 60));
+          const lines = [...document.querySelectorAll("#console-history .console-line")].slice(before).map(l => l.textContent);
+          if (lines.some(l => /unknown verb/i.test(l ?? ""))) failedVerbs.push({ verb: v, output: lines.join(" | ") });
+        }
+        return { passed: failedVerbs.length === 0, evidence: { tested: verbs.length, failed_verbs: failedVerbs } };
+      } catch (e) {
+        return { passed: false, evidence: { reason: "caught: " + String(e) } };
       }
-      return { passed: failedVerbs.length === 0, evidence: { tested: verbs.length, failed_verbs: failedVerbs } };
     })()`);
-  record("console-vocab-coverage", r.passed, r.evidence);
+  if (!r) record("console-vocab-coverage", false, { reason: "evaluate returned null — expression threw or timed out" });
+  else record("console-vocab-coverage", r.passed, r.evidence);
 }
 
 // ── Surface 8: console-verb-produces-output ───────────────────────────────────
@@ -416,6 +422,46 @@ function record(name, passed, evidence) {
   record("layout-tab-functional", r.passed, r.evidence);
 }
 
+// ── Surface 10b: layout-mode-shell-intact (#199 regression) ──────────────────
+// Asserts: in layout mode, ribbon stays visible + paper-stage fills workbench.
+// Then exits to model mode and asserts ribbon is still present.
+{
+  // Already in layout mode from surface 10.
+  const r = await evaluate(`
+    (() => {
+      const ribbon = document.querySelector(".ribbon");
+      const paperStage = document.querySelector(".paper-stage");
+      const workbench = document.querySelector(".workbench");
+      if (!ribbon) return { passed: false, evidence: { reason: "ribbon element absent" } };
+      const ribbonRect = ribbon.getBoundingClientRect();
+      const ribbonVisible = ribbonRect.height > 0 && ribbonRect.width > 0 && ribbonRect.top >= 0 && ribbonRect.bottom <= window.innerHeight + ribbonRect.height;
+      const paperH = paperStage ? paperStage.clientHeight : 0;
+      const wbH = workbench ? workbench.clientHeight : 0;
+      // paper-stage should fill most of workbench (at least 80% after toolbar strip)
+      const stageFills = wbH > 0 && paperH > wbH * 0.7;
+      return { passed: ribbonVisible && stageFills,
+               evidence: { ribbonH: ribbonRect.height, ribbonTop: ribbonRect.top, ribbonVisible, paperH, wbH, stageFills } };
+    })()`);
+  // Exit layout mode — click the MODEL tab
+  await evaluate(`
+    (() => {
+      const modelTab = document.querySelector(".mode-tab[data-mode=model]");
+      if (modelTab) modelTab.click();
+    })()`);
+  await delay(500);
+  const ribbonAfterExit = await evaluate(`
+    (() => {
+      const ribbon = document.querySelector(".ribbon");
+      const wbMode = document.querySelector(".workbench")?.dataset?.mode ?? "";
+      if (!ribbon) return { passed: false, evidence: { reason: "ribbon absent after mode exit" } };
+      const rect = ribbon.getBoundingClientRect();
+      return { passed: rect.height > 0 && wbMode !== "layout",
+               evidence: { ribbonH: rect.height, workbenchMode: wbMode } };
+    })()`);
+  record("layout-mode-shell-intact", r.passed && ribbonAfterExit.passed,
+    { onEntry: r.evidence, onExit: ribbonAfterExit.evidence });
+}
+
 // ── Surface 11: ortho-grid-z-order ───────────────────────────────────────────
 {
   const r = await evaluate(`
@@ -443,7 +489,7 @@ const output = { sha, timestamp, attached_via_cdp: true, all_passed: allPassed, 
 writeFileSync(outFile, JSON.stringify(output, null, 2));
 
 console.log("");
-console.log(`${passCount}/11 surfaces passed — all_passed: ${allPassed}`);
+console.log(`${passCount}/${surfaces.length} surfaces passed — all_passed: ${allPassed}`);
 console.log(`attached_via_cdp: true`);
 console.log(`Output: ${outFile}`);
 

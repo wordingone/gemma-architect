@@ -179,7 +179,7 @@ html, body, #root {
   text-rendering: geometricPrecision;
 }
 
-html, body { background: var(--paper-base); }
+html, body { background: var(--paper-base); overflow: hidden; /* prevent body scroll; all scrolling is in sub-containers */ }
 
 /* PAPER TEXTURE + UI GRID — single layer, lives on body so it sits
    beneath everything and is reachable by panels' backdrop-filter. */

@@ -219,7 +219,12 @@ function appendArchCompSlider(tabsEl: HTMLElement) {
 }
 
 export function setRibbonMode(mode: "model" | "layout" | "research") {
-  if (!_ribbonTabsEl || !_ribbonToolsEl) return;
+  if (!_ribbonTabsEl || !_ribbonToolsEl) {
+    // Refs lost (HMR or race before buildRibbon ran). Re-query rather than silently drop.
+    _ribbonTabsEl  = document.querySelector(".ribbon-tabs")  as HTMLElement | null;
+    _ribbonToolsEl = document.querySelector(".ribbon-tools") as HTMLElement | null;
+    if (!_ribbonTabsEl || !_ribbonToolsEl) return;
+  }
   if (mode === "layout") {
     fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, LAYOUT_RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);

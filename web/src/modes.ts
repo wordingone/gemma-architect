@@ -430,4 +430,6 @@ export function activateMode(key: string, workbench: HTMLElement | null) {
   const showResearch = key === "research";
   if (paperEl)    paperEl.style.display    = showPaper    ? "" : "none";
   if (researchEl) researchEl.style.display = showResearch ? "" : "none";
+  // Reset any accidental body scroll so the ribbon/modebar are never off-screen.
+  window.scrollTo(0, 0);
 }
