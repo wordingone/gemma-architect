@@ -63,12 +63,10 @@ print('process alive:', str(pid) in result.stdout)
 ## Run gemma-verify against the shared window
 
 ```bash
-bun run verify:cdp
-# or with --isolated flag to force a fresh browser (CI mode, skips CDP):
-bun run verify:cdp -- --isolated
+bun run verify:raw
 ```
 
-The CDP runner (`scripts/gemma-verify-cdp.ts`) writes the same JSON as the SKILL.md skill:
+The raw CDP runner (`scripts/gemma-verify-raw.mjs`) writes the same JSON as the SKILL.md skill:
 ```
 B:/M/gemma-architect-master/state/gemma-verify-<sha>-<timestamp>.json
 { "sha": "...", "attached_via_cdp": true, "all_passed": true, "surfaces": [...] }
@@ -78,7 +76,7 @@ When `attached_via_cdp: true`, the JSON satisfies the gemma-verify-gate hook. Th
 
 ### Canonical tab
 
-In CDP mode the runner finds the existing tab whose URL starts with `http://localhost:5175/` and reuses it — it never opens a new tab. If no such tab exists the runner exits 2 with `BLOCKED: no canonical tab found`. The tab is never closed after the run; Jun's window and tab survive every `verify:cdp` invocation. To restore a closed canonical tab, run `stop.ps1` then `start.ps1`.
+In CDP mode the runner finds the existing tab whose URL starts with `http://localhost:5175/` and reuses it — it never opens a new tab. If no such tab exists the runner exits 2 with `BLOCKED: no canonical tab found`. The tab is never closed after the run; Jun's window and tab survive every `verify:raw` invocation. To restore a closed canonical tab, run `stop.ps1` then `start.ps1`.
 
 ---
 
@@ -148,7 +146,7 @@ The `gemma-verify-gate.sh` PreToolUse hook blocks `gh pr create` and `gh pr merg
 
 To run a PR gate in CI (no shared window):
 ```bash
-GEMMA_ISOLATED=1 bun run verify:cdp -- --isolated
+GEMMA_ISOLATED=1 bun run verify:raw
 gh pr create ...  # gate reads GEMMA_ISOLATED and skips cdp.json check
 ```
 

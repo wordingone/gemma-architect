@@ -18,7 +18,9 @@ import { execSync } from "child_process";
 
 // ── Connection ────────────────────────────────────────────────────────────────
 
-const DEV_URL   = process.env.GEMMA_DEV_URL ?? "http://localhost:5175/";
+const targetUrlIdx = process.argv.indexOf("--target-url");
+const DEV_URL   = targetUrlIdx !== -1 ? process.argv[targetUrlIdx + 1]
+                : (process.env.GEMMA_DEV_URL ?? "http://localhost:5175/");
 const STATE_DIR = `${process.cwd()}/state`;
 
 function getSHA() {

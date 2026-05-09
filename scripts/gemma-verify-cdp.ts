@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+// @deprecated — use gemma-verify-raw.mjs (no Playwright dep, raw CDP WS).
+// This file is kept for historical reference only. bun run verify:cdp exits 2.
+//
 // gemma-verify-cdp.ts — CDP-attach variant of the gemma-verify skill.
 //
 // When B:/M/gemma-architect-master/.shared-browser/cdp.json exists, connects to
