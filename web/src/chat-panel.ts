@@ -190,17 +190,23 @@ export class ChatPanel {
 
   private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; fired: string[] }> {
     const fired: string[] = [];
+    const errors: string[] = [];
     for (const d of resp.dispatches) {
       const out = await invokeCommand({
         command: d.verb,
         parameters: d.args,
         metadata: { source: "agent" },
       });
-      fired.push(out.status === "success" ? d.verb : `${d.verb}(err)`);
+      if (out.status === "success") {
+        fired.push(d.verb);
+      } else {
+        fired.push(`${d.verb}(err)`);
+        errors.push(out.summary ?? `Failed ${d.verb}.`);
+      }
     }
     const summary = resp.dispatches.length === 0
       ? (resp.text.trim() || "(no response)")
-      : buildDispatchSummary(resp.dispatches, fired);
+      : buildDispatchSummary(resp.dispatches, fired, errors);
     return { summary, fired };
   }
 

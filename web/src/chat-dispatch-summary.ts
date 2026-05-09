@@ -25,7 +25,7 @@ export const VERB_LABELS: Record<string, [string, string]> = {
   SdScale:        ["scale",        "scales"],
 };
 
-export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[]): string {
+export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[], errors: string[] = []): string {
   const counts = new Map<string, number>();
   for (let i = 0; i < dispatches.length; i++) {
     if (!fired[i].endsWith("(err)")) {
@@ -33,10 +33,13 @@ export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[
       counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
-  if (counts.size === 0) return "Nothing was built.";
-  const parts = [...counts.entries()].map(([v, n]) => {
-    const [sing, plur] = VERB_LABELS[v] ?? [v.toLowerCase(), v.toLowerCase() + "s"];
-    return `${n} ${n === 1 ? sing : plur}`;
-  });
-  return `Built: ${parts.join(", ")}.`;
+  const parts: string[] = [...errors];
+  if (counts.size > 0) {
+    const built = [...counts.entries()].map(([v, n]) => {
+      const [sing, plur] = VERB_LABELS[v] ?? [v.toLowerCase(), v.toLowerCase() + "s"];
+      return `${n} ${n === 1 ? sing : plur}`;
+    });
+    parts.push(`Built: ${built.join(", ")}.`);
+  }
+  return parts.length > 0 ? parts.join(" ") : "Nothing was built.";
 }
