@@ -711,6 +711,7 @@
 - canonical_name: setGridVisible
   ifc4_class: null
   kernel_op: setGridVisible
+  topology_role: system
   args:
     - {name: id,      type: string,  required: true,  description: "Grid id to toggle."}
     - {name: visible, type: boolean, required: true,  description: "True to show, false to hide."}
@@ -720,6 +721,7 @@
 - canonical_name: setGridSpacing
   ifc4_class: null
   kernel_op: setGridSpacing
+  topology_role: system
   args:
     - {name: id,      type: string, required: true,  description: "Grid id to update."}
     - {name: spacing, type: number, required: true,  unit: m, description: "New spacing in metres."}
@@ -729,6 +731,7 @@
 - canonical_name: setActiveGrid
   ifc4_class: null
   kernel_op: setActiveGrid
+  topology_role: system
   args:
     - {name: id, type: string, required: true, description: "Grid id to make active for snap."}
   synonyms: [activate grid, use grid, snap to grid]
