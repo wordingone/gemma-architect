@@ -1,5 +1,4 @@
-// layers.ts — Layer data model and in-memory store for Phase A (#168).
-// Phase B will add IndexedDB persistence and sidebar UI.
+// layers.ts — Layer data model and in-memory store (#168 Phase A+B).
 
 export type Layer = {
   id: string;
@@ -44,11 +43,23 @@ const CREATOR_LAYER_MAP: Record<string, string> = {
   SdText:         "Annotations",
 };
 
+type LayerListener = () => void;
+
 class LayerStore {
   private _layers: Map<string, Layer> = new Map();
+  private _listeners: Set<LayerListener> = new Set();
 
   constructor() {
     for (const l of BUILTIN_LAYERS) this._layers.set(l.id, { ...l });
+  }
+
+  subscribe(fn: LayerListener): () => void {
+    this._listeners.add(fn);
+    return () => this._listeners.delete(fn);
+  }
+
+  private _notify(): void {
+    for (const fn of this._listeners) fn();
   }
 
   all(): Layer[] {
@@ -63,18 +74,22 @@ class LayerStore {
     const id = layer.id ?? `user/${Date.now()}`;
     const entry: Layer = { id, name: layer.name, visible: layer.visible ?? true, locked: layer.locked ?? false, color: layer.color ?? "#cccccc" };
     this._layers.set(id, entry);
+    this._notify();
     return entry;
   }
 
   remove(id: string): boolean {
-    if (id === DEFAULT_LAYER_ID) return false; // built-in, never deleted
-    return this._layers.delete(id);
+    if (id === DEFAULT_LAYER_ID) return false;
+    const ok = this._layers.delete(id);
+    if (ok) this._notify();
+    return ok;
   }
 
   setVisible(id: string, visible: boolean): boolean {
     const l = this._layers.get(id);
     if (!l) return false;
     l.visible = visible;
+    this._notify();
     return true;
   }
 
@@ -82,6 +97,7 @@ class LayerStore {
     const l = this._layers.get(id);
     if (!l) return false;
     l.locked = locked;
+    this._notify();
     return true;
   }
 
@@ -89,6 +105,7 @@ class LayerStore {
     const l = this._layers.get(id);
     if (!l) return false;
     l.color = color;
+    this._notify();
     return true;
   }
 }

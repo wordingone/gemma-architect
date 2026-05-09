@@ -12,6 +12,8 @@
 // intact so main.ts wiring (run button, file picker, sample selector, etc.)
 // keeps working without changes.
 
+import { layerStore, type Layer, DEFAULT_LAYER_ID } from "./layers";
+import { Viewer } from "./viewer/viewer";
 import { iconSVG, axesGizmoSVG } from "./icons";
 import {
   setRenderMode, setLineType, setLineWeight, getRenderMode, getLineType, getLineWeight,
@@ -151,6 +153,7 @@ const SIDEBAR_TABS: SidebarTab[] = [
   { id: "inspect", label: "INSPECT" },
   { id: "assets",  label: "ASSETS" },
   { id: "levels",  label: "LEVELS" },
+  { id: "layers",  label: "LAYERS" },
 ];
 
 const SAMPLE_ASSETS = [
@@ -556,6 +559,132 @@ function buildLevelsTab(): HTMLElement {
   // Re-render on levelStore changes (active level switch, visibility toggle, new level added).
   levelStore.subscribe(render);
 
+function buildLayersTab(): HTMLElement {
+  const wrap = el("div", "tab-body layers-tab");
+
+  const header = el("div", "layers-header");
+  header.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 6px;";
+  const title = el("div");
+  title.style.cssText = "font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
+  title.textContent = "BUILDING LAYERS";
+  const addBtn = el("button");
+  addBtn.style.cssText = "font-size:11px; background:none; border:1px solid var(--hairline); border-radius:3px; color:var(--ink); cursor:pointer; padding:1px 6px; line-height:16px;";
+  addBtn.textContent = "+";
+  addBtn.title = "New layer";
+  header.appendChild(title);
+  header.appendChild(addBtn);
+  wrap.appendChild(header);
+
+  const list = el("div", "layer-list");
+  wrap.appendChild(list);
+
+  function getViewer(): Viewer | undefined {
+    return (window as unknown as { __viewer?: Viewer }).__viewer;
+  }
+
+  function applyVisibility(layerId: string, visible: boolean): void {
+    const v = getViewer();
+    if (!v) return;
+    v.getScene().children.forEach((obj) => {
+      if ((obj as THREE.Object3D & { userData: Record<string, unknown> }).userData?.layerId === layerId) {
+        obj.visible = visible;
+      }
+    });
+  }
+
+  function applyColor(layerId: string, hex: string): void {
+    const v = getViewer();
+    if (!v) return;
+    const color = new THREE.Color(hex);
+    v.getScene().traverse((obj) => {
+      if ((obj as THREE.Object3D & { userData: Record<string, unknown> }).userData?.layerId === layerId) {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.isMesh && mesh.material) {
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const m of mats) {
+            if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+              (m as THREE.MeshStandardMaterial).color.set(color);
+              (m as THREE.MeshStandardMaterial).needsUpdate = true;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function renderList(): void {
+    list.innerHTML = "";
+    for (const layer of layerStore.all()) {
+      const row = el("div", "layer-row", { "data-layer-id": layer.id });
+      row.style.cssText = "display:flex; align-items:center; gap:4px; padding:3px 2px; border-bottom:1px solid var(--hairline); min-height:26px;";
+
+      // Eye toggle
+      const eyeBtn = el("button");
+      eyeBtn.style.cssText = "background:none; border:none; cursor:pointer; color:var(--ink); opacity:" + (layer.visible ? "1" : "0.35") + "; padding:0 2px; flex-shrink:0;";
+      eyeBtn.title = layer.visible ? "Hide layer" : "Show layer";
+      eyeBtn.innerHTML = layer.visible
+        ? `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor"/><circle cx="6.5" cy="4.5" r="1.5" fill="currentColor"/></svg>`
+        : `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor" stroke-dasharray="2 1"/></svg>`;
+      eyeBtn.addEventListener("click", () => {
+        layerStore.setVisible(layer.id, !layer.visible);
+        applyVisibility(layer.id, !layer.visible);
+      });
+
+      // Lock toggle
+      const lockBtn = el("button");
+      lockBtn.style.cssText = "background:none; border:none; cursor:pointer; color:var(--ink); opacity:" + (layer.locked ? "1" : "0.35") + "; padding:0 2px; flex-shrink:0;";
+      lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
+      lockBtn.innerHTML = layer.locked
+        ? `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`
+        : `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor" stroke-dasharray="2 1"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`;
+      lockBtn.addEventListener("click", () => {
+        layerStore.setLocked(layer.id, !layer.locked);
+      });
+
+      // Color swatch
+      const colorInput = document.createElement("input");
+      colorInput.type = "color";
+      colorInput.value = layer.color;
+      colorInput.style.cssText = "width:14px; height:14px; border:none; padding:0; cursor:pointer; flex-shrink:0; border-radius:2px;";
+      colorInput.title = "Layer color";
+      colorInput.addEventListener("change", () => {
+        layerStore.setColor(layer.id, colorInput.value);
+        applyColor(layer.id, colorInput.value);
+      });
+
+      // Name
+      const nameEl = el("span");
+      nameEl.style.cssText = "flex:1; font-size:11px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:default;";
+      nameEl.textContent = layer.name;
+
+      // Delete button (disabled for built-in "0/Default")
+      const delBtn = el("button");
+      delBtn.style.cssText = "background:none; border:none; cursor:" + (layer.id === DEFAULT_LAYER_ID ? "default" : "pointer") + "; color:var(--ink-dim); opacity:" + (layer.id === DEFAULT_LAYER_ID ? "0.2" : "0.6") + "; padding:0 2px; flex-shrink:0; font-size:13px;";
+      delBtn.textContent = "×";
+      delBtn.title = layer.id === DEFAULT_LAYER_ID ? "Default layer cannot be deleted" : "Delete layer";
+      delBtn.disabled = layer.id === DEFAULT_LAYER_ID;
+      delBtn.addEventListener("click", () => {
+        if (layer.id === DEFAULT_LAYER_ID) return;
+        layerStore.remove(layer.id);
+      });
+
+      row.appendChild(eyeBtn);
+      row.appendChild(lockBtn);
+      row.appendChild(colorInput);
+      row.appendChild(nameEl);
+      row.appendChild(delBtn);
+      list.appendChild(row);
+    }
+  }
+
+  addBtn.addEventListener("click", () => {
+    const name = prompt("Layer name:");
+    if (!name?.trim()) return;
+    layerStore.add({ name: name.trim(), visible: true, locked: false, color: "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0") });
+  });
+
+  layerStore.subscribe(renderList);
+  renderList();
   return wrap;
 }
 
@@ -579,6 +708,7 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
       }
     }),
     levels:  buildLevelsTab(),
+    layers:  buildLayersTab(),
   };
 
   for (const t of SIDEBAR_TABS) {
