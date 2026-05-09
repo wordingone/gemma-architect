@@ -44,22 +44,27 @@ type _SkillJsonEntry = {
   keywords: string[];
   steps?: Array<{ verb: string; args: Record<string, unknown> }>;
 };
-const _SKILL_JSON_MODS = import.meta.glob<_SkillJsonEntry>(
+// Access .default for compatibility across Vite JSON module shapes.
+const _SKILL_JSON_MODS = import.meta.glob(
   "../skills/*/skill.json",
-  { eager: true, import: "default" },
-);
+  { eager: true },
+) as Record<string, { default: _SkillJsonEntry } | _SkillJsonEntry>;
 
 function _buildTimeSkills(): Skill[] {
-  return Object.values(_SKILL_JSON_MODS).map((json) => ({
-    name: json.name,
-    version: "0",
-    description: json.name.replace(/-/g, " "),
-    keywords: json.keywords,
-    examples: [],
-    eval_id: "",
-    body: "",
-    steps: json.steps,
-  }));
+  const skills = Object.values(_SKILL_JSON_MODS).map((mod) => {
+    const json = ("default" in mod ? mod.default : mod) as _SkillJsonEntry;
+    return {
+      name: json.name,
+      version: "0",
+      description: json.name.replace(/-/g, " "),
+      keywords: json.keywords,
+      examples: [],
+      eval_id: "",
+      body: "",
+      steps: json.steps,
+    };
+  });
+  return skills;
 }
 
 // Push a line into the in-page CONSOLE dock tab. The tab body lives in

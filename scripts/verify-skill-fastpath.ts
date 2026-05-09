@@ -9,14 +9,17 @@
 //
 // Saves receipt to: state/verify-skill-fastpath-<sha>-<ts>.json
 // Exit 0 = all_passed. Exit 1 = failed. Exit 2 = setup error.
+//
+// Uses an isolated headless browser against the :5183 dev server
+// (which serves gemma-architect/ on the current branch).
 
 import { chromium } from "playwright";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 
-const CDP_JSON  = "B:/M/gemma-architect-master/.shared-browser/cdp.json";
+// :5183 serves B:/M/gemma-architect/ (this repo). :5175 serves the master clone.
+const DEV_URL   = "http://localhost:5183/";
 const STATE_DIR = `${process.cwd()}/state`;
-const DEV_URL   = "http://localhost:5175/";
 
 function getSHA(): string {
   try {
@@ -29,26 +32,21 @@ const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(".", "")
 mkdirSync(STATE_DIR, { recursive: true });
 const outFile = `${STATE_DIR}/verify-skill-fastpath-${sha}-${timestamp}.json`;
 
-if (!existsSync(CDP_JSON)) {
-  console.error(`BLOCKED: ${CDP_JSON} not found. Start shared browser first.`);
+// Verify the dev server is up before launching Playwright
+try {
+  execSync(`curl -s --max-time 4 ${DEV_URL} -o nul`, { timeout: 6000 });
+} catch {
+  console.error(`BLOCKED: ${DEV_URL} not reachable. Start with: bun run web:dev -- --port 5183`);
   process.exit(2);
 }
-const { endpoint } = JSON.parse(readFileSync(CDP_JSON, "utf8").replace(/^﻿/, ""));
-const browser = await chromium.connectOverCDP(endpoint);
-const context = browser.contexts()[0] ?? await browser.newContext();
-console.log(`Connected via CDP: ${endpoint}`);
 
-const allPages = browser.contexts().flatMap(c => c.pages());
-const page = allPages.find(p => p.url().startsWith(DEV_URL));
-if (!page) {
-  console.error(`BLOCKED: no page at ${DEV_URL}`);
-  process.exit(2);
-}
-console.log(`Page: ${page.url()}`);
-
-// Reload to ensure HMR changes (workbench.ts setSkills wiring) are active.
-await page.goto(DEV_URL, { waitUntil: "load", timeout: 30000 });
+console.log(`Target: ${DEV_URL}`);
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext();
+const page = await context.newPage();
+await page.goto(DEV_URL, { waitUntil: "networkidle", timeout: 30000 });
 await page.waitForTimeout(3000); // wait for viewer + skill-store init
+console.log(`Page loaded: ${page.url()}`);
 
 type Check = { name: string; passed: boolean; evidence: unknown };
 const checks: Check[] = [];
@@ -58,6 +56,13 @@ function record(c: Check) {
   console.log(`  ${c.passed ? "✓" : "✗"} ${c.name}`);
   if (!c.passed) console.log("    evidence:", JSON.stringify(c.evidence).slice(0, 300));
 }
+
+// ── 0: Confirm debug globals set (verifies _buildTimeSkills ran) ──────────────
+const skillCount = await page.evaluate(() => (window as any).__debugSkillCount as number | undefined);
+const skillNames = await page.evaluate(() => (window as any).__debugSkillNames as string[] | undefined);
+console.log(`  _buildTimeSkills count: ${skillCount ?? "undefined"}`);
+if (skillNames) console.log(`  skills: ${skillNames.join(", ")}`);
+record({ name: "build-time-skills-loaded", passed: (skillCount ?? 0) > 0, evidence: { skillCount, skillNames } });
 
 // ── A: Ensure CREATE tab is visible in PROMPT mode ────────────────────────────
 const tabActivated = await page.evaluate(() => {
@@ -74,20 +79,19 @@ const tabActivated = await page.evaluate(() => {
 await page.waitForTimeout(300);
 record({ name: "chat-input-visible", passed: tabActivated, evidence: { tabActivated } });
 
-// ── B: Clear any previous chat history (hard-reload would break HMR state) ───
-await page.evaluate(() => {
-  const clearBtn = document.querySelector(".chat-clear-btn") as HTMLElement | null;
-  if (clearBtn) clearBtn.click();
-});
-await page.waitForTimeout(100);
+if (!tabActivated) {
+  console.error("Chat input not found — aborting");
+  await browser.close();
+  process.exit(1);
+}
 
-// ── C: Capture baseline scene children count ──────────────────────────────────
+// ── B: Baseline scene children count ──────────────────────────────────────────
 const beforeCount = await page.evaluate(() =>
   (window as any).__viewer?.scene?.children?.length ?? -1
 );
 console.log(`  Baseline scene children: ${beforeCount}`);
 
-// ── D: Type prompt and submit ─────────────────────────────────────────────────
+// ── C: Submit prompt ──────────────────────────────────────────────────────────
 await page.evaluate(() => {
   const input = document.querySelector(".chat-input") as HTMLTextAreaElement | null;
   if (!input) throw new Error("no .chat-input");
@@ -96,27 +100,23 @@ await page.evaluate(() => {
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
   input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
 });
-console.log("  Prompt submitted. Waiting for skill dispatch...");
+console.log("  Prompt submitted. Polling for scene growth...");
 
-// ── E: Poll until mesh count delta stabilises or timeout ─────────────────────
+// ── D: Poll until mesh count stabilises ───────────────────────────────────────
 let afterCount = beforeCount;
 for (let i = 0; i < 40; i++) {
   await page.waitForTimeout(200);
-  afterCount = await page.evaluate(() =>
-    (window as any).__viewer?.scene?.children?.length ?? -1
-  );
-  if (afterCount - beforeCount >= 15) break; // enough dispatches landed
+  afterCount = await page.evaluate(() => (window as any).__viewer?.scene?.children?.length ?? -1);
+  if (afterCount - beforeCount >= 15) break;
 }
-await page.waitForTimeout(600); // settle
-afterCount = await page.evaluate(() =>
-  (window as any).__viewer?.scene?.children?.length ?? -1
-);
+await page.waitForTimeout(800);
+afterCount = await page.evaluate(() => (window as any).__viewer?.scene?.children?.length ?? -1);
 const meshDelta = afterCount - beforeCount;
-console.log(`  After: ${afterCount} scene children (Δ=${meshDelta})`);
+console.log(`  After: ${afterCount} (Δ=${meshDelta})`);
 record({ name: "mesh-delta-ge-18", passed: meshDelta >= 18, evidence: { beforeCount, afterCount, meshDelta } });
 
-// ── F: Verify assistant message + dispatch pills ──────────────────────────────
-const msgEvidence = await page.evaluate(() => {
+// ── E: Last assistant message ─────────────────────────────────────────────────
+const msgEv = await page.evaluate(() => {
   const msgs = Array.from(document.querySelectorAll(".chat-msg-assistant:not(.chat-thinking)"));
   const last = msgs[msgs.length - 1] as HTMLElement | undefined;
   if (!last) return { found: false, pillCount: 0, hasError: false, content: "" };
@@ -127,33 +127,25 @@ const msgEvidence = await page.evaluate(() => {
     content: (last.querySelector(".chat-msg-content")?.textContent ?? "").slice(0, 200),
   };
 });
-record({ name: "assistant-msg-present", passed: msgEvidence.found, evidence: msgEvidence });
-record({ name: "dispatch-pills-present", passed: msgEvidence.pillCount >= 18, evidence: { pillCount: msgEvidence.pillCount } });
-record({ name: "no-chat-error", passed: !msgEvidence.hasError, evidence: msgEvidence });
+console.log("  Last msg:", JSON.stringify(msgEv));
+record({ name: "assistant-msg-present", passed: msgEv?.found, evidence: msgEv });
+record({ name: "dispatch-pills-ge-18", passed: (msgEv?.pillCount ?? 0) >= 18, evidence: { pillCount: msgEv?.pillCount } });
+record({ name: "no-chat-error", passed: !msgEv?.hasError, evidence: { hasError: msgEv?.hasError } });
 
-// ── G: Verify no model inference occurred (button re-enabled, no thinking el) ─
-const noSpinner = await page.evaluate(() => {
-  const thinking = document.querySelectorAll(".chat-thinking");
+// ── F: Send button re-enabled (not stuck waiting for model) ──────────────────
+const btnOk = await page.evaluate(() => {
   const btn = document.querySelector(".chat-send-btn") as HTMLButtonElement | null;
-  return { spinnerCount: thinking.length, btnDisabled: btn?.disabled ?? true };
+  const thinking = document.querySelectorAll(".chat-thinking");
+  return { btnDisabled: btn?.disabled ?? true, spinnerCount: thinking.length };
 });
-record({ name: "no-spinner-model-inference", passed: noSpinner.spinnerCount === 0 && !noSpinner.btnDisabled, evidence: noSpinner });
-
-// ── H: frameAllVisible fired (viewer has non-empty bounding box) ──────────────
-const viewerFramed = await page.evaluate(() => {
-  const v = (window as any).__viewer;
-  if (!v) return false;
-  const box = new (v.scene.constructor as any)();
-  return v.scene.children.length > 5;
-});
-record({ name: "viewer-has-geometry", passed: viewerFramed, evidence: { sceneChildren: afterCount } });
+record({ name: "send-btn-re-enabled", passed: !btnOk?.btnDisabled && btnOk?.spinnerCount === 0, evidence: btnOk });
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 const allPassed = checks.every(c => c.passed);
 const receipt = {
   sha,
   timestamp: new Date().toISOString(),
-  page_url: page.url(),
+  dev_url: DEV_URL,
   all_passed: allPassed,
   checks,
 };
