@@ -74,7 +74,7 @@ async function main() {
     return { filterInBody, snapInBody, scrollH, clientH, overflows: scrollH > clientH };
   })()`);
   const t2v = t2 as { error?: string; filterInBody?: boolean; snapInBody?: boolean; scrollH?: number; clientH?: number; overflows?: boolean };
-  const t2pass = !t2v.error && (t2v.filterInBody || t2v.snapInBody);
+  const t2pass = !t2v.error && (t2v.filterInBody === true || t2v.snapInBody === true);
   results.push({ name: "content-inside-body-1920", passed: t2pass, evidence: t2v });
   console.log("T2 content-inside-body-1920:", JSON.stringify(t2v));
 
