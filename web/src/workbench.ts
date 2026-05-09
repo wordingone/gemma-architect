@@ -558,6 +558,8 @@ function buildLevelsTab(): HTMLElement {
   render();
   // Re-render on levelStore changes (active level switch, visibility toggle, new level added).
   levelStore.subscribe(render);
+  return wrap;
+}
 
 function buildLayersTab(): HTMLElement {
   const wrap = el("div", "tab-body layers-tab");
@@ -658,7 +660,7 @@ function buildLayersTab(): HTMLElement {
       nameEl.textContent = layer.name;
 
       // Delete button (disabled for built-in "0/Default")
-      const delBtn = el("button");
+      const delBtn = el("button") as HTMLButtonElement;
       delBtn.style.cssText = "background:none; border:none; cursor:" + (layer.id === DEFAULT_LAYER_ID ? "default" : "pointer") + "; color:var(--ink-dim); opacity:" + (layer.id === DEFAULT_LAYER_ID ? "0.2" : "0.6") + "; padding:0 2px; flex-shrink:0; font-size:13px;";
       delBtn.textContent = "×";
       delBtn.title = layer.id === DEFAULT_LAYER_ID ? "Default layer cannot be deleted" : "Delete layer";
