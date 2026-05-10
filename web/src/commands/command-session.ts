@@ -43,6 +43,11 @@ let _seq = 0;
 
 const PRIMITIVE_CANONICALS = new Set(["SdPoint", "SdLine", "SdPolyline", "SdRectangle", "SdCircle"]);
 
+// IFC placement commands that collect clicks instead of requiring coordinates upfront.
+const IFC_PICKER_CANONICALS = new Set([
+  "IfcWall", "IfcSlab", "IfcColumn", "IfcDoor", "IfcWindow",
+]);
+
 function nextSessionId(): string {
   _seq += 1;
   return `cmd-${_seq}`;
@@ -173,6 +178,23 @@ function applyPrimitivePick(session: ActiveSession, point: [number, number]): vo
   }
 }
 
+function applyIfcPick(session: ActiveSession, point: [number, number]): void {
+  switch (session.canonical) {
+    case "IfcWall":
+    case "IfcSlab": {
+      const pts = (session.args.profile as [number, number][] | undefined) ?? [];
+      pts.push([point[0], point[1]]);
+      session.args.profile = pts;
+      break;
+    }
+    case "IfcColumn":
+    case "IfcDoor":
+    case "IfcWindow":
+      session.args.position = [point[0], point[1]];
+      break;
+  }
+}
+
 async function executeSession(session: ActiveSession): Promise<CommandSessionResult> {
   session.state = "execute";
   const dispatchArgs = { ...session.args };
@@ -241,7 +263,8 @@ export async function startCommandSession(envelope: CommandEnvelope): Promise<Co
   };
   _session = session;
 
-  if (missing.length > 0 && PRIMITIVE_CANONICALS.has(canonical)) {
+  const needsPicker = PRIMITIVE_CANONICALS.has(canonical) || IFC_PICKER_CANONICALS.has(canonical);
+  if (missing.length > 0 && needsPicker) {
     session.state = "collecting_args";
     return {
       status: "needs_input",
@@ -260,7 +283,11 @@ export async function provideSessionPick(point: [number, number]): Promise<Comma
   if (!_session) {
     return { status: "error", state: "idle", summary: "No active command session." };
   }
-  applyPrimitivePick(_session, point);
+  if (PRIMITIVE_CANONICALS.has(_session.canonical)) {
+    applyPrimitivePick(_session, point);
+  } else if (IFC_PICKER_CANONICALS.has(_session.canonical)) {
+    applyIfcPick(_session, point);
+  }
   const missing = missingArgs(_session.entry, _session.args);
   if (_session.canonical === "SdPolyline") {
     const pts = (_session.args.points as number[][] | undefined) ?? [];
@@ -274,6 +301,39 @@ export async function provideSessionPick(point: [number, number]): Promise<Comma
         summary: `Waiting for SdPolyline: points (${pts.length}/2+).`,
       };
     }
+  } else if (_session.canonical === "IfcWall") {
+    const pts = (_session.args.profile as [number, number][] | undefined) ?? [];
+    if (pts.length < 2) {
+      return {
+        status: "needs_input",
+        state: "collecting_args",
+        canonical: "IfcWall",
+        missing: [],
+        resolvedArgs: { ..._session.args },
+        summary: `Click second point of wall (${pts.length}/2).`,
+      };
+    }
+  } else if (_session.canonical === "IfcSlab") {
+    const pts = (_session.args.profile as [number, number][] | undefined) ?? [];
+    if (pts.length < 3) {
+      return {
+        status: "needs_input",
+        state: "collecting_args",
+        canonical: "IfcSlab",
+        missing: [],
+        resolvedArgs: { ..._session.args },
+        summary: `Click corner ${pts.length + 1} of slab (${pts.length}/3 minimum).`,
+      };
+    }
+    // ≥3 points: stay collecting until Enter commits
+    return {
+      status: "needs_input",
+      state: "collecting_args",
+      canonical: "IfcSlab",
+      missing: [],
+      resolvedArgs: { ..._session.args },
+      summary: `${pts.length} corners — press Enter to place slab.`,
+    };
   } else if (missing.length > 0) {
     return {
       status: "needs_input",
@@ -283,6 +343,16 @@ export async function provideSessionPick(point: [number, number]): Promise<Comma
       resolvedArgs: { ..._session.args },
       summary: buildSummary(_session.canonical, _session.args, "needs_input", missing),
     };
+  }
+  _session.state = "ready";
+  return executeSession(_session);
+}
+
+export async function commitCommandSession(): Promise<CommandSessionResult | null> {
+  if (!_session || _session.state !== "collecting_args") return null;
+  if (_session.canonical === "IfcSlab") {
+    const pts = (_session.args.profile as [number, number][] | undefined) ?? [];
+    if (pts.length < 3) return null;
   }
   _session.state = "ready";
   return executeSession(_session);

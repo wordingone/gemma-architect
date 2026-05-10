@@ -8,6 +8,8 @@ import { saveProjectJson } from "./shell";
 import { runAgentTurn } from "./agent/agent-harness";
 import { dispatch, dispatchSync } from "./commands/dispatch";
 import { setConsoleMode } from "./workbench";
+import { startCommandSession } from "./commands/command-session";
+import { setPickerHint } from "./viewer/create-mode";
 
 type Cmd = {
   group: "GENERATE" | "MODEL" | "VIEW" | "FILE";
@@ -16,6 +18,12 @@ type Cmd = {
   kbd: string;
   run: () => void;
 };
+
+function startPicker(verb: string): void {
+  void startCommandSession({ command: verb, parameters: {}, metadata: { source: "palette" } }).then((r) => {
+    if (r.status === "needs_input") setPickerHint(r.summary ?? "Click in viewport to place");
+  });
+}
 
 function clickById(id: string) {
   const el = document.getElementById(id);
@@ -61,12 +69,17 @@ const ALL_CMDS: Cmd[] = [
       }).catch((e) => console.error("[agent]", e));
     },
   },
-  { group: "MODEL",    icon: "wall",     label: "New wall",                 kbd: "W",   run: () => selectDemoIndex(0) },
-  { group: "MODEL",    icon: "slab",     label: "New slab (raised)",        kbd: "S",   run: () => selectDemoIndex(2) },
-  { group: "MODEL",    icon: "column",   label: "New column",               kbd: "C",   run: () => selectDemoIndex(1) },
-  { group: "MODEL",    icon: "extrude",  label: "Slab with stair hole",     kbd: "E",   run: () => selectDemoIndex(3) },
-  { group: "MODEL",    icon: "wall",     label: "L-shape walls",            kbd: "L",   run: () => selectDemoIndex(5) },
-  { group: "MODEL",    icon: "wall",     label: "Schultz Residence (14 elements)", kbd: "R",   run: () => selectDemoIndex(8) },
+  { group: "MODEL",    icon: "wall",     label: "IfcWall — place wall",              kbd: "",   run: () => startPicker("IfcWall") },
+  { group: "MODEL",    icon: "slab",     label: "IfcSlab — place slab",              kbd: "",   run: () => startPicker("IfcSlab") },
+  { group: "MODEL",    icon: "column",   label: "IfcColumn — place column",          kbd: "",   run: () => startPicker("IfcColumn") },
+  { group: "MODEL",    icon: "wall",     label: "IfcDoor — place door",              kbd: "",   run: () => startPicker("IfcDoor") },
+  { group: "MODEL",    icon: "wall",     label: "IfcWindow — place window",          kbd: "",   run: () => startPicker("IfcWindow") },
+  { group: "MODEL",    icon: "wall",     label: "New wall (demo prompt)",            kbd: "W",  run: () => selectDemoIndex(0) },
+  { group: "MODEL",    icon: "slab",     label: "New slab (raised, demo)",           kbd: "S",  run: () => selectDemoIndex(2) },
+  { group: "MODEL",    icon: "column",   label: "New column (demo)",                 kbd: "C",  run: () => selectDemoIndex(1) },
+  { group: "MODEL",    icon: "extrude",  label: "Slab with stair hole",              kbd: "E",  run: () => selectDemoIndex(3) },
+  { group: "MODEL",    icon: "wall",     label: "L-shape walls",                     kbd: "L",  run: () => selectDemoIndex(5) },
+  { group: "MODEL",    icon: "wall",     label: "Schultz Residence (14 elements)",   kbd: "R",  run: () => selectDemoIndex(8) },
   { group: "VIEW", icon: "graph", label: "View → Top",         kbd: "", run: () => { dispatchSync("SdSetViewOrtho", { view: "top" }); } },
   { group: "VIEW", icon: "graph", label: "View → Front",       kbd: "", run: () => { dispatchSync("SdSetViewOrtho", { view: "front" }); } },
   { group: "VIEW", icon: "graph", label: "View → Right",       kbd: "", run: () => { dispatchSync("SdSetViewOrtho", { view: "right" }); } },

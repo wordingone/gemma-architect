@@ -24,6 +24,7 @@ import { ChatPanel } from "./chat-panel";
 import { compileDsl } from "./commands/dsl-eval";
 import { dispatchSync, type DispatchArgs } from "./commands/dispatch";
 import { startCommandSession } from "./commands/command-session";
+import { setPickerHint } from "./viewer/create-mode";
 import { setState, subscribe as subscribeAppState, type ViewName } from "./app-state";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./viewer/snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
@@ -1217,12 +1218,16 @@ function buildConsoleInner(): HTMLElement {
               dispArgs[k] = Number.isFinite(n) ? n : v;
             }
           }
-          const dr = dispatchSync(verb, dispArgs);
-          if (!dr.ok && dr.error === "ArgValidationError") {
-            const sr = await startCommandSession({ command: verb, parameters: dispArgs });
-            const hint = sr.status === "needs_input" ? sr.summary : null;
-            pushLine("info", `${verb} → needs_input${hint ? ": " + hint : ""}`);
+          const sr = await startCommandSession({ command: verb, parameters: dispArgs, metadata: { source: "console" } });
+          if (sr.status === "needs_input") {
+            setPickerHint(sr.summary ?? "Click in viewport to place");
+            pushLine("info", `${verb} → ${sr.summary ?? "needs_input"}`);
+          } else if (sr.status === "success") {
+            setPickerHint(null);
+            pushLine("ok", `dispatch ${verb} → ok`);
           } else {
+            // Not in dictionary — fall back to dispatchSync (e.g. setActiveTool)
+            const dr = dispatchSync(verb, dispArgs);
             pushLine(
               dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
               `dispatch ${verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
@@ -1237,12 +1242,15 @@ function buildConsoleInner(): HTMLElement {
         }
         if (c.dispatches && c.dispatches.length > 0) {
           for (const d of c.dispatches) {
-            const dr = dispatchSync(d.verb, d.args);
-            if (!dr.ok && dr.error === "ArgValidationError") {
-              const sr = await startCommandSession({ command: d.verb, parameters: d.args });
-              const hint = sr.status === "needs_input" ? sr.summary : null;
-              pushLine("info", `${d.verb} → needs_input${hint ? ": " + hint : ""}`);
+            const sr = await startCommandSession({ command: d.verb, parameters: d.args, metadata: { source: "console" } });
+            if (sr.status === "needs_input") {
+              setPickerHint(sr.summary ?? "Click in viewport to place");
+              pushLine("info", `${d.verb} → ${sr.summary ?? "needs_input"}`);
+            } else if (sr.status === "success") {
+              setPickerHint(null);
+              pushLine("ok", `dispatch ${d.verb} → ok`);
             } else {
+              const dr = dispatchSync(d.verb, d.args);
               pushLine(
                 dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
                 `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,

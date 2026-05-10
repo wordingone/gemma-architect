@@ -457,7 +457,7 @@
   ifc4_class: IfcWall
   kernel_op: makeWall
   args:
-    - {name: profile,   type: polyline, required: false}
+    - {name: profile,   type: polyline, required: true}
     - {name: length,    type: number,   required: false, unit: m, default: 4.0}
     - {name: thickness, type: number,   required: false, unit: m, default: 0.2}
     - {name: height,    type: number,   required: false, unit: m, default: 3.0}
@@ -490,8 +490,8 @@
   kernel_op: makeColumn
   args:
     - {name: position, type: point3, required: true}
-    - {name: profile,  type: polyline_or_circle, required: true}
-    - {name: height,   type: number, required: true, unit: m, default: 4.0}
+    - {name: profile,  type: polyline_or_circle, required: false}
+    - {name: height,   type: number, required: false, unit: m, default: 4.0}
     - {name: level,    type: string, required: false, description: "Level ID or name."}
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
@@ -551,7 +551,7 @@
   kernel_op: makeDoor
   args:
     - {name: hostWall, type: solid,  required: false}
-    - {name: position, type: point3, required: false}
+    - {name: position, type: point3, required: true}
     - {name: width,    type: number, required: false, unit: m, default: 0.9}
     - {name: height,   type: number, required: false, unit: m, default: 2.1}
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
@@ -566,7 +566,7 @@
   kernel_op: makeWindow
   args:
     - {name: hostWall, type: solid,  required: false}
-    - {name: position, type: point3, required: false}
+    - {name: position, type: point3, required: true}
     - {name: width,    type: number, required: false, unit: m, default: 1.2}
     - {name: height,   type: number, required: false, unit: m, default: 1.4}
     - {name: sillH,    type: number, required: false, unit: m, default: 0.9}

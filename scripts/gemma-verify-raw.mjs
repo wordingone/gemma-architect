@@ -1366,6 +1366,53 @@ function record(name, passed, evidence) {
   }
 }
 
+// ── Surface 30: ifc-picker-activation (#326) ─────────────────────────────────
+// cmdk "IfcWall" Enter → picker-prompt.visible; session.state = collecting_args
+{
+  const r = await evaluate(`(async function() {
+    // Escape any prior state
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    await new Promise(r => setTimeout(r, 150));
+
+    // Open cmdk via Meta+K
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, ctrlKey: true, bubbles: true }));
+    await new Promise(r => setTimeout(r, 300));
+    const input = document.querySelector('.cmdk-input');
+    if (!input) return { passed: false, evidence: { reason: 'cmdk did not open — no .cmdk-input' } };
+
+    // Type "IfcWall"
+    input.value = 'IfcWall';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 150));
+
+    // Find the "IfcWall — place wall" row and click it
+    const rows = [...document.querySelectorAll('.cmdk-row')];
+    const wallRow = rows.find(r => r.textContent.includes('IfcWall') && r.textContent.includes('place wall'));
+    if (!wallRow) {
+      // Fall back: press Enter on first result
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+    } else {
+      wallRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+    await new Promise(r => setTimeout(r, 600));
+
+    // Check picker prompt visibility
+    const prompt = document.querySelector('.picker-prompt');
+    const visible = !!prompt && prompt.classList.contains('visible');
+    const promptText = prompt ? prompt.textContent.trim() : '';
+
+    // Clean up
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    await new Promise(r => setTimeout(r, 150));
+
+    return { passed: visible, evidence: { visible, promptText } };
+  })()`, true);
+  if (!r) record('ifc-picker-activation', false, { reason: 'evaluate returned null' });
+  else record('ifc-picker-activation', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

@@ -23,7 +23,7 @@ import { setState } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { snapPoint } from "./snap-state";
 import { pushAction } from "../history";
-import { getActiveCommandSession, provideSessionPick, clearCommandSession } from "../commands/command-session";
+import { getActiveCommandSession, provideSessionPick, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import { gridStore } from "../grids";
 import { levelStore } from "../levels";
 import { datumStore } from "../datums";
@@ -1124,6 +1124,9 @@ export function initCreateMode(viewer: Viewer): void {
     }
     if (ev.key === "Enter") {
       commitUnlimited(viewer);
+      void commitCommandSession().then((r) => {
+        if (r) setPickerHint(r.status === "needs_input" ? (r.summary ?? null) : null);
+      });
     }
   });
 
