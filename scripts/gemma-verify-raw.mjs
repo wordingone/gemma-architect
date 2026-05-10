@@ -1800,6 +1800,27 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('undo-roundtrip', r.passed, r.evidence);
 }
 
+// ── Surface 39: anthropic-key-absent (#385) ──────────────────────────────────
+// Regression lock: ANTHROPIC_API_KEY must never re-appear in parity-loop.ts.
+{
+  let foundInParityLoop = false;
+  try {
+    execSync('grep -q "ANTHROPIC" scripts/parity-loop.ts', { cwd: 'B:/M/gemma-architect', encoding: 'utf8' });
+    foundInParityLoop = true;  // grep exit 0 = found
+  } catch {
+    foundInParityLoop = false; // grep exit 1 = not found (correct)
+  }
+  let foundInJudge = false;
+  try {
+    execSync('grep -q "ANTHROPIC" web/test/capability/judge.ts', { cwd: 'B:/M/gemma-architect', encoding: 'utf8' });
+    foundInJudge = true;
+  } catch {
+    foundInJudge = false;
+  }
+  const passed = !foundInParityLoop && !foundInJudge;
+  record('anthropic-key-absent', passed, { found_in_parity_loop: foundInParityLoop, found_in_judge: foundInJudge });
+}
+
 } finally {
   await cleanup();
 }

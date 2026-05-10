@@ -13,11 +13,10 @@
 //   bun web/test/capability/judge.ts --ifc path/to/model.ifc --prompt sf-residence-2br
 //   bun web/test/capability/judge.ts --dry-run                # show questions, skip judge calls
 //
-// Judge model (first available wins):
+// Judge model:
 //   1. JUDGE_URL env var → OpenAI-compat /v1/chat/completions endpoint
 //      (serve_lora.py at localhost:8088 via P7 server-side MTP path)
-//   2. ANTHROPIC_API_KEY env var → claude-haiku-4-5 direct API call
-//   3. --dry-run flag → print questions only, skip model calls
+//   2. --dry-run flag → print questions only, skip model calls
 //
 // IFC source (first available wins per prompt):
 //   1. --ifc <path> flag (single IFC, must also pass --prompt)
@@ -44,7 +43,6 @@ const FILTER = argv.indexOf("--prompt") !== -1 ? argv[argv.indexOf("--prompt") +
 const IFC_OVERRIDE = argv.indexOf("--ifc") !== -1 ? argv[argv.indexOf("--ifc") + 1] : null;
 
 const JUDGE_URL = process.env.JUDGE_URL ?? "http://localhost:8088/v1/chat/completions";
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
 const MAX_IFC_CHARS = 48_000; // truncate large IFCs to keep within context
 const MAX_QUESTIONS = 5;
 
@@ -224,50 +222,14 @@ async function callJudgeOpenAI(ifcText: string, question: string): Promise<strin
   return (data.choices?.[0]?.message?.content ?? "").trim();
 }
 
-async function callJudgeAnthropic(ifcText: string, question: string): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 32,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `IFC:\n<ifc>\n${ifcText}\n</ifc>\n\nQuestion: ${question}`,
-        },
-      ],
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}: ${await res.text()}`);
-  const data = await res.json() as any;
-  return (data.content?.[0]?.text ?? "").trim();
-}
-
 async function callJudge(ifcText: string, question: string): Promise<string> {
   // Truncate IFC to fit in context window
   const text = ifcText.length > MAX_IFC_CHARS ? ifcText.slice(0, MAX_IFC_CHARS) + "\n...truncated" : ifcText;
-
-  // Try serve_lora.py (OpenAI-compat) first
   try {
     return await callJudgeOpenAI(text, question);
   } catch (e: any) {
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error(
-        `Judge endpoint unreachable (${e.message}) and ANTHROPIC_API_KEY not set. ` +
-        "Set JUDGE_URL (serve_lora.py at localhost:8088) or ANTHROPIC_API_KEY."
-      );
-    }
+    throw new Error(`Judge endpoint unreachable (${e.message}). Set JUDGE_URL to a running llama-server /v1/chat/completions.`);
   }
-
-  // Fallback: Anthropic claude-haiku
-  return await callJudgeAnthropic(text, question);
 }
 
 // ── IFC file resolution ───────────────────────────────────────────────────────
@@ -406,8 +368,7 @@ async function main() {
   console.log(`P8d round-trip judge — SHA ${sha}`);
   if (DRY_RUN) console.log("DRY-RUN: no judge model calls will be made");
   else {
-    const backend = ANTHROPIC_API_KEY ? "Anthropic (fallback)" : "";
-    console.log(`Judge: ${JUDGE_URL}${backend ? ` + ${backend}` : ""}`);
+    console.log(`Judge: ${JUDGE_URL}`);
   }
   console.log(`Prompts: ${prompts.length}\n`);
 
@@ -444,7 +405,7 @@ async function main() {
     ran_at: new Date().toISOString(),
     dry_run: DRY_RUN,
     judge_url: DRY_RUN ? null : JUDGE_URL,
-    judge_backend: DRY_RUN ? null : (ANTHROPIC_API_KEY ? "openai-compat+anthropic-fallback" : "openai-compat"),
+    judge_backend: DRY_RUN ? null : "openai-compat",
     prompts_judged: judged.length,
     total_questions: totalQ,
     total_pass: totalPass,

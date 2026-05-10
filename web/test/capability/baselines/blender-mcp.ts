@@ -167,27 +167,7 @@ async function generateBlenderPython(prompt: string, outputPath: string): Promis
     }
   }
 
-  // Anthropic fallback
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error("No JUDGE_URL and no ANTHROPIC_API_KEY — cannot generate Blender Python");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: MAX_TOKENS,
-      system: BLENDER_SYSTEM,
-      messages: [{ role: "user", content: userMsg }],
-    }),
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text().catch(() => "")}`);
-  const data = await res.json() as any;
-  return data.content?.[0]?.text ?? "";
+  throw new Error("JUDGE_URL endpoint unreachable and no fallback configured. Set JUDGE_URL to a running llama-server.");
 }
 
 // ─── Blender MCP execute ──────────────────────────────────────────────────────

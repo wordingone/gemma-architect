@@ -8,11 +8,10 @@
 // Usage:
 //   bun scripts/parity-loop.ts [--mock] [--max-iterations N]
 //
-//   --mock            Skips Anthropic API calls; uses synthetic scoring for dry-run testing.
+//   --mock            Use synthetic scoring (skips parity-score.mjs); cycles verbs deterministically.
 //   --max-iterations  Override safety cap from state file (default: 100).
 //
-// Environment:
-//   ANTHROPIC_API_KEY  Required unless --mock is set.
+// No external API keys required. Scorer: parity-score.mjs (deterministic JPEG bpp, no API).
 
 import { writeFileSync, readFileSync, appendFileSync, mkdirSync } from "fs";
 import { spawnSync } from "child_process";
@@ -25,7 +24,6 @@ const PARITY_STATE_PATH = "B:/M/avir/leo/state/parity-experiment.json";
 const ITERATIONS_JSONL  = "B:/M/avir/leo/state/parity-experiment-iterations.jsonl";
 const PARITY_BANK_DIR   = "B:/M/avir/leo/state/parity-bank";
 const PARITY_SCORER     = "B:/M/avir/infra/skills/visual-check/parity-score.mjs";
-const HAIKU_MODEL       = "claude-haiku-4-5-20251001";
 
 // ── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -55,12 +53,6 @@ const MAX_ITERATIONS   = maxIterOverride ?? (cfg.iteration_strategy.max_iteratio
 const TIER_LADDER      = [90, 95, 99];
 const _startTierIdx    = TIER_LADDER.findIndex(t => t >= (cfg.parity_threshold.current_tier ?? 90));
 const START_TIER_IDX   = _startTierIdx < 0 ? TIER_LADDER.length - 1 : _startTierIdx;
-
-const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
-if (!apiKey && !MOCK) {
-  console.error("ERROR: ANTHROPIC_API_KEY not set. Use --mock for dry-run or set the key.");
-  process.exit(2);
-}
 
 // ── CDP connection ────────────────────────────────────────────────────────────
 
@@ -132,8 +124,8 @@ function scoreViewport(vpPath: string): ScoreResult | null {
     return { score: Math.min(100, _mockCallN * 5), deltas: [] };
   }
   const r = spawnSync(
-    "bun", [PARITY_SCORER, refImagePath, vpPath],
-    { env: { ...process.env, ANTHROPIC_API_KEY: apiKey }, timeout: 90_000, encoding: "utf8" },
+    "node", [PARITY_SCORER, refImagePath, vpPath],
+    { timeout: 90_000, encoding: "utf8" },
   );
   if (r.status !== 0) {
     console.error(`parity-score failed: ${(r.stderr as string).slice(0, 200)}`);
@@ -149,67 +141,16 @@ interface Proposal { verb: string; args: Record<string, unknown>; rationale: str
 
 const MOCK_VERBS = ["IfcWall", "IfcSlab", "IfcColumn", "IfcDoor", "IfcWindow"];
 
-async function proposeDispatch(
-  vpPath: string,
-  lastDeltas: ScoreResult["deltas"],
-  lastAttempts: string[],
-): Promise<Proposal | null> {
-  if (MOCK) {
-    return {
-      verb: MOCK_VERBS[_mockCallN % MOCK_VERBS.length],
-      args: {},
-      rationale: `mock iteration ${_mockCallN}`,
-    };
-  }
-
-  const refB64 = readFileSync(refImagePath).toString("base64");
-  const vpB64  = readFileSync(vpPath).toString("base64");
-
-  const prompt = [
-    "You are a BIM modeling agent closing the gap between a reference building and a current viewport.",
-    "Available verbs: IfcWall(length,thickness,height), IfcSlab(width,depth,thickness), IfcColumn(size,height),",
-    "  IfcDoor(width,height), IfcWindow(width,height), IfcRoof(type,width,depth),",
-    "  SdMove(x,y,z), SdRotate(angle,axis), SdScale(factor).",
-    `Prior score deltas: ${JSON.stringify(lastDeltas)}.`,
-    `Last attempts: ${lastAttempts.slice(-3).join("; ")}.`,
-    "Propose ONE dispatch. Return JSON ONLY: {\"verb\":\"...\",\"args\":{...},\"rationale\":\"...\"}",
-  ].join("\n");
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: HAIKU_MODEL,
-      max_tokens: 256,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: "Reference building (target):" },
-          { type: "image", source: { type: "base64", media_type: "image/png", data: refB64 } },
-          { type: "text", text: "Current viewport:" },
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: vpB64 } },
-          { type: "text", text: prompt },
-        ],
-      }],
-    }),
-    signal: AbortSignal.timeout(60_000),
-  });
-
-  if (!res.ok) {
-    console.error(`Haiku API error ${res.status}: ${await res.text().catch(() => "")}`);
-    return null;
-  }
-
-  const data = await res.json() as { content?: Array<{ text?: string }> };
-  const text = data.content?.[0]?.text?.trim() ?? "";
-  try {
-    const m = text.match(/\{[\s\S]*\}/);
-    return m ? JSON.parse(m[0]) as Proposal : null;
-  } catch { return null; }
+function proposeDispatch(
+  _vpPath: string,
+  _lastDeltas: ScoreResult["deltas"],
+  _lastAttempts: string[],
+): Proposal {
+  return {
+    verb: MOCK_VERBS[_mockCallN % MOCK_VERBS.length],
+    args: {},
+    rationale: `deterministic cycle iteration ${_mockCallN}`,
+  };
 }
 
 // ── JSONL logger ──────────────────────────────────────────────────────────────
@@ -264,13 +205,7 @@ while (iterationN < MAX_ITERATIONS) {
   const scoreBefore = beforeResult?.score ?? currentScore;
 
   // 3. Propose dispatch
-  const proposal = await proposeDispatch(vpBefore, beforeResult?.deltas ?? [], lastAttempts);
-  if (!proposal) {
-    console.error("Could not get dispatch proposal — halting.");
-    log({ ts: new Date().toISOString(), iteration_n: iterationN, active_tier: activeTier, dispatches: [], delta_before: beforeResult, delta_after: null, haiku_description: "proposal failed", score: scoreBefore, action: "halt" });
-    haltReason = "proposal failed";
-    break;
-  }
+  const proposal = proposeDispatch(vpBefore, beforeResult?.deltas ?? [], lastAttempts);
   console.log(`  → ${proposal.verb} ${JSON.stringify(proposal.args)}: ${proposal.rationale}`);
 
   // 4. Execute dispatch
@@ -329,7 +264,7 @@ while (iterationN < MAX_ITERATIONS) {
     dispatches: [{ verb: proposal.verb, args: proposal.args, rationale: proposal.rationale }],
     delta_before: beforeResult,
     delta_after: afterResult,
-    haiku_description: proposal.rationale,
+    scorer_note: proposal.rationale,
     score: scoreAfter,
     action,
   });
@@ -340,14 +275,14 @@ while (iterationN < MAX_ITERATIONS) {
   if (consecutiveNonImprovements >= HALT_CONSECUTIVE) {
     haltReason = `${HALT_CONSECUTIVE} consecutive non-improvements`;
     console.log(`Halting: ${haltReason}.`);
-    log({ ts: new Date().toISOString(), iteration_n: iterationN, active_tier: activeTier, dispatches: [], delta_before: afterResult, delta_after: null, haiku_description: `halt: ${haltReason}`, score: currentScore, action: "halt" });
+    log({ ts: new Date().toISOString(), iteration_n: iterationN, active_tier: activeTier, dispatches: [], delta_before: afterResult, delta_after: null, scorer_note: `halt: ${haltReason}`, score: currentScore, action: "halt" });
     break;
   }
 }
 
 if (iterationN >= MAX_ITERATIONS && haltReason === "safety cap") {
   console.log(`Safety cap hit (${MAX_ITERATIONS} iterations).`);
-  log({ ts: new Date().toISOString(), iteration_n: MAX_ITERATIONS, active_tier: activeTier, dispatches: [], delta_before: null, delta_after: null, haiku_description: "halt: safety cap", score: currentScore, action: "halt" });
+  log({ ts: new Date().toISOString(), iteration_n: MAX_ITERATIONS, active_tier: activeTier, dispatches: [], delta_before: null, delta_after: null, scorer_note: "halt: safety cap", score: currentScore, action: "halt" });
 }
 
 ws.close();
