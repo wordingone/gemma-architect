@@ -137,6 +137,36 @@ function record(name, passed, evidence) {
   if (!passed) console.log("    evidence:", JSON.stringify(evidence).slice(0, 300));
 }
 
+// ── Modal-overlay cleanup (called after any surface that may open cmdk) ────────
+// Fires Escape on both window + document to cover all listener registrations.
+// Returns { wasClosed: bool } so callers can log if needed.
+async function closeCmdkIfOpen() {
+  await evaluate(`(() => {
+    const input = document.querySelector('.cmdk-input, [data-cmdk-input]');
+    if (!input) return;
+    const visible = input.getBoundingClientRect().height > 0;
+    if (!visible) return;
+    const closeBtn = document.querySelector('.cmdk-close, .cmdk-backdrop');
+    if (closeBtn) { closeBtn.click(); return; }
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+  })()`);
+  await delay(300);
+}
+
+// Between-surface invariant: assert no modal overlay remains open.
+// Logs a warning (does not fail the surface) — purely for diagnostics.
+async function assertNoCmdkOverlay(afterSurface) {
+  const open = await evaluate(`(() => {
+    const input = document.querySelector('.cmdk-input, [data-cmdk-input]');
+    return input ? input.getBoundingClientRect().height > 0 : false;
+  })()`);
+  if (open) {
+    console.log(`  ⚠ cmdk overlay still open after ${afterSurface} — force-closing`);
+    await closeCmdkIfOpen();
+  }
+}
+
 // ── Surface 0: initial-scene-clean (#218 regression guard) ───────────────────
 // Asserts: immediately after a fresh page reload, the viewer scene contains
 // no user-created building elements (no IfcWall, SdBox, etc.).
@@ -475,14 +505,9 @@ function record(name, passed, evidence) {
       return { passed: !!input && visible,
                evidence: { inputFound: !!input, inputClass: input?.className, visible } };
     })()`);
-  // Dismiss
-  await evaluate(`
-    (() => {
-      const closeBtn = document.querySelector(".cmdk-close, .cmdk-backdrop");
-      if (closeBtn) closeBtn.click();
-      else window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
-    })()`);
-  await delay(300);
+  // Dismiss — fire on both window + document; closeCmdkIfOpen verifies gone.
+  await closeCmdkIfOpen();
+  await assertNoCmdkOverlay("cmdk-dialog-opens");
   record("cmdk-dialog-opens", s9.passed, s9.evidence);
 }
 
@@ -1411,6 +1436,7 @@ function record(name, passed, evidence) {
   })()`, true);
   if (!r) record('ifc-picker-activation', false, { reason: 'evaluate returned null' });
   else record('ifc-picker-activation', r.passed, r.evidence);
+  await assertNoCmdkOverlay('ifc-picker-activation');
 }
 
 } finally {
