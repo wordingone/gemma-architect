@@ -320,24 +320,29 @@ registerHandler("SdBox", (args) => {
   const w = (args.width as number | undefined) ?? (args.size as number | undefined) ?? 1;
   const d = (args.depth as number | undefined) ?? (args.length as number | undefined) ?? 1;
   const h = (args.height as number | undefined) ?? 1;
+  const cplane = resolveCPlane("SdBox", args as Record<string, unknown>, viewer);
   const geom = new THREE.BoxGeometry(w, d, h);
   geom.translate(0, 0, h / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cplane.normal);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "SdBox";
+  mesh.userData.cplaneKind = cplane.kind;
   viewer.addMesh(mesh, "brep");
   return { created: "box", width: w, depth: d, height: h };
 });
 
 registerHandler("SdSphere", (args) => {
   const r = (args.radius as number | undefined) ?? 1;
+  const cplane = resolveCPlane("SdSphere", args as Record<string, unknown>, viewer);
   const geom = new THREE.SphereGeometry(r, 32, 16);
   const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.4, metalness: 0.0 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.z = r;
+  mesh.position.copy(cplane.normal.clone().multiplyScalar(r));
   mesh.userData.kind = "brep";
   mesh.userData.creator = "SdSphere";
+  mesh.userData.cplaneKind = cplane.kind;
   viewer.addMesh(mesh, "brep");
   return { created: "sphere", radius: r };
 });
@@ -345,13 +350,16 @@ registerHandler("SdSphere", (args) => {
 registerHandler("SdCylinder", (args) => {
   const r = (args.radius as number | undefined) ?? 0.5;
   const h = (args.height as number | undefined) ?? 2;
+  const cplane = resolveCPlane("SdCylinder", args as Record<string, unknown>, viewer);
   const geom = new THREE.CylinderGeometry(r, r, h, 32);
   geom.rotateX(Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.z = h / 2;
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cplane.normal);
+  mesh.position.copy(cplane.normal.clone().multiplyScalar(h / 2));
   mesh.userData.kind = "brep";
   mesh.userData.creator = "SdCylinder";
+  mesh.userData.cplaneKind = cplane.kind;
   viewer.addMesh(mesh, "brep");
   return { created: "cylinder", radius: r, height: h };
 });
@@ -359,13 +367,16 @@ registerHandler("SdCylinder", (args) => {
 registerHandler("SdCone", (args) => {
   const r = (args.radius as number | undefined) ?? 0.5;
   const h = (args.height as number | undefined) ?? 2;
+  const cplane = resolveCPlane("SdCone", args as Record<string, unknown>, viewer);
   const geom = new THREE.ConeGeometry(r, h, 32);
   geom.rotateX(Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0xd0a868, roughness: 0.55, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.z = h / 2;
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cplane.normal);
+  mesh.position.copy(cplane.normal.clone().multiplyScalar(h / 2));
   mesh.userData.kind = "brep";
   mesh.userData.creator = "SdCone";
+  mesh.userData.cplaneKind = cplane.kind;
   viewer.addMesh(mesh, "brep");
   return { created: "cone", radius: r, height: h };
 });

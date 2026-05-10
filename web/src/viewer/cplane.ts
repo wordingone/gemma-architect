@@ -143,8 +143,11 @@ export function resolveCPlane(
   switch (kind) {
     case "world":
       return WORLD_XY;
-    case "view-derived":
-      return VIEW_PLANE[viewer.activeView] ?? WORLD_XY;
+    case "view-derived": {
+      const base = VIEW_PLANE[viewer.activeView] ?? WORLD_XY;
+      // Well-known planes carry kind:"world"; re-tag when returned via view-derived resolution.
+      return base.kind === "view-derived" ? base : { ...base, kind: "view-derived" as const };
+    }
     case "host-derived":
       // W-2 will implement host surface lookup; for now fall back to world XY.
       return WORLD_XY;

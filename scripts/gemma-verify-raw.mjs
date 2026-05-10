@@ -1576,6 +1576,62 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('iteration-mode', r.passed, r.evidence);
 }
 
+// ── Surface 36: view-cplane-orientation (#359) ───────────────────────────────
+// viewer:cplane-derived fires on setView(); SdBox placed in front view orients in XZ.
+{
+  const r = await evaluate(`
+    (async () => {
+      const viewer = window.__viewer;
+      if (!viewer) return { passed: false, evidence: { reason: '__viewer not found' } };
+      const prevView = viewer.activeView;
+
+      // Arm viewer:cplane-derived listener before setView.
+      let eventFired = false;
+      let eventNormalY = null;
+      const handler = (e) => {
+        eventFired = true;
+        eventNormalY = e.detail?.cplane?.normal?.y ?? null;
+      };
+      window.addEventListener('viewer:cplane-derived', handler);
+      viewer.setView('front');
+      window.removeEventListener('viewer:cplane-derived', handler);
+
+      // Event must fire with WORLD_XZ normal (y ≈ 1).
+      const eventOk = eventFired && eventNormalY !== null && Math.abs(eventNormalY - 1) < 0.01;
+
+      // Dispatch SdBox and verify orientation in XZ plane.
+      const beforeCount = viewer.scene.children.length;
+      window.__dispatch('SdBox', { width: 2, depth: 2, height: 2 });
+      await new Promise(r => setTimeout(r, 120));
+      const afterCount = viewer.scene.children.length;
+      if (afterCount <= beforeCount) {
+        viewer.setView(prevView);
+        return { passed: false, evidence: { reason: 'SdBox not added', eventOk } };
+      }
+
+      const boxes = viewer.scene.children.filter(m => m.userData && m.userData.creator === 'SdBox');
+      const box = boxes[boxes.length - 1];
+      if (!box) {
+        viewer.setView(prevView);
+        return { passed: false, evidence: { reason: 'no SdBox in scene', eventOk } };
+      }
+
+      box.updateMatrixWorld(true);
+      // matrixWorld column 2 = local Z in world space.
+      const dotY = box.matrixWorld.elements[9]; // local Z dot world Y
+      const orientOk = dotY > 0.99;
+      const kindOk = box.userData.cplaneKind === 'view-derived';
+
+      viewer.setView(prevView);
+      return {
+        passed: eventOk && orientOk && kindOk,
+        evidence: { eventFired, eventNormalY, eventOk, dotY, orientOk, cplaneKind: box.userData.cplaneKind, kindOk }
+      };
+    })()`);
+  if (!r) record('view-cplane-orientation', false, { reason: 'evaluate returned null' });
+  else record('view-cplane-orientation', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

@@ -14,7 +14,7 @@ import { emitChainFragment } from "./transforms.js";
 import { getSnap, subscribeSnap } from "./snap-state.js";
 import { showHandlesFor, clearHandles, isSubObjectHandle, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
 import { getCurrentDispatchCtx } from "../commands/dispatch.js";
-import { WORLD_XY, type CPlane } from "./cplane.js";
+import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -2128,6 +2128,9 @@ export class Viewer {
 
   setView(name: "top" | "bottom" | "front" | "back" | "left" | "right" | "iso" | "extents" | "persp"): void {
     this.activeView = name;
+    window.dispatchEvent(new CustomEvent("viewer:cplane-derived", {
+      detail: { cplane: resolveCPlane("SdBox", {}, this), view: name },
+    }));
     if (name === "persp") return; // keep current camera position; just record activeView
     const b = this.currentBounds ?? { min: [-5, -5, -5] as [number, number, number], max: [5, 5, 5] as [number, number, number] };
     const cx = (b.min[0] + b.max[0]) / 2;
