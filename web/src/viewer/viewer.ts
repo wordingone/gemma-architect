@@ -116,6 +116,8 @@ export class Viewer {
   // position" bug on relocate entry.
   private dblclickPivotStart: THREE.Matrix4 = new THREE.Matrix4();
   private dblclickTargetStart: THREE.Matrix4 = new THREE.Matrix4();
+  // Cached orthographic camera for axis-aligned views (#331). Reused across setView() calls.
+  private _orthoViewCamera: THREE.OrthographicCamera | null = null;
   // Per-axis arm-length factor for the scale gumball. 1.0 = default reach.
   // Mutated by scale-axis relocate (dblclick scale handle + cursor follow):
   // the gumball center stays put, but the cube tip + its picker box slide
@@ -2117,13 +2119,20 @@ export class Viewer {
     const maxDim = Math.max(size.x, size.y, size.z, 0.5);
     const dist = (maxDim / 2) / Math.tan((this.camera.fov / 2) * (Math.PI / 180)) * 1.4;
     const dir = new THREE.Vector3(1, 1, 1.5).normalize();
+    // Restore perspective camera if an ortho view swap is active (#331).
+    const perspPane = this.panes.find(p => p.view === "persp");
+    if (perspPane && perspPane.camera !== this.camera) {
+      perspPane.camera = this.camera;
+      perspPane.controls.object = this.camera;
+      perspPane.controls.enableRotate = true;
+    }
     this.camera.position.set(center.x + dir.x * dist, center.y + dir.y * dist, center.z + dir.z * dist);
     this.camera.updateProjectionMatrix();
-    const perspPane = this.panes.find(p => p.view === "persp");
     if (perspPane) {
       perspPane.controls.target.set(center.x, center.y, center.z);
       perspPane.controls.update();
     }
+    this.activeView = "persp";
   }
 
   setView(name: "top" | "bottom" | "front" | "back" | "left" | "right" | "iso" | "extents" | "persp"): void {
@@ -2131,7 +2140,17 @@ export class Viewer {
     window.dispatchEvent(new CustomEvent("viewer:cplane-derived", {
       detail: { cplane: resolveCPlane("SdBox", {}, this), view: name },
     }));
-    if (name === "persp") return; // keep current camera position; just record activeView
+    const perspPane = this.panes.find(p => p.view === "persp");
+    if (name === "persp") {
+      // Restore perspective camera if we were in an ortho view.
+      if (perspPane && perspPane.camera !== this.camera) {
+        perspPane.camera = this.camera;
+        perspPane.controls.object = this.camera;
+        perspPane.controls.enableRotate = true;
+        perspPane.controls.update();
+      }
+      return;
+    }
     const b = this.currentBounds ?? { min: [-5, -5, -5] as [number, number, number], max: [5, 5, 5] as [number, number, number] };
     const cx = (b.min[0] + b.max[0]) / 2;
     const cy = (b.min[1] + b.max[1]) / 2;
@@ -2152,12 +2171,47 @@ export class Viewer {
       case "iso":     dir = new THREE.Vector3(1, 1, 1).normalize(); break;
       case "extents": dir = new THREE.Vector3(1, 1, 1.5).normalize(); break;
     }
-    this.camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist);
-    this.camera.updateProjectionMatrix();
-    const perspPane = this.panes.find(p => p.view === "persp");
-    if (perspPane) {
+
+    const ORTHO_VIEWS = new Set(["top", "bottom", "front", "back", "left", "right"]);
+    if (ORTHO_VIEWS.has(name) && perspPane) {
+      // Switch persp pane to orthographic projection for axis-aligned views (#331).
+      if (!this._orthoViewCamera) {
+        this._orthoViewCamera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.01, 10000);
+      }
+      const oc = this._orthoViewCamera;
+      const half = diag * 1.1;
+      const pr = perspPane.el.getBoundingClientRect();
+      const aspect = pr.width > 0 && pr.height > 0 ? pr.width / pr.height : 1;
+      oc.left = -half * aspect;
+      oc.right = half * aspect;
+      oc.top = half;
+      oc.bottom = -half;
+      oc.near = 0.01;
+      oc.far = diag * 200;
+      // Plan views: Y is north. Elevation views: Z is up.
+      if (name === "top" || name === "bottom") oc.up.set(0, 1, 0);
+      else oc.up.set(0, 0, 1);
+      oc.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist);
+      oc.lookAt(cx, cy, cz);
+      oc.updateProjectionMatrix();
+      perspPane.camera = oc;
+      perspPane.controls.object = oc;
+      perspPane.controls.enableRotate = false;
       perspPane.controls.target.set(cx, cy, cz);
       perspPane.controls.update();
+    } else {
+      // iso / extents — restore perspective camera if needed.
+      if (perspPane && perspPane.camera !== this.camera) {
+        perspPane.camera = this.camera;
+        perspPane.controls.object = this.camera;
+        perspPane.controls.enableRotate = true;
+      }
+      this.camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist);
+      this.camera.updateProjectionMatrix();
+      if (perspPane) {
+        perspPane.controls.target.set(cx, cy, cz);
+        perspPane.controls.update();
+      }
     }
   }
 

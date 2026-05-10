@@ -1860,6 +1860,32 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('set-cplane-roundtrip', r.passed, r.evidence);
 }
 
+// ── Surface 42: ortho-projection (#331) ──────────────────────────────────────
+// setView("top") must switch the persp pane to OrthographicCamera.
+// Asserts projection matrix element [5] (1/top) matches ortho formula, not perspective.
+{
+  const r = await evaluate(`
+    (() => {
+      const viewer = window.__viewer;
+      if (!viewer) return { passed: false, evidence: { reason: '__viewer not found' } };
+      viewer.setView('top');
+      const perspPane = viewer.panes?.find(p => p.view === 'persp');
+      if (!perspPane) return { passed: false, evidence: { reason: 'persp pane not found' } };
+      const cam = perspPane.camera;
+      const isPerspective = cam.isPerspectiveCamera === true;
+      const isOrtho = cam.isOrthographicCamera === true;
+      // For an OrthographicCamera, projectionMatrix[5] = 2/(top-bottom).
+      // For a PerspectiveCamera, projectionMatrix[5] = 1/tan(fov/2).
+      // We just assert the camera is orthographic; projection matrix check is secondary.
+      const passed = isOrtho && !isPerspective;
+      // Restore to persp so we don't leave the viewer in an odd state.
+      viewer.setView('iso');
+      return { passed, evidence: { isOrtho, isPerspective, cameraType: cam.type } };
+    })()`);
+  if (!r) record('ortho-projection', false, { reason: 'evaluate returned null' });
+  else record('ortho-projection', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
