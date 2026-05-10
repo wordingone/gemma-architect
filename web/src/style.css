@@ -469,10 +469,12 @@ html[data-mode="night"] .snap-dock::after {
 }
 
 .modebar::before {
-  /* heavy notation stripe at left */
+  /* heavy notation stripe at left — width matches palette column (80px) */
   content: "VIEW";
   display: flex;
   align-items: center;
+  width: 80px;
+  box-sizing: border-box;
   padding: 0 12px;
   font-family: var(--mono);
   font-size: 9px;
@@ -1162,6 +1164,8 @@ html[data-mode="night"] .paper-stage {
   border-right: var(--lw-edge) solid var(--chrome-seam);
   align-items: stretch;
   flex-shrink: 0;
+  min-width: 80px;
+  box-sizing: border-box;
 }
 .ribbon-tab {
   display: flex;
