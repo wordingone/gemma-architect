@@ -1286,9 +1286,7 @@ async function assertNoCmdkOverlay(afterSurface) {
     const btn = document.querySelector('#viewport-2 .vp-view-btn');
     if (!btn) return { passed: false, evidence: { reason: 'no .vp-view-btn in viewport-2' } };
 
-    // Capture camera position before switching.
-    const before = window.__viewer?.camera?.position;
-    const beforeZ = before ? Math.round(before.z * 1000) / 1000 : null;
+    // (camera position no longer checked here; see Surface 38 for ortho projection assert)
 
     // Dispatch click to open popover.
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -1309,13 +1307,13 @@ async function assertNoCmdkOverlay(afterSurface) {
     const nameEl = btn.querySelector('.vp-view-name');
     const labelUpdated = nameEl && nameEl.textContent.trim() === 'TOP';
 
-    // Camera must have moved — TOP view sets camera.z >> initial y-up z.
-    const after = window.__viewer?.camera?.position;
-    const afterZ = after ? Math.round(after.z * 1000) / 1000 : null;
-    const cameraMoved = beforeZ !== null && afterZ !== null && Math.abs(afterZ - beforeZ) > 1;
+    // After setView("top"), the persp pane camera must be orthographic (#331).
+    const perspPane = window.__viewer?.panes?.find(p => p.view === 'persp');
+    const paneCamera = perspPane?.camera;
+    const cameraIsOrtho = paneCamera?.isOrthographicCamera === true;
 
-    const passed = popoverOpen && popoverClosed && !!labelUpdated && cameraMoved;
-    return { passed, evidence: { popoverOpen, popoverClosed, labelText: nameEl?.textContent?.trim(), labelUpdated, beforeZ, afterZ, cameraMoved } };
+    const passed = popoverOpen && popoverClosed && !!labelUpdated && cameraIsOrtho;
+    return { passed, evidence: { popoverOpen, popoverClosed, labelText: nameEl?.textContent?.trim(), labelUpdated, cameraIsOrtho, cameraType: paneCamera?.type } };
   })()`, true);
   if (!r) record('view-switcher-dropdown', false, { reason: 'evaluate returned null' });
   else record('view-switcher-dropdown', r.passed, r.evidence);
