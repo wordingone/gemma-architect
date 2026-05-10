@@ -635,6 +635,7 @@ function record(name, passed, evidence) {
         }, { once: true });
       });
 
+      const recycleCountBefore = (window.__worker_recycle_count ?? 0);
       let fetchOk = false;
       let fetchErr = '';
       try {
@@ -657,7 +658,7 @@ function record(name, passed, evidence) {
 
       try {
         const detail = await loadPromise;
-        // Wait for SdZoomExtents camera animation to settle (#288 Part A).
+        // Wait for SdZoomExtents camera animation to settle + terminateAndRecycle() to fire (#288, #292).
         await new Promise(r => setTimeout(r, 800));
         const afterCount = window.__viewer?.scene?.children?.length ?? 0;
         let hasMeshWithCreator = false;
@@ -698,8 +699,10 @@ function record(name, passed, evidence) {
             }
           }
         } catch (_) {}
-        const passed = afterCount > 0 && hasMeshWithCreator && zoomApplied !== false;
-        return { passed, evidence: { afterCount, hasMeshWithCreator, detail, zoomApplied, ...zoomEvidence } };
+        const recycleCountAfter = (window.__worker_recycle_count ?? 0);
+        const recycled = recycleCountAfter > recycleCountBefore;
+        const passed = afterCount > 0 && hasMeshWithCreator && zoomApplied !== false && recycled;
+        return { passed, evidence: { afterCount, hasMeshWithCreator, detail, zoomApplied, recycled, recycleCountBefore, recycleCountAfter, ...zoomEvidence } };
       } catch (e) {
         return { passed: false, evidence: { reason: 'event not received', error: String(e) } };
       }

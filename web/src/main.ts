@@ -1315,7 +1315,8 @@ function toggleDraftingStyle(): void {
 (window as unknown as { __toggleDrafting?: () => void }).__toggleDrafting = toggleDraftingStyle;
 
 // Worker boot. Vite resolves the URL + format=es per vite.config.ts worker block.
-const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+// `let` — reassigned by spawnWorker() after each IFC load to reclaim wasm linear memory.
+let worker: Worker;
 let nextId = 1;
 let pendingStl: ArrayBuffer | null = null;
 
@@ -1340,66 +1341,77 @@ function setStatus(msg: string, kind: "ok" | "err" | "info" | "warn" | "" = "") 
 let workerReady = false;
 const pendingRuns: Array<() => void> = [];
 
+// Recycle counter exposed for gemma-verify surface assertion.
+(window as any).__worker_recycle_count = 0;
+
+function spawnWorker(): void {
+  worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  worker.onmessage = (ev: MessageEvent<WorkerOut>) => {
+    const msg = ev.data;
+    if (msg.type === "ready") {
+      workerReady = true;
+      runBtn.disabled = false;
+      setStatus("OpenCascade ready.", "info");
+      pendingRuns.forEach((fn) => fn());
+      pendingRuns.length = 0;
+      return;
+    }
+
+    // Route worker messages with id field via callbacks map first; fall through
+    // to the legacy run-ok / run-error handlers if no callback registered.
+    if ("id" in msg) {
+      const cb = workerCallbacks.get((msg as any).id);
+      if (cb) {
+        workerCallbacks.delete((msg as any).id);
+        cb(msg);
+        return;
+      }
+    }
+
+    if (msg.type === "run-error") {
+      setStatus(`Error: ${msg.error}`, "err");
+      runBtn.disabled = false;
+      refreshExportButtons();
+      return;
+    }
+    if (msg.type === "run-ok") {
+      viewer.setMesh(msg.mesh, msg.bounds);
+      pendingStl = msg.stl.byteLength > 0 ? msg.stl : null;
+      currentSource = { kind: "prompt", demoId: currentDemo.id };
+      setStatus(
+        `${shortLabel(currentDemo.label)} · ${formatBounds(msg.bounds)} · ready to export`,
+        "ok",
+      );
+      // Approximate triangle count from worker-emitted mesh.
+      const promptTris = msg.mesh.indices?.length
+        ? msg.mesh.indices.length / 3
+        : (msg.mesh.vertices?.length ?? 0) / 9;
+      scenePanel.update({
+        format: "replicad",
+        triangles: Math.round(promptTris),
+        filename: shortLabel(currentDemo.label),
+      });
+      runBtn.disabled = false;
+      refreshExportButtons();
+      window.dispatchEvent(
+        new CustomEvent("gemma:run-ok", {
+          detail: { js: jsSource.value, label: shortLabel(currentDemo.label) },
+        }),
+      );
+    }
+  };
+}
+
 function terminateAndRecycle(): void {
   worker.terminate();
   workerReady = false;
   workerCallbacks.clear();
+  (window as any).__worker_recycle_count++;
+  spawnWorker();
 }
 
-worker.onmessage = (ev: MessageEvent<WorkerOut>) => {
-  const msg = ev.data;
-  if (msg.type === "ready") {
-    workerReady = true;
-    runBtn.disabled = false;
-    setStatus("OpenCascade ready.", "info");
-    pendingRuns.forEach((fn) => fn());
-    pendingRuns.length = 0;
-    return;
-  }
-
-  // Route worker messages with id field via callbacks map first; fall through
-  // to the legacy run-ok / run-error handlers if no callback registered.
-  if ("id" in msg) {
-    const cb = workerCallbacks.get((msg as any).id);
-    if (cb) {
-      workerCallbacks.delete((msg as any).id);
-      cb(msg);
-      return;
-    }
-  }
-
-  if (msg.type === "run-error") {
-    setStatus(`Error: ${msg.error}`, "err");
-    runBtn.disabled = false;
-    refreshExportButtons();
-    return;
-  }
-  if (msg.type === "run-ok") {
-    viewer.setMesh(msg.mesh, msg.bounds);
-    pendingStl = msg.stl.byteLength > 0 ? msg.stl : null;
-    currentSource = { kind: "prompt", demoId: currentDemo.id };
-    setStatus(
-      `${shortLabel(currentDemo.label)} · ${formatBounds(msg.bounds)} · ready to export`,
-      "ok",
-    );
-    // Approximate triangle count from worker-emitted mesh.
-    const promptTris = msg.mesh.indices?.length
-      ? msg.mesh.indices.length / 3
-      : (msg.mesh.vertices?.length ?? 0) / 9;
-    scenePanel.update({
-      format: "replicad",
-      triangles: Math.round(promptTris),
-      filename: shortLabel(currentDemo.label),
-    });
-    runBtn.disabled = false;
-    refreshExportButtons();
-    window.dispatchEvent(
-      new CustomEvent("gemma:run-ok", {
-        detail: { js: jsSource.value, label: shortLabel(currentDemo.label) },
-      }),
-    );
-  }
-};
+// Initial boot.
+spawnWorker();
 
 function formatBounds(b: { min: [number, number, number]; max: [number, number, number] }): string {
   const dx = (b.max[0] - b.min[0]).toFixed(2);
@@ -1578,9 +1590,11 @@ async function handleFile(file: File): Promise<void> {
             finalizeFileLoad(scene, file.name);
             window.dispatchEvent(new CustomEvent("viewer:ifc-loaded", { detail: { filename: file.name } }));
             dispatchSync("SdZoomExtents", {});
+            terminateAndRecycle();
           });
         } else if (msg.type === "load-ifc-error") {
           setStatus(`IFC parse failed: ${msg.error}`, "err");
+          terminateAndRecycle();
         }
       });
       worker.postMessage({ type: "load-ifc", id, bytes: buffer }, [buffer]);
