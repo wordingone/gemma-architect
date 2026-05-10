@@ -225,7 +225,7 @@ function buildPalette(host: HTMLElement) {
     const sec = el("div", "palette-section");
     if (i === COMP_SECTION_IDX) sec.classList.add("palette-section--hidden");
     for (const tool of section.tools) {
-      const btn = el("button", "palette-btn", { type: "button", title: tool.label, "data-tool": tool.id });
+      const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
       btn.innerHTML = iconSVG(tool.icon, 18) +
         `<span class="palette-tooltip">${tool.label}</span><span class="corner"></span>`;
       btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
