@@ -1255,10 +1255,14 @@ function record(name, passed, evidence) {
 // ── Surface 28: view-switcher-dropdown ───────────────────────────────────────
 {
   // Click the viewport-2 vp-view-btn; assert popover opens.
-  // Click "TOP" option; assert label updates and popover closes.
+  // Click "TOP" option; assert label updates, popover closes, AND camera moved.
   const r = await evaluate(`(async function() {
     const btn = document.querySelector('#viewport-2 .vp-view-btn');
     if (!btn) return { passed: false, evidence: { reason: 'no .vp-view-btn in viewport-2' } };
+
+    // Capture camera position before switching.
+    const before = window.__viewer?.camera?.position;
+    const beforeZ = before ? Math.round(before.z * 1000) / 1000 : null;
 
     // Dispatch click to open popover.
     btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -1273,14 +1277,19 @@ function record(name, passed, evidence) {
     if (topItem) {
       topItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     }
-    await new Promise(r => setTimeout(r, 80));
+    await new Promise(r => setTimeout(r, 200));
 
     const popoverClosed = !popover || popover.classList.contains('vs-popover--hidden');
     const nameEl = btn.querySelector('.vp-view-name');
     const labelUpdated = nameEl && nameEl.textContent.trim() === 'TOP';
 
-    const passed = popoverOpen && popoverClosed && !!labelUpdated;
-    return { passed, evidence: { popoverOpen, popoverClosed, labelText: nameEl?.textContent?.trim(), labelUpdated } };
+    // Camera must have moved — TOP view sets camera.z >> initial y-up z.
+    const after = window.__viewer?.camera?.position;
+    const afterZ = after ? Math.round(after.z * 1000) / 1000 : null;
+    const cameraMoved = beforeZ !== null && afterZ !== null && Math.abs(afterZ - beforeZ) > 1;
+
+    const passed = popoverOpen && popoverClosed && !!labelUpdated && cameraMoved;
+    return { passed, evidence: { popoverOpen, popoverClosed, labelText: nameEl?.textContent?.trim(), labelUpdated, beforeZ, afterZ, cameraMoved } };
   })()`, true);
   if (!r) record('view-switcher-dropdown', false, { reason: 'evaluate returned null' });
   else record('view-switcher-dropdown', r.passed, r.evidence);

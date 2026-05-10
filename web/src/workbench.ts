@@ -1870,8 +1870,11 @@ function initViewSwitcher(): void {
     const item = el("div", "vs-item", { "data-view": opt.view });
     item.innerHTML = `<span class="vs-check">✓</span><span class="vp-tag ${opt.tag}"></span><span class="vs-label">${opt.label}</span>`;
     item.addEventListener("click", () => {
-      setState("currentView", opt.view);
-      dispatchSync("SdSetView", { view: opt.view });
+      if (opt.view === "perspective") {
+        dispatchSync("SdSetViewPerspective", {});
+      } else {
+        dispatchSync("SdSetViewOrtho", { view: opt.view });
+      }
       if (activeBtn) applyViewToBtn(activeBtn, opt.view);
       closePopover();
     });
@@ -1887,8 +1890,11 @@ function initViewSwitcher(): void {
       e.preventDefault();
       const opt = VIEW_OPTIONS[focusedIdx];
       if (opt) {
-        setState("currentView", opt.view);
-        dispatchSync("SdSetView", { view: opt.view });
+        if (opt.view === "perspective") {
+          dispatchSync("SdSetViewPerspective", {});
+        } else {
+          dispatchSync("SdSetViewOrtho", { view: opt.view });
+        }
         if (activeBtn) applyViewToBtn(activeBtn, opt.view);
         closePopover();
       }
