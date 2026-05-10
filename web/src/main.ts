@@ -544,43 +544,98 @@ registerHandler("IfcStair", (args) => {
   return { created: "stair", steps, run, height: totalH };
 });
 
+// ── Realistic door geometry: frame (jambs + head) + panel leaf ───────────────
+function buildDoorGroup(w: number, h: number, wallT: number): THREE.Group {
+  const fw = 0.05;  // 50mm frame width
+  const pt = 0.04;  // 40mm panel thickness
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xa09080, roughness: 0.8, metalness: 0.0 });
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0xc4a06a, roughness: 0.65, metalness: 0.0 });
+  const group = new THREE.Group();
+
+  // Left jamb
+  const lj = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
+  lj.position.set(-fw / 2, 0, h / 2);
+  group.add(lj);
+
+  // Right jamb
+  const rj = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
+  rj.position.set(w + fw / 2, 0, h / 2);
+  group.add(rj);
+
+  // Head rail
+  const head = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat);
+  head.position.set(w / 2, 0, h + fw / 2);
+  group.add(head);
+
+  // Panel leaf (single-swing-left default: IfcDoorTypeOperationEnum.SINGLE_SWING_LEFT)
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(w, pt, h - fw), panelMat);
+  panel.position.set(w / 2, 0, (h - fw) / 2);
+  group.add(panel);
+
+  // Mid-rail detail at ~1/3 height
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(w, pt + 0.005, fw * 0.6), panelMat);
+  rail.position.set(w / 2, 0, h / 3);
+  group.add(rail);
+
+  return group;
+}
+
+// ── Realistic window geometry: frame (4 rails) + translucent pane ────────────
+function buildWindowGroup(w: number, h: number, wallT: number): THREE.Group {
+  const fw = 0.04;  // 40mm frame rail width
+  const paneT = 0.006;  // 6mm glass pane
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x909090, roughness: 0.4, metalness: 0.2 });
+  const paneMat  = new THREE.MeshStandardMaterial({ color: 0xadd8e6, roughness: 0.05, metalness: 0.0, transparent: true, opacity: 0.35 });
+  const group = new THREE.Group();
+
+  // Left rail
+  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat), { position: new THREE.Vector3(-fw / 2, 0, h / 2) }));
+  // Right rail
+  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat), { position: new THREE.Vector3(w + fw / 2, 0, h / 2) }));
+  // Bottom rail
+  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat), { position: new THREE.Vector3(w / 2, 0, -fw / 2) }));
+  // Top rail
+  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat), { position: new THREE.Vector3(w / 2, 0, h + fw / 2) }));
+
+  // Glass pane (single panel — IfcWindowTypePartitioningEnum.SINGLE_PANEL)
+  const pane = new THREE.Mesh(new THREE.BoxGeometry(w, paneT, h), paneMat);
+  pane.position.set(w / 2, 0, h / 2);
+  group.add(pane);
+
+  return group;
+}
+
 registerHandler("IfcDoor", (args) => {
   const w = (args.width  as number | undefined) ?? 0.9;
   const h = (args.height as number | undefined) ?? 2.1;
-  const t = 0.2;
-  const geom = new THREE.BoxGeometry(w, t, h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff5c5c, transparent: true, opacity: 0.4 });
-  const mesh = new THREE.Mesh(geom, mat);
+  const wallT = (args.wallThickness as number | undefined) ?? 0.2;
+  const group = buildDoorGroup(w, h, wallT);
   const pos = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
-  else mesh.position.z = getActiveLevelElevation();
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcDoor";
-  mesh.userData.layerId = resolveLayerId("IfcDoor", args);
-  mesh.userData.levelId = getActiveLevelId();
-  viewer.addMesh(mesh, "brep");
-  return { created: "door", width: w, height: h };
+  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
+  else group.position.z = getActiveLevelElevation();
+  group.userData.kind = "brep";
+  group.userData.creator = "IfcDoor";
+  group.userData.layerId = resolveLayerId("IfcDoor", args);
+  group.userData.levelId = getActiveLevelId();
+  viewer.addMesh(group, "brep");
+  return { created: "door", width: w, height: h, submeshes: group.children.length };
 });
 
 registerHandler("IfcWindow", (args) => {
   const w    = (args.width  as number | undefined) ?? 1.2;
-  const h    = (args.height as number | undefined) ?? 1.4;
+  const h    = (args.height as number | undefined) ?? 1.5;
   const sill = (args.sillH  as number | undefined) ?? 0.9;
-  const t    = 0.2;
-  const geom = new THREE.BoxGeometry(w, t, h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x5b8def, transparent: true, opacity: 0.4 });
-  const mesh = new THREE.Mesh(geom, mat);
+  const wallT = (args.wallThickness as number | undefined) ?? 0.2;
+  const group = buildWindowGroup(w, h, wallT);
   const pos = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? (getActiveLevelElevation() + sill));
-  else mesh.position.z = getActiveLevelElevation() + sill;
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcWindow";
-  mesh.userData.layerId = resolveLayerId("IfcWindow", args);
-  mesh.userData.levelId = getActiveLevelId();
-  viewer.addMesh(mesh, "brep");
-  return { created: "window", width: w, height: h, sillH: sill };
+  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? (getActiveLevelElevation() + sill));
+  else group.position.z = getActiveLevelElevation() + sill;
+  group.userData.kind = "brep";
+  group.userData.creator = "IfcWindow";
+  group.userData.layerId = resolveLayerId("IfcWindow", args);
+  group.userData.levelId = getActiveLevelId();
+  viewer.addMesh(group, "brep");
+  return { created: "window", width: w, height: h, sillH: sill, submeshes: group.children.length };
 });
 
 registerHandler("IfcRoof", (args) => {
