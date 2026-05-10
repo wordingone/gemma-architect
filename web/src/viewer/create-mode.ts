@@ -92,6 +92,20 @@ function readActiveTool(): string | null {
   return id;
 }
 
+// Project a world-space XY point to screen (client) coordinates.
+// Returns null when the point is behind the camera.
+function projectToScreen(viewer: Viewer, x: number, y: number, z = 0): { x: number; y: number } | null {
+  const canvas = viewer.getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const camera = viewer.getCamera();
+  const v = new THREE.Vector3(x, y, z).project(camera as THREE.PerspectiveCamera);
+  if (v.z > 1) return null; // behind camera
+  return {
+    x: (v.x * 0.5 + 0.5) * rect.width + rect.left,
+    y: (-v.y * 0.5 + 0.5) * rect.height + rect.top,
+  };
+}
+
 // Unproject canvas-space (px) to world coords on the XY plane (z=0).
 function unprojectToXY(viewer: Viewer, clientX: number, clientY: number): THREE.Vector3 | null {
   const canvas = viewer.getCanvas();
@@ -485,12 +499,29 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   return { mesh, chain };
 }
 
+function makePointMaterial(sizePx = 14): THREE.PointsMaterial {
+  const canvas = document.createElement("canvas");
+  canvas.width = 32; canvas.height = 32;
+  const ctx = canvas.getContext("2d")!;
+  ctx.beginPath();
+  ctx.arc(16, 16, 12, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "#111111";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  return new THREE.PointsMaterial({
+    size: sizePx, sizeAttenuation: false,
+    map: new THREE.CanvasTexture(canvas),
+    transparent: true, alphaTest: 0.1, depthTest: false,
+  });
+}
+
 function buildPoint(p: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
   const r = 0.06;
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
-  const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0xffffff });
-  const group = new THREE.Points(geom, mat);
+  const group = new THREE.Points(geom, makePointMaterial());
   group.position.set(p.x, p.y, 0);
   group.renderOrder = 1;
   group.userData.kind = "point";
@@ -1095,11 +1126,17 @@ export function initCreateMode(viewer: Viewer): void {
   vpBody.addEventListener("pointermove", (ev) => {
     const tool = readActiveTool();
     if (!tool) { hideCursorDot(); return; }
-    // Show dot at screen position regardless of ground-plane hit (camera may be near-horizontal).
-    moveCursorDot(viewer, { x: 0, y: 0 }, ev.clientX, ev.clientY);
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
-    if (!world || _pending.length === 0) return;
+    if (!world) {
+      // No ground-plane hit (near-horizontal camera) — show dot at raw mouse position.
+      moveCursorDot(viewer, { x: 0, y: 0 }, ev.clientX, ev.clientY);
+      return;
+    }
     const snapped = snapPoint(world.x, world.y);
+    // Project snapped world position back to screen so the dot visually snaps (#327).
+    const screen = projectToScreen(viewer, snapped.x, snapped.y, 0);
+    moveCursorDot(viewer, snapped, screen?.x ?? ev.clientX, screen?.y ?? ev.clientY);
+    if (_pending.length === 0) return;
     const handler = TOOL_HANDLERS[tool];
     // Show rubber band for multi-click tools (clicks≥2) and unlimited tools (clicks=-1).
     if (!handler || (handler.clicks > 0 && handler.clicks < 2)) return;
