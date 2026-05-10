@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// parity-loop.ts — W-P4 visual parity iteration driver (#319)
+// parity-loop.ts — W-P4 visual parity iteration driver (#319) + W-P7 tiered state machine (#322)
 //
 // Reads:  B:/M/avir/leo/state/parity-experiment.json  (config)
 // Writes: B:/M/avir/leo/state/parity-experiment-iterations.jsonl  (per-iteration log)
@@ -52,7 +52,9 @@ const cfg = state.config;
 const refImagePath = cfg.reference.still_image_path;
 const HALT_CONSECUTIVE = cfg.iteration_strategy.halt_on_consecutive_non_improvements ?? 3;
 const MAX_ITERATIONS   = maxIterOverride ?? (cfg.iteration_strategy.max_iterations_safety_cap ?? 100);
-const CURRENT_TIER     = cfg.parity_threshold.current_tier ?? 90;
+const TIER_LADDER      = [90, 95, 99];
+const _startTierIdx    = TIER_LADDER.findIndex(t => t >= (cfg.parity_threshold.current_tier ?? 90));
+const START_TIER_IDX   = _startTierIdx < 0 ? TIER_LADDER.length - 1 : _startTierIdx;
 
 const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
 if (!apiKey && !MOCK) {
@@ -225,28 +227,33 @@ const lastAttempts: string[] = [];
 let consecutiveNonImprovements = 0;
 let iterationN = 0;
 let currentScore = 0;
+let activeTierIdx = START_TIER_IDX;
+let activeTier    = TIER_LADDER[activeTierIdx];
 
-console.log(`parity-loop: tier=${CURRENT_TIER} max_iterations=${MAX_ITERATIONS} mock=${MOCK}`);
+console.log(`parity-loop: tiers=${TIER_LADDER.join("→")} starting=${activeTier} max_iterations=${MAX_ITERATIONS} mock=${MOCK}`);
 console.log(`JSONL → ${ITERATIONS_JSONL}`);
 
-// Initial score
+// Initial score — advance activeTier past any already-banked tiers
 const vpInit = join(TMP, "parity-init.jpg");
 await takeScreenshot(vpInit);
 const initResult = scoreViewport(vpInit);
 currentScore = initResult?.score ?? 0;
-console.log(`Initial score: ${currentScore} (tier target: ${CURRENT_TIER})`);
-
-if (currentScore >= CURRENT_TIER) {
-  console.log("Already at tier. Nothing to do.");
+while (activeTierIdx < TIER_LADDER.length && currentScore >= TIER_LADDER[activeTierIdx]) {
+  activeTierIdx++;
+}
+if (activeTierIdx >= TIER_LADDER.length) {
+  console.log(`Initial score ${currentScore} already meets all tiers. Nothing to do.`);
   ws.close();
   process.exit(0);
 }
+activeTier = TIER_LADDER[activeTierIdx];
+console.log(`Initial score: ${currentScore} → pursuing tier ${activeTier}`);
 
 let haltReason = "safety cap";
 
 while (iterationN < MAX_ITERATIONS) {
   iterationN++;
-  console.log(`\n─── Iteration ${iterationN}/${MAX_ITERATIONS} (score=${currentScore}, non-imp=${consecutiveNonImprovements}) ───`);
+  console.log(`\n─── Iteration ${iterationN}/${MAX_ITERATIONS} (score=${currentScore}, tier=${activeTier}, non-imp=${consecutiveNonImprovements}) ───`);
 
   // 1. Capture viewport
   const vpBefore = join(TMP, `parity-${iterationN}-before.jpg`);
@@ -260,7 +267,7 @@ while (iterationN < MAX_ITERATIONS) {
   const proposal = await proposeDispatch(vpBefore, beforeResult?.deltas ?? [], lastAttempts);
   if (!proposal) {
     console.error("Could not get dispatch proposal — halting.");
-    log({ ts: new Date().toISOString(), iteration_n: iterationN, dispatches: [], delta_before: beforeResult, delta_after: null, haiku_description: "proposal failed", score: scoreBefore, action: "halt" });
+    log({ ts: new Date().toISOString(), iteration_n: iterationN, active_tier: activeTier, dispatches: [], delta_before: beforeResult, delta_after: null, haiku_description: "proposal failed", score: scoreBefore, action: "halt" });
     haltReason = "proposal failed";
     break;
   }
@@ -277,21 +284,30 @@ while (iterationN < MAX_ITERATIONS) {
   const scoreAfter = afterResult?.score ?? scoreBefore;
 
   const improved = scoreAfter > scoreBefore;
-  const reachedTier = scoreAfter >= CURRENT_TIER;
+  const reachedTier = scoreAfter >= activeTier;
   let action: "improve" | "revert" | "halt";
 
   if (reachedTier) {
-    action = "halt";
     currentScore = scoreAfter;
-    const tierDir = join(PARITY_BANK_DIR, `tier-${CURRENT_TIER}-${Date.now()}`);
+    const tierDir = join(PARITY_BANK_DIR, `tier-${activeTier}-${Date.now()}`);
     mkdirSync(tierDir, { recursive: true });
     writeFileSync(join(tierDir, "viewport.jpg"), readFileSync(vpAfter));
     writeFileSync(join(tierDir, "meta.json"), JSON.stringify({
-      score: scoreAfter, tier: CURRENT_TIER, iteration: iterationN,
+      score: scoreAfter, tier: activeTier, iteration: iterationN,
       dispatches: [...lastAttempts, `${proposal.verb}(${scoreBefore}→${scoreAfter})`],
     }));
-    haltReason = `tier ${CURRENT_TIER} reached`;
-    console.log(`  ✓ Tier ${CURRENT_TIER} reached! Banked to ${tierDir}`);
+    console.log(`  ✓ Tier ${activeTier} reached! Banked to ${tierDir}`);
+    activeTierIdx++;
+    if (activeTierIdx >= TIER_LADDER.length) {
+      action = "halt";
+      haltReason = `all tiers complete (${TIER_LADDER.join("→")})`;
+      console.log(`  All tiers complete.`);
+    } else {
+      action = "improve";
+      activeTier = TIER_LADDER[activeTierIdx];
+      consecutiveNonImprovements = 0;
+      console.log(`  Retargeting to tier ${activeTier}.`);
+    }
   } else if (improved) {
     action = "improve";
     consecutiveNonImprovements = 0;
@@ -309,6 +325,7 @@ while (iterationN < MAX_ITERATIONS) {
   log({
     ts: new Date().toISOString(),
     iteration_n: iterationN,
+    active_tier: activeTier,
     dispatches: [{ verb: proposal.verb, args: proposal.args, rationale: proposal.rationale }],
     delta_before: beforeResult,
     delta_after: afterResult,
@@ -323,16 +340,17 @@ while (iterationN < MAX_ITERATIONS) {
   if (consecutiveNonImprovements >= HALT_CONSECUTIVE) {
     haltReason = `${HALT_CONSECUTIVE} consecutive non-improvements`;
     console.log(`Halting: ${haltReason}.`);
-    log({ ts: new Date().toISOString(), iteration_n: iterationN, dispatches: [], delta_before: afterResult, delta_after: null, haiku_description: `halt: ${haltReason}`, score: currentScore, action: "halt" });
+    log({ ts: new Date().toISOString(), iteration_n: iterationN, active_tier: activeTier, dispatches: [], delta_before: afterResult, delta_after: null, haiku_description: `halt: ${haltReason}`, score: currentScore, action: "halt" });
     break;
   }
 }
 
 if (iterationN >= MAX_ITERATIONS && haltReason === "safety cap") {
   console.log(`Safety cap hit (${MAX_ITERATIONS} iterations).`);
-  log({ ts: new Date().toISOString(), iteration_n: MAX_ITERATIONS, dispatches: [], delta_before: null, delta_after: null, haiku_description: "halt: safety cap", score: currentScore, action: "halt" });
+  log({ ts: new Date().toISOString(), iteration_n: MAX_ITERATIONS, active_tier: activeTier, dispatches: [], delta_before: null, delta_after: null, haiku_description: "halt: safety cap", score: currentScore, action: "halt" });
 }
 
 ws.close();
-console.log(`\nparity-loop: done. ${iterationN} iteration(s). Score: ${currentScore}. Halted: ${haltReason}.`);
+const tiersCompleted = TIER_LADDER.slice(0, activeTierIdx).join("→") || "none";
+console.log(`\nparity-loop: done. ${iterationN} iteration(s). Score: ${currentScore}. Tiers completed: ${tiersCompleted}. Halted: ${haltReason}.`);
 console.log(`JSONL: ${ITERATIONS_JSONL}`);
