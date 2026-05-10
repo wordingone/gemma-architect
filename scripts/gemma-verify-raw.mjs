@@ -1507,6 +1507,26 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('cplane-default-resolution', r.passed, r.evidence);
 }
 
+// ── Surface 33: assets-tab (#342) ────────────────────────────────────────────
+{
+  const r = await evaluate(`
+    (() => {
+      const assetsTab = document.querySelector('.sb-tab[data-tab="assets"]');
+      if (!assetsTab) return { passed: false, evidence: { reason: 'no .sb-tab[data-tab=assets]' } };
+      assetsTab.click();
+      const assetGrid = document.querySelector('.asset-grid');
+      const assetCards = document.querySelectorAll('.asset-card');
+      const toolGroups = document.querySelectorAll('.tool-group');
+      const ribbonTransform = [...document.querySelectorAll('.tool-group-label')].some(el => el.textContent === 'TRANSFORM');
+      return {
+        passed: !!assetGrid && assetCards.length > 0 && toolGroups.length === 0,
+        evidence: { assetGrid: !!assetGrid, assetCards: assetCards.length, toolGroups: toolGroups.length, ribbonTransform }
+      };
+    })()`);
+  if (!r) record('assets-tab', false, { reason: 'evaluate returned null' });
+  else record('assets-tab', r.passed, r.evidence);
+}
+
 // ── Surface 32: iteration-mode (#320) ────────────────────────────────────────
 {
   const r = await evaluate(`

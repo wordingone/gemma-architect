@@ -226,7 +226,7 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
     fillRibbonTools(_ribbonToolsEl, RESEARCH_TOOL_GROUPS);
   } else {
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
-    fillRibbonTools(_ribbonToolsEl, TOOL_GROUPS);
+    fillRibbonTools(_ribbonToolsEl, []);
     appendArchCompSlider(_ribbonTabsEl);
   }
 }
@@ -470,7 +470,7 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
 
   // Fill with model ribbon content initially.
   fillRibbonTabs(tabsEl, RIBBON_TABS, RIBBON_TABS[0]);
-  fillRibbonTools(toolsEl, TOOL_GROUPS);
+  fillRibbonTools(toolsEl, []);
   appendArchCompSlider(tabsEl);
 
   // .ribbon-right — quick actions (palette + export + viewport split).
