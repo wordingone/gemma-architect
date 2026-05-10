@@ -396,7 +396,7 @@ function record(name, passed, evidence) {
             failedVerbs.push({ verb: v, output: lines.join(" | "), error: isUnknown ? "unknown_verb" : "arg_validation_error" });
           }
         }
-        return { passed: failedVerbs.length === 0, evidence: { tested: verbs.length, failed_verbs: failedVerbs } };
+        return { passed: failedVerbs.length === 0, evidence: { tested: verbs.length, tested_verbs: verbs, failed_verbs: failedVerbs } };
       } catch (e) {
         return { passed: false, evidence: { reason: "caught: " + String(e) } };
       }
