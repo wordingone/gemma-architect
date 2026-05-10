@@ -1216,28 +1216,36 @@ function record(name, passed, evidence) {
     window.__dispatch('SdClippingPlanesClear', {});
     await new Promise(r => setTimeout(r, 150));
 
-    // Apply a section box so VIEW STATE has something to show.
+    // Apply a section box and a named clip plane.
     window.__dispatch('SdSectionBox', { min: [-5, -5, 0], max: [5, 5, 6] });
     window.__dispatch('SdClippingPlane', { origin: [3, 0, 0], normal: [1, 0, 0], label: 'surf27-test' });
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 250));
 
-    // Check getClippingPlanes() returns the plane we added.
+    // ── Engine assertions ──────────────────────────────────────────────────
     const planes = v.getClippingPlanes?.() ?? [];
     const sb = v.getSectionBox?.();
     const hasSectionBox = !!sb;
     const hasPlane = planes.some(p => p.label === 'surf27-test');
 
-    // Check sidebar VIEW STATE section is present in DOM.
-    const viewStateHdr = Array.from(document.querySelectorAll('.sb-tab[data-tab="scene"] ~ * [class], .tab-body *'))
-      .find(el => el.textContent?.trim() === 'VIEW STATE');
+    // ── DOM assertions — VIEW STATE sidebar renders both entries ───────────
+    // buildViewStateSection() creates spans with textContent = title for the
+    // subsection header and spans per row with the label text.
+    const allSpans = Array.from(document.querySelectorAll('span'));
+    const hasViewStateHdr = allSpans.some(el => el.textContent?.trim() === 'VIEW STATE');
+    const hasSectionBoxEntry = allSpans.some(el => el.textContent?.trim() === 'Section box');
+    const hasClipEntry = allSpans.some(el => el.textContent?.trim() === 'surf27-test');
 
-    // Cleanup.
+    // ── Cleanup ────────────────────────────────────────────────────────────
     window.__dispatch('SdSectionBoxOff', {});
     window.__dispatch('SdClippingPlanesClear', {});
 
+    const passed = hasSectionBox && hasPlane && hasViewStateHdr && hasSectionBoxEntry && hasClipEntry;
     return {
-      passed: hasSectionBox && hasPlane,
-      evidence: { hasSectionBox, hasPlane, planeCount: planes.length, viewStateDomPresent: !!viewStateHdr },
+      passed,
+      evidence: {
+        hasSectionBox, hasPlane, planeCount: planes.length,
+        hasViewStateHdr, hasSectionBoxEntry, hasClipEntry,
+      },
     };
   })()`, true);
   if (!r) record('view-state-sidebar-lists-clip', false, { reason: 'evaluate returned null' });
