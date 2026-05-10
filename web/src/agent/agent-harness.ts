@@ -595,7 +595,37 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
   return { dispatches, text: text.trim() };
 }
 
-// ---- Remote inference path (serve_lora.py) --------------------------------
+// ---- Remote inference path (serve_lora.py / llama-server) -----------------
+
+// Formats messages into the gemma instruction-tuned prompt for /completion.
+// Fallback when /v1/chat/completions has a broken --chat-template (llama-server
+// b8786 bug: --chat-template gemma renders as literal "gemma", 3 tokens only).
+function formatGemmaCompletionPrompt(
+  messages: Array<{ role: string; content: string | unknown[] }>,
+): string {
+  const parts: string[] = ["<bos>"];
+  let pendingSystem = "";
+  for (const msg of messages) {
+    const text =
+      typeof msg.content === "string"
+        ? msg.content
+        : (msg.content as Array<{ type: string; text?: string }>)
+            .filter((p) => p.type === "text")
+            .map((p) => p.text ?? "")
+            .join("");
+    if (msg.role === "system") {
+      pendingSystem = text;
+    } else if (msg.role === "user") {
+      const combined = pendingSystem ? `${pendingSystem}\n\n${text}` : text;
+      parts.push(`<start_of_turn>user\n${combined}<end_of_turn>\n`);
+      pendingSystem = "";
+    } else if (msg.role === "assistant") {
+      parts.push(`<start_of_turn>model\n${text}<end_of_turn>\n`);
+    }
+  }
+  parts.push("<start_of_turn>model\n");
+  return parts.join("");
+}
 
 async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const MAX_HISTORY_MSGS = 20;
@@ -630,10 +660,39 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
   const json = (await resp.json()) as {
     choices: Array<{ message: { role: string; content: string } }>;
+    usage?: { prompt_tokens?: number };
     _latency_ms?: number;
     _tps?: number;
     _mtp_enabled?: boolean;
   };
+
+  // Detect broken llama-server --chat-template rendering (b8786 bug): all inputs
+  // collapse to ≤5 tokens. Fall back to /completion with gemma-formatted prompt.
+  if ((json.usage?.prompt_tokens ?? 999) <= 5) {
+    // ctx-size 8192 → ~24K char budget. Trim system message to fit if oversized.
+    const PROMPT_CHAR_LIMIT = 20000;
+    const fallbackMessages = [...messages];
+    let prompt = formatGemmaCompletionPrompt(fallbackMessages);
+    if (prompt.length > PROMPT_CHAR_LIMIT) {
+      const sysMsg = fallbackMessages[0];
+      if (sysMsg?.role === "system" && typeof sysMsg.content === "string") {
+        const excess = prompt.length - PROMPT_CHAR_LIMIT;
+        sysMsg.content = sysMsg.content.slice(0, Math.max(100, sysMsg.content.length - excess));
+        prompt = formatGemmaCompletionPrompt(fallbackMessages);
+      }
+    }
+    const compResp = await fetch(`${REMOTE_URL}/completion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, n_predict: 1024, temperature: 0.1, stop: ["<end_of_turn>"] }),
+    });
+    if (!compResp.ok) throw new Error(`remote agent fallback: HTTP ${compResp.status}`);
+    const compJson = (await compResp.json()) as { content: string; tokens_predicted?: number };
+    const content = compJson.content ?? "";
+    updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE`);
+    const { dispatches, text } = parseDispatches(content);
+    return { dispatches, text: text || content, raw: compJson };
+  }
 
   const content = json.choices[0]?.message?.content ?? "";
   const tpsLabel = json._tps != null ? ` · ${json._tps.toFixed(0)} t/s` : "";
