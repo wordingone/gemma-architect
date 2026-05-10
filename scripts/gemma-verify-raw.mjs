@@ -1821,6 +1821,45 @@ async function assertNoCmdkOverlay(afterSurface) {
   record('anthropic-key-absent', passed, { found_in_parity_loop: foundInParityLoop, found_in_judge: foundInJudge });
 }
 
+// ── Surface 40: set-cplane-roundtrip (#360) ──────────────────────────────────
+{
+  const r = await evaluate(`(() => {
+    const events = [];
+    const listener = (e) => events.push(e.detail && e.detail.mode);
+    window.addEventListener('viewer:cplane-changed', listener);
+
+    // 1. mode=top → kind='explicit', normal z≈1 (XY plane)
+    window.__dispatch('SdSetCPlane', { mode: 'top' });
+    const cp1 = window.__viewer.activeCPlane;
+    const ok1 = cp1.kind === 'explicit' && Math.abs(cp1.normal.z - 1) < 0.001;
+
+    // 2. mode=front → kind='explicit', normal y≈1 (XZ plane)
+    window.__dispatch('SdSetCPlane', { mode: 'front' });
+    const cp2 = window.__viewer.activeCPlane;
+    const ok2 = cp2.kind === 'explicit' && Math.abs(cp2.normal.y - 1) < 0.001;
+
+    // 3. SdResetCPlane → kind='world' (not explicit; resolveCPlane uses per-canonical defaults)
+    window.__dispatch('SdResetCPlane', {});
+    const cp3 = window.__viewer.activeCPlane;
+    const ok3 = cp3.kind === 'world';
+
+    window.removeEventListener('viewer:cplane-changed', listener);
+    const eventsOk = events.length >= 3;
+    const passed = ok1 && ok2 && ok3 && eventsOk;
+    return {
+      passed,
+      evidence: {
+        ok1, ok2, ok3, eventsOk, eventCount: events.length, eventModes: events,
+        cp1: { kind: cp1.kind, normal: { x: +cp1.normal.x.toFixed(3), y: +cp1.normal.y.toFixed(3), z: +cp1.normal.z.toFixed(3) } },
+        cp2: { kind: cp2.kind, normal: { x: +cp2.normal.x.toFixed(3), y: +cp2.normal.y.toFixed(3), z: +cp2.normal.z.toFixed(3) } },
+        cp3: { kind: cp3.kind },
+      },
+    };
+  })()`, true);
+  if (!r) record('set-cplane-roundtrip', false, { reason: 'evaluate returned null' });
+  else record('set-cplane-roundtrip', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

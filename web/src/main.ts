@@ -49,7 +49,7 @@ import { initCreateMode, emitClickWorld } from "./viewer/create-mode";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
-import { resolveCPlane } from "./viewer/cplane";
+import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
 import { runIteration } from "./chat-panel";
 import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs-primitives";
@@ -122,6 +122,8 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 (window as unknown as { __levelStore: typeof levelStore }).__levelStore = levelStore;
 // Expose resolveCPlane for surface 31 CDP verification (W-1 #357).
 (window as unknown as { __resolveCPlane: typeof resolveCPlane }).__resolveCPlane = resolveCPlane;
+// Expose activeCPlane accessor for surface 39 CDP verification (W-4 #360).
+(window as unknown as { __getActiveCPlane: () => CPlane }).__getActiveCPlane = () => viewer.activeCPlane;
 (window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 (window as unknown as { __runIteration: typeof runIteration }).__runIteration = runIteration;
 // Expose snap test hooks for CDP verification (#374).
@@ -1714,6 +1716,60 @@ registerHandler("SdArray", (args) => {
     cols,
     spacing: [sx, sy, sz],
   };
+});
+
+// W-4 (#360): SdSetCPlane — explicit CPlane override.
+// Writes viewer.activeCPlane; kind='explicit' locks resolveCPlane to return it.
+// mode='world' resets to WORLD_XY (kind='world') so per-canonical defaults resume.
+registerHandler("SdSetCPlane", (args) => {
+  const mode = (args.mode as string | undefined) ?? "world";
+  const viewMap: Record<string, CPlane> = {
+    top: WORLD_XY, bottom: WORLD_XY,
+    front: WORLD_XZ, back: WORLD_XZ,
+    right: WORLD_YZ, left: WORLD_YZ,
+  };
+  let newCPlane: CPlane;
+  switch (mode) {
+    case "top":
+      newCPlane = { ...WORLD_XY, kind: "explicit" as const }; break;
+    case "front":
+      newCPlane = { ...WORLD_XZ, kind: "explicit" as const }; break;
+    case "right":
+      newCPlane = { ...WORLD_YZ, kind: "explicit" as const }; break;
+    case "view-derived": {
+      const base = viewMap[viewer.activeView] ?? WORLD_XY;
+      newCPlane = { ...base, kind: "explicit" as const }; break;
+    }
+    case "explicit": {
+      const oRaw = (args.origin as number[] | undefined) ?? [0, 0, 0];
+      const xRaw = (args.xAxis  as number[] | undefined) ?? [1, 0, 0];
+      const yRaw = (args.yAxis  as number[] | undefined) ?? [0, 1, 0];
+      const origin = new THREE.Vector3(oRaw[0] ?? 0, oRaw[1] ?? 0, oRaw[2] ?? 0);
+      const xAxis  = new THREE.Vector3(xRaw[0] ?? 1, xRaw[1] ?? 0, xRaw[2] ?? 0).normalize();
+      const yAxis  = new THREE.Vector3(yRaw[0] ?? 0, yRaw[1] ?? 1, yRaw[2] ?? 0).normalize();
+      const normal = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize();
+      newCPlane = { origin, xAxis, yAxis, normal, kind: "explicit" as const }; break;
+    }
+    case "world":
+    default:
+      newCPlane = { ...WORLD_XY }; break;
+  }
+  viewer.activeCPlane = newCPlane;
+  window.dispatchEvent(new CustomEvent("viewer:cplane-changed", {
+    detail: { cplane: newCPlane, mode },
+    bubbles: false,
+  }));
+  return { mode, kind: newCPlane.kind };
+});
+
+registerHandler("SdResetCPlane", () => {
+  const reset: CPlane = { ...WORLD_XY };
+  viewer.activeCPlane = reset;
+  window.dispatchEvent(new CustomEvent("viewer:cplane-changed", {
+    detail: { cplane: reset, mode: "world" },
+    bubbles: false,
+  }));
+  return { reset: true };
 });
 
 // Install shim handlers for every dictionary verb that doesn't have a native

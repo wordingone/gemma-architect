@@ -1032,6 +1032,39 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdSetCPlane
+  kernel_op: setCPlane
+  args:
+    - name: mode
+      type: enum_choice
+      required: true
+      description: "Which construction plane to activate"
+      options:
+        - {value: world,        label: "World XY",     description: "Reset to world XY — per-canonical defaults resume"}
+        - {value: top,          label: "Top (XY)",     description: "Lock active CPlane to world XY (top view plane)"}
+        - {value: front,        label: "Front (XZ)",   description: "Lock active CPlane to world XZ (front view plane)"}
+        - {value: right,        label: "Right (YZ)",   description: "Lock active CPlane to world YZ (right view plane)"}
+        - {value: view-derived, label: "Current View", description: "Lock active CPlane to the current orthographic view's plane"}
+        - {value: host-pick,    label: "Pick Surface", description: "Click a face to derive CPlane from its normal (W-6)"}
+        - {value: explicit,     label: "Explicit",     description: "Specify origin + axes directly"}
+    - {name: origin, type: vector3, required: false, description: "Origin point for explicit mode"}
+    - {name: xAxis,  type: vector3, required: false, description: "X axis direction for explicit mode"}
+    - {name: yAxis,  type: vector3, required: false, description: "Y axis direction for explicit mode"}
+  topology_role: view
+  kg_predicates: []
+  synonyms: [setcplane, "set cplane", "set construction plane", cplane, workplane, "work plane"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdResetCPlane
+  kernel_op: resetCPlane
+  args: []
+  topology_role: view
+  kg_predicates: []
+  synonyms: [resetcplane, "reset cplane", "reset construction plane", "cplane reset"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 - canonical_name: SdRenderMode
   kernel_op: setRenderMode
   args:
