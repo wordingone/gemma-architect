@@ -31,7 +31,14 @@ export type SdArgType =
   | "any" | "list_any"
   | "number_or_vector3"
   | "list_point2"
-  | "arraybuffer" | "enum_format";
+  | "arraybuffer" | "enum_format"
+  | "enum_choice";
+
+export type ChoiceOption = {
+  value: string;
+  label: string;
+  description: string;
+};
 
 export type SdArg = {
   name: string;
@@ -39,6 +46,8 @@ export type SdArg = {
   required: boolean;
   unit?: string;
   default?: unknown;
+  description?: string;
+  options?: ChoiceOption[];
 };
 
 export type SdTopologyRole =
@@ -332,10 +341,20 @@ function asArgList(n: ParsedNode | undefined): SdArg[] {
       required: e.required && e.required.kind === "scalar" ? e.required.value === true : false,
     };
     if (e.unit) arg.unit = asString(e.unit);
+    if (e.description) arg.description = asString(e.description);
     if (e.default !== undefined) {
       const d = e.default;
       if (d.kind === "scalar") arg.default = d.value;
       else if (d.kind === "list") arg.default = d.items.map((x) => x.kind === "scalar" ? x.value : null);
+    }
+    if (e.options && e.options.kind === "list") {
+      arg.options = e.options.items
+        .filter((o): o is ParsedMap => o.kind === "map")
+        .map((o) => ({
+          value: asString(o.entries.value),
+          label: asString(o.entries.label),
+          description: asString(o.entries.description),
+        }));
     }
     out.push(arg);
   }

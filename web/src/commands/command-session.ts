@@ -1,5 +1,5 @@
 import { dispatch, resolveVerb, type DispatchResult } from "./dispatch";
-import { getEntry, type SdArg, type SpatialDictionaryEntry } from "./dictionary";
+import { getEntry, type SdArg, type SpatialDictionaryEntry, type ChoiceOption } from "./dictionary";
 
 export type CommandSessionState =
   | "idle"
@@ -17,7 +17,7 @@ export type CommandEnvelope = {
   metadata?: { source?: InvocationSource; sessionId?: string };
 };
 
-export type SessionStatus = "running" | "needs_input" | "success" | "error";
+export type SessionStatus = "running" | "needs_input" | "needs_choice" | "success" | "error";
 
 export type CommandSessionResult = {
   status: SessionStatus;
@@ -27,6 +27,7 @@ export type CommandSessionResult = {
   missing?: string[];
   resolvedArgs?: Record<string, unknown>;
   dispatchResult?: DispatchResult;
+  awaiting_text_choice?: { arg: string; options: ChoiceOption[] };
 };
 
 type ActiveSession = {
@@ -129,6 +130,18 @@ function missingArgs(entry: SpatialDictionaryEntry, args: Record<string, unknown
     .filter((a) => a.required)
     .filter((a) => args[a.name] === undefined || args[a.name] === null)
     .map((a) => a.name);
+}
+
+function findMissingEnumChoiceArg(
+  entry: SpatialDictionaryEntry,
+  args: Record<string, unknown>,
+): { arg: string; options: ChoiceOption[] } | null {
+  for (const spec of entry.args) {
+    if (spec.type !== "enum_choice") continue;
+    if (args[spec.name] !== undefined && args[spec.name] !== null) continue;
+    return { arg: spec.name, options: spec.options ?? [] };
+  }
+  return null;
 }
 
 function buildSummary(canonical: string, args: Record<string, unknown>, status: string, missing: string[] = []): string {
@@ -275,6 +288,22 @@ export async function startCommandSession(envelope: CommandEnvelope): Promise<Co
       summary: buildSummary(canonical, args, "needs_input", missing),
     };
   }
+
+  // Text-choice gate: if any enum_choice arg has no value, surface chooser before executing.
+  const missingChoice = findMissingEnumChoiceArg(entry, args);
+  if (missingChoice) {
+    session.state = "collecting_args";
+    return {
+      status: "needs_choice",
+      state: session.state,
+      canonical,
+      missing: [missingChoice.arg],
+      awaiting_text_choice: missingChoice,
+      resolvedArgs: { ...args },
+      summary: `Choose ${missingChoice.arg} for ${canonical}: ${missingChoice.options.map((o) => o.value).join(", ")}.`,
+    };
+  }
+
   session.state = "ready";
   return executeSession(session);
 }
@@ -335,6 +364,45 @@ export async function provideSessionPick(point: [number, number]): Promise<Comma
       summary: `${pts.length} corners — press Enter to place slab.`,
     };
   } else if (missing.length > 0) {
+    return {
+      status: "needs_input",
+      state: "collecting_args",
+      canonical: _session.canonical,
+      missing,
+      resolvedArgs: { ..._session.args },
+      summary: buildSummary(_session.canonical, _session.args, "needs_input", missing),
+    };
+  }
+  _session.state = "ready";
+  return executeSession(_session);
+}
+
+// Called by chat-panel or cursor chooser when user has selected an enum_choice value.
+export async function provideSessionChoice(value: string): Promise<CommandSessionResult> {
+  if (!_session) {
+    return { status: "error", state: "idle", summary: "No active command session." };
+  }
+  const missingChoice = findMissingEnumChoiceArg(_session.entry, _session.args);
+  if (!missingChoice) {
+    return { status: "error", state: _session.state, summary: "No pending enum_choice in session." };
+  }
+  _session.args[missingChoice.arg] = value;
+  // Re-check for additional missing choices or other missing required args.
+  const nextChoice = findMissingEnumChoiceArg(_session.entry, _session.args);
+  if (nextChoice) {
+    return {
+      status: "needs_choice",
+      state: "collecting_args",
+      canonical: _session.canonical,
+      missing: [nextChoice.arg],
+      awaiting_text_choice: nextChoice,
+      resolvedArgs: { ..._session.args },
+      summary: `Choose ${nextChoice.arg} for ${_session.canonical}: ${nextChoice.options.map((o) => o.value).join(", ")}.`,
+    };
+  }
+  const missing = missingArgs(_session.entry, _session.args);
+  const needsPicker = PRIMITIVE_CANONICALS.has(_session.canonical) || IFC_PICKER_CANONICALS.has(_session.canonical);
+  if (missing.length > 0 && needsPicker) {
     return {
       status: "needs_input",
       state: "collecting_args",

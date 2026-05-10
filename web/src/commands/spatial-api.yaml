@@ -581,6 +581,17 @@
   ifc4_class: IfcRoof
   kernel_op: makeRoof
   args:
+    - name: roofType
+      type: enum_choice
+      required: false
+      default: flat
+      description: "Roof configuration type"
+      options:
+        - {value: flat,        label: "Flat",        description: "Flat deck (no pitch)"}
+        - {value: pitched,     label: "Pitched",     description: "Simple gable roof with two sloped faces"}
+        - {value: hipped,      label: "Hipped",      description: "Hip roof, sloped on all four sides"}
+        - {value: curved,      label: "Curved",      description: "Barrel vault or arched roof"}
+        - {value: combination, label: "Combination", description: "Mixed flat and pitched zones"}
     - {name: footprint,  type: polyline, required: true}
     - {name: pitchDeg,   type: number,   required: false, default: 30, unit: deg}
     - {name: ridgeHeight,type: number,   required: false, unit: m}

@@ -22,6 +22,7 @@ import {
   resolveAlias,
   type SpatialDictionaryEntry,
   type SdArg,
+  type ChoiceOption,
 } from "./dictionary";
 
 // ============================================================
@@ -43,8 +44,10 @@ export type DispatchResultErr = {
     | "UnknownVerb"
     | "ArgValidationError"
     | "NoHandler"
-    | "HandlerThrew";
+    | "HandlerThrew"
+    | "NeedsChoiceError";
   detail?: string;
+  choice?: { arg: string; options: ChoiceOption[] };
 };
 
 export type DispatchResult = DispatchResultOk | DispatchResultErr;
@@ -164,6 +167,13 @@ function validateArgValue(value: unknown, spec: SdArg): string | null {
     case "string":
     case "enum_format":
       return typeof value === "string" ? null : `arg "${spec.name}" expected string`;
+    case "enum_choice": {
+      if (typeof value !== "string") return `arg "${spec.name}" expected string (enum_choice)`;
+      if (spec.options && spec.options.length > 0 && !spec.options.some((o) => o.value === value)) {
+        return `arg "${spec.name}" must be one of: ${spec.options.map((o) => o.value).join(", ")}`;
+      }
+      return null;
+    }
     case "boolean":
       return typeof value === "boolean" ? null : `arg "${spec.name}" expected boolean`;
     case "point2":
@@ -205,8 +215,27 @@ function validateArgs(args: DispatchArgs, schema: SdArg[]): string | null {
   if (!isPlainObject(args)) return "args must be an object";
   // Check each declared arg.
   for (const spec of schema) {
+    // enum_choice missing-required case is handled by findMissingEnumChoice pre-pass.
+    if (spec.type === "enum_choice" && (args[spec.name] === undefined || args[spec.name] === null)) {
+      if (!spec.required) continue;
+      // Required but null/undefined: already caught by pre-pass; skip here to avoid double-error.
+      continue;
+    }
     const err = validateArgValue(args[spec.name], spec);
     if (err) return err;
+  }
+  return null;
+}
+
+function findMissingEnumChoice(
+  args: DispatchArgs,
+  schema: SdArg[],
+): { arg: string; options: ChoiceOption[] } | null {
+  for (const spec of schema) {
+    if (spec.type !== "enum_choice") continue;
+    if (args[spec.name] !== undefined && args[spec.name] !== null) continue;
+    // Missing enum_choice (required or optional with no default provided).
+    return { arg: spec.name, options: spec.options ?? [] };
   }
   return null;
 }
@@ -233,6 +262,11 @@ export async function dispatch(
   if (!entry) {
     // Should be unreachable since resolveVerb confirmed it, but defensive.
     return { ok: false, canonical, error: "UnknownVerb", detail: `entry=null` };
+  }
+
+  const missingChoice = findMissingEnumChoice(args, entry.args);
+  if (missingChoice) {
+    return { ok: false, canonical, error: "NeedsChoiceError", choice: missingChoice };
   }
 
   const argsErr = validateArgs(args, entry.args);
@@ -273,6 +307,10 @@ export function dispatchSync(verb: string, args: DispatchArgs = {}): DispatchRes
   }
   const entry = getEntry(canonical);
   if (!entry) return { ok: false, canonical, error: "UnknownVerb" };
+  const missingChoiceSync = findMissingEnumChoice(args, entry.args);
+  if (missingChoiceSync) {
+    return { ok: false, canonical, error: "NeedsChoiceError", choice: missingChoiceSync };
+  }
   const argsErr = validateArgs(args, entry.args);
   if (argsErr) return { ok: false, canonical, error: "ArgValidationError", detail: argsErr };
   const handler = handlers.get(canonical);
