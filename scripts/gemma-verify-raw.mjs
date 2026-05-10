@@ -1560,6 +1560,32 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('snap-step-dynamic', r.passed, r.evidence);
 }
 
+// ── Surface 35: parity-dashboard (#321) ──────────────────────────────────────
+{
+  const r = await evaluate(`
+    (() => {
+      const fn = window.__notifyParityChanged;
+      if (typeof fn !== 'function') return { passed: false, evidence: { reason: '__notifyParityChanged not defined' } };
+      // Ensure SCENE tab is visible.
+      const sceneTab = document.querySelector('.sb-tab[data-tab="scene"]');
+      if (sceneTab) sceneTab.click();
+      fn({
+        iterationN: 3, score: 72, tier: 90, action: 'improve',
+        scoreSeries: [55, 60, 66, 72],
+        deltas: [{ dimension: 'wall coverage', description: 'missing north wall' }]
+      });
+      const rows = document.querySelectorAll('.parity-row');
+      const sparkline = document.querySelector('.parity-sparkline');
+      const deltas = document.querySelectorAll('.parity-delta');
+      return {
+        passed: rows.length >= 3 && !!sparkline && deltas.length >= 1,
+        evidence: { rows: rows.length, sparkline: !!sparkline, deltas: deltas.length }
+      };
+    })()`);
+  if (!r) record('parity-dashboard', false, { reason: 'evaluate returned null' });
+  else record('parity-dashboard', r.passed, r.evidence);
+}
+
 // ── Surface 32: iteration-mode (#320) ────────────────────────────────────────
 {
   const r = await evaluate(`

@@ -329,6 +329,81 @@ function buildSnapDock(): HTMLElement {
   return root;
 }
 
+interface ParityUpdate {
+  iterationN: number;
+  score: number;
+  tier: number;
+  scoreSeries: number[];
+  deltas: Array<{ dimension: string; description: string }>;
+  action: string;
+}
+
+function buildParitySubsection(): HTMLElement {
+  const body = el("div");
+  body.style.cssText = "padding-bottom:4px;";
+
+  const hint = el("div");
+  hint.style.cssText = "padding:4px 10px; font-size:10px; color:var(--ink-faint);";
+  hint.textContent = "No iteration yet.";
+  body.appendChild(hint);
+
+  function render(u: ParityUpdate): void {
+    body.innerHTML = "";
+
+    function row(label: string, value: string): void {
+      const r = el("div");
+      r.className = "parity-row";
+      r.style.cssText =
+        "display:flex; align-items:center; justify-content:space-between;" +
+        " padding:2px 10px; font-size:10px; color:var(--ink-dim);";
+      const k = el("span");
+      k.textContent = label;
+      const v = el("span");
+      v.textContent = value;
+      r.appendChild(k);
+      r.appendChild(v);
+      body.appendChild(r);
+    }
+
+    row("Iteration", String(u.iterationN));
+    row("Score", `${u.score}%`);
+    row("Tier", `${u.tier}%`);
+    row("Action", u.action);
+
+    if (u.scoreSeries.length > 0) {
+      const blocks = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+      const max = Math.max(...u.scoreSeries);
+      const min = Math.min(...u.scoreSeries);
+      const range = max - min || 1;
+      const spark = u.scoreSeries
+        .map(s => blocks[Math.round(((s - min) / range) * (blocks.length - 1))])
+        .join("");
+      const sparkEl = el("div");
+      sparkEl.className = "parity-sparkline";
+      sparkEl.style.cssText =
+        "padding:2px 10px; font-size:10px; font-family:var(--mono); color:var(--ink-dim);";
+      sparkEl.textContent = spark;
+      body.appendChild(sparkEl);
+    }
+
+    for (const d of u.deltas.slice(0, 5)) {
+      const dim = el("div");
+      dim.className = "parity-delta";
+      dim.style.cssText =
+        "padding:1px 10px 1px 18px; font-size:9px; color:var(--ink-faint);" +
+        " overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+      dim.textContent = `• ${d.dimension}: ${d.description}`;
+      body.appendChild(dim);
+    }
+  }
+
+  document.addEventListener("viewer:parity-changed", (e: Event) => {
+    render((e as CustomEvent<ParityUpdate>).detail);
+  });
+
+  return body;
+}
+
 function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body hier-tab");
   if (scenePanel) {
@@ -373,6 +448,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   refBody.appendChild(buildGridsTab());
   refBody.appendChild(buildDatumsTab());
   addSubsection("REFERENCE GEOMETRY", refBody);
+  addSubsection("PARITY", buildParitySubsection());
   addSubsection("VIEW STATE", buildViewStateSection());
 
   return wrap;
