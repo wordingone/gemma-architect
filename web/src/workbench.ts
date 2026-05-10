@@ -24,7 +24,7 @@ import { ChatPanel } from "./chat-panel";
 import { compileDsl } from "./commands/dsl-eval";
 import { dispatchSync, type DispatchArgs } from "./commands/dispatch";
 import { startCommandSession } from "./commands/command-session";
-import { setState } from "./app-state";
+import { setState, subscribe as subscribeAppState, type ViewName } from "./app-state";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./viewer/snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import { levelStore, type Level } from "./levels";
@@ -1800,6 +1800,130 @@ function wireDockResize() {
   });
 }
 
+// ── View-switcher (W2.3) ──────────────────────────────────────────────────────
+
+type ViewOption = { view: ViewName; tag: string; label: string };
+const VIEW_OPTIONS: ViewOption[] = [
+  { view: "top",         tag: "top",   label: "TOP" },
+  { view: "bottom",      tag: "bot",   label: "BOTTOM" },
+  { view: "front",       tag: "front", label: "FRONT" },
+  { view: "back",        tag: "back",  label: "BACK" },
+  { view: "left",        tag: "left",  label: "LEFT" },
+  { view: "right",       tag: "right", label: "RIGHT" },
+  { view: "iso",         tag: "iso",   label: "ISO" },
+  { view: "perspective", tag: "persp", label: "PERSPECTIVE" },
+];
+
+function applyViewToBtn(btn: HTMLElement, view: ViewName): void {
+  const opt = VIEW_OPTIONS.find(o => o.view === view);
+  if (!opt) return;
+  const tagEl = btn.querySelector<HTMLElement>(".vp-tag");
+  const nameEl = btn.querySelector<HTMLElement>(".vp-view-name");
+  if (tagEl) { tagEl.className = `vp-tag ${opt.tag}`; }
+  if (nameEl) { nameEl.textContent = opt.label; }
+  btn.dataset.vpView = view;
+}
+
+function initViewSwitcher(): void {
+  const backdrop = el("div", "vs-backdrop vs-backdrop--hidden");
+  document.body.appendChild(backdrop);
+
+  const popover = el("div", "vs-popover vs-popover--hidden");
+  popover.setAttribute("tabindex", "-1");
+  document.body.appendChild(popover);
+
+  let activeBtn: HTMLElement | null = null;
+  let focusedIdx = -1;
+
+  function setFocusedIdx(idx: number): void {
+    focusedIdx = idx;
+    popover.querySelectorAll<HTMLElement>(".vs-item").forEach((item, i) => {
+      item.classList.toggle("vs-item--focused", i === idx);
+    });
+  }
+
+  function closePopover(): void {
+    popover.classList.add("vs-popover--hidden");
+    backdrop.classList.add("vs-backdrop--hidden");
+    activeBtn = null;
+    focusedIdx = -1;
+    popover.querySelectorAll<HTMLElement>(".vs-item").forEach(item => {
+      item.classList.remove("vs-item--focused");
+    });
+  }
+
+  function syncActive(current: ViewName): void {
+    popover.querySelectorAll<HTMLElement>(".vs-item").forEach(item => {
+      item.classList.toggle("vs-item--active", item.dataset.view === current);
+    });
+  }
+
+  for (const opt of VIEW_OPTIONS) {
+    const item = el("div", "vs-item", { "data-view": opt.view });
+    item.innerHTML = `<span class="vs-check">✓</span><span class="vp-tag ${opt.tag}"></span><span class="vs-label">${opt.label}</span>`;
+    item.addEventListener("click", () => {
+      setState("currentView", opt.view);
+      dispatchSync("SdSetView", { view: opt.view });
+      if (activeBtn) applyViewToBtn(activeBtn, opt.view);
+      closePopover();
+    });
+    popover.appendChild(item);
+  }
+
+  popover.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closePopover(); e.preventDefault(); return; }
+    const n = VIEW_OPTIONS.length;
+    if (e.key === "ArrowDown") { e.preventDefault(); setFocusedIdx((focusedIdx + 1) % n); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setFocusedIdx((focusedIdx - 1 + n) % n); }
+    else if (e.key === "Enter" && focusedIdx >= 0) {
+      e.preventDefault();
+      const opt = VIEW_OPTIONS[focusedIdx];
+      if (opt) {
+        setState("currentView", opt.view);
+        dispatchSync("SdSetView", { view: opt.view });
+        if (activeBtn) applyViewToBtn(activeBtn, opt.view);
+        closePopover();
+      }
+    }
+  });
+
+  backdrop.addEventListener("click", closePopover);
+
+  document.querySelectorAll<HTMLElement>(".vp-view-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (activeBtn === btn && !popover.classList.contains("vs-popover--hidden")) {
+        closePopover();
+        return;
+      }
+      activeBtn = btn;
+      const rect = btn.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      popover.classList.remove("vs-popover--hidden");
+      backdrop.classList.remove("vs-backdrop--hidden");
+      const pw = popover.offsetWidth;
+      const ph = popover.offsetHeight;
+      let left = rect.left;
+      let top  = rect.bottom + 2;
+      if (left + pw > vw - 10) left = Math.max(0, rect.right - pw);
+      if (top  + ph > vh - 10) top  = rect.top - ph - 2;
+      popover.style.left = `${left}px`;
+      popover.style.top  = `${top}px`;
+      const currentView = btn.dataset.vpView as ViewName ?? "perspective";
+      syncActive(currentView);
+      const activeIdx = VIEW_OPTIONS.findIndex(o => o.view === currentView);
+      setFocusedIdx(activeIdx >= 0 ? activeIdx : 0);
+      popover.focus();
+    });
+  });
+
+  // Keep viewport-2's button in sync when view changes via cmdk/agent.
+  subscribeAppState("currentView", (view) => {
+    const vp2btn = document.querySelector<HTMLElement>("#viewport-2 .vp-view-btn");
+    if (vp2btn) applyViewToBtn(vp2btn, view);
+  });
+}
+
 function initRenderModePopover(): void {
   const MODES: RenderMode[] = ["shaded", "wireframe", "ghosted", "realistic", "technical"];
   const LINE_TYPES: LineType[] = ["solid", "dashed", "hidden", "centerline", "gridline", "dotted"];
@@ -1955,6 +2079,7 @@ export function buildWorkbench() {
   if (axesHost) axesHost.innerHTML = axesGizmoSVG();
 
   initRenderModePopover();
+  initViewSwitcher();
 
   wireDockResize();
 }

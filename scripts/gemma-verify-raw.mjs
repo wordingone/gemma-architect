@@ -1252,6 +1252,40 @@ function record(name, passed, evidence) {
   else record('view-state-sidebar-lists-clip', r.passed, r.evidence);
 }
 
+// ── Surface 28: view-switcher-dropdown ───────────────────────────────────────
+{
+  // Click the viewport-2 vp-view-btn; assert popover opens.
+  // Click "TOP" option; assert label updates and popover closes.
+  const r = await evaluate(`(async function() {
+    const btn = document.querySelector('#viewport-2 .vp-view-btn');
+    if (!btn) return { passed: false, evidence: { reason: 'no .vp-view-btn in viewport-2' } };
+
+    // Dispatch click to open popover.
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise(r => setTimeout(r, 80));
+
+    const popover = document.querySelector('.vs-popover');
+    const popoverOpen = !!popover && !popover.classList.contains('vs-popover--hidden');
+
+    // Click the TOP item.
+    const items = popover ? [...popover.querySelectorAll('.vs-item')] : [];
+    const topItem = items.find(it => it.dataset.view === 'top');
+    if (topItem) {
+      topItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    }
+    await new Promise(r => setTimeout(r, 80));
+
+    const popoverClosed = !popover || popover.classList.contains('vs-popover--hidden');
+    const nameEl = btn.querySelector('.vp-view-name');
+    const labelUpdated = nameEl && nameEl.textContent.trim() === 'TOP';
+
+    const passed = popoverOpen && popoverClosed && !!labelUpdated;
+    return { passed, evidence: { popoverOpen, popoverClosed, labelText: nameEl?.textContent?.trim(), labelUpdated } };
+  })()`, true);
+  if (!r) record('view-switcher-dropdown', false, { reason: 'evaluate returned null' });
+  else record('view-switcher-dropdown', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
