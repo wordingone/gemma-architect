@@ -220,23 +220,25 @@ describe("Dispatch + validation", () => {
   });
 });
 
-describe("IfcWall optional-profile regression (#81)", () => {
+describe("IfcWall profile requirement (#326)", () => {
   beforeEach(() => {
     unregisterHandler("IfcWall");
   });
 
-  test("dispatch succeeds with only {length, thickness, height} — no profile", async () => {
+  test("dispatch succeeds when profile is provided", async () => {
     registerHandler("IfcWall", (args) => ({ got: args }));
-    const r = await dispatch("IfcWall", { length: 5, thickness: 0.2, height: 2.8 });
+    const r = await dispatch("IfcWall", { profile: [[0, 0], [5, 0]], thickness: 0.2, height: 2.8 });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.canonical).toBe("IfcWall");
   });
 
-  test("dispatch succeeds with empty args — all args optional, no ArgValidationError", async () => {
+  test("dispatch returns ArgValidationError when profile is missing — use startCommandSession for picker flow", async () => {
     registerHandler("IfcWall", () => "ok");
     const r = await dispatch("IfcWall", {});
-    // All args optional: validation passes, handler is called, result is ok
-    if (!r.ok) expect(r.error).not.toBe("ArgValidationError");
+    // profile is required: direct dispatch without it must fail validation.
+    // The human-flow path (console/cmdk) routes through startCommandSession → needs_input.
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe("ArgValidationError");
   });
 });
 
