@@ -251,6 +251,9 @@ export class Viewer {
 
     this.handleResize();
     window.addEventListener("resize", () => this.handleResize());
+    // Defense-in-depth: catch layout-driven canvas size changes (e.g. sidebar
+    // tab switches that grow/shrink the workbench row) that don't fire window.resize.
+    new ResizeObserver(() => this.handleResize()).observe(this.canvas);
 
     // Raycaster for object picking. The canvas has CSS pointer-events:none
     // (lets clicks fall through to the per-pane .vp-body which hosts the

@@ -284,7 +284,7 @@ html[data-mode="night"] .snap-dock::after {
   display: grid;
   grid-template-rows: 24px 30px 50px 1fr 22px;
   grid-template-columns: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
   width: 100vw;
   background: transparent;
   /* SILHOUETTE — single hairline, the page edge */
@@ -1312,6 +1312,8 @@ html[data-mode="night"] .paper-stage {
 .workbench {
   display: grid;
   grid-template-columns: 80px 1fr var(--sidebar-w, 320px);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
   border-bottom: var(--lw-edge) solid var(--chrome-seam);
   background: transparent;
@@ -2236,6 +2238,7 @@ html[data-mode="night"] .paper-stage {
   /* -webkit-backdrop-filter: var(--glass-blur); */
   box-shadow: inset 0.5px 0 0 0 var(--glass-edge-light);
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
   position: relative;
 }
