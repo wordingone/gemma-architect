@@ -74,9 +74,15 @@ async function poll() {
     return;
   }
 
+  // Only tracked changes block the pull; untracked files are harmless for ff-only.
   const statusResult = run("git status --porcelain");
-  if ((statusResult.stdout ?? "").trim()) {
-    log(`SKIP-DIRTY serving tree has uncommitted changes (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
+  const trackedDirty = (statusResult.stdout ?? "")
+    .split("\n")
+    .filter(l => l.length >= 2 && !l.startsWith("??"))
+    .join("\n")
+    .trim();
+  if (trackedDirty) {
+    log(`SKIP-DIRTY serving tree has tracked uncommitted changes (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
     return;
   }
 
