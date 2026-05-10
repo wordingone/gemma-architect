@@ -47,6 +47,7 @@ import { syncToolActiveClass, getState, setState } from "./app-state";
 import { initCreateMode, emitClickWorld } from "./viewer/create-mode";
 import { undo, redo } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
+import { resolveCPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
 import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs-primitives";
 import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePointAt, domain as curveDomain } from "./nurbs-curves";
@@ -116,6 +117,8 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 // Expose gridStore for CDP probes.
 (window as unknown as { __gridStore: typeof gridStore }).__gridStore = gridStore;
 (window as unknown as { __levelStore: typeof levelStore }).__levelStore = levelStore;
+// Expose resolveCPlane for surface 31 CDP verification (W-1 #357).
+(window as unknown as { __resolveCPlane: typeof resolveCPlane }).__resolveCPlane = resolveCPlane;
 (window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
@@ -404,6 +407,7 @@ function getActiveLevelElevation(): number {
 }
 
 registerHandler("IfcWall", (args) => {
+  const cplane = resolveCPlane("IfcWall", args as Record<string, unknown>, viewer);
   const rawProfile = args.profile as [number, number][] | undefined;
   const wallLen = (args.length as number | undefined) ?? 4;
   const profile: [number, number][] = rawProfile ?? [[0, 0], [wallLen, 0]];
@@ -432,6 +436,7 @@ registerHandler("IfcWall", (args) => {
   }
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcWall";
+  mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcWall", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
@@ -439,6 +444,7 @@ registerHandler("IfcWall", (args) => {
 });
 
 registerHandler("IfcSlab", (args) => {
+  const cplane = resolveCPlane("IfcSlab", args as Record<string, unknown>, viewer);
   const w = (args.width as number | undefined) ?? (args.length as number | undefined) ?? 4;
   const d = (args.depth as number | undefined) ?? (args.width as number | undefined) ?? 4;
   const t = (args.thickness as number | undefined) ?? 0.2;
@@ -449,6 +455,7 @@ registerHandler("IfcSlab", (args) => {
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcSlab";
+  mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcSlab", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
@@ -456,6 +463,7 @@ registerHandler("IfcSlab", (args) => {
 });
 
 registerHandler("IfcColumn", (args) => {
+  const cplane = resolveCPlane("IfcColumn", args as Record<string, unknown>, viewer);
   const s = (args.size as number | undefined) ?? 0.3;
   const h = (args.height as number | undefined) ?? 4;
   const geom = new THREE.BoxGeometry(s, s, h);
@@ -467,6 +475,7 @@ registerHandler("IfcColumn", (args) => {
   else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcColumn";
+  mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcColumn", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
@@ -1220,13 +1229,30 @@ registerHandler("IfcFurnishingElement", (args) => {
 // Render using THREE line/point primitives (not mesh geometry) per Jun's
 // "tubes / spheres" feedback: lines = LineSegments, points = sprite-style Points.
 
+function buildPointMaterial(sizePx = 14): THREE.PointsMaterial {
+  const canvas = document.createElement("canvas");
+  canvas.width = 32; canvas.height = 32;
+  const ctx = canvas.getContext("2d")!;
+  ctx.beginPath();
+  ctx.arc(16, 16, 12, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "#111111";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  return new THREE.PointsMaterial({
+    size: sizePx, sizeAttenuation: false,
+    map: new THREE.CanvasTexture(canvas),
+    transparent: true, alphaTest: 0.1, depthTest: false,
+  });
+}
+
 registerHandler("SdPoint", (args) => {
   const pos = (args.position as number[] | undefined) ?? [0, 0, 0];
   const p = Prim3.create(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute([p.x, p.y, p.z], 3));
-  const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x000000 });
-  const obj = new THREE.Points(geom, mat);
+  const obj = new THREE.Points(geom, buildPointMaterial());
   obj.userData.kind = "point";
   obj.userData.creator = "SdPoint";
   viewer.addMesh(obj, "mesh");
@@ -1528,8 +1554,7 @@ registerHandler("SdArray", (args) => {
   function makePoint(position: [number, number, number]): THREE.Points {
     const geom = new THREE.BufferGeometry();
     geom.setAttribute("position", new THREE.Float32BufferAttribute(position, 3));
-    const mat = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false, color: 0x000000 });
-    const obj = new THREE.Points(geom, mat);
+    const obj = new THREE.Points(geom, buildPointMaterial());
     obj.userData.kind = "point";
     obj.userData.creator = "SdArray";
     return obj;

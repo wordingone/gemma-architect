@@ -14,6 +14,7 @@ import { emitChainFragment } from "./transforms.js";
 import { getSnap, subscribeSnap } from "./snap-state.js";
 import { showHandlesFor, clearHandles, isSubObjectHandle, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
 import { getCurrentDispatchCtx } from "../commands/dispatch.js";
+import { WORLD_XY, type CPlane } from "./cplane.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -165,6 +166,9 @@ export class Viewer {
   // Arbitrary named clipping planes (SdClippingPlane).
   private _clipPlanes: THREE.Plane[] = [];
   private _clipLabels: Map<string, THREE.Plane> = new Map();
+  // Construction plane (W-1). Updated by setView(); overridden by SdSetCPlane (W-4).
+  activeView:   string = "persp";
+  activeCPlane: CPlane = WORLD_XY;
 
   constructor(canvas: HTMLCanvasElement, viewportAreaEl: HTMLElement) {
     this.canvas = canvas;
@@ -2122,7 +2126,8 @@ export class Viewer {
     }
   }
 
-  setView(name: "top" | "bottom" | "front" | "back" | "left" | "right" | "iso" | "extents"): void {
+  setView(name: "top" | "bottom" | "front" | "back" | "left" | "right" | "iso" | "extents" | "persp"): void {
+    this.activeView = name;
     const b = this.currentBounds ?? { min: [-5, -5, -5] as [number, number, number], max: [5, 5, 5] as [number, number, number] };
     const cx = (b.min[0] + b.max[0]) / 2;
     const cy = (b.min[1] + b.max[1]) / 2;

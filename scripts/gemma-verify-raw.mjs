@@ -1448,6 +1448,65 @@ async function assertNoCmdkOverlay(afterSurface) {
   await assertNoCmdkOverlay('ifc-picker-activation');
 }
 
+// ── Surface 31: cplane-default-resolution (#357) ──────────────────────────────
+{
+  const r = await evaluate(`(() => {
+    const resolve = window.__resolveCPlane;
+    const viewer  = window.__viewer;
+    if (!resolve) return { passed: false, evidence: { reason: '__resolveCPlane not exposed' } };
+    if (!viewer)  return { passed: false, evidence: { reason: '__viewer not exposed' } };
+
+    const results = [];
+
+    // AC1: IfcWall always returns world XY regardless of view.
+    // Set activeView to 'front' (XZ plane) then confirm IfcWall still returns XY.
+    const prevView = viewer.activeView;
+    viewer.activeView = 'front';
+    const wallPlane = resolve('IfcWall', {}, viewer);
+    viewer.activeView = prevView;
+    const wallIsXY = wallPlane.name === 'World XY' || (
+      Math.abs(wallPlane.normal.x) < 0.01 &&
+      Math.abs(wallPlane.normal.y) < 0.01 &&
+      Math.abs(wallPlane.normal.z - 1) < 0.01
+    );
+    results.push({ check: 'IfcWall→worldXY-ignores-view', passed: wallIsXY, normal: { x: wallPlane.normal.x, y: wallPlane.normal.y, z: wallPlane.normal.z }, kind: wallPlane.kind });
+
+    // AC2: SdBox with activeView='top' → world XY.
+    viewer.activeView = 'top';
+    const boxTop = resolve('SdBox', {}, viewer);
+    viewer.activeView = prevView;
+    const boxTopIsXY = Math.abs(boxTop.normal.z - 1) < 0.01;
+    results.push({ check: 'SdBox+top→worldXY', passed: boxTopIsXY, normal: { x: boxTop.normal.x, y: boxTop.normal.y, z: boxTop.normal.z } });
+
+    // AC3: SdBox with activeView='front' → world XZ (normal.y ≈ 1).
+    viewer.activeView = 'front';
+    const boxFront = resolve('SdBox', {}, viewer);
+    viewer.activeView = prevView;
+    const boxFrontIsXZ = Math.abs(boxFront.normal.y - 1) < 0.01;
+    results.push({ check: 'SdBox+front→worldXZ', passed: boxFrontIsXZ, normal: { x: boxFront.normal.x, y: boxFront.normal.y, z: boxFront.normal.z } });
+
+    // AC4: explicit activeCPlane is always returned.
+    const explicitPlane = {
+      origin: new (Object.getPrototypeOf(viewer.activeCPlane.origin).constructor)(1, 2, 3),
+      xAxis:  new (Object.getPrototypeOf(viewer.activeCPlane.xAxis).constructor)(1, 0, 0),
+      yAxis:  new (Object.getPrototypeOf(viewer.activeCPlane.yAxis).constructor)(0, 0, 1),
+      normal: new (Object.getPrototypeOf(viewer.activeCPlane.normal).constructor)(0, 1, 0),
+      name: 'TestExplicit', kind: 'explicit'
+    };
+    const savedCPlane = viewer.activeCPlane;
+    viewer.activeCPlane = explicitPlane;
+    const explicitResult = resolve('IfcWall', {}, viewer);
+    viewer.activeCPlane = savedCPlane;
+    const explicitOk = explicitResult.kind === 'explicit' && explicitResult.name === 'TestExplicit';
+    results.push({ check: 'explicit-activeCPlane-overrides', passed: explicitOk, kind: explicitResult.kind, name: explicitResult.name });
+
+    const allPassed = results.every(r => r.passed);
+    return { passed: allPassed, evidence: { results } };
+  })()`, true);
+  if (!r) record('cplane-default-resolution', false, { reason: 'evaluate returned null' });
+  else record('cplane-default-resolution', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
