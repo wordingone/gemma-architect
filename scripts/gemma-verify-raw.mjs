@@ -1286,6 +1286,86 @@ function record(name, passed, evidence) {
   else record('view-switcher-dropdown', r.passed, r.evidence);
 }
 
+// ── Surface 29: ifc-render-determinism ───────────────────────────────────────
+{
+  // Load Schultz_Residence.ifc twice; assert bpp values are consistent (≤ 0.02 diff).
+  // Uses fitCamera(currentBounds) — immune to the frameAllVisible bounding-box
+  // pathology that SdZoomExtents exhibits with IFC files.
+
+  async function normalizeAndCapture(label) {
+    // Reset camera via fitCamera (avoids broken SdZoomExtents → frameAllVisible)
+    await evaluate(`(function() {
+      const v = window.__viewer;
+      if (v && v.currentBounds) v.fitCamera(v.currentBounds);
+    })()`);
+    await delay(600);
+    // Clamp canvas height to visible viewport so both captures use same region size
+    await evaluate(`(function() {
+      const va = document.getElementById('viewport-area-host');
+      const c = document.getElementById('viewer-canvas');
+      if (!va || !c) return;
+      const r = va.getBoundingClientRect();
+      const w = Math.round(r.width);
+      const h = Math.min(Math.round(r.height), window.innerHeight - Math.round(r.top));
+      c.style.cssText = 'position:absolute; top:0; left:0; width:' + w + 'px; height:' + h + 'px; z-index:0; pointer-events:none; display:block;';
+      window.dispatchEvent(new Event('resize'));
+    })()`);
+    await delay(600);
+    return canvasBpp(label);
+  }
+
+  // First capture: IFC already loaded from Surface 13
+  const s1 = await normalizeAndCapture('run1');
+
+  // Second load: same IFC file via DataTransfer injection
+  await evaluate(`(function() {
+    window.__deterIFCLoaded = false;
+    window.addEventListener('viewer:ifc-loaded', function _h() {
+      window.__deterIFCLoaded = true;
+      window.removeEventListener('viewer:ifc-loaded', _h);
+    });
+    return true;
+  })()`);
+
+  const loadOk = await evaluate(`(async function() {
+    try {
+      const resp = await fetch('/samples/Schultz_Residence.ifc');
+      if (!resp.ok) return false;
+      const bytes = await resp.arrayBuffer();
+      const file = new File([bytes], 'Schultz_Residence.ifc', { type: 'application/x-step' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const input = document.getElementById('file-input');
+      if (!input) return false;
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    } catch(e) { return false; }
+  })()`, true);
+
+  if (!loadOk) {
+    record('ifc-render-determinism', false, { reason: 'second IFC load trigger failed', bpp1: s1.bpp });
+  } else {
+    let loaded2 = false;
+    for (let i = 0; i < 60; i++) {
+      await delay(1000);
+      if (await evaluate('window.__deterIFCLoaded')) { loaded2 = true; break; }
+    }
+
+    if (!loaded2) {
+      record('ifc-render-determinism', false, { reason: 'second viewer:ifc-loaded not received (60s)', bpp1: s1.bpp });
+    } else {
+      const s2 = await normalizeAndCapture('run2');
+      const diff = Math.round(Math.abs(s1.bpp - s2.bpp) * 1000) / 1000;
+      const passed = diff <= 0.02;
+      record('ifc-render-determinism', passed, {
+        bpp1: s1.bpp, bpp2: s2.bpp, diff,
+        pixels1: s1.pixels, pixels2: s2.pixels,
+      });
+    }
+  }
+}
+
 } finally {
   await cleanup();
 }
