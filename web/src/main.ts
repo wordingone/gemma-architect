@@ -1577,6 +1577,7 @@ async function handleFile(file: File): Promise<void> {
           buildIfcMesh(msg, file.name).then((scene) => {
             finalizeFileLoad(scene, file.name);
             window.dispatchEvent(new CustomEvent("viewer:ifc-loaded", { detail: { filename: file.name } }));
+            dispatchSync("SdZoomExtents", {});
           });
         } else if (msg.type === "load-ifc-error") {
           setStatus(`IFC parse failed: ${msg.error}`, "err");

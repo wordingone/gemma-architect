@@ -657,13 +657,49 @@ function record(name, passed, evidence) {
 
       try {
         const detail = await loadPromise;
+        // Wait for SdZoomExtents camera animation to settle (#288 Part A).
+        await new Promise(r => setTimeout(r, 800));
         const afterCount = window.__viewer?.scene?.children?.length ?? 0;
         let hasMeshWithCreator = false;
         window.__viewer?.scene?.traverse?.(obj => {
           if (obj.userData?.creator) hasMeshWithCreator = true;
         });
+        // Compute scene bounding box center and camera distance to verify zoom-extents fired.
+        let zoomApplied = false;
+        let zoomEvidence = {};
+        try {
+          const scene = window.__viewer?.scene;
+          const cam = window.__viewer?.camera;
+          if (scene && cam) {
+            let minX = Infinity, minY = Infinity, minZ = Infinity;
+            let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+            scene.traverse(obj => {
+              if (obj.geometry) {
+                const pos = obj.geometry.attributes?.position;
+                if (pos) {
+                  for (let i = 0; i < pos.count; i++) {
+                    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (y < minY) minY = y; if (y > maxY) maxY = y;
+                    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+                  }
+                }
+              }
+            });
+            const hasGeom = isFinite(minX);
+            if (hasGeom) {
+              const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+              const diag = Math.sqrt((maxX-minX)**2 + (maxY-minY)**2 + (maxZ-minZ)**2);
+              const cp = cam.position;
+              const camDist = Math.sqrt((cp.x-cx)**2 + (cp.y-cy)**2 + (cp.z-cz)**2);
+              // Camera within 3× diagonal = framed on model
+              zoomApplied = diag > 0 && camDist < diag * 3;
+              zoomEvidence = { diag: Math.round(diag*100)/100, camDist: Math.round(camDist*100)/100, ratio: Math.round(camDist/diag*100)/100 };
+            }
+          }
+        } catch (_) {}
         const passed = afterCount > 0 && hasMeshWithCreator;
-        return { passed, evidence: { afterCount, hasMeshWithCreator, detail } };
+        return { passed, evidence: { afterCount, hasMeshWithCreator, detail, zoomApplied, ...zoomEvidence } };
       } catch (e) {
         return { passed: false, evidence: { reason: 'event not received', error: String(e) } };
       }
