@@ -47,7 +47,7 @@ import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState } from "./app-state";
 import { initCreateMode, emitClickWorld } from "./viewer/create-mode";
 import { initSectionHandles } from "./viewer/section-handles";
-import { undo, redo } from "./history";
+import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { resolveCPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
@@ -57,7 +57,7 @@ import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePoin
 import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
 import { tessellateSurface } from "./nurbs-surfaces";
 import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "./nurbs-surface-algorithms";
-import { addToMultiSelected, clearMultiSelected, getFilters, getSelected, topologyAllowed } from "./viewer/selection-state";
+import { addToMultiSelected, clearMultiSelected, getFilters, getSelected, setSelected, topologyAllowed } from "./viewer/selection-state";
 import { initRenderModes, setRenderMode, type RenderMode } from "./render-modes";
 import * as THREE from "three";
 
@@ -133,6 +133,7 @@ const viewer = new Viewer(canvas, viewportAreaEl);
   .__notifyParityChanged = (detail) => {
     document.dispatchEvent(new CustomEvent("viewer:parity-changed", { detail }));
   };
+(window as unknown as { __setSelected: typeof setSelected }).__setSelected = setSelected;
 initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
@@ -234,6 +235,7 @@ registerHandler("SdExport", (args) => {
 registerHandler("SdMove", (args) => {
   const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
   if (!sel) return { moved: false, reason: "no selection" };
+  const before = captureTransform(sel);
   const x = (args.x as number | undefined)
     ?? (Array.isArray(args.delta) ? (args.delta as number[])[0] : undefined)
     ?? (Array.isArray(args.vector) ? (args.vector as number[])[0] : undefined)
@@ -251,22 +253,26 @@ registerHandler("SdMove", (args) => {
   sel.position.z += z;
   sel.updateMatrix();
   sel.updateMatrixWorld(true);
+  pushTransformAction(sel, before);
   return { moved: true, delta: [x, y, z] };
 });
 
 registerHandler("SdScale", (args) => {
   const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
   if (!sel) return { scaled: false, reason: "no selection" };
+  const before = captureTransform(sel);
   const f = (args.factor as number | undefined) ?? 1;
   sel.scale.multiplyScalar(f);
   sel.updateMatrix();
   sel.updateMatrixWorld(true);
+  pushTransformAction(sel, before);
   return { scaled: true, factor: f };
 });
 
 registerHandler("SdRotate", (args) => {
   const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
   if (!sel) return { rotated: false, reason: "no selection" };
+  const before = captureTransform(sel);
   const deg = (args.angle as number | undefined) ?? 0;
   const axis = (args.axis as number[] | undefined) ?? [0, 0, 1];
   const q = new THREE.Quaternion().setFromAxisAngle(
@@ -276,6 +282,7 @@ registerHandler("SdRotate", (args) => {
   sel.quaternion.premultiply(q);
   sel.updateMatrix();
   sel.updateMatrixWorld(true);
+  pushTransformAction(sel, before);
   return { rotated: true, angle: deg, axis };
 });
 
@@ -465,6 +472,7 @@ registerHandler("IfcWall", (args) => {
   mesh.userData.layerId = resolveLayerId("IfcWall", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
+  pushAction(mesh, "IfcWall");
   return { created: "wall", length: len, thickness: t, height: wallH };
 });
 
@@ -484,6 +492,7 @@ registerHandler("IfcSlab", (args) => {
   mesh.userData.layerId = resolveLayerId("IfcSlab", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
+  pushAction(mesh, "IfcSlab");
   return { created: "slab", width: w, depth: d };
 });
 
@@ -504,6 +513,7 @@ registerHandler("IfcColumn", (args) => {
   mesh.userData.layerId = resolveLayerId("IfcColumn", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
+  pushAction(mesh, "IfcColumn");
   return { created: "column", height: h };
 });
 
@@ -690,14 +700,18 @@ function buildWindowGroup(w: number, h: number, wallT: number): THREE.Group {
   const paneMat  = new THREE.MeshStandardMaterial({ color: 0xadd8e6, roughness: 0.05, metalness: 0.0, transparent: true, opacity: 0.35 });
   const group = new THREE.Group();
 
-  // Left rail
-  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat), { position: new THREE.Vector3(-fw / 2, 0, h / 2) }));
-  // Right rail
-  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat), { position: new THREE.Vector3(w + fw / 2, 0, h / 2) }));
-  // Bottom rail
-  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat), { position: new THREE.Vector3(w / 2, 0, -fw / 2) }));
-  // Top rail
-  group.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat), { position: new THREE.Vector3(w / 2, 0, h + fw / 2) }));
+  const lRail = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
+  lRail.position.set(-fw / 2, 0, h / 2);
+  group.add(lRail);
+  const rRail = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
+  rRail.position.set(w + fw / 2, 0, h / 2);
+  group.add(rRail);
+  const bRail = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat);
+  bRail.position.set(w / 2, 0, -fw / 2);
+  group.add(bRail);
+  const tRail = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat);
+  tRail.position.set(w / 2, 0, h + fw / 2);
+  group.add(tRail);
 
   // Glass pane (single panel — IfcWindowTypePartitioningEnum.SINGLE_PANEL)
   const pane = new THREE.Mesh(new THREE.BoxGeometry(w, paneT, h), paneMat);
@@ -734,6 +748,7 @@ registerHandler("IfcDoor", (args) => {
   group.userData.layerId = resolveLayerId("IfcDoor", args);
   group.userData.levelId = getActiveLevelId();
   viewer.addMesh(group, "brep");
+  pushAction(group, "IfcDoor");
   let voidCut = false;
   const hostUuid = args.hostUuid as string | undefined;
   if (hostUuid) {
@@ -776,6 +791,7 @@ registerHandler("IfcWindow", (args) => {
   group.userData.layerId = resolveLayerId("IfcWindow", args);
   group.userData.levelId = getActiveLevelId();
   viewer.addMesh(group, "brep");
+  pushAction(group, "IfcWindow");
   let voidCut = false;
   const hostUuid = args.hostUuid as string | undefined;
   if (hostUuid) {
@@ -1665,6 +1681,7 @@ registerHandler("SdArray", (args) => {
   ];
 
   let created = 0;
+  const batchObjs: THREE.Object3D[] = [];
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       const dx = i * sx + j * syx;
@@ -1673,6 +1690,7 @@ registerHandler("SdArray", (args) => {
       if (isPointTarget || !baseObj) {
         const p = makePoint([basePoint[0] + dx, basePoint[1] + dy, basePoint[2] + dz]);
         viewer.addMesh(p, "mesh");
+        batchObjs.push(p);
       } else {
         const clone = baseObj.clone(true);
         clone.position.set(
@@ -1682,10 +1700,12 @@ registerHandler("SdArray", (args) => {
         );
         clone.userData.creator = "SdArray";
         viewer.addMesh(clone, (clone.userData.kind as string | undefined) ?? "mesh");
+        batchObjs.push(clone);
       }
       created++;
     }
   }
+  pushBatchAction(batchObjs, "SdArray");
 
   return {
     created: isPointTarget || !baseObj ? "point-array" : "array",

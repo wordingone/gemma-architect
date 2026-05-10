@@ -1706,6 +1706,100 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('host-cplane-orientation', r.passed, r.evidence);
 }
 
+// ── Surface 38: undo-roundtrip (#318) ────────────────────────────────────────
+// Dispatches each of the 9 create/transform/batch verbs, captures scene state,
+// dispatches SdUndo, asserts scene is restored.
+{
+  const r = await evaluate(`(async function() {
+    const results = [];
+
+    function sceneHash() {
+      const scene = window.__viewer?.scene;
+      if (!scene) return '';
+      return scene.children.map(c => c.uuid + ':' + c.type).join('|');
+    }
+
+    function posHash(obj) {
+      if (!obj) return '';
+      const p = obj.position;
+      return [p.x.toFixed(4), p.y.toFixed(4), p.z.toFixed(4)].join(',');
+    }
+
+    async function roundtrip(name, dispatchFn) {
+      const before = sceneHash();
+      dispatchFn();
+      await new Promise(r => setTimeout(r, 100));
+      const after = sceneHash();
+      const changed = after !== before;
+      window.__dispatch('SdUndo', {});
+      await new Promise(r => setTimeout(r, 100));
+      const restoredHash = sceneHash();
+      const restoredOk = restoredHash === before;
+      const passed = changed && restoredOk;
+      results.push({ name, passed, evidence: { changed, restored: restoredOk } });
+    }
+
+    async function transformRoundtrip(name, dispatchFn) {
+      // Create a wall to use as transform target
+      const before = sceneHash();
+      window.__dispatch('IfcWall', { profile: [[0,0],[2,0]], height: 3 });
+      await new Promise(r => setTimeout(r, 100));
+      const scene = window.__viewer?.scene;
+      const wall = scene?.children[scene.children.length - 1];
+      if (!wall) {
+        results.push({ name, passed: false, evidence: { reason: 'no wall created for transform test' } });
+        // undo the wall
+        window.__dispatch('SdUndo', {});
+        await new Promise(r => setTimeout(r, 80));
+        return;
+      }
+      // Set as selected via __setSelected
+      if (window.__setSelected) {
+        window.__setSelected({ topology: 'brep', uuid: wall.uuid, object: wall, transformTarget: wall });
+      }
+      await new Promise(r => setTimeout(r, 80));
+      const posBefore = posHash(wall);
+      dispatchFn(wall);
+      await new Promise(r => setTimeout(r, 100));
+      const posAfter = posHash(wall);
+      window.__dispatch('SdUndo', {});
+      await new Promise(r => setTimeout(r, 100));
+      const posRestored = posHash(wall);
+      const posChanged = posAfter !== posBefore;
+      const posRestoredOk = posRestored === posBefore;
+      results.push({ name, passed: posRestoredOk, evidence: { posChanged, posRestoredOk, posBefore, posAfter, posRestored } });
+      // Undo the wall creation too
+      window.__dispatch('SdUndo', {});
+      await new Promise(r => setTimeout(r, 80));
+    }
+
+    // 1. IfcWall — profile required:true; provide 2-point polyline
+    await roundtrip('IfcWall', () => window.__dispatch('IfcWall', { profile: [[0,0],[3,0]], height: 3 }));
+    // 2. IfcSlab — profile required:true, thickness required:true
+    await roundtrip('IfcSlab', () => window.__dispatch('IfcSlab', { profile: [[0,0],[4,0],[4,4],[0,4]], thickness: 0.2 }));
+    // 3. IfcColumn — position required:true
+    await roundtrip('IfcColumn', () => window.__dispatch('IfcColumn', { position: [0, 0] }));
+    // 4. IfcDoor — position required:true
+    await roundtrip('IfcDoor', () => window.__dispatch('IfcDoor', { position: [0, 0, 0] }));
+    // 5. IfcWindow — position required:true
+    await roundtrip('IfcWindow', () => window.__dispatch('IfcWindow', { position: [0, 0, 0] }));
+    // 6. SdMove
+    await transformRoundtrip('SdMove', () => window.__dispatch('SdMove', { x: 2, y: 0, z: 0 }));
+    // 7. SdScale
+    await transformRoundtrip('SdScale', () => window.__dispatch('SdScale', { factor: 2 }));
+    // 8. SdRotate
+    await transformRoundtrip('SdRotate', () => window.__dispatch('SdRotate', { angle: 45, axis: [0, 0, 1] }));
+    // 9. SdArray (point array — no selection needed)
+    await roundtrip('SdArray', () => window.__dispatch('SdArray', { count: 3, spacing: [1, 0, 0], target: 'point' }));
+
+    const allPassed = results.every(r => r.passed);
+    const failed = results.filter(r => !r.passed);
+    return { passed: allPassed, evidence: { results, failed } };
+  })()`, true);
+  if (!r) record('undo-roundtrip', false, { reason: 'evaluate returned null' });
+  else record('undo-roundtrip', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

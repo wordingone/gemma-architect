@@ -1,33 +1,85 @@
-// Undo/redo stack for scene object placement (#27).
-// Each action records the placed THREE.Object3D + its replicad chain string.
-// Undo removes the object from the scene; redo re-adds it.
+// Undo/redo stack for scene object placement (#27) and transforms (#318).
+// Action union: CreateAction | TransformAction | BatchAction.
 
 import * as THREE from "three";
 import type { Viewer } from "./viewer/viewer";
 
-type Action = { obj: THREE.Object3D; chain: string };
+export type TransformSnapshot = {
+  pos: THREE.Vector3;
+  quat: THREE.Quaternion;
+  scale: THREE.Vector3;
+};
+
+type CreateAction    = { kind: "create";    obj: THREE.Object3D; chain: string };
+type TransformAction = { kind: "transform"; obj: THREE.Object3D; before: TransformSnapshot; after: TransformSnapshot };
+type BatchAction     = { kind: "batch";     objs: THREE.Object3D[]; chain: string };
+type Action = CreateAction | TransformAction | BatchAction;
 
 const _undo: Action[] = [];
 const _redo: Action[] = [];
 
 export function pushAction(obj: THREE.Object3D, chain: string): void {
-  _undo.push({ obj, chain });
+  _undo.push({ kind: "create", obj, chain });
+  _redo.length = 0;
+}
+
+export function captureTransform(obj: THREE.Object3D): TransformSnapshot {
+  return {
+    pos:   obj.position.clone(),
+    quat:  obj.quaternion.clone(),
+    scale: obj.scale.clone(),
+  };
+}
+
+export function pushTransformAction(obj: THREE.Object3D, before: TransformSnapshot): void {
+  const after = captureTransform(obj);
+  _undo.push({ kind: "transform", obj, before, after });
+  _redo.length = 0;
+}
+
+export function pushBatchAction(objs: THREE.Object3D[], chain: string): void {
+  if (objs.length === 0) return;
+  _undo.push({ kind: "batch", objs, chain });
   _redo.length = 0;
 }
 
 export function undo(viewer: Viewer): boolean {
   const a = _undo.pop();
   if (!a) return false;
-  viewer.getScene().remove(a.obj);
-  _redo.push(a);
+  if (a.kind === "create") {
+    viewer.getScene().remove(a.obj);
+    _redo.push(a);
+  } else if (a.kind === "transform") {
+    a.obj.position.copy(a.before.pos);
+    a.obj.quaternion.copy(a.before.quat);
+    a.obj.scale.copy(a.before.scale);
+    a.obj.updateMatrix();
+    a.obj.updateMatrixWorld(true);
+    _redo.push(a);
+  } else {
+    for (const obj of a.objs) viewer.getScene().remove(obj);
+    _redo.push(a);
+  }
   return true;
 }
 
 export function redo(viewer: Viewer): boolean {
   const a = _redo.pop();
   if (!a) return false;
-  viewer.getScene().add(a.obj);
-  _undo.push(a);
+  if (a.kind === "create") {
+    viewer.getScene().add(a.obj);
+    _undo.push(a);
+  } else if (a.kind === "transform") {
+    a.obj.position.copy(a.after.pos);
+    a.obj.quaternion.copy(a.after.quat);
+    a.obj.scale.copy(a.after.scale);
+    a.obj.updateMatrix();
+    a.obj.updateMatrixWorld(true);
+    _undo.push(a);
+  } else {
+    for (const obj of a.objs) viewer.getScene().add(obj);
+    _undo.push(a);
+  }
   return true;
 }
 
