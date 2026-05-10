@@ -110,6 +110,38 @@ const CANONICAL_KIND: Record<string, CPlaneKind> = {
   SdLoft:      "view-derived",
 };
 
+// ── Host-derived plane computation (W-2) ─────────────────────────────────────
+//
+// Derives a CPlane from a host mesh (wall/slab) using its world-space
+// orientation.  Works for any rotation because we extract axes from the
+// object's world quaternion rather than from Euler angles.
+//
+// Wall convention: local-X = length, local-Y = thickness/normal, local-Z = height.
+// Slab convention: local-X = width,  local-Y = depth,           local-Z = normal.
+// For openings (IfcDoor / IfcWindow / IfcOpening) we always use the wall
+// (local-Y = normal) convention because those hosts are walls, not slabs.
+
+export function computeHostCPlane(
+  hostObj: THREE.Object3D,
+  pickPoint?: THREE.Vector3,
+): CPlane {
+  const q = new THREE.Quaternion();
+  hostObj.getWorldQuaternion(q);
+
+  // Wall normal = host's local +Y projected to world space.
+  const normal = new THREE.Vector3(0, 1, 0).applyQuaternion(q).normalize();
+  // Wall length direction = host's local +X in world space.
+  const xAxis  = new THREE.Vector3(1, 0, 0).applyQuaternion(q).normalize();
+  // Wall height direction = xAxis × normal (gives world-up for an upright wall).
+  const yAxis  = new THREE.Vector3().crossVectors(xAxis, normal).normalize();
+
+  const origin = pickPoint
+    ? pickPoint.clone()
+    : new THREE.Vector3().setFromMatrixPosition(hostObj.matrixWorld);
+
+  return { origin, xAxis, yAxis, normal, kind: "host-derived" };
+}
+
 // ── Viewer interface (minimal — avoids circular import with viewer.ts) ────────
 
 export interface CPlaneViewer {
@@ -134,6 +166,7 @@ export function resolveCPlane(
   canonical: string,
   _args: Record<string, unknown>,
   viewer: CPlaneViewer,
+  hostObject?: THREE.Object3D,
 ): CPlane {
   // Explicit override always wins.
   if (viewer.activeCPlane.kind === "explicit") return viewer.activeCPlane;
@@ -149,7 +182,8 @@ export function resolveCPlane(
       return base.kind === "view-derived" ? base : { ...base, kind: "view-derived" as const };
     }
     case "host-derived":
-      // W-2 will implement host surface lookup; for now fall back to world XY.
+      // W-2: caller passes the resolved host object directly.
+      if (hostObject) return computeHostCPlane(hostObject);
       return WORLD_XY;
     default:
       return WORLD_XY;

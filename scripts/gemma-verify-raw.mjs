@@ -377,7 +377,8 @@ async function assertNoCmdkOverlay(afterSurface) {
       const afterCount = v.scene.children.length;
       return { passed: afterCount < beforeCount, evidence: { beforeCount, afterCount, sceneShrunk: afterCount < beforeCount } };
     })()`);
-  record("delete-propagation", r.passed, r.evidence);
+  if (!r) record("delete-propagation", false, { reason: "evaluate returned null" });
+  else record("delete-propagation", r.passed, r.evidence);
 }
 
 // ── Surface 7: console-vocab-runs ─────────────────────────────────────────────
@@ -1656,6 +1657,53 @@ async function assertNoCmdkOverlay(afterSurface) {
     })()`);
   if (!r) record('view-cplane-orientation', false, { reason: 'evaluate returned null' });
   else record('view-cplane-orientation', r.passed, r.evidence);
+}
+
+// ── Surface 37: host-cplane-orientation (#358) ───────────────────────────────
+// Dispatches a rotated IfcWall (diagonal), then an IfcDoor with hostUuid set.
+// Passes when: door.userData.cplaneKind === "host-derived" AND the door's
+// world-Y axis (matrixWorld column 1) is parallel to the wall's world-Y axis.
+// Uses matrixWorld.elements directly to avoid needing window.THREE.
+{
+  const r = await evaluate(`(() => {
+    const dispatch = window.__dispatch;
+    const scene = window.__viewer && window.__viewer.scene;
+    if (!dispatch || !scene) return { passed: false, evidence: { reason: 'dispatch or scene unavailable' } };
+
+    // Place a diagonal wall (45°) so its normal is not world-Y.
+    const wallResult = dispatch('IfcWall', { profile: [[0,0],[5,5]], height: 3 });
+    if (!wallResult || !wallResult.ok) return { passed: false, evidence: { reason: 'IfcWall dispatch failed', wallResult } };
+
+    const walls = scene.children.filter(o => o.userData && o.userData.creator === 'IfcWall');
+    if (!walls.length) return { passed: false, evidence: { reason: 'no IfcWall in scene' } };
+    const wall = walls[walls.length - 1];
+
+    // Place a door with hostUuid.
+    const doorResult = dispatch('IfcDoor', {
+      width: 0.9, height: 2.1, position: [2.5, 2.5], hostUuid: wall.uuid,
+    });
+    if (!doorResult || !doorResult.ok) return { passed: false, evidence: { reason: 'IfcDoor dispatch failed', doorResult } };
+
+    const doors = scene.children.filter(o => o.userData && o.userData.creator === 'IfcDoor');
+    if (!doors.length) return { passed: false, evidence: { reason: 'no IfcDoor in scene' } };
+    const door = doors[doors.length - 1];
+
+    const cplaneKind = door.userData.cplaneKind;
+    if (cplaneKind !== 'host-derived') return { passed: false, evidence: { reason: 'cplaneKind not host-derived', cplaneKind, wallUuid: wall.uuid } };
+
+    // Extract world-Y axis from matrixWorld (column 1: elements[4..6]) — no THREE needed.
+    wall.updateMatrixWorld(true);
+    door.updateMatrixWorld(true);
+    const we = wall.matrixWorld.elements;
+    const de = door.matrixWorld.elements;
+    const wallY = [we[4], we[5], we[6]];
+    const doorY = [de[4], de[5], de[6]];
+    const dot = Math.abs(wallY[0]*doorY[0] + wallY[1]*doorY[1] + wallY[2]*doorY[2]);
+    const parallel = dot > 0.99;
+    return { passed: parallel, evidence: { cplaneKind, wallY, doorY, dot } };
+  })()`, true);
+  if (!r) record('host-cplane-orientation', false, { reason: 'evaluate returned null' });
+  else record('host-cplane-orientation', r.passed, r.evidence);
 }
 
 } finally {

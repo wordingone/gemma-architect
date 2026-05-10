@@ -708,6 +708,11 @@ function buildWindowGroup(w: number, h: number, wallT: number): THREE.Group {
 }
 
 registerHandler("IfcDoor", (args) => {
+  const hostUuidDoor = args.hostUuid as string | undefined;
+  const hostObjDoor = hostUuidDoor
+    ? viewer.getScene().getObjectByProperty("uuid", hostUuidDoor) ?? undefined
+    : undefined;
+  const cplane = resolveCPlane("IfcDoor", args as Record<string, unknown>, viewer, hostObjDoor);
   const w     = (args.width  as number | undefined) ?? 0.9;
   const h     = (args.height as number | undefined) ?? 2.1;
   const wallT = (args.wallThickness as number | undefined) ?? 0.2;
@@ -716,8 +721,16 @@ registerHandler("IfcDoor", (args) => {
   const elevation = getActiveLevelElevation();
   if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elevation);
   else group.position.z = elevation;
+  // Align door to host wall normal (W-2).
+  if (cplane.kind === "host-derived") {
+    const q = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0), cplane.normal,
+    );
+    group.quaternion.copy(q);
+  }
   group.userData.kind = "brep";
   group.userData.creator = "IfcDoor";
+  group.userData.cplaneKind = cplane.kind;
   group.userData.layerId = resolveLayerId("IfcDoor", args);
   group.userData.levelId = getActiveLevelId();
   viewer.addMesh(group, "brep");
@@ -736,6 +749,11 @@ registerHandler("IfcDoor", (args) => {
 });
 
 registerHandler("IfcWindow", (args) => {
+  const hostUuidWin = args.hostUuid as string | undefined;
+  const hostObjWin = hostUuidWin
+    ? viewer.getScene().getObjectByProperty("uuid", hostUuidWin) ?? undefined
+    : undefined;
+  const cplane = resolveCPlane("IfcWindow", args as Record<string, unknown>, viewer, hostObjWin);
   const w     = (args.width  as number | undefined) ?? 1.2;
   const h     = (args.height as number | undefined) ?? 1.5;
   const sill  = (args.sillH  as number | undefined) ?? 0.9;
@@ -745,8 +763,16 @@ registerHandler("IfcWindow", (args) => {
   const elevation = getActiveLevelElevation();
   if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? (elevation + sill));
   else group.position.z = elevation + sill;
+  // Align window to host wall normal (W-2).
+  if (cplane.kind === "host-derived") {
+    const q = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0), cplane.normal,
+    );
+    group.quaternion.copy(q);
+  }
   group.userData.kind = "brep";
   group.userData.creator = "IfcWindow";
+  group.userData.cplaneKind = cplane.kind;
   group.userData.layerId = resolveLayerId("IfcWindow", args);
   group.userData.levelId = getActiveLevelId();
   viewer.addMesh(group, "brep");
@@ -1045,6 +1071,11 @@ registerHandler("IfcSkylight", (args) => {
 });
 
 registerHandler("IfcOpening", (args) => {
+  const hostUuidOp = args.hostUuid as string | undefined;
+  const hostObjOp = hostUuidOp
+    ? viewer.getScene().getObjectByProperty("uuid", hostUuidOp) ?? undefined
+    : undefined;
+  const cplane = resolveCPlane("IfcOpening", args as Record<string, unknown>, viewer, hostObjOp);
   const w = (args.width  as number | undefined) ?? 1;
   const h = (args.height as number | undefined) ?? 2;
   const t = 0.25;
@@ -1056,8 +1087,16 @@ registerHandler("IfcOpening", (args) => {
   const elevation = getActiveLevelElevation();
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elevation);
   else mesh.position.z = elevation;
+  // Align opening marker to host wall normal (W-2).
+  if (cplane.kind === "host-derived") {
+    const q = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0), cplane.normal,
+    );
+    mesh.quaternion.copy(q);
+  }
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcOpening";
+  mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcOpening", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
@@ -2349,3 +2388,4 @@ if (import.meta.hot) {
     terminateAndRecycle();
   });
 }
+
