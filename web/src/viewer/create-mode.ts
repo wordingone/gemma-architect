@@ -479,7 +479,7 @@ function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THREE.Obje
   const geom = new THREE.BufferGeometry();
   const flat = pts.flatMap((p) => [p.x - cx, p.y - cy, 0]);
   geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
-  const mat = new THREE.LineBasicMaterial({ color: 0x9ec5d8 });
+  const mat = new THREE.LineBasicMaterial({ color: 0x1565c0 });
   const mesh = new THREE.Line(geom, mat);
   mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
@@ -521,7 +521,7 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   const curve = new THREE.CatmullRomCurve3(vecs, false, "catmullrom", 0.5);
   const sampled = curve.getPoints(Math.max(pts.length * 16, 64));
   const geom = new THREE.BufferGeometry().setFromPoints(sampled);
-  const mat = new THREE.LineBasicMaterial({ color: 0x9ec5d8 });
+  const mat = new THREE.LineBasicMaterial({ color: 0x1565c0 });
   const mesh = new THREE.Line(geom, mat);
   mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
