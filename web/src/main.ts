@@ -544,6 +544,74 @@ registerHandler("IfcStair", (args) => {
   return { created: "stair", steps, run, height: totalH };
 });
 
+// ── Boolean void cut for box-geometry walls/slabs (#324) ─────────────────────
+// Decomposes a BoxGeometry host into segments, replacing it with a Group that
+// has a rectangular void at voidWorldCenter. Operates in the host's local space
+// so works for any wall rotation. Silently skips if geometry is not a box.
+function cutRectVoidFromBoxMesh(
+  host: THREE.Mesh,
+  voidWorldCenter: THREE.Vector3,
+  voidW: number,
+  voidH: number,
+): THREE.Group | null {
+  host.updateMatrixWorld(true);
+  const geom = host.geometry as THREE.BufferGeometry;
+  geom.computeBoundingBox();
+  const bb = geom.boundingBox;
+  if (!bb) return null;
+  const wallLen   = bb.max.x - bb.min.x;
+  const wallThick = bb.max.y - bb.min.y;
+  const wallHt    = bb.max.z - bb.min.z;
+  const wallZMin  = bb.min.z;
+
+  // Void center in wall local space — only X and Z matter for a box wall.
+  const localCenter = host.worldToLocal(voidWorldCenter.clone());
+  const vX = localCenter.x;   // x-center of void on wall length axis
+  const vZBot = localCenter.z - voidH / 2;
+  const vZTop = localCenter.z + voidH / 2;
+
+  const mat = (Array.isArray(host.material) ? host.material[0] : host.material) as THREE.Material;
+  const seg = (segW: number, segH: number, ox: number, oz: number): THREE.Mesh => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(segW, wallThick, segH), mat);
+    m.position.set(bb.min.x + ox + segW / 2, 0, wallZMin + oz + segH / 2);
+    return m;
+  };
+
+  const group = new THREE.Group();
+
+  // Left of void
+  const leftW = (vX - voidW / 2) - bb.min.x;
+  if (leftW > 0.001) group.add(seg(leftW, wallHt, 0, 0));
+
+  // Right of void
+  const rightX = vX + voidW / 2;
+  const rightW = bb.max.x - rightX;
+  if (rightW > 0.001) group.add(seg(rightW, wallHt, rightX - bb.min.x, 0));
+
+  // Below void (sill — for windows)
+  const belowH = Math.max(0, vZBot - wallZMin);
+  if (belowH > 0.001) group.add(seg(voidW, belowH, vX - voidW / 2 - bb.min.x, 0));
+
+  // Above void
+  const aboveBot = Math.min(vZTop, wallZMin + wallHt) - wallZMin;
+  const aboveH   = (wallZMin + wallHt) - (wallZMin + aboveBot);
+  if (aboveH > 0.001) group.add(seg(voidW, aboveH, vX - voidW / 2 - bb.min.x, aboveBot));
+
+  // Copy host transform + metadata
+  group.position.copy(host.position);
+  group.rotation.copy(host.rotation);
+  group.scale.copy(host.scale);
+  group.userData = { ...host.userData };
+
+  // Swap host with group in parent
+  const parent = host.parent;
+  if (!parent) return null;
+  parent.remove(host);
+  geom.dispose();
+  parent.add(group);
+  return group;
+}
+
 // ── Realistic door geometry: frame (jambs + head) + panel leaf ───────────────
 function buildDoorGroup(w: number, h: number, wallT: number): THREE.Group {
   const fw = 0.05;  // 50mm frame width
@@ -606,36 +674,59 @@ function buildWindowGroup(w: number, h: number, wallT: number): THREE.Group {
 }
 
 registerHandler("IfcDoor", (args) => {
-  const w = (args.width  as number | undefined) ?? 0.9;
-  const h = (args.height as number | undefined) ?? 2.1;
+  const w     = (args.width  as number | undefined) ?? 0.9;
+  const h     = (args.height as number | undefined) ?? 2.1;
   const wallT = (args.wallThickness as number | undefined) ?? 0.2;
   const group = buildDoorGroup(w, h, wallT);
   const pos = args.position as number[] | undefined;
-  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
-  else group.position.z = getActiveLevelElevation();
+  const elevation = getActiveLevelElevation();
+  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elevation);
+  else group.position.z = elevation;
   group.userData.kind = "brep";
   group.userData.creator = "IfcDoor";
   group.userData.layerId = resolveLayerId("IfcDoor", args);
   group.userData.levelId = getActiveLevelId();
   viewer.addMesh(group, "brep");
-  return { created: "door", width: w, height: h, submeshes: group.children.length };
+  let voidCut = false;
+  const hostUuid = args.hostUuid as string | undefined;
+  if (hostUuid) {
+    const host = viewer.getScene().getObjectByProperty("uuid", hostUuid);
+    if (host instanceof THREE.Mesh) {
+      const voidCenter = group.position.clone();
+      voidCenter.z = elevation + h / 2;
+      cutRectVoidFromBoxMesh(host, voidCenter, w, h);
+      voidCut = true;
+    }
+  }
+  return { created: "door", width: w, height: h, submeshes: group.children.length, voidCut };
 });
 
 registerHandler("IfcWindow", (args) => {
-  const w    = (args.width  as number | undefined) ?? 1.2;
-  const h    = (args.height as number | undefined) ?? 1.5;
-  const sill = (args.sillH  as number | undefined) ?? 0.9;
+  const w     = (args.width  as number | undefined) ?? 1.2;
+  const h     = (args.height as number | undefined) ?? 1.5;
+  const sill  = (args.sillH  as number | undefined) ?? 0.9;
   const wallT = (args.wallThickness as number | undefined) ?? 0.2;
   const group = buildWindowGroup(w, h, wallT);
   const pos = args.position as number[] | undefined;
-  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? (getActiveLevelElevation() + sill));
-  else group.position.z = getActiveLevelElevation() + sill;
+  const elevation = getActiveLevelElevation();
+  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? (elevation + sill));
+  else group.position.z = elevation + sill;
   group.userData.kind = "brep";
   group.userData.creator = "IfcWindow";
   group.userData.layerId = resolveLayerId("IfcWindow", args);
   group.userData.levelId = getActiveLevelId();
   viewer.addMesh(group, "brep");
-  return { created: "window", width: w, height: h, sillH: sill, submeshes: group.children.length };
+  let voidCut = false;
+  const hostUuid = args.hostUuid as string | undefined;
+  if (hostUuid) {
+    const host = viewer.getScene().getObjectByProperty("uuid", hostUuid);
+    if (host instanceof THREE.Mesh) {
+      const voidCenter = group.position.clone();
+      cutRectVoidFromBoxMesh(host, voidCenter, w, h);
+      voidCut = true;
+    }
+  }
+  return { created: "window", width: w, height: h, sillH: sill, submeshes: group.children.length, voidCut };
 });
 
 registerHandler("IfcRoof", (args) => {
@@ -798,14 +889,26 @@ registerHandler("IfcOpening", (args) => {
   const mat  = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, wireframe: true });
   const mesh = new THREE.Mesh(geom, mat);
   const pos  = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
-  else mesh.position.z = getActiveLevelElevation();
+  const elevation = getActiveLevelElevation();
+  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elevation);
+  else mesh.position.z = elevation;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcOpening";
   mesh.userData.layerId = resolveLayerId("IfcOpening", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
-  return { created: "opening", width: w, height: h };
+  let voidCut = false;
+  const hostUuid = args.hostUuid as string | undefined;
+  if (hostUuid) {
+    const host = viewer.getScene().getObjectByProperty("uuid", hostUuid);
+    if (host instanceof THREE.Mesh) {
+      const voidCenter = mesh.position.clone();
+      voidCenter.z = elevation + h / 2;
+      cutRectVoidFromBoxMesh(host, voidCenter, w, h);
+      voidCut = true;
+    }
+  }
+  return { created: "opening", width: w, height: h, voidCut };
 });
 
 registerHandler("IfcRamp", (args) => {
