@@ -24,6 +24,8 @@
     "shared-browser:stop": "powershell -File scripts/shared-browser/stop.ps1",
     "shared-browser:sweep": "node scripts/shared-browser-sweep.mjs",
     "shared-browser:watch": "node scripts/shared-browser-watch.mjs",
+    "master-autofwd": "node scripts/gemma-master-autofwd.mjs",
+    "master-autofwd:dry": "node scripts/gemma-master-autofwd.mjs --dry-run",
     "verify:raw": "node scripts/gemma-verify-raw.mjs",
     "verify:cdp": "node -e \"process.stderr.write('DEPRECATED: verify:cdp removed — use: bun run verify:raw\\n'); process.exit(2);\"",
     "cdp": "node --experimental-strip-types scripts/cdp.ts",
