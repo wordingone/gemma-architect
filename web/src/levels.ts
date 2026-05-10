@@ -83,6 +83,16 @@ class LevelStore {
     return true;
   }
 
+  update(id: string, opts: { name?: string; elevation?: number; height?: number }): boolean {
+    const l = this._levels.get(id);
+    if (!l) return false;
+    if (opts.name !== undefined) l.name = opts.name;
+    if (opts.elevation !== undefined) l.elevation = opts.elevation;
+    if (opts.height !== undefined) l.height = opts.height;
+    this._notify();
+    return true;
+  }
+
   setVisible(id: string, visible: boolean): boolean {
     const l = this._levels.get(id);
     if (!l) return false;

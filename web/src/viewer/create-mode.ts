@@ -166,14 +166,10 @@ function showLevelChip(
   const commit = () => {
     const name = nameIn.value.trim();
     const height = parseFloat(hIn.value);
-    if (name || !isNaN(height)) {
-      const dispatch = (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch;
-      const level = levelStore.get(levelId);
-      if (level && dispatch) {
-        if (name) dispatch("setLevelName", { id: levelId, name });
-        if (!isNaN(height)) dispatch("setLevelHeight", { id: levelId, height });
-      }
-    }
+    levelStore.update(levelId, {
+      ...(name ? { name } : {}),
+      ...(!isNaN(height) ? { height } : {}),
+    });
     chip.remove();
   };
 
