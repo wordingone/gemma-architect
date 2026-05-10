@@ -49,6 +49,12 @@ type MeshNode = {
   depth: number;
 };
 
+const PHYSICAL_IFC_CLASSES = new Set([
+  "IfcWall", "IfcWallStandardCase", "IfcSlab", "IfcColumn", "IfcBeam",
+  "IfcRoof", "IfcDoor", "IfcWindow", "IfcStair", "IfcRailing",
+  "IfcCovering", "IfcFurnishingElement", "IfcBuildingElementProxy",
+]);
+
 export class ScenePanel {
   private root: HTMLElement;
   private viewer: Viewer;
@@ -188,7 +194,7 @@ export class ScenePanel {
           for (const el of elems) {
             const label = el.name && el.name !== `#${el.expressID}` ? el.name : `#${el.expressID}`;
             outlinerHtml += `
-              <div class="outliner-row" style="--depth:2">
+              <div class="outliner-row" style="--depth:2" data-express-id="${el.expressID}" data-action="ifc-select">
                 <span class="name" title="${escapeAttr(el.guid)}">${escapeHtml(label)}</span>
               </div>`;
           }
@@ -237,6 +243,9 @@ export class ScenePanel {
     const metaRow = `<div class="sp-meta-row" style="padding:6px 10px; font-family:var(--mono); font-size:10px; color:var(--ink-faint); border-bottom:1px solid var(--hairline-soft);">${fmtStr}${filenameStr}${entityStr}${schemaStr} &middot; ${this.nodes.length} mesh${this.nodes.length === 1 ? "" : "es"} &middot; ${totalTris.toLocaleString()} tri</div>`;
     this.root.innerHTML = metaRow + outlinerHtml;
     this.wireRowActions();
+    if (summary.hierarchy && summary.hierarchy.length > 0) {
+      this.autoSelectFirstPhysical(summary.hierarchy);
+    }
   }
 
   private wireRowActions(): void {
@@ -262,8 +271,15 @@ export class ScenePanel {
     this.root.querySelectorAll<HTMLElement>("[data-action]").forEach((el) => {
       el.addEventListener("click", (e) => {
         e.stopPropagation();
-        const id = el.dataset.id;
         const action = el.dataset.action;
+
+        if (action === "ifc-select") {
+          const eid = el.dataset.expressId ? parseInt(el.dataset.expressId, 10) : NaN;
+          if (!isNaN(eid)) this.selectByExpressId(el as HTMLElement, eid);
+          return;
+        }
+
+        const id = el.dataset.id;
         const node = this.nodes.find((n) => n.id === id);
         if (!node) return;
         if (action === "toggle") {
@@ -286,6 +302,32 @@ export class ScenePanel {
         }
       });
     });
+  }
+
+  private findMeshByExpressId(eid: number): THREE.Mesh | null {
+    return this.nodes.find((n) => n.mesh.userData.expressID === eid)?.mesh ?? null;
+  }
+
+  private selectByExpressId(row: HTMLElement, eid: number): void {
+    this.root.querySelectorAll(".outliner-row.selected").forEach((r) => r.classList.remove("selected"));
+    row.classList.add("selected");
+    const mesh = this.findMeshByExpressId(eid);
+    if (mesh) {
+      this.viewer.selectObject(mesh);
+      this.viewer.frameObjectOnly(mesh);
+    }
+  }
+
+  private autoSelectFirstPhysical(hierarchy: IfcHierarchyElement[]): void {
+    const sorted = [...hierarchy].sort((a, b) => {
+      if (a.storeyName === "Unassigned" && b.storeyName !== "Unassigned") return 1;
+      if (b.storeyName === "Unassigned" && a.storeyName !== "Unassigned") return -1;
+      return a.storeyElevation - b.storeyElevation;
+    });
+    const first = sorted.find((el) => PHYSICAL_IFC_CLASSES.has(el.ifcClass));
+    if (!first) return;
+    const row = this.root.querySelector<HTMLElement>(`[data-express-id="${first.expressID}"]`);
+    if (row) this.selectByExpressId(row, first.expressID);
   }
 }
 

@@ -1203,6 +1203,42 @@ function record(name, passed, evidence) {
   else record('level-chip-persist', r.passed, r.evidence);
 }
 
+// ── Surface 27: ifc-default-selection ────────────────────────────────────────
+{
+  const loaded = await evaluate(`(async function() {
+    const sel = document.getElementById('sample-select');
+    if (!sel) return { ok: false, reason: 'no sample-select' };
+    const fileBtn = document.getElementById('mode-file-btn');
+    if (fileBtn) fileBtn.click();
+    await new Promise(r => setTimeout(r, 100));
+    const opt = [...sel.options].find(o => o.value === 'kit-fzk-haus');
+    if (!opt) return { ok: false, reason: 'no kit-fzk-haus option' };
+    sel.value = 'kit-fzk-haus';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true };
+  })()`, true);
+
+  if (!loaded?.ok) {
+    record('ifc-default-selection', false, { reason: loaded?.reason ?? 'load trigger failed' });
+  } else {
+    await delay(12000);
+    const r = await evaluate(`(function() {
+      const root = document.querySelector('#scene-panel, .scene-panel-embed');
+      if (!root) return { passed: false, evidence: { reason: 'no scene-panel' } };
+      const storeyHeaders = [...root.querySelectorAll('.outliner-section-header')];
+      const hasStoreyTree = storeyHeaders.length > 0;
+      const selectedRow = root.querySelector('.outliner-row.selected');
+      const hasSelected = !!selectedRow;
+      const selectedText = selectedRow?.querySelector('.name')?.textContent?.trim() ?? null;
+      const hasViewerSelection = !!window.__viewer?.targetObject;
+      const passed = hasStoreyTree && hasSelected && hasViewerSelection;
+      return { passed, evidence: { storeyHeaderCount: storeyHeaders.length, hasStoreyTree, hasSelected, selectedText, hasViewerSelection } };
+    })()`, true);
+    if (!r) record('ifc-default-selection', false, { reason: 'evaluate returned null' });
+    else record('ifc-default-selection', r.passed, r.evidence);
+  }
+}
+
 } finally {
   await cleanup();
 }
