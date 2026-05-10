@@ -1642,6 +1642,31 @@ html[data-mode="night"] .paper-stage {
 }
 .chooser-chip:hover { background: rgba(255, 255, 255, 0.22); }
 
+/* Section box face handles (#347) */
+.section-handles-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+}
+.section-handle {
+  display: none;
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 140, 0, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  pointer-events: auto;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s, background 0.1s;
+}
+.section-handle:hover {
+  background: rgba(255, 180, 0, 1);
+  transform: translate(-50%, -50%) scale(1.35);
+}
+
 /* ── PARAMETERS tab (#237) ───────────────────────────────────────────────── */
 .params-header {
   font-family: var(--mono);

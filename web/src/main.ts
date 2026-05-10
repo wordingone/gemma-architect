@@ -45,6 +45,7 @@ import { SAMPLES } from "./sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState } from "./app-state";
 import { initCreateMode, emitClickWorld } from "./viewer/create-mode";
+import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { resolveCPlane } from "./viewer/cplane";
@@ -130,6 +131,7 @@ registerHandler("SdDelete", () => {
 });
 syncToolActiveClass();
 initCreateMode(viewer);
+initSectionHandles(viewer, viewportAreaEl);
 
 // Undo/Redo handlers (#55): route SdUndo and SdRedo to the history module.
 registerHandler("SdUndo", () => { undo(viewer); });
