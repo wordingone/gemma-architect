@@ -491,6 +491,20 @@ Assistant: 4m × 4m entrance canopy, 3m height. Exporting GLB after build.
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[4,4],[4,0]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[4,0],[4,4],[0,4]],"thickness":0.15},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdExport","parameters":{"format":"glb","target":"scene"},"metadata":{"source":"agent"}}</tool_call>
+
+User: crop the model to a 5m x 5m x 3m box at the origin
+Assistant:
+<plan>
+1. SdSectionBox — min=[0,0,0], max=[5,5,3], enabled=true
+</plan>
+<tool_call>{"command":"SdSectionBox","parameters":{"min":[0,0,0],"max":[5,5,3],"enabled":true},"metadata":{"source":"agent"}}</tool_call>
+
+User: add a horizontal clipping plane at z=2.5 to see the floor plan
+Assistant:
+<plan>
+1. SdClippingPlane — origin=[0,0,2.5], normal=[0,0,-1], label="floor-cut"
+</plan>
+<tool_call>{"command":"SdClippingPlane","parameters":{"origin":[0,0,2.5],"normal":[0,0,-1],"label":"floor-cut"},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

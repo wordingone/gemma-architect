@@ -1061,6 +1061,53 @@ function record(name, passed, evidence) {
   else record('grid-level-datum-pick', r.passed, r.evidence);
 }
 
+// ── Surface 23: section-box ───────────────────────────────────────────────────
+// Dispatch SdSectionBox, verify getSectionBox() returns matching bounds.
+// Dispatch SdSectionBoxOff, verify getSectionBox() returns null.
+{
+  const r = await evaluate(`(async () => {
+    const dispatch = window.__dispatch;
+    if (!dispatch) return { passed: false, evidence: { reason: 'no __dispatch' } };
+    const min = [1, 2, 0], max = [6, 7, 3];
+    dispatch('SdSectionBox', { min, max, enabled: true });
+    await new Promise(r => setTimeout(r, 100));
+    const box = window.__viewer?.getSectionBox?.();
+    const boxOk = box && Math.abs(box.min[0] - min[0]) < 0.01 && Math.abs(box.max[2] - max[2]) < 0.01;
+    dispatch('SdSectionBoxOff', {});
+    await new Promise(r => setTimeout(r, 100));
+    const boxOff = window.__viewer?.getSectionBox?.();
+    const offOk = boxOff === null;
+    return { passed: !!boxOk && offOk, evidence: { min, max, box, boxOk, boxOff, offOk } };
+  })()`, true);
+  if (!r) record('section-box', false, { reason: 'evaluate returned null' });
+  else record('section-box', r.passed, r.evidence);
+}
+
+// ── Surface 24: clipping-planes ───────────────────────────────────────────────
+// Add 2 clipping planes, verify count; remove one by label; clear all.
+{
+  const r = await evaluate(`(async () => {
+    const dispatch = window.__dispatch;
+    if (!dispatch) return { passed: false, evidence: { reason: 'no __dispatch' } };
+    dispatch('SdClippingPlanesClear', {});
+    await new Promise(r => setTimeout(r, 50));
+    dispatch('SdClippingPlane', { origin: [0,0,2.5], normal: [0,0,-1], label: 'floor-cut' });
+    dispatch('SdClippingPlane', { origin: [3,0,0], normal: [1,0,0], label: 'vert-cut' });
+    await new Promise(r => setTimeout(r, 100));
+    const countAfterAdd = window.__viewer?.getClippingPlaneCount?.() ?? -1;
+    dispatch('SdClippingPlaneRemove', { label: 'vert-cut' });
+    await new Promise(r => setTimeout(r, 50));
+    const countAfterRemove = window.__viewer?.getClippingPlaneCount?.() ?? -1;
+    dispatch('SdClippingPlanesClear', {});
+    await new Promise(r => setTimeout(r, 50));
+    const countAfterClear = window.__viewer?.getClippingPlaneCount?.() ?? -1;
+    const passed = countAfterAdd === 2 && countAfterRemove === 1 && countAfterClear === 0;
+    return { passed, evidence: { countAfterAdd, countAfterRemove, countAfterClear } };
+  })()`, true);
+  if (!r) record('clipping-planes', false, { reason: 'evaluate returned null' });
+  else record('clipping-planes', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

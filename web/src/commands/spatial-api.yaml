@@ -1185,3 +1185,56 @@
   synonyms: [showLevel, hideLevel, toggleLevel]
   kernel: replicad
   alias_source: generic_cad_vocabulary
+
+- canonical_name: SdSectionBox
+  kernel_op: setSectionBox
+  args:
+    - {name: min, type: point3, required: true, description: "Min corner [x,y,z]"}
+    - {name: max, type: point3, required: true, description: "Max corner [x,y,z]"}
+    - {name: enabled, type: boolean, required: false, default: true}
+  topology_role: view
+  kg_predicates: []
+  synonyms: [sectionbox, "section box", "crop box", "clip box", "section volume"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdSectionBoxOff
+  kernel_op: clearSectionBox
+  args: []
+  topology_role: view
+  kg_predicates: []
+  synonyms: [sectionboxoff, "remove section box", "clear section box", "disable section box"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdClippingPlane
+  kernel_op: addClippingPlane
+  args:
+    - {name: origin, type: point3, required: true, description: "Point on the plane [x,y,z]"}
+    - {name: normal, type: vector3, required: true, description: "Plane normal vector [x,y,z]"}
+    - {name: enabled, type: boolean, required: false, default: true}
+    - {name: label, type: string, required: false, description: "Named handle for later removal"}
+  topology_role: view
+  kg_predicates: []
+  synonyms: [clippingplane, "clipping plane", "cut plane", "section plane", "clip plane"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdClippingPlanesClear
+  kernel_op: clearClippingPlanes
+  args: []
+  topology_role: view
+  kg_predicates: []
+  synonyms: [clippingplanesclear, "clear clipping planes", "remove all clip planes", "clear clips"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdClippingPlaneRemove
+  kernel_op: removeClippingPlane
+  args:
+    - {name: label, type: string, required: true, description: "Label passed to SdClippingPlane"}
+  topology_role: view
+  kg_predicates: []
+  synonyms: [clippingplaneremove, "remove clipping plane", "delete clip plane"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary

@@ -161,6 +161,43 @@ registerHandler("SdZoomSelected", () => {
   return { ok: true };
 });
 
+registerHandler("SdSectionBox", (args) => {
+  const min = args.min as [number, number, number];
+  const max = args.max as [number, number, number];
+  const enabled = (args.enabled ?? true) as boolean;
+  if (!Array.isArray(min) || min.length < 3 || !Array.isArray(max) || max.length < 3)
+    return { error: "min and max must be [x,y,z] arrays" };
+  viewer.setSectionBox(min, max, enabled);
+  return { ok: true, min, max, enabled };
+});
+
+registerHandler("SdSectionBoxOff", () => {
+  viewer.clearSectionBox();
+  return { ok: true };
+});
+
+registerHandler("SdClippingPlane", (args) => {
+  const origin = args.origin as [number, number, number];
+  const normal = args.normal as [number, number, number];
+  const label = args.label as string | undefined;
+  if (!Array.isArray(origin) || origin.length < 3 || !Array.isArray(normal) || normal.length < 3)
+    return { error: "origin and normal must be [x,y,z] arrays" };
+  viewer.addClippingPlane(origin, normal, label);
+  return { ok: true, origin, normal, label };
+});
+
+registerHandler("SdClippingPlanesClear", () => {
+  viewer.clearClippingPlanes();
+  return { ok: true };
+});
+
+registerHandler("SdClippingPlaneRemove", (args) => {
+  const label = args.label as string;
+  if (!label) return { error: "label required" };
+  const removed = viewer.removeClippingPlane(label);
+  return { ok: removed, label };
+});
+
 registerHandler("SdExport", (args) => {
   const fmt = args.format as string | undefined;
   if (!fmt) return { error: "format required (ifc|glb|gltf|obj|stl|step|svg|dxf|pdf|usdz)" };

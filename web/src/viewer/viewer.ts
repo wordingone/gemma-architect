@@ -156,6 +156,11 @@ export class Viewer {
   private _thumbRenderer: THREE.WebGLRenderer | null = null;
   // Sub-object handle selection: set when the gumball is attached to a CP handle.
   private subTargetObject: THREE.Object3D | null = null;
+  // Section box: 6 axis-aligned half-space planes derived from min/max corners.
+  private _sectionPlanes: THREE.Plane[] = [];
+  // Arbitrary named clipping planes (SdClippingPlane).
+  private _clipPlanes: THREE.Plane[] = [];
+  private _clipLabels: Map<string, THREE.Plane> = new Map();
 
   constructor(canvas: HTMLCanvasElement, viewportAreaEl: HTMLElement) {
     this.canvas = canvas;
@@ -1909,6 +1914,71 @@ export class Viewer {
       perspPane.controls.target.set(cx, cy, cz);
       perspPane.controls.update();
     }
+  }
+
+  // ── Section box (6 axis-aligned clipping planes from a min/max AABB) ──────────
+
+  setSectionBox(min: [number, number, number], max: [number, number, number], enabled = true): void {
+    this._sectionPlanes = [];
+    if (enabled) {
+      this._sectionPlanes = [
+        new THREE.Plane(new THREE.Vector3( 1,  0,  0), -min[0]),
+        new THREE.Plane(new THREE.Vector3(-1,  0,  0),  max[0]),
+        new THREE.Plane(new THREE.Vector3( 0,  1,  0), -min[1]),
+        new THREE.Plane(new THREE.Vector3( 0, -1,  0),  max[1]),
+        new THREE.Plane(new THREE.Vector3( 0,  0,  1), -min[2]),
+        new THREE.Plane(new THREE.Vector3( 0,  0, -1),  max[2]),
+      ];
+    }
+    this._applyClippingPlanes();
+  }
+
+  clearSectionBox(): void {
+    this._sectionPlanes = [];
+    this._applyClippingPlanes();
+  }
+
+  getSectionBox(): { min: [number, number, number]; max: [number, number, number] } | null {
+    if (this._sectionPlanes.length < 6) return null;
+    return {
+      min: [-this._sectionPlanes[0].constant, -this._sectionPlanes[2].constant, -this._sectionPlanes[4].constant],
+      max: [ this._sectionPlanes[1].constant,  this._sectionPlanes[3].constant,  this._sectionPlanes[5].constant],
+    };
+  }
+
+  // ── Arbitrary clipping planes ─────────────────────────────────────────────────
+
+  addClippingPlane(origin: [number, number, number], normal: [number, number, number], label?: string): void {
+    const n = new THREE.Vector3(...normal).normalize();
+    const plane = new THREE.Plane(n, -n.dot(new THREE.Vector3(...origin)));
+    this._clipPlanes.push(plane);
+    if (label) this._clipLabels.set(label, plane);
+    this._applyClippingPlanes();
+  }
+
+  clearClippingPlanes(): void {
+    this._clipPlanes = [];
+    this._clipLabels.clear();
+    this._applyClippingPlanes();
+  }
+
+  removeClippingPlane(label: string): boolean {
+    const plane = this._clipLabels.get(label);
+    if (!plane) return false;
+    this._clipPlanes = this._clipPlanes.filter((p) => p !== plane);
+    this._clipLabels.delete(label);
+    this._applyClippingPlanes();
+    return true;
+  }
+
+  getClippingPlaneCount(): number {
+    return this._clipPlanes.length;
+  }
+
+  private _applyClippingPlanes(): void {
+    const all = [...this._sectionPlanes, ...this._clipPlanes];
+    this.renderer.clippingPlanes = all;
+    this.renderer.localClippingEnabled = all.length > 0;
   }
 
   frameAllVisible(): void {
