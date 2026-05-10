@@ -26,7 +26,8 @@ const warnings = [];
 // ── package.json scripts ──────────────────────────────────────────────────────
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 for (const [name, cmd] of Object.entries(pkg.scripts ?? {})) {
-  if (!/\bvite\b/.test(cmd)) continue;
+  // Match vite only as a launch command (followed by whitespace or end), not inside filenames.
+  if (!/\bvite(\s|$)/.test(cmd)) continue;
   if (/\bbuild\b|\bpreview\b/.test(cmd)) continue; // build/preview don't need --port
   if (!cmd.includes("--port 5175")) {
     violations.push({ source: "package.json", key: name, cmd });

@@ -116,7 +116,7 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 // Expose gridStore for CDP probes.
 (window as unknown as { __gridStore: typeof gridStore }).__gridStore = gridStore;
 (window as unknown as { __levelStore: typeof levelStore }).__levelStore = levelStore;
-(window as unknown as { __emitClickWorld: typeof emitClickWorld }).__emitClickWorld = (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => emitClickWorld(viewer, w, opts);
+(window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
