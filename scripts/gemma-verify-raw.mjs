@@ -197,15 +197,23 @@ async function assertNoCmdkOverlay(afterSurface) {
 }
 
 // ── Surface 1: ribbon-icons-rendered ─────────────────────────────────────────
+// MODEL mode intentionally has no ribbon tools (PR #342/#378). Switch to LAYOUT first.
 {
+  await evaluate(`(() => {
+    const t = document.querySelector('.mode-tab[data-mode="layout"]');
+    if (t) t.click();
+  })()`);
+  await delay(300);
   const r = await evaluate(`
     (() => {
       const btns = [...document.querySelectorAll(".ribbon .tool-btn")];
-      if (!btns.length) return { passed: false, evidence: { reason: "no .tool-btn found" } };
+      if (!btns.length) return { passed: false, evidence: { reason: "no .tool-btn found in layout mode" } };
       const failures = btns.filter(b => !b.querySelector("svg"))
         .map(b => ({ btn: b.outerHTML.slice(0, 80), reason: "no svg" }));
       return { passed: failures.length === 0, evidence: { count: btns.length, failures } };
     })()`);
+  await evaluate(`(() => { document.querySelector('.mode-tab[data-mode="model"]')?.click(); })()`);
+  await delay(200);
   record("ribbon-icons-rendered", r.passed, r.evidence);
 }
 
@@ -422,9 +430,9 @@ async function assertNoCmdkOverlay(afterSurface) {
           await new Promise(r => setTimeout(r, 60));
           const lines = [...document.querySelectorAll("#console-history .console-line")].slice(before).map(l => l.textContent);
           const isUnknown  = lines.some(l => /unknown verb/i.test(l ?? ""));
-          const isArgError = lines.some(l => /ArgValidationError/i.test(l ?? ""));
-          if (isUnknown || isArgError) {
-            failedVerbs.push({ verb: v, output: lines.join(" | "), error: isUnknown ? "unknown_verb" : "arg_validation_error" });
+          // ArgValidationError = verb recognised but needs args; correct pre-W2.4 (#233). Not a failure.
+          if (isUnknown) {
+            failedVerbs.push({ verb: v, output: lines.join(" | "), error: "unknown_verb" });
           }
         }
         return { passed: failedVerbs.length === 0, evidence: { tested: verbs.length, tested_verbs: verbs, failed_verbs: failedVerbs } };
@@ -845,7 +853,7 @@ async function assertNoCmdkOverlay(afterSurface) {
     (async () => {
       const beforeCount = window.__viewer?.scene?.children?.length ?? 0;
 
-      const wallRes = window.__dispatch?.('IfcWall', { height: 3, length: 5, thickness: 0.2 });
+      const wallRes = window.__dispatch?.('IfcWall', { profile: [[0,0],[5,0]], height: 3, length: 5, thickness: 0.2 });
       await new Promise(r => setTimeout(r, 300));
 
       const afterCount = window.__viewer?.scene?.children?.length ?? 0;
@@ -1055,7 +1063,8 @@ async function assertNoCmdkOverlay(afterSurface) {
     const modelTab = document.querySelector('.mode-tab[data-mode="model"]');
     if (modelTab) { modelTab.click(); await new Promise(r => setTimeout(r, 300)); }
     const afterLabels = Array.from(document.querySelectorAll('.tool-group-label')).map(el => el.textContent.trim());
-    const restored = afterLabels.includes('TRANSFORM');
+    // MODEL mode has no tool groups (PR #342). Restored = research labels gone, not TRANSFORM present.
+    const restored = !afterLabels.includes('CORPUS') && !afterLabels.includes('FINDINGS');
     return {
       passed: hasCorpus && hasFindings && noTransform && noSolid && restored,
       evidence: { researchLabels: labels, hasCorpus, hasFindings, noTransform, noSolid, afterLabels, restored }
@@ -1882,6 +1891,32 @@ async function assertNoCmdkOverlay(afterSurface) {
     })()`);
   if (!r) record('ortho-projection', false, { reason: 'evaluate returned null' });
   else record('ortho-projection', r.passed, r.evidence);
+}
+
+// ── Surface 43: assets-tab-visible (#342) ────────────────────────────────────
+// Ribbon has no TOOL_GROUP labels; ASSETS sidebar tab activates sample picker.
+{
+  const r = await evaluate(`
+    (() => {
+      // 1. Check ribbon-tools has no tool-group elements (TRANSFORM/SKETCH 2D/SOLID/ARCH/MEASURE gone)
+      const toolGroups = document.querySelectorAll('.ribbon-tools .tool-group');
+      const ribbonGroupLabels = Array.from(document.querySelectorAll('.ribbon-tools .tool-group-label')).map(el => el.textContent);
+      if (toolGroups.length > 0) {
+        return { passed: false, evidence: { reason: 'tool-group elements still in ribbon-tools', count: toolGroups.length, labels: ribbonGroupLabels } };
+      }
+      // 2. ASSETS tab present in sidebar
+      const assetsTab = Array.from(document.querySelectorAll('.sb-tab')).find(t => t.textContent === 'ASSETS');
+      if (!assetsTab) {
+        return { passed: false, evidence: { reason: 'ASSETS tab not found in sidebar' } };
+      }
+      // 3. Click ASSETS tab and assert sample picker cards appear
+      assetsTab.click();
+      const cards = document.querySelectorAll('.tab-body.assets .asset-card');
+      const passed = cards.length > 0;
+      return { passed, evidence: { cardCount: cards.length, toolGroupCount: toolGroups.length } };
+    })()`);
+  if (!r) record('assets-tab-visible', false, { reason: 'evaluate returned null' });
+  else record('assets-tab-visible', r.passed, r.evidence);
 }
 
 } finally {

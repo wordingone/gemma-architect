@@ -4,7 +4,7 @@ import { buildPhoneSlider } from "./phone-slider.js";
 
 // Shell chrome — design-handoff #171.
 //
-// Builds the menubar (9 menus) / modebar (4 modes) / ribbon (6 tabs + tools)
+// Builds the menubar (9 menus) / modebar (4 modes) / ribbon (RENDER tab + right actions)
 // statusbar wiring on top of the existing prompt-pane + viewer-pane layout.
 //
 // DOM target classes match the design bundle's structure (project/styles.css):
@@ -93,14 +93,6 @@ const MENUS: MenuItem[] = [
 ];
 
 type ToolGroup = { label: string; tools: string[] };
-const TOOL_GROUPS: ToolGroup[] = [
-  { label: "TRANSFORM", tools: ["Select", "Move", "Rotate", "Scale"] },
-  { label: "SKETCH 2D", tools: ["Line", "Rect", "Circle", "Polygon", "Polyline", "Arc", "Spline"] },
-  { label: "SOLID",     tools: ["Extrude", "Revolve", "Fillet", "Chamfer", "Boolean"] },
-  { label: "ARCH",      tools: ["Wall", "Slab", "Column", "Stair", "Door", "Window"] },
-  { label: "MEASURE",   tools: ["Ruler", "Compass", "Aligned-Dim", "Angular-Dim", "Area-Dim", "Volume-Dim", "Label", "Transient-Measure"] },
-];
-
 const LAYOUT_RIBBON_TABS = ["RENDER"] as const;
 type LayoutRibbonTab = typeof LAYOUT_RIBBON_TABS[number];
 
