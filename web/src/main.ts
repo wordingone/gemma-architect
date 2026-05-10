@@ -1208,6 +1208,28 @@ registerHandler("IfcDatum", (args) => {
   return { created: "datum", elevation: elev };
 });
 
+registerHandler("IfcReferenceLine", (args) => {
+  const origin = (args.origin as number[] | undefined) ?? [0, 0];
+  const end    = (args.end    as number[] | undefined) ?? [5, 0];
+  const ax = origin[0] ?? 0, ay = origin[1] ?? 0;
+  const bx = end[0]    ?? 5, by = end[1]    ?? 0;
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const cx = (ax + bx) / 2, cy = (ay + by) / 2;
+  const angRad = Math.atan2(dy, dx) - Math.PI / 2;
+  const points = [new THREE.Vector3(0, -len / 2, 0), new THREE.Vector3(0, len / 2, 0)];
+  const geom = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({ color: 0xcc1166 });
+  const line = new THREE.Line(geom, mat);
+  line.position.set(cx, cy, 0.002);
+  line.rotation.z = angRad;
+  line.userData.kind = "reference-line";
+  line.userData.creator = "IfcReferenceLine";
+  line.userData.controlPoints = [[ax, ay, 0], [bx, by, 0]];
+  viewer.addMesh(line, "brep");
+  return { created: "reference-line", origin: [ax, ay], end: [bx, by] };
+});
+
 registerHandler("IfcFurnishingElement", (args) => {
   const w    = (args.width       as number | undefined) ?? 0.8;
   const d    = (args.depth       as number | undefined) ?? 0.6;
@@ -2159,7 +2181,7 @@ function sanitizeStem(filename: string): string {
 }
 
 // Creator tags that are spatial/structural only — skip in IFC element export.
-const IFC_SKIP_CREATORS = new Set(["IfcGrid", "IfcGridLine", "IfcLevel", "IfcDatum"]);
+const IFC_SKIP_CREATORS = new Set(["IfcGrid", "IfcGridLine", "IfcLevel", "IfcDatum", "IfcReferenceLine"]);
 
 function sceneElementsForExport(): IfcSceneElement[] {
   const elements: IfcSceneElement[] = [];

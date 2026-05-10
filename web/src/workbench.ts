@@ -30,7 +30,7 @@ import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeS
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import { levelStore, type Level } from "./levels";
 import { gridStore, type Grid } from "./grids";
-import { datumStore, type Datum } from "./datums";
+import { refLineStore } from "./ref-lines";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./viewer/selection-state";
 import { getCreateSequence } from "./viewer/create-mode";
@@ -130,7 +130,7 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "ceiling",    icon: "ceiling",    label: "Ceiling" },
     { id: "grid",       icon: "grid",       label: "Grid" },
     { id: "level",      icon: "level",      label: "Level" },
-    { id: "datum",      icon: "datum",      label: "Datum" },
+    { id: "datum",      icon: "datum",      label: "Reference Line" },
   ]},
   { tools: [
     { id: "stair",       icon: "stair",       label: "Stair" },
@@ -892,7 +892,7 @@ function buildDatumsTab(): HTMLElement {
   header.style.cssText = "display:flex; align-items:center; padding:4px 2px 6px;";
   const title = el("div");
   title.style.cssText = "font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
-  title.textContent = "SURVEY DATUMS";
+  title.textContent = "REFERENCE LINES";
   header.appendChild(title);
   wrap.appendChild(header);
 
@@ -902,27 +902,27 @@ function buildDatumsTab(): HTMLElement {
 
   function renderList(): void {
     list.innerHTML = "";
-    for (const datum of datumStore.all()) {
+    for (const rl of refLineStore.all()) {
       const row = el("div", "layer-row");
       row.style.cssText = "display:flex; align-items:center; gap:6px; padding:3px 2px; border-bottom:1px solid var(--hairline);";
 
       const posEl = el("span");
       posEl.style.cssText = "flex:1; font-size:11px; color:var(--ink-body); font-family:monospace;";
-      const [x, y, z] = datum.position;
-      posEl.textContent = datum.label ?? `(${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`;
+      const [ax, ay] = rl.start, [bx, by] = rl.end;
+      posEl.textContent = rl.label ?? `(${ax.toFixed(1)},${ay.toFixed(1)}) → (${bx.toFixed(1)},${by.toFixed(1)})`;
 
       row.appendChild(posEl);
       list.appendChild(row);
     }
-    if (datumStore.all().length === 0) {
+    if (refLineStore.all().length === 0) {
       const empty = el("div");
       empty.style.cssText = "font-size:11px; color:var(--ink-dim); padding:4px 2px;";
-      empty.textContent = "No datums placed";
+      empty.textContent = "No reference lines placed";
       list.appendChild(empty);
     }
   }
 
-  datumStore.subscribe(renderList);
+  refLineStore.subscribe(renderList);
   renderList();
   return wrap;
 }

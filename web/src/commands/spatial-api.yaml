@@ -805,6 +805,19 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: IfcReferenceLine
+  ifc4_class: IfcAnnotation
+  kernel_op: makeReferenceLine
+  args:
+    - {name: origin, type: point2, required: false}
+    - {name: end,    type: point2, required: false}
+    - {name: label,  type: string, required: false}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [reference line, ref line, datum line, control line, layout line, axis line]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §8 Furniture & Fixtures
 # ============================================================

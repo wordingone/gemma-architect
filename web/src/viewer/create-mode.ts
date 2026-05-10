@@ -27,7 +27,7 @@ import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clea
 import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../grids";
 import { levelStore } from "../levels";
-import { datumStore } from "../datums";
+import { refLineStore } from "../ref-lines";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -798,17 +798,24 @@ function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Obje
   return { mesh, chain, levelId: level.id };
 }
 
-function buildDatum(p: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
-  const datum = datumStore.add({ position: [p.x, p.y, 0] });
-  const geom = new THREE.SphereGeometry(0.15, 8, 8);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x33bb66, roughness: 0.3, metalness: 0.2 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(p.x, p.y, 0);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcDatum";
-  mesh.userData.datumId = datum.id;
-  const chain = `IfcDatum({position:[${round(p.x)},${round(p.y)},0]})`;
-  return { mesh, chain };
+function buildReferenceLine(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const angRad = Math.atan2(dy, dx) - Math.PI / 2;
+  const points = [new THREE.Vector3(0, -len / 2, 0), new THREE.Vector3(0, len / 2, 0)];
+  const geom = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({ color: 0xcc1166 });
+  const line = new THREE.Line(geom, mat);
+  line.position.set(cx, cy, 0.002);
+  line.rotation.z = angRad;
+  const entry = refLineStore.add({ start: [a.x, a.y], end: [b.x, b.y] });
+  line.userData.kind = "reference-line";
+  line.userData.creator = "IfcReferenceLine";
+  line.userData.refLineId = entry.id;
+  line.userData.controlPoints = [[a.x, a.y, 0], [b.x, b.y, 0]];
+  const chain = `IfcReferenceLine({origin:[${round(a.x)},${round(a.y)}],end:[${round(b.x)},${round(b.y)}]})`;
+  return { mesh: line, chain };
 }
 
 type ToolHandler = {
@@ -903,7 +910,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   railing:      { clicks: 2, handler: ([a, b]) => buildRailing(a, b) },
   grid:         { clicks: 2, handler: ([a, b]) => buildGridLine(a, b) },
   level:        { clicks: 1, handler: ([p]) => buildLevel(p) },
-  datum:        { clicks: 1, handler: ([p]) => buildDatum(p) },
+  datum:        { clicks: 2, handler: ([a, b]) => buildReferenceLine(a, b) },
   section:      { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b) },
   clip:         { clicks: 2, handler: ([a, b]) => buildClipPlane(a, b) },
 };
