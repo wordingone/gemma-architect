@@ -1149,6 +1149,60 @@ function record(name, passed, evidence) {
   else record('sidebar-tab-cycle-preserves-geometry', r.passed, r.evidence);
 }
 
+// ── Surface 26: level-chip-persist ───────────────────────────────────────────
+// Place a level via emitClickWorld (level tool), wait for inline chip, type
+// name + height, press Enter, assert levelStore persisted the values.
+{
+  const r = await evaluate(`(async () => {
+    if (!window.__emitClickWorld || !window.__levelStore || !window.__dispatch)
+      return { passed: false, evidence: { reason: 'missing window hooks' } };
+
+    // Activate the level tool.
+    window.__dispatch('setActiveTool', { toolId: 'level' });
+    await new Promise(r => setTimeout(r, 80));
+
+    // Count levels before placement.
+    const beforeLevels = window.__levelStore.all().length;
+
+    // Emit a synthetic level placement click at world (20, 20).
+    const placed = window.__emitClickWorld({ x: 20, y: 20 }, { tool: 'level' });
+    await new Promise(r => setTimeout(r, 200));
+
+    // Chip should appear.
+    const chip = document.querySelector('.level-inline-chip');
+    if (!chip) return { passed: false, evidence: { reason: 'chip did not appear', placed: !!placed } };
+
+    const nameIn = chip.querySelector('input[type=text]');
+    const heightIn = chip.querySelector('input[type=number]');
+    if (!nameIn || !heightIn) return { passed: false, evidence: { reason: 'chip inputs missing' } };
+
+    // Type recognizable values.
+    const expectedName = 'VerifyChipLevel';
+    const expectedHeight = 4.2;
+    nameIn.focus();
+    nameIn.value = expectedName;
+    nameIn.dispatchEvent(new Event('input', { bubbles: true }));
+    heightIn.value = String(expectedHeight);
+    heightIn.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // Press Enter to commit.
+    nameIn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await new Promise(r => setTimeout(r, 200));
+
+    // Chip should have removed itself.
+    const chipGone = !document.querySelector('.level-inline-chip');
+
+    // Assert levelStore persisted the values.
+    const allLevels = window.__levelStore.all();
+    const persisted = allLevels.find(l => l.name === expectedName);
+    const heightOk = persisted ? Math.abs(persisted.height - expectedHeight) < 0.01 : false;
+    const passed = chipGone && !!persisted && heightOk;
+    return { passed, evidence: { chipGone, persistedName: persisted?.name, persistedHeight: persisted?.height, expectedName, expectedHeight, heightOk, beforeLevels, afterLevels: allLevels.length } };
+  })()`, true);
+  if (!r) record('level-chip-persist', false, { reason: 'evaluate returned null' });
+  else record('level-chip-persist', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

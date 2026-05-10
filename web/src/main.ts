@@ -44,7 +44,7 @@ import {
 import { SAMPLES } from "./sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState } from "./app-state";
-import { initCreateMode } from "./viewer/create-mode";
+import { initCreateMode, emitClickWorld } from "./viewer/create-mode";
 import { undo, redo } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
@@ -115,6 +115,8 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 (window as unknown as { __getActiveCommandSession: typeof getActiveCommandSession }).__getActiveCommandSession = getActiveCommandSession;
 // Expose gridStore for CDP probes.
 (window as unknown as { __gridStore: typeof gridStore }).__gridStore = gridStore;
+(window as unknown as { __levelStore: typeof levelStore }).__levelStore = levelStore;
+(window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
