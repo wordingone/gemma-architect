@@ -310,6 +310,11 @@ export class Viewer {
           const dWorld = new THREE.Matrix4().copy(this.pivotProxy.matrix).multiply(this.pivotMatrixBeforeDrag.clone().invert());
           const newMatrix = new THREE.Matrix4().copy(dWorld).multiply(this.targetMatrixBeforeDrag);
           newMatrix.decompose(this.targetObject.position, this.targetObject.quaternion, this.targetObject.scale);
+          // Sync clip-plane math when user moves/rotates the visualization mesh.
+          if (this.targetObject.userData.creator === "SdClippingPlane") {
+            const label = this.targetObject.userData.clipLabel as string | undefined;
+            if (label) this.updateClippingPlane(label, this.targetObject as THREE.Mesh);
+          }
           // Sub-object: live refit parent geometry as handle moves.
           if (this.subTargetObject && mode === "translate") {
             const cpIndex = this.subTargetObject.userData.cpIndex as number;
@@ -1739,6 +1744,7 @@ export class Viewer {
       mesh.userData.dispatchArgs = { ...ctx.args };
     }
     this.scene.add(mesh);
+    this._applyActiveClipPlanesToSubtree(mesh);
   }
 
   /** Walk scene children; callback may mutate visible/material but not add/remove. */
@@ -1994,10 +2000,62 @@ export class Viewer {
     });
   }
 
+  // Switch to per-material local clipping so objects tagged excludeFromClip
+  // (clip-plane visualization, gumball handles) are exempt from the clip set.
   private _applyClippingPlanes(): void {
     const all = [...this._sectionPlanes, ...this._clipPlanes];
-    this.renderer.clippingPlanes = all;
+    this.renderer.clippingPlanes = [];
     this.renderer.localClippingEnabled = all.length > 0;
+
+    // Build gizmo-owned object set so handles are never clipped.
+    const gizmoObjs = new Set<THREE.Object3D>();
+    for (const g of this.gizmos) g.traverse((o) => gizmoObjs.add(o));
+    if (this.pivotProxy) gizmoObjs.add(this.pivotProxy);
+
+    this.scene.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      const exclude = obj.userData.excludeFromClip === true || gizmoObjs.has(obj);
+      const planes = exclude ? [] : all;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const m of mats) {
+        if ((m as THREE.Material).clippingPlanes !== planes) {
+          (m as THREE.Material).clippingPlanes = planes;
+          (m as THREE.Material).needsUpdate = true;
+        }
+      }
+    });
+  }
+
+  // Apply active clip planes to a newly added object's subtree without
+  // traversing the full scene.
+  private _applyActiveClipPlanesToSubtree(root: THREE.Object3D): void {
+    const all = [...this._sectionPlanes, ...this._clipPlanes];
+    if (all.length === 0) return;
+    root.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      if (obj.userData.excludeFromClip) return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const m of mats) {
+        (m as THREE.Material).clippingPlanes = all;
+        (m as THREE.Material).needsUpdate = true;
+      }
+    });
+  }
+
+  // Recompute the stored THREE.Plane from the clip-plane visualization mesh's
+  // current world matrix. Call from objectChange when the gumball moves/rotates
+  // a SdClippingPlane mesh so the clip math follows the visual in real time.
+  updateClippingPlane(label: string, mesh: THREE.Mesh): void {
+    const plane = this._clipLabels.get(label);
+    if (!plane) return;
+    mesh.updateMatrixWorld(true);
+    // PlaneGeometry local normal = +Z. Transform through normal matrix to world.
+    const m3 = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+    const normal = new THREE.Vector3(0, 0, 1).applyMatrix3(m3).normalize();
+    const origin = new THREE.Vector3().setFromMatrixPosition(mesh.matrixWorld);
+    plane.normal.copy(normal);
+    plane.constant = -normal.dot(origin);
+    // THREE.js reads plane.normal/.constant directly each frame — no reassign needed.
   }
 
   frameAllVisible(): void {

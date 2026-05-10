@@ -769,6 +769,7 @@ function buildSectionBox(a: { x: number; y: number }, b: { x: number; y: number 
   mesh.position.set(cx, cy, cz);
   mesh.userData.kind = "section-box";
   mesh.userData.creator = "SdSectionBox";
+  mesh.userData.excludeFromClip = true;
   const min: [number, number, number] = [round(minX), round(minY), round(minZ)];
   const max: [number, number, number] = [round(maxX), round(maxY), round(maxZ)];
   return {
@@ -792,7 +793,9 @@ function buildClipPlane(a: { x: number; y: number }, b: { x: number; y: number }
   mesh.rotation.set(Math.PI / 2, 0, Math.atan2(dy, dx));
   mesh.userData.kind = "clip-plane";
   mesh.userData.creator = "SdClippingPlane";
+  mesh.userData.excludeFromClip = true;
   const label = `clip-${Date.now()}`;
+  mesh.userData.clipLabel = label;
   const origin: [number, number, number] = [round(cx), round(cy), 0];
   const normal: [number, number, number] = [round(nx), round(ny), 0];
   return {
