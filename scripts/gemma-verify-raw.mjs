@@ -698,7 +698,7 @@ function record(name, passed, evidence) {
             }
           }
         } catch (_) {}
-        const passed = afterCount > 0 && hasMeshWithCreator;
+        const passed = afterCount > 0 && hasMeshWithCreator && zoomApplied !== false;
         return { passed, evidence: { afterCount, hasMeshWithCreator, detail, zoomApplied, ...zoomEvidence } };
       } catch (e) {
         return { passed: false, evidence: { reason: 'event not received', error: String(e) } };
