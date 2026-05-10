@@ -11,13 +11,13 @@
 //   If either fails: log SKIP reason; never touch the tree
 //
 // Heartbeat: state/gemma-master-autofwd.heartbeat updated on every poll.
-// Log:        state/gemma-master-autofwd.log (appended, not rotated)
+// Log:        state/gemma-master-autofwd.log (rotated at 10MB → .log.1)
 //
 // Usage:
 //   node scripts/gemma-master-autofwd.mjs           # runs until killed
 //   node scripts/gemma-master-autofwd.mjs --dry-run  # log only, no pull
 
-import { appendFileSync, mkdirSync, writeFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
 
@@ -40,11 +40,21 @@ function log(msg) {
   appendFileSync(LOG_FILE, line + "\n");
 }
 
+function rotateLog(maxBytes = 10 * 1024 * 1024) {
+  try {
+    if (statSync(LOG_FILE).size < maxBytes) return;
+    const rotated = LOG_FILE + ".1";
+    if (existsSync(rotated)) unlinkSync(rotated);
+    renameSync(LOG_FILE, rotated);
+  } catch { /* ignore — missing file is fine on first run */ }
+}
+
 function run(cmd) {
   return spawnSync(cmd, { shell: true, cwd: SERVING_DIR, encoding: "utf8" });
 }
 
 async function poll() {
+  rotateLog();
   writeFileSync(HEARTBEAT, ts());
 
   const remoteResult = run("git ls-remote origin master");
