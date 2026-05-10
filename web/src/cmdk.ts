@@ -9,7 +9,7 @@ import { runAgentTurn } from "./agent/agent-harness";
 import { dispatch, dispatchSync } from "./commands/dispatch";
 import { setConsoleMode } from "./workbench";
 import { startCommandSession } from "./commands/command-session";
-import { setPickerHint } from "./viewer/create-mode";
+import { setPickerHint, setChooserHint } from "./viewer/create-mode";
 
 type Cmd = {
   group: "GENERATE" | "MODEL" | "VIEW" | "FILE";
@@ -22,6 +22,7 @@ type Cmd = {
 function startPicker(verb: string): void {
   void startCommandSession({ command: verb, parameters: {}, metadata: { source: "palette" } }).then((r) => {
     if (r.status === "needs_input") setPickerHint(r.summary ?? "Click in viewport to place");
+    else if (r.status === "needs_choice" && r.awaiting_text_choice) setChooserHint(r.awaiting_text_choice);
   });
 }
 

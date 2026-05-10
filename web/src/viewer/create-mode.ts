@@ -23,7 +23,8 @@ import { setState } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { snapPoint } from "./snap-state";
 import { pushAction } from "../history";
-import { getActiveCommandSession, provideSessionPick, clearCommandSession, commitCommandSession } from "../commands/command-session";
+import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
+import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../grids";
 import { levelStore } from "../levels";
 import { datumStore } from "../datums";
@@ -74,6 +75,7 @@ let _cursorDot: HTMLElement | null = null;
 let _viewer: Viewer | null = null;
 
 let _pickerPromptEl: HTMLElement | null = null;
+let _chooserEl: HTMLElement | null = null;
 
 export function setPickerHint(msg: string | null): void {
   if (!_pickerPromptEl) return;
@@ -83,6 +85,38 @@ export function setPickerHint(msg: string | null): void {
   } else {
     _pickerPromptEl.classList.remove("visible");
   }
+}
+
+export function setChooserHint(choice: { arg: string; options: ChoiceOption[] } | null): void {
+  if (!_chooserEl) return;
+  if (!choice) {
+    _chooserEl.classList.remove("visible");
+    _chooserEl.innerHTML = "";
+    return;
+  }
+  _chooserEl.innerHTML = "";
+  const label = document.createElement("div");
+  label.className = "chooser-label";
+  label.textContent = `Choose ${choice.arg}:`;
+  _chooserEl.appendChild(label);
+  for (const opt of choice.options) {
+    const chip = document.createElement("button");
+    chip.className = "chooser-chip";
+    chip.textContent = opt.label;
+    chip.title = opt.description;
+    chip.addEventListener("click", () => {
+      void provideSessionChoice(opt.value).then((result) => {
+        if (result.status === "needs_choice" && result.awaiting_text_choice) {
+          setChooserHint(result.awaiting_text_choice);
+        } else {
+          setChooserHint(null);
+          setPickerHint(result.status === "needs_input" ? (result.summary ?? null) : null);
+        }
+      });
+    });
+    _chooserEl.appendChild(chip);
+  }
+  _chooserEl.classList.add("visible");
 }
 
 function readActiveTool(): string | null {
@@ -1063,6 +1097,10 @@ export function initCreateMode(viewer: Viewer): void {
   _pickerPromptEl.className = "picker-prompt";
   vpBody.appendChild(_pickerPromptEl);
 
+  _chooserEl = document.createElement("div");
+  _chooserEl.className = "chooser-overlay";
+  vpBody.appendChild(_chooserEl);
+
   // Capture-phase listener — runs before the viewer's own pointerdown so we
   // can swallow the event when a create-tool is active or a session needs picks.
   vpBody.addEventListener("pointerdown", (ev) => {
@@ -1076,7 +1114,12 @@ export function initCreateMode(viewer: Viewer): void {
         ev.stopImmediatePropagation();
         const snapped = snapPoint(world.x, world.y);
         void provideSessionPick([snapped.x, snapped.y]).then((result) => {
-          setPickerHint(result.status === "needs_input" ? (result.summary ?? null) : null);
+          if (result.status === "needs_choice" && result.awaiting_text_choice) {
+            setChooserHint(result.awaiting_text_choice);
+          } else {
+            setChooserHint(null);
+            setPickerHint(result.status === "needs_input" ? (result.summary ?? null) : null);
+          }
         });
       }
       return;
@@ -1122,13 +1165,21 @@ export function initCreateMode(viewer: Viewer): void {
       if (getActiveCommandSession()?.state === "collecting_args") {
         clearCommandSession();
         setPickerHint(null);
+        setChooserHint(null);
       }
       return;
     }
     if (ev.key === "Enter") {
       commitUnlimited(viewer);
       void commitCommandSession().then((r) => {
-        if (r) setPickerHint(r.status === "needs_input" ? (r.summary ?? null) : null);
+        if (r) {
+          if (r.status === "needs_choice" && r.awaiting_text_choice) {
+            setChooserHint(r.awaiting_text_choice);
+          } else {
+            setChooserHint(null);
+            setPickerHint(r.status === "needs_input" ? (r.summary ?? null) : null);
+          }
+        }
       });
     }
   });

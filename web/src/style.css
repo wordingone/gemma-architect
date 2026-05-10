@@ -1605,6 +1605,43 @@ html[data-mode="night"] .paper-stage {
 .picker-prompt.visible { display: block; }
 #viewport-area-host:has(.picker-prompt.visible) { cursor: crosshair; }
 
+/* Chooser overlay — shown when a command session awaits enum_choice (#345) */
+.chooser-overlay {
+  display: none;
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.82);
+  border-radius: 8px;
+  z-index: 21;
+  pointer-events: auto;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.chooser-overlay.visible { display: flex; }
+.chooser-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.chooser-chip {
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12px;
+  font-family: var(--mono);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chooser-chip:hover { background: rgba(255, 255, 255, 0.22); }
+
 /* ── PARAMETERS tab (#237) ───────────────────────────────────────────────── */
 .params-header {
   font-family: var(--mono);
