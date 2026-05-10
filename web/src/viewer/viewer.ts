@@ -1950,6 +1950,35 @@ export class Viewer {
     };
   }
 
+  // Plane layout (setSectionBox order):
+  //   [0] normal(+1,0,0) constant=-min[0]  → -X face
+  //   [1] normal(-1,0,0) constant=+max[0]  → +X face
+  //   [2] normal(0,+1,0) constant=-min[1]  → -Y face
+  //   [3] normal(0,-1,0) constant=+max[1]  → +Y face
+  //   [4] normal(0,0,+1) constant=-min[2]  → -Z face
+  //   [5] normal(0,0,-1) constant=+max[2]  → +Z face
+  // For all faces: plane.constant += delta moves the face outward (positive = expand).
+  private static readonly _FACE_IDX: Record<string, number> = {
+    '+x': 1, '-x': 0, '+y': 3, '-y': 2, '+z': 5, '-z': 4,
+  };
+
+  pushSectionFace(face: '+x' | '-x' | '+y' | '-y' | '+z' | '-z', delta: number): void {
+    if (this._sectionPlanes.length < 6) return;
+    const idx = Viewer._FACE_IDX[face];
+    this._sectionPlanes[idx].constant += delta;
+    this._applyClippingPlanes();
+  }
+
+  // Returns the signed position of the face along its axis (scene units).
+  // '+x' → max[0], '-x' → min[0], etc.
+  getSectionFacePosition(face: '+x' | '-x' | '+y' | '-y' | '+z' | '-z'): number | null {
+    if (this._sectionPlanes.length < 6) return null;
+    const idx = Viewer._FACE_IDX[face];
+    const plane = this._sectionPlanes[idx];
+    // +faces store constant=+coord; -faces store constant=-coord
+    return face.startsWith('+') ? plane.constant : -plane.constant;
+  }
+
   // ── Arbitrary clipping planes ─────────────────────────────────────────────────
 
   addClippingPlane(origin: [number, number, number], normal: [number, number, number], label?: string): void {
