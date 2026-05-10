@@ -20,6 +20,7 @@ import { DEMOS, applyParams, type DemoPrompt, type Param } from "./demo-prompts"
 import { getLayerForCreator, layerStore } from "./layers";
 import { levelStore, getActiveLevelId } from "./levels";
 import { gridStore } from "./grids";
+import { snapPoint, setStep as snapSetStep, getStep as snapGetStep } from "./viewer/snap-state";
 import { buildIfc, buildIfcScene, ifcRoundTrip, type IfcSceneElement } from "./ifc";
 import {
   detectFormat,
@@ -123,6 +124,10 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 (window as unknown as { __resolveCPlane: typeof resolveCPlane }).__resolveCPlane = resolveCPlane;
 (window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 (window as unknown as { __runIteration: typeof runIteration }).__runIteration = runIteration;
+// Expose snap test hooks for CDP verification (#374).
+(window as unknown as { __snapPoint: typeof snapPoint }).__snapPoint = snapPoint;
+(window as unknown as { __snapSetStep: typeof snapSetStep }).__snapSetStep = snapSetStep;
+(window as unknown as { __snapGetStep: typeof snapGetStep }).__snapGetStep = snapGetStep;
 initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {

@@ -55,7 +55,8 @@ export function setAngleStep(deg: number): void { _state.angleStep = Math.max(0.
 export function snapPoint(x: number, y: number): { x: number; y: number } {
   if (_state.snapOn && _state.gridOn) {
     const activeGrid = gridStore.getActive();
-    const s = (activeGrid?.spacing ?? _state.step);
+    // User step always governs precision; active grid provides origin/rotation frame only.
+    const s = _state.step;
 
     if (activeGrid && activeGrid.visible) {
       // Transform point into grid-local space (subtract origin, un-rotate).

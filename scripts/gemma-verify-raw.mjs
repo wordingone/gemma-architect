@@ -1527,6 +1527,39 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('assets-tab', r.passed, r.evidence);
 }
 
+// ── Surface 34: snap-step-dynamic (#374) ─────────────────────────────────────
+{
+  const r = await evaluate(`
+    (() => {
+      const snapPoint = window.__snapPoint;
+      const setStep = window.__snapSetStep;
+      const getStep = window.__snapGetStep;
+      if (!snapPoint || !setStep || !getStep) {
+        return { passed: false, evidence: { reason: 'snap hooks not exposed', hasSnapPoint: !!snapPoint, hasSetStep: !!setStep } };
+      }
+      const prev = getStep();
+      // Test 1: step=0.5, input x=0.7 → should snap to 0.5
+      setStep(0.5);
+      const r1 = snapPoint(0.7, 0);
+      // Test 2: step=0.1, input x=0.73 → should snap to 0.7
+      setStep(0.1);
+      const r2 = snapPoint(0.73, 0);
+      // Test 3: step=1.0, input x=0.7 → should snap to 1.0
+      setStep(1.0);
+      const r3 = snapPoint(0.7, 0);
+      setStep(prev);
+      const ok1 = Math.abs(r1.x - 0.5) < 0.001;
+      const ok2 = Math.abs(r2.x - 0.7) < 0.001;
+      const ok3 = Math.abs(r3.x - 1.0) < 0.001;
+      return {
+        passed: ok1 && ok2 && ok3,
+        evidence: { step05: { in: 0.7, out: r1.x, ok: ok1 }, step01: { in: 0.73, out: r2.x, ok: ok2 }, step10: { in: 0.7, out: r3.x, ok: ok3 } }
+      };
+    })()`);
+  if (!r) record('snap-step-dynamic', false, { reason: 'evaluate returned null' });
+  else record('snap-step-dynamic', r.passed, r.evidence);
+}
+
 // ── Surface 32: iteration-mode (#320) ────────────────────────────────────────
 {
   const r = await evaluate(`
