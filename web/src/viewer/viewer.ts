@@ -2128,6 +2128,7 @@ export class Viewer {
 
   setView(name: "top" | "bottom" | "front" | "back" | "left" | "right" | "iso" | "extents" | "persp"): void {
     this.activeView = name;
+    if (name === "persp") return; // keep current camera position; just record activeView
     const b = this.currentBounds ?? { min: [-5, -5, -5] as [number, number, number], max: [5, 5, 5] as [number, number, number] };
     const cx = (b.min[0] + b.max[0]) / 2;
     const cy = (b.min[1] + b.max[1]) / 2;
