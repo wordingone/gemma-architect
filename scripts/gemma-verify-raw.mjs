@@ -1203,7 +1203,7 @@ function record(name, passed, evidence) {
   else record('level-chip-persist', r.passed, r.evidence);
 }
 
-// ── Surface 27: ifc-default-selection ────────────────────────────────────────
+// ── Surface 29: ifc-default-selection ────────────────────────────────────────
 {
   const loaded = await evaluate(`(async function() {
     const sel = document.getElementById('sample-select');
