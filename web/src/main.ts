@@ -729,7 +729,130 @@ registerHandler("IfcWindow", (args) => {
   return { created: "window", width: w, height: h, sillH: sill, submeshes: group.children.length, voidCut };
 });
 
+function buildRoofGeometry(
+  type: string, w: number, d: number, ridgeH: number,
+): THREE.BufferGeometry {
+  switch (type) {
+    case "pitched": {
+      // Gable roof: triangular cross-section extruded along depth.
+      // Ridge runs along Y. Vertices: 4 base corners + 2 ridge points.
+      const v = new Float32Array([
+        -w/2, -d/2, 0,      // 0 front-left
+         w/2, -d/2, 0,      // 1 front-right
+         w/2,  d/2, 0,      // 2 back-right
+        -w/2,  d/2, 0,      // 3 back-left
+           0, -d/2, ridgeH, // 4 front ridge
+           0,  d/2, ridgeH, // 5 back ridge
+      ]);
+      const idx = new Uint16Array([
+        0,1,4,  3,5,2,       // gable ends
+        0,4,5, 0,5,3,        // left slope
+        1,2,5, 1,5,4,        // right slope
+        0,2,1, 0,3,2,        // floor
+      ]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      geo.computeVertexNormals();
+      return geo;
+    }
+    case "hipped": {
+      // Hip roof: ridge runs along long axis (Y if d>w), set back w/2 from each end.
+      const setback = Math.min(w / 2, d / 2);
+      const v = new Float32Array([
+        -w/2, -d/2, 0,                       // 0
+         w/2, -d/2, 0,                       // 1
+         w/2,  d/2, 0,                       // 2
+        -w/2,  d/2, 0,                       // 3
+           0, -(d/2 - setback), ridgeH,      // 4 near ridge pt
+           0,  (d/2 - setback), ridgeH,      // 5 far ridge pt
+      ]);
+      const idx = new Uint16Array([
+        // Near hip: 0,1,4
+        0,1,4,
+        // Far hip: 2,3,5
+        2,3,5,
+        // Left slopes: 0,4,5, 0,5,3
+        0,4,5, 0,5,3,
+        // Right slopes: 1,2,5, 1,5,4
+        1,2,5, 1,5,4,
+        // Floor
+        0,2,1, 0,3,2,
+      ]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      geo.computeVertexNormals();
+      return geo;
+    }
+    case "curved": {
+      // Barrel vault: half-cylinder, radius=w/2, length=d, axis=Y.
+      const segs = 24;
+      const positions: number[] = [];
+      const indices: number[] = [];
+      // Build top half-circle cross-section (theta 0..PI) × 2 depth positions.
+      for (let si = 0; si <= segs; si++) {
+        const t = (si / segs) * Math.PI; // 0..PI gives top half
+        const x = (w / 2) * Math.cos(Math.PI - t); // -w/2 .. +w/2
+        const z = (w / 2) * Math.sin(Math.PI - t); // 0 .. ridgeH-approx
+        positions.push(x, -d/2, z, x, d/2, z);
+      }
+      for (let si = 0; si < segs; si++) {
+        const a = si * 2, b = si * 2 + 1, c = si * 2 + 2, e = si * 2 + 3;
+        indices.push(a, c, b, b, c, e);
+      }
+      // End caps
+      const nv = (segs + 1) * 2;
+      // Front cap: fan from (0, -d/2, 0)
+      positions.push(0, -d/2, 0); const fc = nv;
+      for (let si = 0; si < segs; si++) indices.push(fc, si * 2, si * 2 + 2);
+      // Back cap: fan from (0, +d/2, 0)
+      positions.push(0, d/2, 0); const bc = nv + 1;
+      for (let si = 0; si < segs; si++) indices.push(bc, si * 2 + 3, si * 2 + 1);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      return geo;
+    }
+    case "combination": {
+      // Flat centre slab + pitched ends (L-wing approach).
+      // Centre: flat slab w × d/2 (middle third)
+      // Ends: two smaller pitched roofs.
+      const geo = new THREE.BufferGeometry();
+      const hw = w / 2, hd = d / 2, wh = Math.max(0.15, ridgeH * 0.4);
+      const v = new Float32Array([
+        // Flat centre (z = wh)
+        -hw, -hd/2, wh,  hw, -hd/2, wh,  hw, hd/2, wh,  -hw, hd/2, wh,
+        // Front pitched end (below centre)
+        -hw, -hd, 0,  hw, -hd, 0,  0, -hd, ridgeH,  0, -hd/2, ridgeH,
+        // Back pitched end
+        -hw, hd, 0,   hw, hd, 0,   0, hd, ridgeH,   0, hd/2, ridgeH,
+      ]);
+      const idx = new Uint16Array([
+        // Flat slab (4 verts 0-3)
+        0,2,1, 0,3,2,
+        // Front end: verts 4,5,6,7
+        4,6,5, 4,7,6, 4,0,7, 5,6,7, // approximate
+        // Back end: verts 8,9,10,11
+        8,9,10, 8,10,11, 8,11,3, 9,10,11,
+      ]);
+      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      geo.computeVertexNormals();
+      return geo;
+    }
+    default: {
+      // flat: low box slab
+      const geo = new THREE.BoxGeometry(w, d, Math.max(0.15, ridgeH * 0.3));
+      geo.translate(0, 0, Math.max(0.15, ridgeH * 0.3) / 2);
+      return geo;
+    }
+  }
+}
+
 registerHandler("IfcRoof", (args) => {
+  const roofType = (args.roofType as string | undefined) ?? "flat";
   const pitch   = (args.pitchDeg    as number | undefined) ?? 30;
   const fp      = args.footprint as number[][] | undefined;
   let w = 8, d = 10;
@@ -740,18 +863,25 @@ registerHandler("IfcRoof", (args) => {
     d = (Math.max(...ys) - Math.min(...ys)) || 10;
   }
   const ridgeH = (args.ridgeHeight as number | undefined) ?? (Math.min(w, d) / 2 * Math.tan((pitch * Math.PI) / 180));
-  const geom   = new THREE.BoxGeometry(w, d, Math.max(0.2, ridgeH));
-  geom.translate(0, 0, Math.max(0.2, ridgeH) / 2);
-  const mat  = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02 });
+  const geom   = buildRoofGeometry(roofType, w, d, ridgeH);
+  const mat  = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 3);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcRoof";
+  mesh.userData.roofType = roofType;
+  mesh.userData.ifcPredefinedType = ({
+    flat: "FLAT_ROOF",
+    pitched: "GABLE_ROOF",
+    hipped: "HIP_ROOF",
+    curved: "BARREL_ROOF",
+    combination: "MANSARD_ROOF",
+  } as Record<string, string>)[roofType] ?? "NOTDEFINED";
   mesh.userData.layerId = resolveLayerId("IfcRoof", args);
   mesh.userData.levelId = getActiveLevelId();
   viewer.addMesh(mesh, "brep");
-  return { created: "roof", width: w, depth: d, ridgeHeight: ridgeH };
+  return { created: "roof", roofType, width: w, depth: d, ridgeHeight: ridgeH, ifcPredefinedType: mesh.userData.ifcPredefinedType };
 });
 
 registerHandler("IfcSpace", (args) => {
