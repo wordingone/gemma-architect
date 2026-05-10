@@ -29,6 +29,7 @@ import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeS
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import { levelStore, type Level } from "./levels";
 import { gridStore, type Grid } from "./grids";
+import { datumStore, type Datum } from "./datums";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "./viewer/selection-state";
 import { getCreateSequence } from "./viewer/create-mode";
@@ -365,6 +366,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   const refBody = el("div");
   refBody.appendChild(buildLevelsTab());
   refBody.appendChild(buildGridsTab());
+  refBody.appendChild(buildDatumsTab());
   addSubsection("REFERENCE GEOMETRY", refBody);
 
   return wrap;
@@ -813,6 +815,48 @@ function buildGridsTab(): HTMLElement {
   }
 
   gridStore.subscribe(renderList);
+  renderList();
+  return wrap;
+}
+
+function buildDatumsTab(): HTMLElement {
+  const wrap = el("div", "tab-body datums-tab");
+
+  const header = el("div", "datums-header");
+  header.style.cssText = "display:flex; align-items:center; padding:4px 2px 6px;";
+  const title = el("div");
+  title.style.cssText = "font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
+  title.textContent = "SURVEY DATUMS";
+  header.appendChild(title);
+  wrap.appendChild(header);
+
+  const list = el("div", "datum-list");
+  list.style.cssText = "display:flex; flex-direction:column; gap:2px;";
+  wrap.appendChild(list);
+
+  function renderList(): void {
+    list.innerHTML = "";
+    for (const datum of datumStore.all()) {
+      const row = el("div", "layer-row");
+      row.style.cssText = "display:flex; align-items:center; gap:6px; padding:3px 2px; border-bottom:1px solid var(--hairline);";
+
+      const posEl = el("span");
+      posEl.style.cssText = "flex:1; font-size:11px; color:var(--ink-body); font-family:monospace;";
+      const [x, y, z] = datum.position;
+      posEl.textContent = datum.label ?? `(${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`;
+
+      row.appendChild(posEl);
+      list.appendChild(row);
+    }
+    if (datumStore.all().length === 0) {
+      const empty = el("div");
+      empty.style.cssText = "font-size:11px; color:var(--ink-dim); padding:4px 2px;";
+      empty.textContent = "No datums placed";
+      list.appendChild(empty);
+    }
+  }
+
+  datumStore.subscribe(renderList);
   renderList();
   return wrap;
 }
