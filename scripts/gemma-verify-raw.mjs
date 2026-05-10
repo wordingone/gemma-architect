@@ -1858,6 +1858,35 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('set-cplane-roundtrip', r.passed, r.evidence);
 }
 
+// ── Surface 41: tier0-llama-server-dispatch (#389) ───────────────────────────
+// Asserts that the remote inference path (VITE_GEMMA_AGENT_URL = :8088) produces
+// at least one IfcWall dispatch verb when given "draw a 5m wall". Exercises the
+// full chat-panel → runRemoteAgentTurn → llama-server → parseDispatches chain.
+// Skips if __runIteration is not present or REMOTE_URL is unset.
+{
+  const r = await evaluate(`(async () => {
+    if (typeof window.__runIteration !== 'function') {
+      return { passed: false, evidence: { reason: '__runIteration not found — build not loaded' } };
+    }
+    const badge = document.getElementById('ai-model-badge')?.textContent ?? '';
+    const hasRemote = badge.includes('REMOTE') || badge.includes('LIVE');
+    if (!hasRemote) {
+      return { passed: false, evidence: { reason: 'REMOTE badge not shown — VITE_GEMMA_AGENT_URL not set or model not loaded', badge } };
+    }
+    try {
+      const result = await window.__runIteration(null, null, 'draw a 5m wall', []);
+      const dispatches = result?.dispatches ?? [];
+      const verb = dispatches[0]?.verb ?? null;
+      const passed = dispatches.length > 0;
+      return { passed, evidence: { verb, dispatchCount: dispatches.length, textSnippet: (result?.text ?? '').slice(0, 100) } };
+    } catch(e) {
+      return { passed: false, evidence: { error: e.message } };
+    }
+  })()`, true, 90000);
+  if (!r) record('tier0-llama-server-dispatch', false, { reason: 'evaluate returned null' });
+  else record('tier0-llama-server-dispatch', r.passed, r.evidence);
+}
+
 // ── Surface 42: ortho-projection (#331) ──────────────────────────────────────
 // setView("top") must switch the persp pane to OrthographicCamera.
 // Asserts projection matrix element [5] (1/top) matches ortho formula, not perspective.
