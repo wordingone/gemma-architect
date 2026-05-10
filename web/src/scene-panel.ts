@@ -49,10 +49,12 @@ type MeshNode = {
   depth: number;
 };
 
-const PHYSICAL_IFC_CLASSES = new Set([
-  "IfcWall", "IfcWallStandardCase", "IfcSlab", "IfcColumn", "IfcBeam",
-  "IfcRoof", "IfcDoor", "IfcWindow", "IfcStair", "IfcRailing",
-  "IfcCovering", "IfcFurnishingElement", "IfcBuildingElementProxy",
+// web-ifc emits uppercase class names (e.g. "IFCWALL"); match case-insensitively.
+const PHYSICAL_IFC_CLASSES_UPPER = new Set([
+  "IFCWALL", "IFCWALLSTANDARDCASE", "IFCSLAB", "IFCSLABSTANDARDCASE",
+  "IFCCOLUMN", "IFCCOLUMNSTANDARDCASE", "IFCBEAM", "IFCBEAMSTANDARDCASE",
+  "IFCROOF", "IFCDOOR", "IFCWINDOW", "IFCSTAIR",
+  "IFCRAILING", "IFCCOVERING", "IFCFURNISHINGELEMENT", "IFCBUILDINGELEMENTPROXY",
 ]);
 
 export class ScenePanel {
@@ -324,7 +326,7 @@ export class ScenePanel {
       if (b.storeyName === "Unassigned" && a.storeyName !== "Unassigned") return -1;
       return a.storeyElevation - b.storeyElevation;
     });
-    const first = sorted.find((el) => PHYSICAL_IFC_CLASSES.has(el.ifcClass));
+    const first = sorted.find((el) => PHYSICAL_IFC_CLASSES_UPPER.has(el.ifcClass.toUpperCase()));
     if (!first) return;
     const row = this.root.querySelector<HTMLElement>(`[data-express-id="${first.expressID}"]`);
     if (row) this.selectByExpressId(row, first.expressID);
