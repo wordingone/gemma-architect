@@ -299,3 +299,43 @@ export class ChatPanel {
     el.remove();
   }
 }
+
+// ── Iteration API (#320) ──────────────────────────────────────────────────────
+// Stateless entry point for the agent loop driver. Compares viewport against a
+// reference image and emits the next geometry commands. Exposed as
+// window.__runIteration for CDP-driven loop orchestrators and gemma-verify.
+//
+// Token budget: maxNewTokens=1024 ≤ 60% of Gemma-4 E2B's ~8192-token context.
+
+export async function runIteration(
+  refImg: ImageBitmap | null,
+  vpImg: ImageBitmap | null,
+  deltaText: string,
+  recentDispatches: AgentDispatch[],
+): Promise<AgentResponse> {
+  const recentText = recentDispatches.length > 0
+    ? `Recent commands: ${recentDispatches.slice(-8).map((d) => `${d.verb}(${JSON.stringify(d.args)})`).join("; ")}`
+    : "";
+
+  const lines = [
+    "Iteration step: examine the current viewport and emit the next geometry commands to move toward the target state.",
+    deltaText ? `Target delta: ${deltaText}` : "",
+    recentText,
+    refImg != null ? "(A reference image is attached as the target state.)" : "",
+  ].filter(Boolean);
+
+  let userImage: string | undefined;
+  if (vpImg != null) {
+    const canvas = document.createElement("canvas");
+    canvas.width = vpImg.width;
+    canvas.height = vpImg.height;
+    canvas.getContext("2d")!.drawImage(vpImg, 0, 0);
+    userImage = canvas.toDataURL("image/jpeg", 0.8);
+  }
+
+  return runAgentTurn({
+    prompt: lines.join("\n"),
+    userImage,
+    maxNewTokens: 1024,
+  });
+}

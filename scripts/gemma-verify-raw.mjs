@@ -1507,6 +1507,22 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('cplane-default-resolution', r.passed, r.evidence);
 }
 
+// ── Surface 32: iteration-mode (#320) ────────────────────────────────────────
+{
+  const r = await evaluate(`
+    (() => {
+      const fnExists = typeof window.__runIteration === 'function';
+      if (!fnExists) return { passed: false, evidence: { reason: '__runIteration not registered' } };
+      const result = window.__runIteration(null, null, 'draw a 5m wall', []);
+      const isPromise = result != null && typeof result.then === 'function';
+      if (!isPromise) return { passed: false, evidence: { reason: 'did not return a Promise', type: typeof result } };
+      result.catch(() => {});
+      return { passed: true, evidence: { fnExists, isPromise } };
+    })()`);
+  if (!r) record('iteration-mode', false, { reason: 'evaluate returned null' });
+  else record('iteration-mode', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
