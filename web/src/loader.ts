@@ -229,6 +229,7 @@ export async function buildIfcMesh(
     const hier = hierByExpressID.get(range.expressID);
     mesh.name = hier?.name || `#${range.expressID}`;
     mesh.userData = {
+      kind: "brep",
       expressID: range.expressID,
       ifcClass: hier?.ifcClass ?? "",
       guid: hier?.guid ?? "",

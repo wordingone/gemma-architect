@@ -2009,7 +2009,12 @@ export class Viewer {
       if (ud?.kind !== "brep" && ud?.kind !== "compound") return;
       box.expandByObject(obj);
     });
-    if (box.isEmpty()) box.setFromObject(this.scene);
+    if (box.isEmpty() && this.currentBounds) {
+      box.set(
+        new THREE.Vector3(...this.currentBounds.min),
+        new THREE.Vector3(...this.currentBounds.max),
+      );
+    }
     if (box.isEmpty() || !isFinite(box.min.x) || !isFinite(box.max.x)) return;
     const center = new THREE.Vector3();
     box.getCenter(center);
