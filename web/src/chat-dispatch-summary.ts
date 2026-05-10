@@ -16,6 +16,7 @@ export const VERB_LABELS: Record<string, [string, string]> = {
   IfcCeiling:     ["ceiling",      "ceilings"],
   IfcCurtainWall: ["curtain wall", "curtain walls"],
   IfcGrid:        ["grid",         "grids"],
+  IfcGridLine:    ["grid line",    "grid lines"],
   IfcLevel:       ["level",        "levels"],
   SdBox:          ["box",          "boxes"],
   SdSphere:       ["sphere",       "spheres"],

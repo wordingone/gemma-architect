@@ -750,34 +750,36 @@ function buildRailing(a: { x: number; y: number }, b: { x: number; y: number }):
   return { mesh, chain };
 }
 
-function buildRefGrid(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
-  const w = Math.abs(b.x - a.x) || 5;
-  const d = Math.abs(b.y - a.y) || 5;
+function buildGridLine(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-  const spacing = 5;
-  const count = Math.max(2, Math.min(10, Math.round(Math.max(w, d) / spacing) + 1));
-  const name = `Grid ${gridStore.all().length + 1}`;
-  const grid = gridStore.add({ name, spacing, count, rotation: 0, origin: [cx, cy], visible: true });
-  const extent = spacing * (count - 1);
-  const half = extent / 2;
-  const t = 0.02;
-  const mat = new THREE.MeshBasicMaterial({ color: 0x888899, transparent: true, opacity: 0.5 });
-  const group = new THREE.Group();
-  group.position.set(cx, cy, 0);
-  group.userData.kind = "grid";
-  group.userData.gridId = grid.id;
-  group.userData.creator = "IfcGrid";
-  for (let i = 0; i < count; i++) {
-    const offset = -half + i * spacing;
-    const mv = new THREE.Mesh(new THREE.BoxGeometry(t, extent + spacing, t), mat);
-    mv.position.set(offset, 0, 0);
-    group.add(mv);
-    const mh = new THREE.Mesh(new THREE.BoxGeometry(extent + spacing, t, t), mat);
-    mh.position.set(0, offset, 0);
-    group.add(mh);
-  }
-  const chain = `IfcGrid({origin:[${round(cx)},${round(cy)}],spacing:${spacing},count:${count},name:"${name}"})`;
-  return { mesh: group, chain };
+  const angRad = Math.atan2(dy, dx) - Math.PI / 2;
+
+  // Architectural dash-dot-dash: alternating long dash / short dot segments.
+  // LineDashedMaterial only supports uniform patterns, so use dashSize + gapSize
+  // tuned to approximate the standard grid-line style.
+  const points = [new THREE.Vector3(0, -len / 2, 0), new THREE.Vector3(0, len / 2, 0)];
+  const geom = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineDashedMaterial({ color: 0x1a56cc, dashSize: 0.5, gapSize: 0.15 });
+  const line = new THREE.Line(geom, mat);
+  line.computeLineDistances();
+  line.position.set(cx, cy, 0.001);
+  line.rotation.z = angRad;
+
+  // Auto-label: count existing IfcGridLine objects in scene
+  const existingCount = _viewer
+    ? _viewer.getScene().children.filter((o) => o.userData.creator === "IfcGridLine").length
+    : 0;
+  const label = String.fromCharCode(65 + existingCount % 26); // A, B, C…
+
+  line.userData.kind = "grid-line";
+  line.userData.creator = "IfcGridLine";
+  line.userData.label = label;
+  line.userData.controlPoints = [[a.x, a.y, 0], [b.x, b.y, 0]];
+
+  const chain = `IfcGridLine({origin:[${round(a.x)},${round(a.y)}],end:[${round(b.x)},${round(b.y)}]})`;
+  return { mesh: line, chain };
 }
 
 function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Object3D; chain: string; levelId: string } {
@@ -899,7 +901,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   opening:      { clicks: 1, handler: ([p]) => buildOpening(p) },
   ramp:         { clicks: 2, handler: ([a, b]) => buildRamp(a, b) },
   railing:      { clicks: 2, handler: ([a, b]) => buildRailing(a, b) },
-  grid:         { clicks: 2, handler: ([a, b]) => buildRefGrid(a, b) },
+  grid:         { clicks: 2, handler: ([a, b]) => buildGridLine(a, b) },
   level:        { clicks: 1, handler: ([p]) => buildLevel(p) },
   datum:        { clicks: 1, handler: ([p]) => buildDatum(p) },
   section:      { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b) },

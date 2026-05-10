@@ -2157,7 +2157,7 @@ function sanitizeStem(filename: string): string {
 }
 
 // Creator tags that are spatial/structural only — skip in IFC element export.
-const IFC_SKIP_CREATORS = new Set(["IfcGrid", "IfcLevel", "IfcDatum"]);
+const IFC_SKIP_CREATORS = new Set(["IfcGrid", "IfcGridLine", "IfcLevel", "IfcDatum"]);
 
 function sceneElementsForExport(): IfcSceneElement[] {
   const elements: IfcSceneElement[] = [];
