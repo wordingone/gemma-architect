@@ -1111,6 +1111,44 @@ function record(name, passed, evidence) {
   else record('clipping-planes', r.passed, r.evidence);
 }
 
+// ── Surface 25: sidebar-tab-cycle-preserves-geometry (#287/#296) ─────────────
+// Dispatch IfcWall, record visible mesh count, cycle SCENE→INSPECT→ASSETS→SCENE,
+// assert count unchanged. Regression guard for eye-toggle inversion (#296).
+{
+  const r = await evaluate(`
+  (async () => {
+    if (!window.__dispatch) return { passed: false, evidence: { reason: '__dispatch missing' } };
+    const v = window.__viewer;
+    if (!v) return { passed: false, evidence: { reason: 'no __viewer' } };
+
+    window.__dispatch('IfcWall', { length: 4, thickness: 0.2, height: 2.8 });
+    await new Promise(r => setTimeout(r, 300));
+
+    function countVisible() {
+      let n = 0;
+      v.scene.traverse(obj => {
+        if (obj.isMesh && (obj.userData?.creator || obj.userData?.layerId) && obj.visible) n++;
+      });
+      return n;
+    }
+
+    const before = countVisible();
+    if (before === 0) return { passed: false, evidence: { reason: 'no visible geometry before cycle', before } };
+
+    for (const tabId of ['inspect', 'assets', 'scene']) {
+      const tab = document.querySelector('.sb-tab[data-tab="' + tabId + '"]');
+      if (!tab) return { passed: false, evidence: { reason: 'tab not found', tabId } };
+      tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    const after = countVisible();
+    return { passed: after >= before, evidence: { before, after } };
+  })()`, true);
+  if (!r) record('sidebar-tab-cycle-preserves-geometry', false, { reason: 'evaluate returned null' });
+  else record('sidebar-tab-cycle-preserves-geometry', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

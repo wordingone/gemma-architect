@@ -696,8 +696,9 @@ function buildLayersTab(): HTMLElement {
         ? `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor"/><circle cx="6.5" cy="4.5" r="1.5" fill="currentColor"/></svg>`
         : `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor" stroke-dasharray="2 1"/></svg>`;
       eyeBtn.addEventListener("click", () => {
-        layerStore.setVisible(layer.id, !layer.visible);
-        applyVisibility(layer.id, !layer.visible);
+        const newVisible = !layer.visible;
+        layerStore.setVisible(layer.id, newVisible);
+        applyVisibility(layer.id, newVisible);
       });
 
       // Lock toggle
