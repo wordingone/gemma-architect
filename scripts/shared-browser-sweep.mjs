@@ -22,6 +22,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const STATE_DIR = join(ROOT, "state");
@@ -81,6 +82,36 @@ async function closeTab(tab) {
   return res.ok;
 }
 
+// Kill the vite server listening on `port`, with a guard: never kill a process
+// whose CommandLine contains "--port 5175" (canonical server).
+function killViteOnPort(port) {
+  if (port === 5175) return false; // hard guard: never kill canonical
+  try {
+    const ps = `
+      $conn = Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1;
+      if (!$conn) { exit 1 }
+      $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($conn.OwningProcess)" -ErrorAction SilentlyContinue;
+      if (!$proc -or $proc.CommandLine -notmatch 'vite') { exit 2 }
+      if ($proc.CommandLine -match '--port 5175') { exit 3 }
+      Write-Output "$($proc.ProcessId):$($proc.CommandLine.Substring(0, [Math]::Min(120, $proc.CommandLine.Length)))";
+      Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue;
+      exit 0
+    `;
+    const out = execSync(`powershell -NoProfile -Command "${ps.replace(/\n\s*/g, ' ')}"`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (out) {
+      log(`KILLED-VITE port=${port} proc=${out.split(":")[0]}`);
+      return true;
+    }
+  } catch (e) {
+    const code = e.status ?? -1;
+    if (code === 1) { /* no listener on port */ }
+    else if (code === 2) { /* listener is not vite */ }
+    else if (code === 3) { log(`SKIP-CANONICAL-VITE port=${port} — has --port 5175`); }
+    else { log(`KILL-VITE-ERR port=${port}: ${String(e.message).slice(0, 80)}`); }
+  }
+  return false;
+}
+
 async function sweep() {
   let tabs;
   try {
@@ -128,6 +159,9 @@ async function sweep() {
       if (ok) {
         log(`CLOSED ${label}`);
         closed++;
+        // Kill the vite server feeding this non-canonical tab.
+        const portMatch = url.match(/localhost:(\d+)/);
+        if (portMatch) killViteOnPort(Number(portMatch[1]));
       } else {
         log(`CLOSE-FAILED ${label}`);
       }
