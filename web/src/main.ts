@@ -170,11 +170,13 @@ registerHandler("SdSectionBox", (args) => {
   if (!Array.isArray(min) || min.length < 3 || !Array.isArray(max) || max.length < 3)
     return { error: "min and max must be [x,y,z] arrays" };
   viewer.setSectionBox(min, max, enabled);
+  document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   return { ok: true, min, max, enabled };
 });
 
 registerHandler("SdSectionBoxOff", () => {
   viewer.clearSectionBox();
+  document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   return { ok: true };
 });
 
@@ -185,11 +187,13 @@ registerHandler("SdClippingPlane", (args) => {
   if (!Array.isArray(origin) || origin.length < 3 || !Array.isArray(normal) || normal.length < 3)
     return { error: "origin and normal must be [x,y,z] arrays" };
   viewer.addClippingPlane(origin, normal, label);
+  document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   return { ok: true, origin, normal, label };
 });
 
 registerHandler("SdClippingPlanesClear", () => {
   viewer.clearClippingPlanes();
+  document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   return { ok: true };
 });
 
@@ -197,6 +201,7 @@ registerHandler("SdClippingPlaneRemove", (args) => {
   const label = args.label as string;
   if (!label) return { error: "label required" };
   const removed = viewer.removeClippingPlane(label);
+  document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   return { ok: removed, label };
 });
 

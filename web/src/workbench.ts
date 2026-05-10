@@ -142,6 +142,10 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "opening",     icon: "opening",     label: "Opening" },
   ]},
   { tools: [
+    { id: "section", icon: "section", label: "Section Box" },
+    { id: "clip",    icon: "clip",    label: "Clip Plane" },
+  ]},
+  { tools: [
     { id: "aligned-dim",       icon: "aligned-dim",       label: "Aligned Dim" },
     { id: "angular-dim",       icon: "angular-dim",       label: "Angular Dim" },
     { id: "area-dim",          icon: "area-dim",          label: "Area" },
@@ -368,8 +372,68 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   refBody.appendChild(buildGridsTab());
   refBody.appendChild(buildDatumsTab());
   addSubsection("REFERENCE GEOMETRY", refBody);
+  addSubsection("VIEW STATE", buildViewStateSection());
 
   return wrap;
+}
+
+function buildViewStateSection(): HTMLElement {
+  const body = el("div");
+  body.style.cssText = "padding-bottom:4px;";
+
+  function render(): void {
+    body.innerHTML = "";
+    const v = (window as unknown as { __viewer?: { getSectionBox?: () => unknown; getClippingPlanes?: () => Array<{ label: string }> } }).__viewer;
+    const dispatch = (window as unknown as { __dispatch?: (verb: string, args: Record<string, unknown>) => void }).__dispatch;
+
+    const hasSectionBox = !!v?.getSectionBox?.();
+    const planes = v?.getClippingPlanes?.() ?? [];
+
+    if (!hasSectionBox && planes.length === 0) {
+      const hint = el("div");
+      hint.style.cssText = "padding:4px 10px; font-size:10px; color:var(--ink-faint);";
+      hint.textContent = "No active clips";
+      body.appendChild(hint);
+      return;
+    }
+
+    function makeRow(labelText: string, onRemove: () => void): void {
+      const row = el("div");
+      row.style.cssText =
+        "display:flex; align-items:center; justify-content:space-between;" +
+        " padding:2px 10px; font-size:10px; color:var(--ink-dim);";
+      const name = el("span");
+      name.textContent = labelText;
+      const btn = el("button");
+      btn.textContent = "✕";
+      btn.title = "Remove";
+      btn.style.cssText =
+        "background:none; border:none; cursor:pointer; color:var(--ink-faint);" +
+        " font-size:10px; padding:0 2px; line-height:1;";
+      btn.addEventListener("click", onRemove);
+      row.appendChild(name);
+      row.appendChild(btn);
+      body.appendChild(row);
+    }
+
+    if (hasSectionBox) {
+      makeRow("Section box", () => {
+        dispatch?.("SdSectionBoxOff", {});
+        document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
+      });
+    }
+
+    for (const p of planes) {
+      makeRow(p.label, () => {
+        dispatch?.("SdClippingPlaneRemove", { label: p.label });
+        document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
+      });
+    }
+  }
+
+  render();
+  document.addEventListener("viewer:clip-changed", render);
+  return body;
 }
 
 function buildInspectTab(): HTMLElement {

@@ -1979,6 +1979,21 @@ export class Viewer {
     return this._clipPlanes.length;
   }
 
+  getClippingPlanes(): Array<{ label: string; origin: [number, number, number]; normal: [number, number, number] }> {
+    const labelByPlane = new Map<THREE.Plane, string>();
+    this._clipLabels.forEach((plane, label) => labelByPlane.set(plane, label));
+    return this._clipPlanes.map((plane, idx) => {
+      const n = plane.normal;
+      // Closest point on the plane to the world origin: p = -constant * normal
+      const o = n.clone().multiplyScalar(-plane.constant);
+      return {
+        label: labelByPlane.get(plane) ?? `plane-${idx}`,
+        origin: [o.x, o.y, o.z] as [number, number, number],
+        normal: [n.x, n.y, n.z] as [number, number, number],
+      };
+    });
+  }
+
   private _applyClippingPlanes(): void {
     const all = [...this._sectionPlanes, ...this._clipPlanes];
     this.renderer.clippingPlanes = all;

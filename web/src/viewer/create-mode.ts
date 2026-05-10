@@ -747,8 +747,60 @@ function buildDatum(p: { x: number; y: number }): { mesh: THREE.Object3D; chain:
 type ToolHandler = {
   // Number of clicks to auto-commit. -1 = unlimited: collect until Enter.
   clicks: number;
-  handler: (pts: Array<{ x: number; y: number; z?: number }>) => { mesh: THREE.Object3D; chain: string };
+  handler: (pts: Array<{ x: number; y: number; z?: number }>) => {
+    mesh: THREE.Object3D;
+    chain: string;
+    // If set, fired via dispatchSync on commit (not during rubber-band preview).
+    dispatchOnCommit?: { verb: string; args: Record<string, unknown> };
+  };
 };
+
+function buildSectionBox(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
+  const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
+  const minZ = -0.1, maxZ = 6.0;
+  const w = maxX - minX || 0.1, d = maxY - minY || 0.1, h = maxZ - minZ;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+  const geom = new THREE.BoxGeometry(w, d, h);
+  const edges = new THREE.EdgesGeometry(geom);
+  geom.dispose();
+  const mat = new THREE.LineBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.7 });
+  const mesh = new THREE.LineSegments(edges, mat);
+  mesh.position.set(cx, cy, cz);
+  mesh.userData.kind = "section-box";
+  mesh.userData.creator = "SdSectionBox";
+  const min: [number, number, number] = [round(minX), round(minY), round(minZ)];
+  const max: [number, number, number] = [round(maxX), round(maxY), round(maxZ)];
+  return {
+    mesh,
+    chain: `SdSectionBox({min:[${min}],max:[${max}]})`,
+    dispatchOnCommit: { verb: "SdSectionBox", args: { min, max } },
+  };
+}
+
+function buildClipPlane(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const lineLen = Math.sqrt(dx * dx + dy * dy) || 1;
+  // Normal perpendicular to line direction, pointing to the "right" of a→b
+  const nx = -dy / lineLen, ny = dx / lineLen;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const planeH = 4;
+  const geom = new THREE.PlaneGeometry(lineLen, planeH);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, planeH / 2);
+  mesh.rotation.set(Math.PI / 2, 0, Math.atan2(dy, dx));
+  mesh.userData.kind = "clip-plane";
+  mesh.userData.creator = "SdClippingPlane";
+  const label = `clip-${Date.now()}`;
+  const origin: [number, number, number] = [round(cx), round(cy), 0];
+  const normal: [number, number, number] = [round(nx), round(ny), 0];
+  return {
+    mesh,
+    chain: `SdClippingPlane({origin:[${origin}],normal:[${normal}],label:"${label}"})`,
+    dispatchOnCommit: { verb: "SdClippingPlane", args: { origin, normal, label } },
+  };
+}
 
 const TOOL_HANDLERS: Record<string, ToolHandler> = {
   wall:     { clicks: 2, handler: ([a, b]) => buildWall(a, b) },
@@ -782,6 +834,8 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   grid:         { clicks: 2, handler: ([a, b]) => buildRefGrid(a, b) },
   level:        { clicks: 1, handler: ([p]) => buildLevel(p) },
   datum:        { clicks: 1, handler: ([p]) => buildDatum(p) },
+  section:      { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b) },
+  clip:         { clicks: 2, handler: ([a, b]) => buildClipPlane(a, b) },
 };
 
 const TOOL_TODOS: Record<string, string> = {
@@ -963,6 +1017,10 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep");
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
+  if (out.dispatchOnCommit) {
+    dispatchSync(out.dispatchOnCommit.verb, out.dispatchOnCommit.args);
+    document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
+  }
   // After committing a create operation, return to Select so transform-gizmo
   // interactions are not swallowed by create-mode capture listeners.
   dispatchSync("setActiveTool", { toolId: "select" });

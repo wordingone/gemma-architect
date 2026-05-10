@@ -1203,6 +1203,47 @@ function record(name, passed, evidence) {
   else record('level-chip-persist', r.passed, r.evidence);
 }
 
+// ── Surface 27: view-state-sidebar-lists-clip (#291b) ────────────────────────
+{
+  const r = await evaluate(`
+  (async () => {
+    if (!window.__dispatch) return { passed: false, evidence: { reason: '__dispatch missing' } };
+    const v = window.__viewer;
+    if (!v) return { passed: false, evidence: { reason: 'no __viewer' } };
+
+    // Clear any residual clip state from prior surfaces.
+    window.__dispatch('SdSectionBoxOff', {});
+    window.__dispatch('SdClippingPlanesClear', {});
+    await new Promise(r => setTimeout(r, 150));
+
+    // Apply a section box so VIEW STATE has something to show.
+    window.__dispatch('SdSectionBox', { min: [-5, -5, 0], max: [5, 5, 6] });
+    window.__dispatch('SdClippingPlane', { origin: [3, 0, 0], normal: [1, 0, 0], label: 'surf27-test' });
+    await new Promise(r => setTimeout(r, 200));
+
+    // Check getClippingPlanes() returns the plane we added.
+    const planes = v.getClippingPlanes?.() ?? [];
+    const sb = v.getSectionBox?.();
+    const hasSectionBox = !!sb;
+    const hasPlane = planes.some(p => p.label === 'surf27-test');
+
+    // Check sidebar VIEW STATE section is present in DOM.
+    const viewStateHdr = Array.from(document.querySelectorAll('.sb-tab[data-tab="scene"] ~ * [class], .tab-body *'))
+      .find(el => el.textContent?.trim() === 'VIEW STATE');
+
+    // Cleanup.
+    window.__dispatch('SdSectionBoxOff', {});
+    window.__dispatch('SdClippingPlanesClear', {});
+
+    return {
+      passed: hasSectionBox && hasPlane,
+      evidence: { hasSectionBox, hasPlane, planeCount: planes.length, viewStateDomPresent: !!viewStateHdr },
+    };
+  })()`, true);
+  if (!r) record('view-state-sidebar-lists-clip', false, { reason: 'evaluate returned null' });
+  else record('view-state-sidebar-lists-clip', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
