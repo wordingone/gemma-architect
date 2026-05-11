@@ -2018,6 +2018,39 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('snap-cursor-vertex', r.passed, r.evidence);
 }
 
+// ── Surface 45: point-tool-places-marker (#328) ───────────────────────────────
+// Activate point tool, emit a single click via emitClickWorld, assert the scene
+// contains a mesh with userData.creator === "point".
+{
+  const r = await evaluate(`
+    (() => {
+      try {
+        const beforeCount = window.__viewer.scene.children.length;
+        const result = window.__emitClickWorld({ x: 2, y: 3 }, { tool: 'point' });
+        if (!result) return { passed: false, evidence: { reason: 'emitClickWorld returned null' } };
+        // Find the newly added point in the scene
+        const pts = window.__viewer.scene.children.filter(c => c.userData?.creator === 'point');
+        const passed = pts.length > 0;
+        const pt = pts[pts.length - 1];
+        return {
+          passed,
+          evidence: {
+            sceneChildrenBefore: beforeCount,
+            sceneChildrenAfter: window.__viewer.scene.children.length,
+            pointCount: pts.length,
+            position: pt ? { x: pt.position.x, y: pt.position.y, z: pt.position.z } : null,
+            kind: pt?.userData?.kind,
+            creator: pt?.userData?.creator,
+          },
+        };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!r) record('point-tool-places-marker', false, { reason: 'evaluate returned null' });
+  else record('point-tool-places-marker', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
