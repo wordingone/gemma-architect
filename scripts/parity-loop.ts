@@ -135,21 +135,54 @@ function scoreViewport(vpPath: string): ScoreResult | null {
   catch { return null; }
 }
 
-// ── Dispatch proposal via Haiku ────────────────────────────────────────────
+// ── Dispatch proposal via __runDesignLoop ─────────────────────────────────
 
 interface Proposal { verb: string; args: Record<string, unknown>; rationale: string }
 
 const MOCK_VERBS = ["IfcWall", "IfcSlab", "IfcColumn", "IfcDoor", "IfcWindow"];
 
-function proposeDispatch(
+async function proposeDispatch(
   _vpPath: string,
-  _lastDeltas: ScoreResult["deltas"],
-  _lastAttempts: string[],
-): Proposal {
+  lastDeltas: ScoreResult["deltas"],
+  lastAttempts: string[],
+): Promise<Proposal> {
+  if (MOCK) {
+    return {
+      verb: MOCK_VERBS[_mockCallN % MOCK_VERBS.length],
+      args: {},
+      rationale: `deterministic cycle iteration ${_mockCallN}`,
+    };
+  }
+
+  const deltaSummary = lastDeltas.length > 0
+    ? lastDeltas.map(d => `${d.dimension}: ${d.description}`).join("; ")
+    : "no specific visual gaps identified";
+  const attemptSummary = lastAttempts.length > 0
+    ? `Already dispatched: ${lastAttempts.slice(-5).join(", ")}.`
+    : "No prior dispatches yet.";
+
+  const prompt = [
+    `Visual parity score: ${currentScore}/${activeTier} (targeting ${activeTier}% match).`,
+    attemptSummary,
+    `Visual gaps: ${deltaSummary}.`,
+    `Dispatch ONE building element that closes the largest visual gap.`,
+    `Prefer IFC primitives: IfcWall, IfcSlab, IfcColumn, IfcBeam, IfcDoor, IfcWindow, IfcRoof.`,
+    `Return only the dispatch command — no explanation.`,
+  ].join(" ");
+
+  type LoopResult = { dispatches?: Array<{ verb: string; args?: Record<string, unknown> }>; text?: string };
+  const result = await evaluate(
+    `window.__runDesignLoop(${JSON.stringify(prompt)}, [], undefined, 1)`,
+  ) as LoopResult | null;
+
+  const first = result?.dispatches?.[0];
+  if (!first) {
+    return { verb: "IfcWall", args: {}, rationale: "__runDesignLoop returned no dispatch; fallback" };
+  }
   return {
-    verb: MOCK_VERBS[_mockCallN % MOCK_VERBS.length],
-    args: {},
-    rationale: `deterministic cycle iteration ${_mockCallN}`,
+    verb: first.verb,
+    args: first.args ?? {},
+    rationale: (result?.text ?? "via runDesignLoop").slice(0, 120),
   };
 }
 
@@ -205,7 +238,7 @@ while (iterationN < MAX_ITERATIONS) {
   const scoreBefore = beforeResult?.score ?? currentScore;
 
   // 3. Propose dispatch
-  const proposal = proposeDispatch(vpBefore, beforeResult?.deltas ?? [], lastAttempts);
+  const proposal = await proposeDispatch(vpBefore, beforeResult?.deltas ?? [], lastAttempts);
   console.log(`  → ${proposal.verb} ${JSON.stringify(proposal.args)}: ${proposal.rationale}`);
 
   // 4. Execute dispatch
