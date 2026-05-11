@@ -1,4 +1,4 @@
-export type SliderTab = "ARCH" | "COMP";
+export type SliderTab = "ARCH" | "COMP" | "ASSETS";
 
 export interface PhoneSliderOpts {
   initial?: SliderTab;
@@ -18,7 +18,7 @@ export function buildPhoneSlider(opts: PhoneSliderOpts): { root: HTMLElement; se
   thumb.setAttribute("aria-hidden", "true");
   root.appendChild(thumb);
 
-  const tabs: SliderTab[] = ["ARCH", "COMP"];
+  const tabs: SliderTab[] = ["ARCH", "COMP", "ASSETS"];
   for (const tab of tabs) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -37,12 +37,12 @@ export function buildPhoneSlider(opts: PhoneSliderOpts): { root: HTMLElement; se
   }
 
   function sync() {
-    root.querySelectorAll<HTMLButtonElement>(".phone-slider-btn").forEach((btn) => {
+    root.querySelectorAll<HTMLButtonElement>(".phone-slider-btn").forEach((btn, i) => {
       const isActive = btn.dataset.tab === active;
       btn.classList.toggle("active", isActive);
       btn.setAttribute("aria-selected", isActive ? "true" : "false");
+      if (isActive) thumb.style.transform = `translateX(${i * 100}%)`;
     });
-    thumb.style.transform = active === "COMP" ? "translateX(100%)" : "translateX(0)";
   }
 
   function setTab(t: SliderTab) {

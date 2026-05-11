@@ -190,7 +190,6 @@ type SidebarTab = { id: string; label: string };
 const SIDEBAR_TABS: SidebarTab[] = [
   { id: "scene",   label: "SCENE" },
   { id: "inspect", label: "INSPECT" },
-  { id: "assets",  label: "ASSETS" },
 ];
 
 const SAMPLE_ASSETS = [
@@ -243,8 +242,17 @@ function buildPalette(host: HTMLElement) {
 
   window.addEventListener("ribbon:section-tab", (rawEv) => {
     const tab = (rawEv as CustomEvent<{ tab: string }>).detail?.tab;
+    const ribbonTools = document.querySelector<HTMLElement>(".ribbon-tools");
     if (tab === "ARCH" || tab === "COMP") {
       showSectionTab(tab as "ARCH" | "COMP");
+      if (ribbonTools) ribbonTools.replaceChildren();
+    } else if (tab === "ASSETS") {
+      if (!ribbonTools) return;
+      ribbonTools.replaceChildren();
+      ribbonTools.appendChild(buildAssetsTab((v) => {
+        const sel = document.getElementById("sample-select") as HTMLSelectElement | null;
+        if (sel) { sel.value = v; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+      }));
     }
   });
 }
@@ -1049,14 +1057,6 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
   const panes: Record<string, HTMLElement> = {
     scene:   buildSceneTab(scenePanel),
     inspect: buildInspectTab(),
-    assets:  buildAssetsTab((v) => {
-      // Drive existing sample-select dropdown so loader picks up the sample.
-      const sel = document.getElementById("sample-select") as HTMLSelectElement | null;
-      if (sel) {
-        sel.value = v;
-        sel.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }),
   };
 
   for (const t of SIDEBAR_TABS) {

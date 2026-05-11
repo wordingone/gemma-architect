@@ -1604,21 +1604,23 @@ await resetScene('before-box-inject');
   else record('cplane-default-resolution', r.passed, r.evidence);
 }
 
-// ── Surface 33: assets-tab (#342) ────────────────────────────────────────────
+// ── Surface 33: assets-tab (#342 / #400) ─────────────────────────────────────
+// ASSETS is now in the ribbon phone-slider (ARCH|COMP|ASSETS), not the sidebar.
 {
   const r = await evaluate(`
     (() => {
-      const assetsTab = document.querySelector('.sb-tab[data-tab="assets"]');
-      if (!assetsTab) return { passed: false, evidence: { reason: 'no .sb-tab[data-tab=assets]' } };
-      assetsTab.click();
-      const assetGrid = document.querySelector('.asset-grid');
-      const assetCards = document.querySelectorAll('.asset-card');
-      const toolGroups = document.querySelectorAll('.tool-group');
-      const ribbonTransform = [...document.querySelectorAll('.tool-group-label')].some(el => el.textContent === 'TRANSFORM');
-      return {
-        passed: !!assetGrid && assetCards.length > 0 && toolGroups.length === 0,
-        evidence: { assetGrid: !!assetGrid, assetCards: assetCards.length, toolGroups: toolGroups.length, ribbonTransform }
-      };
+      // 1. ASSETS button must exist in the phone-slider (ribbon tabs area).
+      const assetsBtn = document.querySelector('.phone-slider-btn[data-tab="ASSETS"]');
+      if (!assetsBtn) return { passed: false, evidence: { reason: 'no .phone-slider-btn[data-tab="ASSETS"]' } };
+      // 2. No ASSETS tab in sidebar.
+      const sidebarAssets = document.querySelector('.sb-tab[data-tab="assets"]');
+      if (sidebarAssets) return { passed: false, evidence: { reason: 'ASSETS tab still in sidebar' } };
+      // 3. Click ASSETS ribbon btn — ribbon-tools should fill with asset-cards.
+      assetsBtn.click();
+      const assetCards = document.querySelectorAll('.ribbon-tools .asset-card');
+      const toolGroups = document.querySelectorAll('.ribbon-tools .tool-group');
+      const passed = assetCards.length > 0 && toolGroups.length === 0;
+      return { passed, evidence: { assetCards: assetCards.length, toolGroups: toolGroups.length } };
     })()`);
   if (!r) record('assets-tab', false, { reason: 'evaluate returned null' });
   else record('assets-tab', r.passed, r.evidence);
@@ -2011,25 +2013,30 @@ await resetScene('before-box-inject');
   else record('ortho-projection', r.passed, r.evidence);
 }
 
-// ── Surface 43: assets-tab-visible (#342) ────────────────────────────────────
-// Ribbon has no TOOL_GROUP labels; ASSETS sidebar tab activates sample picker.
+// ── Surface 43: assets-tab-visible (#342 / #400) ─────────────────────────────
+// ASSETS is in the ribbon phone-slider (ARCH|COMP|ASSETS), not the sidebar.
+// Clicking ASSETS fills ribbon-tools with sample-picker cards.
 {
   const r = await evaluate(`
     (() => {
-      // 1. Check ribbon-tools has no tool-group elements (TRANSFORM/SKETCH 2D/SOLID/ARCH/MEASURE gone)
+      // 1. Ribbon-tools must have no legacy tool-group elements.
       const toolGroups = document.querySelectorAll('.ribbon-tools .tool-group');
-      const ribbonGroupLabels = Array.from(document.querySelectorAll('.ribbon-tools .tool-group-label')).map(el => el.textContent);
       if (toolGroups.length > 0) {
-        return { passed: false, evidence: { reason: 'tool-group elements still in ribbon-tools', count: toolGroups.length, labels: ribbonGroupLabels } };
+        return { passed: false, evidence: { reason: 'tool-group elements still in ribbon-tools', count: toolGroups.length } };
       }
-      // 2. ASSETS tab present in sidebar
-      const assetsTab = Array.from(document.querySelectorAll('.sb-tab')).find(t => t.textContent === 'ASSETS');
-      if (!assetsTab) {
-        return { passed: false, evidence: { reason: 'ASSETS tab not found in sidebar' } };
+      // 2. ASSETS button in phone-slider.
+      const assetsBtn = document.querySelector('.phone-slider-btn[data-tab="ASSETS"]');
+      if (!assetsBtn) {
+        return { passed: false, evidence: { reason: 'ASSETS button not in phone-slider' } };
       }
-      // 3. Click ASSETS tab and assert sample picker cards appear
-      assetsTab.click();
-      const cards = document.querySelectorAll('.tab-body.assets .asset-card');
+      // 3. No ASSETS tab in sidebar (migrated to ribbon).
+      const sidebarAssets = Array.from(document.querySelectorAll('.sb-tab')).find(t => t.textContent?.trim() === 'ASSETS');
+      if (sidebarAssets) {
+        return { passed: false, evidence: { reason: 'ASSETS still in sidebar, not migrated' } };
+      }
+      // 4. Click ASSETS ribbon btn → ribbon-tools fills with sample cards.
+      assetsBtn.click();
+      const cards = document.querySelectorAll('.ribbon-tools .asset-card');
       const passed = cards.length > 0;
       return { passed, evidence: { cardCount: cards.length, toolGroupCount: toolGroups.length } };
     })()`);
