@@ -56,41 +56,50 @@ Five prompts, each run once per model variant. Metrics captured from `window.__t
 - `tg_tps` — generation throughput (tokens/s)
 - `dispatch_count` — number of `<tool_call>` blocks emitted (correctness proxy)
 
+**Pre-condition:** benchmark requires an isolated session with `VITE_GEMMA_AGENT_URL` unset so inference runs through the WebGPU path. The active dev session at 5173 has `VITE_GEMMA_AGENT_URL` configured (remote mode) — timing from that session measures network latency, not WebGPU throughput.
+
 ---
 
 ## Benchmark results
 
+> **Note:** Benchmark deferred to dedicated isolated session. Dev server at 5173 is in REMOTE mode; in-browser WebGPU timing requires a clean `bun web:dev` without `VITE_GEMMA_AGENT_URL`. Queue priority (P0 #413 demo umbrella) bumped this to queue item 5 — numbers will be filled in the follow-up commit.
+
 ### E2B (default)
 
-**Model load:** `LIVE · GPU` (WebGPU q4f16, cached)
+**Model load:** confirmed LIVE (used in all prior development sessions; cached)
 
 | Prompt | prefill_ms | decode_ms | tokens_out | tg_tps | dispatch_count |
 |--------|-----------|-----------|-----------|--------|---------------|
-| P1 — single wall | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P2 — 4-wall room | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P3 — cylinder | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P4 — slab + export | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P5 — 3-story building | PENDING | PENDING | PENDING | PENDING | PENDING |
+| P1 — single wall | — | — | — | — | — |
+| P2 — 4-wall room | — | — | — | — | — |
+| P3 — cylinder | — | — | — | — | — |
+| P4 — slab + export | — | — | — | — | — |
+| P5 — 3-story building | — | — | — | — | — |
 | **Mean** | | | | | |
 
 ### E4B
 
-**Model load:** PENDING
+**Model load:** not yet tested (requires isolated session + initial model download ~4GB)
 
 | Prompt | prefill_ms | decode_ms | tokens_out | tg_tps | dispatch_count |
 |--------|-----------|-----------|-----------|--------|---------------|
-| P1 — single wall | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P2 — 4-wall room | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P3 — cylinder | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P4 — slab + export | PENDING | PENDING | PENDING | PENDING | PENDING |
-| P5 — 3-story building | PENDING | PENDING | PENDING | PENDING | PENDING |
+| P1 — single wall | — | — | — | — | — |
+| P2 — 4-wall room | — | — | — | — | — |
+| P3 — cylinder | — | — | — | — | — |
+| P4 — slab + export | — | — | — | — | — |
+| P5 — 3-story building | — | — | — | — | — |
 | **Mean** | | | | | |
 
 ---
 
 ## Recommendation
 
-PENDING — to be filled from benchmark results.
+**Interim (code shipped; benchmark pending):** Keep E2B as default. E4B is available via `?gemma_model=e4b` URL param for any developer who wants to test it on their hardware. Full benchmark + recommendation update will follow in a separate commit once isolated-session timing data is available.
+
+Key factors that will drive the final recommendation:
+- If E4B OOMs on `maxBufferSize < 4GB` → E2B only (VRAM ceiling exceeded before load)
+- If E4B loads but TG tps < 3 → E2B preferred for interactive use
+- If E4B loads and TG tps ≥ 3 AND dispatch-count improvement is measurable → E4B for complex design prompts, E2B for interactive quick turns
 
 ---
 
