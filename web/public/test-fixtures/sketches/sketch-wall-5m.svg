@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+  <rect width="400" height="200" fill="#f5f5f0"/>
+  <!-- Simple hand-sketch style wall rectangle -->
+  <!-- 5m long × 0.2m thick wall, top view -->
+  <rect x="40" y="85" width="320" height="30" fill="none" stroke="#222" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Hatch fill indicating solid wall -->
+  <line x1="60"  y1="85" x2="60"  y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="90"  y1="85" x2="90"  y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="120" y1="85" x2="120" y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="150" y1="85" x2="150" y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="180" y1="85" x2="180" y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="210" y1="85" x2="210" y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="240" y1="85" x2="240" y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="270" y1="85" x2="270" y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="300" y1="85" x2="300" y2="115" stroke="#444" stroke-width="0.8"/>
+  <line x1="330" y1="85" x2="330" y2="115" stroke="#444" stroke-width="0.8"/>
+  <!-- Dimension line -->
+  <line x1="40" y1="145" x2="360" y2="145" stroke="#555" stroke-width="1"/>
+  <line x1="40" y1="140" x2="40" y2="150" stroke="#555" stroke-width="1"/>
+  <line x1="360" y1="140" x2="360" y2="150" stroke="#555" stroke-width="1"/>
+  <text x="200" y="165" text-anchor="middle" font-family="monospace" font-size="13" fill="#333">5m</text>
+  <text x="200" y="20" text-anchor="middle" font-family="monospace" font-size="14" fill="#222">WALL · 5m × 0.2m × 2.8m</text>
+  <text x="200" y="185" text-anchor="middle" font-family="monospace" font-size="10" fill="#777">plan view</text>
+</svg>

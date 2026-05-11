@@ -50,6 +50,9 @@ export class ChatPanel {
   private _sendBtn!: HTMLButtonElement;
   private _perfStripEl!: HTMLElement;
   private _skills: Skill[] = [];
+  private _pendingImage: string | undefined;
+  private _previewEl!: HTMLElement;
+  private _fileInputEl!: HTMLInputElement;
 
   constructor(private _root: HTMLElement) {
     this._build();
@@ -71,18 +74,23 @@ export class ChatPanel {
       <div class="chat-list"></div>
       <div class="chat-starters"></div>
       <div class="chat-perf-strip" style="display:none"></div>
+      <div class="chat-image-preview" style="display:none"></div>
       <div class="chat-compose">
+        <button class="chat-attach-btn" type="button" title="Attach sketch image (or paste / drop)">⊕</button>
         <textarea class="chat-input"
           placeholder="Ask Gemma·Architect — create geometry, inspect the scene, explain commands…"
           rows="2"></textarea>
         <button class="btn btn-accent btn-sm chat-send-btn" type="button">SEND</button>
       </div>
+      <input class="chat-file-input" type="file" accept="image/*" style="display:none" />
     `;
     this._listEl    = this._root.querySelector(".chat-list")!;
     this._startersEl = this._root.querySelector(".chat-starters")!;
     this._perfStripEl = this._root.querySelector(".chat-perf-strip")!;
+    this._previewEl = this._root.querySelector(".chat-image-preview")!;
     this._inputEl   = this._root.querySelector<HTMLTextAreaElement>(".chat-input")!;
     this._sendBtn   = this._root.querySelector<HTMLButtonElement>(".chat-send-btn")!;
+    this._fileInputEl = this._root.querySelector<HTMLInputElement>(".chat-file-input")!;
 
     window.addEventListener("debug:telemetry-toggle", () => {
       const visible = this._perfStripEl.style.display !== "none";
@@ -108,6 +116,81 @@ export class ChatPanel {
         void this._send();
       }
     });
+
+    // Attach button → file picker
+    const attachBtn = this._root.querySelector<HTMLButtonElement>(".chat-attach-btn")!;
+    attachBtn.addEventListener("click", () => this._fileInputEl.click());
+    this._fileInputEl.addEventListener("change", () => {
+      const file = this._fileInputEl.files?.[0];
+      if (file) this._loadImageFile(file);
+      this._fileInputEl.value = "";
+    });
+
+    // Paste image from clipboard
+    this._inputEl.addEventListener("paste", (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) this._loadImageFile(file);
+          break;
+        }
+      }
+    });
+
+    // Drag-and-drop image onto compose area
+    const compose = this._root.querySelector<HTMLElement>(".chat-compose")!;
+    compose.addEventListener("dragover", (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }
+    });
+    compose.addEventListener("drop", (e: DragEvent) => {
+      const file = e.dataTransfer?.files[0];
+      if (file?.type.startsWith("image/")) {
+        e.preventDefault();
+        this._loadImageFile(file);
+      }
+    });
+  }
+
+  private _loadImageFile(file: File): void {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      this._setPreview(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  private _setPreview(dataUrl: string): void {
+    this._pendingImage = dataUrl;
+    this._previewEl.innerHTML = "";
+    const thumb = document.createElement("img");
+    thumb.className = "chat-image-thumb";
+    thumb.src = dataUrl;
+    thumb.alt = "attached sketch";
+    const label = document.createElement("span");
+    label.style.cssText = "font-size:10px;color:var(--ink-dim);flex:1";
+    label.textContent = "sketch attached";
+    const clearBtn = document.createElement("button");
+    clearBtn.className = "chat-image-clear";
+    clearBtn.type = "button";
+    clearBtn.textContent = "✕ remove";
+    clearBtn.addEventListener("click", () => this._clearPreview());
+    this._previewEl.appendChild(thumb);
+    this._previewEl.appendChild(label);
+    this._previewEl.appendChild(clearBtn);
+    this._previewEl.style.display = "";
+  }
+
+  private _clearPreview(): void {
+    this._pendingImage = undefined;
+    this._previewEl.innerHTML = "";
+    this._previewEl.style.display = "none";
   }
 
   private async _send(): Promise<void> {
@@ -115,6 +198,10 @@ export class ChatPanel {
     if (!text || this._sendBtn.disabled) return;
     this._inputEl.value = "";
     this._startersEl.style.display = "none";
+
+    // Capture + clear pending image before any await so it isn't cleared by a concurrent send.
+    const userImage = this._pendingImage;
+    if (userImage) this._clearPreview();
 
     this._pushMsg({ role: "user", content: text });
     this._history.push({ role: "user", content: text });
@@ -141,6 +228,7 @@ export class ChatPanel {
         skills: skillsToPass,
         skillsTotal: this._skills.length,
         maxNewTokens: estimateMaxTokens(text),
+        userImage,
       });
 
       this._removeThinking(thinking);
