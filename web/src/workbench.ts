@@ -2293,6 +2293,24 @@ function initRenderModePopover(): void {
   syncState();
 }
 
+// Panel collapse toggles (#488). Alt+[ = palette, Alt+] = sidebar.
+// CSS classes .palette-collapsed / .sidebar-collapsed on .workbench
+// are defined in style.css responsive section.
+function wirePanelToggles() {
+  const workbench = document.querySelector<HTMLElement>(".workbench");
+  if (!workbench) return;
+  document.addEventListener("keydown", (e) => {
+    if (e.altKey && e.key === "[") {
+      e.preventDefault();
+      workbench.classList.toggle("palette-collapsed");
+    }
+    if (e.altKey && e.key === "]") {
+      e.preventDefault();
+      workbench.classList.toggle("sidebar-collapsed");
+    }
+  });
+}
+
 export function buildWorkbench() {
   const paletteHost = document.getElementById("palette-host");
   const dockTabsHost = document.getElementById("dock-tabs-host");
@@ -2315,4 +2333,5 @@ export function buildWorkbench() {
   initViewSwitcher();
 
   wireDockResize();
+  wirePanelToggles();
 }
