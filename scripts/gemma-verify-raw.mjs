@@ -1460,16 +1460,21 @@ await resetScene('before-box-inject');
   }
 
   async function captureIfcState29(bppLabel) {
-    await delay(500);
-    const meshCount = await evaluate(`(function() {
-      const v = window.__viewer;
-      if (!v || typeof v.getActiveObject !== 'function') return -1;
-      const active = v.getActiveObject();
-      if (!active) return 0;
-      let n = 0;
-      active.traverse(o => { if (o.isMesh) n++; });
-      return n;
-    })()`);
+    // Poll until active object has meshes — ifc-loaded fires before geometry is in scene.
+    let meshCount = 0;
+    for (let i = 0; i < 20; i++) {
+      await delay(500);
+      meshCount = await evaluate(`(function() {
+        const v = window.__viewer;
+        if (!v || typeof v.getActiveObject !== 'function') return -1;
+        const active = v.getActiveObject();
+        if (!active) return 0;
+        let n = 0;
+        active.traverse(o => { if (o.isMesh) n++; });
+        return n;
+      })()`);
+      if ((meshCount ?? 0) > 0) break;
+    }
     const bpp = await canvasBpp(bppLabel);
     return { meshCount: meshCount ?? -1, bpp: bpp.bpp };
   }
