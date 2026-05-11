@@ -893,6 +893,23 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
   const tProc = performance.now();
 
+  // Guard: E2B WebGPU ONNX model compiled context limit ~2048 tokens (#424).
+  // Long system prompts (summariseDictionary + BUILDING_DEFAULTS + FEW_SHOT) reach
+  // 2000-3000 tokens, pushing input + max_new_tokens past the limit and triggering
+  // SafeIntOnOverflow in OrtRun buffer shape computation.
+  // Route to REMOTE for long inputs without permanently engaging _webgpuFallbackEngaged —
+  // WebGPU remains available for shorter prompts within the same session.
+  const WEBGPU_CONTEXT_LIMIT = 2048;
+  const preCheckLen: number = inputs.input_ids?.dims?.[1] ?? 0;
+  const safeMaxNewTokens = Math.min(req.maxNewTokens ?? 512, WEBGPU_CONTEXT_LIMIT - preCheckLen);
+  if (preCheckLen + 64 > WEBGPU_CONTEXT_LIMIT || safeMaxNewTokens <= 0) {
+    window.dispatchEvent(new CustomEvent("agent:telemetry", {
+      detail: { event: "webgpu_input_too_long", inputTokens: preCheckLen, safeMaxNewTokens },
+    }));
+    if (REMOTE_URL) return runRemoteAgentTurn(req);
+    throw new Error(`Prompt too long for on-device inference (${preCheckLen} tokens > ${WEBGPU_CONTEXT_LIMIT - 64} safe limit). Configure VITE_GEMMA_AGENT_URL for complex prompts.`);
+  }
+
   // Generate — greedy decoding for deterministic function-call JSON.
   // P10-2: catch OrtRun failures that slip past the load-time probe (#128/#133).
   // On first failure: engage session-level fallback flag, retry via remote if available.
@@ -900,7 +917,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   try {
     outputs = await model.generate({
       ...inputs,
-      max_new_tokens: req.maxNewTokens ?? 1024,
+      max_new_tokens: safeMaxNewTokens,
       do_sample: false,
     });
   } catch (ortErr) {
