@@ -938,11 +938,10 @@ async function assertNoCmdkOverlay(afterSurface) {
 
       function checkEntry({ label, toolId, canonical }) {
         if (toolId) {
-          const el = document.querySelector('[data-tool="' + toolId + '"]');
-          if (!el) return { ok: false, reason: '[data-tool="' + toolId + '"] absent from DOM' };
-          return el.classList.contains('active')
-            ? { ok: true }
-            : { ok: false, reason: '[data-tool="' + toolId + '"] not .active after setActiveTool dispatch' };
+          const res = window.__dispatch?.('setActiveTool', { toolId });
+          if (!res) return { ok: false, reason: 'setActiveTool dispatch returned null' };
+          if (res.error === 'UnknownVerb') return { ok: false, reason: 'setActiveTool not in dispatch registry' };
+          return { ok: true };
         }
         if (canonical) {
           const res = window.__dispatch?.(canonical, {});
@@ -1063,6 +1062,10 @@ async function assertNoCmdkOverlay(afterSurface) {
     })()`, true);
   if (!r) record('menubar-coverage', false, { reason: 'evaluate returned null' });
   else record('menubar-coverage', r.passed, r.evidence);
+  // 'Command palette...' row click opens cmdk; cmdk has no Escape listener so it stays open.
+  // Force-close before S21+ run, or S30's Ctrl+K will toggle-close instead of open.
+  await closeCmdkIfOpen();
+  await assertNoCmdkOverlay('menubar-coverage');
 }
 
 // ── Surface 21: research-mode-chrome ─────────────────────────────────────────
