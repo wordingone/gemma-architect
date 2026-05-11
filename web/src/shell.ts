@@ -2,6 +2,10 @@ import { iconSVG } from "./icons.js";
 import { dispatchSync } from "./commands/dispatch.js";
 import { buildPhoneSlider } from "./phone-slider.js";
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // Shell chrome — design-handoff #171.
 //
 // Builds the menubar (9 menus) / modebar (4 modes) / ribbon (RENDER tab + right actions)
@@ -121,6 +125,10 @@ type RibbonTab = typeof RIBBON_TABS[number];
 // Module-level refs used by setRibbonMode to swap ribbon content in-place.
 let _ribbonTabsEl: HTMLElement | null = null;
 let _ribbonToolsEl: HTMLElement | null = null;
+// Live reference to the Elements section's cards container, updated each time
+// appendRibbonAssets builds it. Used by setRibbonElementTypes / reset.
+let _elemCardsEl: HTMLElement | null = null;
+let _elemCardWrapEl: HTMLElement | null = null; // the wrap passed to buildAssetCard
 
 function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab: string) {
   tabsEl.innerHTML = "";
@@ -250,6 +258,11 @@ function appendRibbonAssets(toolsEl: HTMLElement) {
     for (const s of samples) cards.appendChild(buildAssetCard(s, wrap));
     col.appendChild(cards);
 
+    if (label === "Elements") {
+      _elemCardsEl = cards;
+      _elemCardWrapEl = wrap;
+    }
+
     return col;
   }
 
@@ -261,6 +274,60 @@ function appendRibbonAssets(toolsEl: HTMLElement) {
 
   wrap.appendChild(buildColumn("Elements", RIBBON_ELEMENT_SAMPLES));
   toolsEl.appendChild(wrap);
+}
+
+// Map IFC class name to an icon key in icons.ts (fallback "model").
+function ifcClassIcon(cls: string): string {
+  const lower = cls.toLowerCase();
+  if (lower.includes("wall"))        return "wall";
+  if (lower.includes("slab"))        return "slab";
+  if (lower.includes("column"))      return "column";
+  if (lower.includes("beam"))        return "beam";
+  if (lower.includes("stair"))       return "stair";
+  if (lower.includes("door"))        return "door";
+  if (lower.includes("window"))      return "window";
+  if (lower.includes("roof"))        return "roof";
+  if (lower.includes("space"))       return "space";
+  if (lower.includes("foundation") || lower.includes("footing")) return "foundation";
+  if (lower.includes("ceiling"))     return "ceiling";
+  if (lower.includes("curtain"))     return "curtainwall";
+  if (lower.includes("railing"))     return "railing";
+  if (lower.includes("ramp"))        return "ramp";
+  if (lower.includes("opening") || lower.includes("void")) return "opening";
+  return "model";
+}
+
+// Replace the static sample cards in the ELEMENTS section with dynamic IFC
+// element-type chips derived from the currently loaded model's hierarchy.
+export function setRibbonElementTypes(types: { cls: string; count: number }[]): void {
+  if (!_elemCardsEl) return;
+  _elemCardsEl.innerHTML = "";
+  _elemCardsEl.className = "ribbon-assets-cards ribbon-assets-cards--chips";
+  for (const { cls, count } of types) {
+    const chip = document.createElement("div");
+    chip.className = "ribbon-element-chip";
+    chip.dataset.ifcClass = cls;
+    chip.title = `${cls} (${count})`;
+    chip.innerHTML = `
+      <span class="ribbon-chip-icon">${iconSVG(ifcClassIcon(cls), 16)}</span>
+      <span class="ribbon-chip-name">${escapeHtml(cls.replace(/^Ifc/, ""))}</span>
+      <span class="ribbon-chip-count">${count}</span>
+    `;
+    chip.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("ribbon:ifc-type", { detail: { cls } }));
+    });
+    _elemCardsEl.appendChild(chip);
+  }
+}
+
+// Restore the static sample cards (called on scene clear / non-IFC load).
+export function resetRibbonElementTypes(): void {
+  if (!_elemCardsEl || !_elemCardWrapEl) return;
+  _elemCardsEl.innerHTML = "";
+  _elemCardsEl.className = "ribbon-assets-cards";
+  for (const s of RIBBON_ELEMENT_SAMPLES) {
+    _elemCardsEl.appendChild(buildAssetCard(s, _elemCardWrapEl));
+  }
 }
 
 // Append the ARCH|COMP toggle into the ribbon tabs strip (MODEL mode only).
@@ -545,8 +612,8 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
   const rightEl = document.createElement("div");
   rightEl.className = "ribbon-right";
   rightEl.innerHTML = `
-    <button class="btn btn-ghost" type="button" id="ribbon-split-single-btn" title="Single viewport (1)">&#x2b1c;</button>
-    <button class="btn btn-ghost" type="button" id="ribbon-split-quad-btn" title="Quad split (4)">&#x229e;</button>
+    <button class="btn btn-ghost btn-icon" type="button" id="ribbon-split-single-btn" title="Single viewport (1)">${iconSVG("split-single", 14)}</button>
+    <button class="btn btn-ghost btn-icon" type="button" id="ribbon-split-quad-btn" title="Quad split (4)">${iconSVG("split-quad", 14)}</button>
     <button class="btn btn-ghost" type="button" id="ribbon-palette-btn" title="Open command palette (Ctrl+K)">⌘K</button>
     <button class="btn" type="button" id="ribbon-export-btn" title="Export (Ctrl+E)">EXPORT</button>
   `;

@@ -1283,6 +1283,50 @@ html[data-mode="night"] .paper-stage {
   white-space: nowrap;
 }
 
+/* Dynamic IFC element-type chips — shown in ELEMENTS section when a model is loaded */
+.ribbon-assets-cards--chips {
+  flex-wrap: wrap;
+  gap: 3px;
+  max-height: 60px;
+  overflow-y: auto;
+  align-items: flex-start;
+}
+.ribbon-element-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--chrome-seam);
+  min-width: 44px;
+  transition: border-color 0.12s, background 0.12s;
+}
+.ribbon-element-chip:hover {
+  border-color: var(--ink-faint);
+  background: var(--paper-2);
+}
+.ribbon-chip-icon { color: var(--ink-dim); display: flex; }
+.ribbon-chip-name {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.ribbon-chip-count {
+  font-size: 7px;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+}
+
+/* btn-icon: square icon-only button, no text padding */
+.btn-icon {
+  padding: 0 7px;
+  gap: 0;
+}
+
 .tool-group {
   display: flex;
   flex-direction: column;

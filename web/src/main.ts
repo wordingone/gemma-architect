@@ -8,7 +8,7 @@
 // Export menu is shared: the active source (whether replicad-generated or
 // loaded-from-file) is queried via viewer.getActiveMeshData().
 
-import { initShellChrome, setRibbonMode } from "./shell";
+import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell";
 import { buildWorkbench } from "./workbench";
 import { buildModes, activateMode } from "./modes";
 import { initCmdK } from "./cmdk";
@@ -1840,6 +1840,7 @@ const scenePanel = new ScenePanel(scenePanelEl, viewer);
 registerHandler("SdClearScene", () => {
   viewer.clearScene();
   scenePanel.clear();
+  resetRibbonElementTypes();
   clearSelected();
   window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
   return { ok: true, cleared: true };
@@ -2228,6 +2229,13 @@ function finalizeFileLoad(scene: LoadedScene, filename: string) {
   const sm = scene.summary.match(/IFC[24X]+/i);
   if (sm) summary.schema = sm[0].toUpperCase();
   scenePanel.update(summary);
+  if (summary.hierarchy && summary.hierarchy.length > 0) {
+    const classCount = new Map<string, number>();
+    for (const el of summary.hierarchy) classCount.set(el.ifcClass, (classCount.get(el.ifcClass) ?? 0) + 1);
+    setRibbonElementTypes([...classCount.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([cls, count]) => ({ cls, count })));
+  } else {
+    resetRibbonElementTypes();
+  }
   refreshExportButtons();
 }
 
