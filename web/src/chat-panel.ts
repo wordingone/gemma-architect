@@ -311,10 +311,24 @@ export class ChatPanel {
     const item = document.createElement("div");
     item.className = "chat-msg chat-msg-assistant chat-plan-pending";
 
+    // Foldable plan block (#413/SU-7)
+    const details = document.createElement("details");
+    details.open = true;
+    details.className = "chat-plan-details";
+    const summaryEl = document.createElement("summary");
+    summaryEl.className = "chat-plan-summary";
+    summaryEl.textContent = "Plan";
     const planBlock = document.createElement("pre");
     planBlock.className = "chat-plan-block";
     planBlock.textContent = planText;
-    item.appendChild(planBlock);
+    details.appendChild(summaryEl);
+    details.appendChild(planBlock);
+    item.appendChild(details);
+
+    // Per-turn dispatch summary (populated as each turn executes)
+    const turnsEl = document.createElement("div");
+    turnsEl.className = "chat-plan-turns";
+    item.appendChild(turnsEl);
 
     const runBtn = document.createElement("button");
     runBtn.className = "btn btn-accent btn-sm chat-plan-run-btn";
@@ -323,17 +337,57 @@ export class ChatPanel {
 
     runBtn.addEventListener("click", () => {
       runBtn.disabled = true;
-      runBtn.textContent = "Executing…";
-      void this._runDispatches(resp).then(({ summary }) => {
-        planBlock.remove();
+      // Build local history: prior turns + plan assistant response
+      const localHistory: Array<{ role: "user" | "assistant"; content: string }> = [
+        ...this._history,
+        { role: "assistant", content: resp.text },
+      ];
+      const allVerbs: string[] = [];
+      let currentResp = resp;
+      let turnNum = 0;
+
+      void (async () => {
+        while (currentResp.dispatches.length > 0 && turnNum < 3) {
+          turnNum++;
+          runBtn.textContent = turnNum === 1 ? "Executing…" : `Executing turn ${turnNum}…`;
+
+          await this._runDispatches(currentResp);
+
+          const verbs = currentResp.dispatches.map((d) => d.verb);
+          allVerbs.push(...verbs);
+          const turnEl = document.createElement("div");
+          turnEl.className = "chat-plan-turn";
+          turnEl.textContent = `Turn ${turnNum}: ${verbs.join(", ")}`;
+          turnsEl.appendChild(turnEl);
+          this._listEl.scrollTop = this._listEl.scrollHeight;
+
+          if (verbs.includes("SdExport") || turnNum >= 3) break;
+
+          // Continuation turn: ask model for next dispatch batch
+          const dispatchedSoFar = allVerbs.join(", ");
+          const continuationPrompt = `Continue plan execution. Already dispatched: ${dispatchedSoFar}. Dispatch the next batch of building elements (up to 10 commands). End with SdExport when all plan items are complete.`;
+          localHistory.push({ role: "user", content: continuationPrompt });
+          const nextResp = await runAgentTurn({
+            prompt: continuationPrompt,
+            history: localHistory.slice(0, -1),
+            maxNewTokens: 1024,
+          });
+          localHistory.push({ role: "assistant", content: nextResp.text });
+          currentResp = nextResp;
+        }
+
+        // Finalize: collapse plan, show done text
+        details.open = false;
         runBtn.remove();
         item.classList.remove("chat-plan-pending");
+        const doneText = `${allVerbs.length} dispatch${allVerbs.length !== 1 ? "es" : ""} in ${turnNum} turn${turnNum !== 1 ? "s" : ""}`;
         const content = document.createElement("div");
         content.className = "chat-msg-content";
-        content.textContent = summary;
-        item.appendChild(content);
-        this._history.push({ role: "assistant", content: summary });
-      });
+        content.textContent = doneText;
+        item.insertBefore(content, turnsEl);
+        this._history.push({ role: "assistant", content: doneText });
+        (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
+      })();
     });
 
     this._messages.push({ role: "assistant", content: planText });

@@ -2571,6 +2571,52 @@ await resetScene('before-box-inject');
   await resetScene('after-demo-prompt-house');
 }
 
+// ── Surface 57: chat-plan-foldable (#413/SU-7) ────────────────────────────────
+// Sends a design-like prompt via the chat input and checks that
+// .chat-plan-details (foldable plan pane) OR a regular assistant response
+// renders in the chat list — verifying _pushPlanMsg or _executeAndPush ran.
+{
+  const r57 = await evaluate(`(async () => {
+    const tab = document.querySelector('.dock-tab[data-tab="prompt"]');
+    if (!tab) return { passed: false, evidence: { reason: 'prompt dock tab not found' } };
+    tab.click();
+    await new Promise(r => setTimeout(r, 150));
+
+    const chatInput = document.querySelector('.chat-input');
+    const sendBtn = document.querySelector('.chat-send-btn');
+    if (!chatInput || !sendBtn) return { passed: false, evidence: { reason: 'chat input not found' } };
+
+    chatInput.value = 'Design a small house with walls and a roof';
+    chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+    sendBtn.click();
+
+    // Wait up to 60s for plan pane or assistant message to appear
+    const start = Date.now();
+    while (Date.now() - start < 60000) {
+      const planDetails = document.querySelector('.chat-plan-details');
+      if (planDetails) {
+        return {
+          passed: true,
+          evidence: {
+            planPaneRendered: true,
+            isOpen: planDetails.hasAttribute('open'),
+            hasSummary: !!planDetails.querySelector('.chat-plan-summary'),
+            hasPlanBlock: !!planDetails.querySelector('.chat-plan-block'),
+          },
+        };
+      }
+      const assistantMsgs = document.querySelectorAll('.chat-msg-assistant .chat-msg-content');
+      if (assistantMsgs.length > 0) {
+        return { passed: true, evidence: { simplePlanPath: true, msgCount: assistantMsgs.length } };
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return { passed: false, evidence: { reason: 'timeout: no plan pane or assistant response' } };
+  })()`, true, 75000);
+  if (!r57) record('chat-plan-foldable', false, { reason: 'evaluate returned null (timeout)' });
+  else record('chat-plan-foldable', r57.passed, r57.evidence);
+}
+
 } finally {
   await cleanup();
 }

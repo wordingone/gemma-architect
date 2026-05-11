@@ -2856,6 +2856,34 @@ html[data-mode="night"] .paper-stage {
   border: var(--lw-construction) solid var(--gemma);
   color: var(--gemma);
 }
+/* Plan pane — foldable (#413/SU-7) */
+.chat-plan-details {
+  width: 100%;
+  border: var(--lw-construction) solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.chat-plan-summary {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  padding: 3px 8px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--glass-bg);
+}
+.chat-plan-summary:hover { color: var(--ink); }
+.chat-plan-details .chat-plan-block {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 10px;
+  border-top: var(--lw-construction) solid var(--border);
+}
+.chat-plan-turns { display: flex; flex-direction: column; gap: 1px; padding: 2px 0; }
+.chat-plan-turn { font-family: var(--mono); font-size: 9px; color: var(--ink-dim); padding: 1px 4px; }
 /* ============================================================
    SKILL CANVAS (P5a)
    ============================================================ */
