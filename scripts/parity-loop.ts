@@ -105,8 +105,28 @@ async function evaluate(expr: string): Promise<unknown> {
   return (r.result as Record<string, Record<string, unknown>>)?.result?.value ?? null;
 }
 
+// Viewport clip region — computed once at startup to match capture-parity-reference.mjs bounds.
+// Both reference and iteration screenshots use the same region + scale so bpp is comparable.
+const vaRectRaw = await evaluate(`(function() {
+  const va = document.getElementById('viewport-area-host');
+  if (!va) return null;
+  const r = va.getBoundingClientRect();
+  return { x: Math.round(r.left), y: Math.round(r.top),
+           w: Math.round(r.width),
+           h: Math.min(Math.round(r.height), window.innerHeight - Math.round(r.top)) };
+})()`);
+const vaRect = vaRectRaw as { x: number; y: number; w: number; h: number } | null;
+if (!vaRect || vaRect.w < 100 || vaRect.h < 100) {
+  console.error("ERROR: viewport-area-host not found or too small:", vaRect);
+  process.exit(1);
+}
+console.log(`Viewport clip: ${vaRect.w}×${vaRect.h} at (${vaRect.x},${vaRect.y}) — scale:2`);
+
 async function takeScreenshot(savePath: string): Promise<void> {
-  const r = await cdpSend("Page.captureScreenshot", { format: "jpeg", quality: 85 });
+  const r = await cdpSend("Page.captureScreenshot", {
+    format: "jpeg", quality: 85,
+    clip: { x: vaRect!.x, y: vaRect!.y, width: vaRect!.w, height: vaRect!.h, scale: 2 },
+  });
   const b64 = (r.result?.data as string | undefined) ?? "";
   writeFileSync(savePath, Buffer.from(b64, "base64"));
 }
