@@ -2478,6 +2478,94 @@ await resetScene('before-box-inject');
   await resetScene('after-su1-e2e'); // clear AI-created IFC objects so next run starts clean
 }
 
+// ── Surface 55: skill-node-parameter-sidecar (#423/SU-2) ─────────────────────
+// Verifies that clicking a session node in the SKILLS tab renders type-aware
+// parameter inputs in the right-hand sidecar. Key fix: IfcWall may NOT be at
+// data-idx="0" because getCreateSequence() items are pushed first; find the
+// node-box by text content ("IfcWall") rather than by index.
+{
+  const r55 = await evaluate(`(async () => {
+    // 1. Reset session so _nodes is clean and _nodesLastSeqLen is 0.
+    window.dispatchEvent(new CustomEvent('gemma:run-ok', {
+      detail: { js: '', label: 'test-reset' },
+    }));
+    await new Promise(r => setTimeout(r, 80));
+
+    // 2. Dispatch IfcWall command — handler pushes { verb, args } to _nodes.
+    window.dispatchEvent(new CustomEvent('gemma:command', {
+      detail: { id: 'IfcWall', args: { length: 4, height: 2.8, thickness: 0.2 } },
+    }));
+    await new Promise(r => setTimeout(r, 300));
+
+    // 3. Activate skills tab so listPane + paramsCol are in the document.
+    const tab = document.querySelector('.dock-tab[data-tab="skills"]');
+    if (!tab) return { passed: false, evidence: { reason: 'skills tab not found' } };
+    tab.click();
+    await new Promise(r => setTimeout(r, 200));
+
+    // 4. Find IfcWall node-box by text (NOT by data-idx — index varies).
+    const allBoxes = Array.from(document.querySelectorAll('.node-box'));
+    const box = allBoxes.find(b => b.textContent.includes('IfcWall'));
+    if (!box) {
+      return {
+        passed: false,
+        evidence: {
+          reason: 'no IfcWall node-box found',
+          totalBoxes: allBoxes.length,
+          nodeTexts: allBoxes.map(b => b.textContent.trim().slice(0, 50)),
+        },
+      };
+    }
+
+    // 5. Click the IfcWall node — should trigger renderNodeParameters().
+    box.click();
+    await new Promise(r => setTimeout(r, 200));
+
+    // 6. Assert sidecar content.
+    const header = document.querySelector('.params-header');
+    const rows = document.querySelectorAll('.params-row');
+    const paramsCol = document.querySelector('.skills-params-col');
+    return {
+      passed: !!header && rows.length > 0,
+      evidence: {
+        headerText: header?.textContent ?? null,
+        rowCount: rows.length,
+        paramsColChildren: paramsCol?.children.length ?? 0,
+        boxDataIdx: box.dataset.idx,
+        totalBoxes: allBoxes.length,
+      },
+    };
+  })()`, true, 10000);
+  if (!r55) record('skill-node-parameter-sidecar', false, { reason: 'evaluate returned null (timeout)' });
+  else record('skill-node-parameter-sidecar', r55.passed, r55.evidence);
+}
+
+// ── Surface 56: demo-prompt-design-house (#413/SU-6) ─────────────────────────
+// Runs "Design a house" via __runDesignLoop(maxTurns=3), checks required IFC classes.
+// Prompt index 0 — rotated per CI run via surface-allowfail to amortize cost.
+{
+  const r56 = await evaluate(`(async () => {
+    if (typeof window.__runDesignLoop !== 'function') return { passed: false, evidence: { reason: '__runDesignLoop not available' } };
+    // Reset scene
+    if (window.__viewer?.scene?.children) {
+      const toRemove = window.__viewer.scene.children.filter(c => c.userData?.kind === 'brep');
+      for (const c of toRemove) window.__viewer.scene.remove(c);
+    }
+    await new Promise(r => setTimeout(r, 300));
+    const result = await window.__runDesignLoop('Design a house', [], undefined, 3);
+    const dispatches = result?.dispatches ?? [];
+    const verbCounts = {};
+    for (const d of dispatches) verbCounts[d.verb] = (verbCounts[d.verb] ?? 0) + 1;
+    const required = ['IfcLevel','IfcSlab','IfcWall','IfcDoor','IfcWindow','IfcRoof','SdExport'];
+    const missing = required.filter(v => !verbCounts[v]);
+    const passed = missing.length === 0;
+    return { passed, evidence: { dispatch_count: dispatches.length, verb_counts: verbCounts, missing_required: missing } };
+  })()`, true, 180000);
+  if (!r56) record('demo-prompt-design-house', false, { reason: 'evaluate returned null (timeout)' });
+  else record('demo-prompt-design-house', r56.passed, r56.evidence);
+  await resetScene('after-demo-prompt-house');
+}
+
 } finally {
   await cleanup();
 }
