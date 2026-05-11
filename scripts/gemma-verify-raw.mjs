@@ -2127,6 +2127,44 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('host-aware-door-placement', r.passed, r.evidence);
 }
 
+// ── Surface 47: polyline-render-after-4-click (#375) ─────────────────────────
+// Place a polyline via 4 calls to emitClickWorld; assert scene has an object
+// with userData.kind="polyline" and the THREE.Line geometry has ≥4 position vertices.
+{
+  const r = await evaluate(`
+    (() => {
+      try {
+        const before = window.__viewer.scene.children.length;
+        window.__emitClickWorld({ x: 0, y: 0 }, { tool: 'polyline' });
+        window.__emitClickWorld({ x: 2, y: 0 }, { tool: 'polyline' });
+        window.__emitClickWorld({ x: 2, y: 2 }, { tool: 'polyline' });
+        const result = window.__emitClickWorld({ x: 0, y: 2 }, { tool: 'polyline' });
+        if (!result) return { passed: false, evidence: { reason: 'emitClickWorld returned null on 4th click' } };
+        const after = window.__viewer.scene.children.length;
+        const polylines = window.__viewer.scene.children.filter(c => c.userData?.kind === 'polyline');
+        const hasPoly = polylines.length > 0;
+        const poly = polylines[polylines.length - 1];
+        const posCount = poly?.geometry?.attributes?.position?.count ?? 0;
+        const passed = hasPoly && posCount >= 4;
+        return {
+          passed,
+          evidence: {
+            sceneChildrenBefore: before,
+            sceneChildrenAfter: after,
+            polylineCount: polylines.length,
+            positionCount: posCount,
+            kind: poly?.userData?.kind,
+            creator: poly?.userData?.creator,
+          },
+        };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!r) record('polyline-render-after-4-click', false, { reason: 'evaluate returned null' });
+  else record('polyline-render-after-4-click', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
