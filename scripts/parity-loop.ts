@@ -11,10 +11,9 @@
 //   --mock            Use synthetic scoring (skips parity-score.mjs); cycles verbs deterministically.
 //   --max-iterations  Override safety cap from state file (default: 100).
 //
-// No external API keys required. Scorer: parity-score.mjs (deterministic JPEG bpp, no API).
+// No external API keys required. Scorer: inline JPEG-bpp (ported from parity-score.mjs, no subprocess).
 
 import { writeFileSync, readFileSync, appendFileSync, mkdirSync } from "fs";
-import { spawnSync } from "child_process";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -23,7 +22,6 @@ import { tmpdir } from "os";
 const PARITY_STATE_PATH = "B:/M/avir/leo/state/parity-experiment.json";
 const ITERATIONS_JSONL  = "B:/M/avir/leo/state/parity-experiment-iterations.jsonl";
 const PARITY_BANK_DIR   = "B:/M/avir/leo/state/parity-bank";
-const PARITY_SCORER     = "B:/M/avir/infra/skills/visual-check/parity-score.mjs";
 
 // ── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -113,7 +111,7 @@ async function takeScreenshot(savePath: string): Promise<void> {
   writeFileSync(savePath, Buffer.from(b64, "base64"));
 }
 
-// ── Score via parity-score.mjs ─────────────────────────────────────────────
+// ── Inline JPEG-bpp scorer (ported from parity-score.mjs, no subprocess) ────
 
 interface ScoreResult {
   score: number;
@@ -125,6 +123,46 @@ interface ScoreResult {
 
 interface ScoreOut { result: ScoreResult | null; note: string }
 
+function readJpegMeta(path: string): { bytes: number; w: number; h: number } {
+  const buf = readFileSync(path);
+  if (buf[0] !== 0xff || buf[1] !== 0xd8) throw new Error(`not a JPEG: ${path}`);
+  let i = 2;
+  while (i < buf.length) {
+    if (buf[i] !== 0xff) { i++; continue; }
+    const marker = buf[i + 1];
+    if (
+      (marker >= 0xc0 && marker <= 0xcf) &&
+      marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc
+    ) {
+      const h = (buf[i + 5] << 8) | buf[i + 6];
+      const w = (buf[i + 7] << 8) | buf[i + 8];
+      return { bytes: buf.length, w, h };
+    }
+    const segLen = (buf[i + 2] << 8) | buf[i + 3];
+    if (!segLen) break;
+    i += 2 + segLen;
+  }
+  throw new Error(`no SOF marker: ${path}`);
+}
+
+const FULL_RANGE = 0.05;
+
+function scoreJpegPair(refPath: string, vpPath: string): ScoreResult {
+  const ref = readJpegMeta(refPath);
+  const vp = readJpegMeta(vpPath);
+  const refBpp = ref.bytes / (ref.w * ref.h);
+  const vpBpp = vp.bytes / (vp.w * vp.h);
+  const bppDelta = Math.abs(refBpp - vpBpp);
+  const score = Math.round(100 * Math.max(0, 1 - Math.min(1, bppDelta / FULL_RANGE)));
+  return {
+    score,
+    deltas: [],
+    ref_bpp: parseFloat(refBpp.toFixed(5)),
+    vp_bpp: parseFloat(vpBpp.toFixed(5)),
+    bpp_delta: parseFloat(bppDelta.toFixed(5)),
+  };
+}
+
 let _mockCallN = 0;
 
 function scoreViewport(vpPath: string): ScoreOut {
@@ -132,24 +170,10 @@ function scoreViewport(vpPath: string): ScoreOut {
     _mockCallN++;
     return { result: { score: Math.min(100, _mockCallN * 5), deltas: [] }, note: "mock" };
   }
-  const r = spawnSync(
-    "node", [PARITY_SCORER, refImagePath, vpPath],
-    { timeout: 90_000, encoding: "utf8" },
-  );
-  if (r.status !== 0) {
-    const detail = [
-      r.error ? `spawn_error=${(r.error as Error).message}` : null,
-      r.status !== null ? `exit=${r.status}` : "exit=null",
-      (r.stderr as string).trim() ? `stderr=${(r.stderr as string).slice(0, 200)}` : "stderr=empty",
-    ].filter(Boolean).join("; ");
-    const note = `parity-score failed: ${detail}`;
-    console.error(note);
-    return { result: null, note };
-  }
   try {
-    return { result: JSON.parse((r.stdout as string).trim()) as ScoreResult, note: "ok" };
-  } catch {
-    const note = "parity-score: JSON parse error";
+    return { result: scoreJpegPair(refImagePath, vpPath), note: "ok" };
+  } catch (e) {
+    const note = `parity-score failed: ${(e as Error).message}`;
     console.error(note);
     return { result: null, note };
   }
