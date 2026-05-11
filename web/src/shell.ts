@@ -236,45 +236,30 @@ function appendRibbonAssets(toolsEl: HTMLElement) {
   const wrap = document.createElement("div");
   wrap.className = "ribbon-assets";
 
-  // Header row — locked to top of ribbon, labels both sections
-  const headerRow = document.createElement("div");
-  headerRow.className = "ribbon-assets-header-row";
+  function buildColumn(label: string, samples: typeof RIBBON_SCENE_SAMPLES): HTMLElement {
+    const col = document.createElement("div");
+    col.className = "ribbon-section-col";
 
-  const projectsLbl = document.createElement("span");
-  projectsLbl.className = "ribbon-asset-section-header";
-  projectsLbl.textContent = "Projects";
-  headerRow.appendChild(projectsLbl);
+    const hdr = document.createElement("span");
+    hdr.className = "ribbon-asset-section-header";
+    hdr.textContent = label;
+    col.appendChild(hdr);
 
-  const headerSep = document.createElement("div");
-  headerSep.className = "ribbon-assets-header-sep";
-  headerRow.appendChild(headerSep);
+    const cards = document.createElement("div");
+    cards.className = "ribbon-assets-cards";
+    for (const s of samples) cards.appendChild(buildAssetCard(s, wrap));
+    col.appendChild(cards);
 
-  const elementsLbl = document.createElement("span");
-  elementsLbl.className = "ribbon-asset-section-header";
-  elementsLbl.textContent = "Elements";
-  headerRow.appendChild(elementsLbl);
+    return col;
+  }
 
-  wrap.appendChild(headerRow);
-
-  // Card row — thumbnails, scrollable
-  const cardRow = document.createElement("div");
-  cardRow.className = "ribbon-assets-card-row";
-
-  const scenesCards = document.createElement("div");
-  scenesCards.className = "ribbon-assets-cards";
-  for (const s of RIBBON_SCENE_SAMPLES) scenesCards.appendChild(buildAssetCard(s, wrap));
-  cardRow.appendChild(scenesCards);
+  wrap.appendChild(buildColumn("Projects", RIBBON_SCENE_SAMPLES));
 
   const divider = document.createElement("div");
   divider.className = "ribbon-asset-divider";
-  cardRow.appendChild(divider);
+  wrap.appendChild(divider);
 
-  const elementsCards = document.createElement("div");
-  elementsCards.className = "ribbon-assets-cards";
-  for (const s of RIBBON_ELEMENT_SAMPLES) elementsCards.appendChild(buildAssetCard(s, wrap));
-  cardRow.appendChild(elementsCards);
-
-  wrap.appendChild(cardRow);
+  wrap.appendChild(buildColumn("Elements", RIBBON_ELEMENT_SAMPLES));
   toolsEl.appendChild(wrap);
 }
 

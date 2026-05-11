@@ -2833,10 +2833,13 @@ await resetScene('before-box-inject');
   else record('dispatch-sweep', r59.passed, r59.evidence);
 }
 
-// ── Surface 60: ribbon-layout-no-overlap (#469/#470) ─────────────────────────
+// ── Surface 60: ribbon-layout-no-overlap (#469/#470/#497) ────────────────────
 // Verifies:
-//   1. All 4 ribbon-asset-cards share the same y-coordinate (horizontal row, ±2px).
-//   2. The ribbon bottom edge does not exceed the workbench top edge (no overlap).
+//   1. Exactly 6 ribbon-asset-cards present (4 Projects + 2 Elements).
+//   2. All 6 cards share same y-coordinate (horizontal row per section, ±2px).
+//   3. ribbon.bottom ≤ workbench.top (no overlap into workbench area).
+//   4. Each section header sits above its first card (header.bottom < card.top).
+//   5. First card left ≤ ribbon-assets left + 4px (flush, no leading padding).
 {
   const r60 = await evaluate(`(() => {
     try {
@@ -2858,6 +2861,30 @@ await resetScene('before-box-inject');
       const overlapPx = Math.round(ribbonBottom - workbenchTop);
       if (overlapPx > 0)
         return { passed: false, evidence: { reason: 'ribbon overlaps workbench', overlapPx, ribbonBottom: Math.round(ribbonBottom), workbenchTop: Math.round(workbenchTop) } };
+
+      // Headers above cards: each .ribbon-section-col header.bottom < first card.top
+      const cols = [...document.querySelectorAll('.ribbon-assets .ribbon-section-col')];
+      for (const col of cols) {
+        const hdr = col.querySelector('.ribbon-asset-section-header');
+        const firstCard = col.querySelector('.ribbon-asset-card');
+        if (!hdr || !firstCard)
+          return { passed: false, evidence: { reason: 'missing header or card in section column' } };
+        const hdrBottom = hdr.getBoundingClientRect().bottom;
+        const cardTop = firstCard.getBoundingClientRect().top;
+        if (hdrBottom >= cardTop)
+          return { passed: false, evidence: { reason: 'section header not above cards', hdrBottom: Math.round(hdrBottom), cardTop: Math.round(cardTop) } };
+      }
+
+      // First card flush with ribbon-assets left edge (≤ 4px gap)
+      const assetsEl = document.querySelector('.ribbon-assets');
+      const firstCardEl = cards[0];
+      if (assetsEl && firstCardEl) {
+        const assetsLeft = assetsEl.getBoundingClientRect().left;
+        const firstCardLeft = firstCardEl.getBoundingClientRect().left;
+        const leftGap = Math.round(firstCardLeft - assetsLeft);
+        if (leftGap > 4)
+          return { passed: false, evidence: { reason: 'first card not flush with ribbon-assets left', leftGap } };
+      }
 
       return {
         passed: true,

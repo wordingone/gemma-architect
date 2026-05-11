@@ -1209,7 +1209,7 @@ html[data-mode="night"] .paper-stage {
 .ribbon-assets {
   margin-left: auto;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: stretch;
   border-left: var(--lw-construction) solid var(--ink-construction);
   flex-shrink: 0;
@@ -1219,24 +1219,16 @@ html[data-mode="night"] .paper-stage {
   background: var(--paper);
   z-index: 1;
 }
-.ribbon-assets-header-row {
+.ribbon-section-col {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  height: 14px;
-  padding: 0 4px;
-  border-bottom: var(--lw-construction) solid var(--ink-construction);
-  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 6px 8px 4px 4px;
 }
-.ribbon-assets-header-sep {
-  width: 1px;
-  height: 60%;
-  background: var(--chrome-seam);
-  flex-shrink: 0;
-  align-self: center;
+.ribbon-section-col + .ribbon-section-col {
+  padding-left: 8px;
 }
 .ribbon-asset-section-header {
-  flex: 1;
   font-size: 7.5px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -1244,27 +1236,20 @@ html[data-mode="night"] .paper-stage {
   font-weight: 600;
   user-select: none;
   white-space: nowrap;
-  text-align: center;
-}
-.ribbon-assets-card-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex: 1;
+  padding-bottom: 4px;
 }
 .ribbon-assets-cards {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 5px;
-  padding: 0 10px;
-  height: 100%;
 }
 .ribbon-asset-divider {
   width: 1px;
-  height: 60%;
   background: var(--chrome-seam);
   flex-shrink: 0;
-  align-self: center;
+  align-self: stretch;
+  margin: 6px 0;
 }
 .ribbon-asset-card {
   display: flex;
