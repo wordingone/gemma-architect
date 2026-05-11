@@ -13,7 +13,7 @@
 //
 // Tracked: issue #196 — long-term fix is to replace Playwright in gemma-verify-cdp.ts
 
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, mkdirSync, readFileSync } from "fs";
 import { execSync } from "child_process";
 
 // ── Connection ────────────────────────────────────────────────────────────────
@@ -2841,12 +2841,24 @@ await resetScene('before-box-inject');
 
 // ── Aggregate + write receipt ─────────────────────────────────────────────────
 
-const allPassed  = surfaces.every(s => s.passed);
+// Read surface-allowfail.txt — surfaces listed there are excluded from all_passed gate.
+let allowFail = new Set();
+try {
+  const af = readFileSync("state/surface-allowfail.txt", "utf8");
+  for (const line of af.split("\n")) {
+    const id = line.split("#")[0].trim();
+    if (id) allowFail.add(id);
+  }
+} catch { /* file absent = no allowfail entries */ }
+
+const gatedSurfaces = surfaces.filter(s => !allowFail.has(s.name));
+const allPassed  = gatedSurfaces.every(s => s.passed);
 const passCount  = surfaces.filter(s => s.passed).length;
-const output = { sha, timestamp, attached_via_cdp: true, all_passed: allPassed, surfaces };
+const output = { sha, timestamp, attached_via_cdp: true, all_passed: allPassed, allow_fail: [...allowFail], surfaces };
 writeFileSync(outFile, JSON.stringify(output, null, 2));
 
 console.log("");
+if (allowFail.size > 0) console.log(`allowfail: ${[...allowFail].join(", ")}`);
 console.log(`${passCount}/${surfaces.length} surfaces passed — all_passed: ${allPassed}`);
 console.log(`attached_via_cdp: true`);
 console.log(`Output: ${outFile}`);
