@@ -20,6 +20,7 @@ export interface AppState {
   night: boolean;              // BLUEPRINT (true) / VELLUM (false)
   selectedId: string | null;   // current selection uuid, or null
   currentView: ViewName;       // active single-pane view
+  compScope: boolean;          // COMP toggle: filter scene tree to selected-component subtree
 }
 
 const DEFAULT_STATE: AppState = {
@@ -30,6 +31,7 @@ const DEFAULT_STATE: AppState = {
   night: false,
   selectedId: null,
   currentView: "perspective",
+  compScope: false,
 };
 
 type Listener<K extends keyof AppState> = (value: AppState[K]) => void;
