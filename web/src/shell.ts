@@ -80,8 +80,7 @@ const MENUS: MenuItem[] = [
   ]},
   { label: "Window", entries: [
     { label: "Prompt",     onAction: () => (document.querySelector('.dock-tab[data-tab="prompt"]') as HTMLElement | null)?.click() },
-    { label: "Node graph", onAction: () => (document.querySelector('.dock-tab[data-tab="nodes"]') as HTMLElement | null)?.click() },
-    { label: "Parameters", onAction: () => (document.querySelector('.dock-tab[data-tab="parameters"]') as HTMLElement | null)?.click() },
+    { label: "Skills",     onAction: () => (document.querySelector('.dock-tab[data-tab="skills"]') as HTMLElement | null)?.click() },
     { label: "History",    onAction: () => (document.querySelector('.dock-tab[data-tab="history"]') as HTMLElement | null)?.click() },
     { separator: true },
     { label: "Reset layout", stub: true, onAction: () => window.location.reload() },

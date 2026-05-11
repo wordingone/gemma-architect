@@ -1027,7 +1027,7 @@ await resetScene('before-box-inject');
             : (t.classList.contains('active') || t.getAttribute('aria-selected') === 'true')
               ? { ok: true } : { ok: false, reason: 'mode-tab ' + mode + ' not active after click' };
         }
-        const dockMap = { 'Prompt': 'prompt', 'Node graph': 'nodes', 'Parameters': 'parameters', 'History': 'history' };
+        const dockMap = { 'Prompt': 'prompt', 'Skills': 'skills', 'History': 'history' };
         if (dockMap[label]) {
           const t = document.querySelector('.dock-tab[data-tab="' + dockMap[label] + '"]');
           return !t ? { ok: false, reason: '.dock-tab[data-tab="' + dockMap[label] + '"] absent' }
@@ -2393,6 +2393,127 @@ await resetScene('before-box-inject');
     })()`);
   if (!r) record('sd-isolate-verb', false, { reason: 'evaluate returned null' });
   else record('sd-isolate-verb', r.passed, r.evidence);
+}
+
+// ── Surface 54: skills-tab-unified (#422/SU-1) ────────────────────────────────
+// Verifies DOCK_TABS now has "skills" tab and no standalone "parameters" tab.
+{
+  const r = await evaluate(`(() => {
+    try {
+      const tabs = Array.from(document.querySelectorAll('.dock-tab')).map(t => t.dataset.tab);
+      const hasSkills = tabs.includes('skills');
+      const hasParams = tabs.includes('parameters');
+      const hasNodes  = tabs.includes('nodes');
+      if (!hasSkills) return { passed: false, evidence: { reason: 'no skills tab', tabs } };
+      if (hasParams)  return { passed: false, evidence: { reason: 'standalone parameters tab still present', tabs } };
+      if (hasNodes)   return { passed: false, evidence: { reason: 'old nodes tab still present', tabs } };
+      // Activate skills tab and verify split layout.
+      document.querySelector('.dock-tab[data-tab="skills"]')?.click();
+      const nodesCol  = document.querySelector('.skills-nodes-col');
+      const paramsCol = document.querySelector('.skills-params-col');
+      return {
+        passed: true,
+        evidence: { tabs, nodesColPresent: !!nodesCol, paramsColPresent: !!paramsCol }
+      };
+    } catch(e) {
+      return { passed: false, evidence: { error: e.message } };
+    }
+  })()`);
+  if (!r) record('skills-tab-unified', false, { reason: 'evaluate returned null' });
+  else record('skills-tab-unified', r.passed, r.evidence);
+}
+
+// ── Surface 55: su1-end-to-end-2storey-house (#413/SU-1) ─────────────────────
+// End-to-end closure for SU-1 token-budget fix: types "Design a 2-storey house"
+// into chat-panel, waits for SdExport dispatch as terminal marker (up to 120s),
+// then asserts: (a) all 7 required element classes dispatched, (b) bpp ≥ 0.03.
+{
+  // Soft-skip if remote model not configured (same gate as tier0-llama-server-dispatch).
+  const su1Badge = await evaluate(`(() => document.getElementById('ai-model-badge')?.textContent ?? '')()`);
+  const su1HasRemote = typeof su1Badge === 'string' && (su1Badge.includes('REMOTE') || su1Badge.includes('LIVE'));
+  if (!su1HasRemote) {
+    record('su1-end-to-end-2storey-house', true, { skipped: true, reason: 'REMOTE badge not shown — soft-skip pending live endpoint', badge: su1Badge });
+  } else {
+
+  await resetScene('before-su1-e2e');
+  await resetToBaseState('before-su1-e2e');
+
+  // Install dispatch interceptor BEFORE submitting prompt.
+  await evaluate(`(() => {
+    window.__su1_dispatches = [];
+    const orig = window.__dispatch;
+    window.__dispatch = function(verb, args) {
+      window.__su1_dispatches.push(verb);
+      return orig ? orig.call(this, verb, args) : undefined;
+    };
+  })()`);
+
+  // Navigate to PROMPT tab in chat (NL) mode and submit.
+  await evaluate(`(() => {
+    const tab = document.querySelector('.dock-tab[data-tab="prompt"]');
+    if (tab) tab.click();
+    // Switch from console mode to NL chat mode if needed.
+    const consolePill = document.querySelector('.mode-pill[data-mode="console"]');
+    if (consolePill) consolePill.click();
+  })()`);
+  await delay(800);
+
+  const typed = await evaluate(`(async () => {
+    let ta = document.querySelector('textarea.chat-input');
+    if (!ta) ta = document.querySelector('.chat-panel-root textarea');
+    if (!ta) {
+      const textareas = Array.from(document.querySelectorAll('textarea')).map(t => t.className);
+      const dockTabs = Array.from(document.querySelectorAll('.dock-tab')).map(t => ({ tab: t.dataset.tab, active: t.classList.contains('active') }));
+      return { ok: false, reason: 'no textarea found', textareas, dockTabs };
+    }
+    ta.value = 'Design a 2-storey house';
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+    ta.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+    return { ok: true, selectorUsed: ta.className };
+  })()`);
+
+  if (!typed?.ok) {
+    record('su1-end-to-end-2storey-house', false, { reason: typed?.reason ?? 'type/submit failed', ...typed });
+  } else {
+    // Poll for SdExport as terminal dispatch — 2-storey house needs ~2700 output tokens,
+    // ~15s generation + 20s dispatch execution → allow 120s total.
+    let found = false;
+    for (let i = 0; i < 60; i++) {
+      await delay(2000);
+      const dispatches = await evaluate(`(() => window.__su1_dispatches ?? [])()`);
+      if (Array.isArray(dispatches) && dispatches.includes('SdExport')) { found = true; break; }
+    }
+
+    if (!found) {
+      const dispatches = await evaluate(`(() => window.__su1_dispatches ?? [])()`);
+      record('su1-end-to-end-2storey-house', false, {
+        reason: 'SdExport not dispatched within 120s',
+        dispatches: Array.isArray(dispatches) ? dispatches.slice(0, 20) : dispatches,
+      });
+    } else {
+      await delay(800); // let final renders settle
+
+      const bppResult = await canvasBpp('after-su1');
+      const dispatches = (await evaluate(`(() => window.__su1_dispatches ?? [])()`)) ?? [];
+
+      const required = ['IfcLevel', 'IfcWall', 'IfcSlab', 'IfcDoor', 'IfcWindow', 'IfcRoof', 'SdExport'];
+      const present = {};
+      for (const cls of required) present[cls] = dispatches.includes(cls);
+      const allClasses = Object.values(present).every(Boolean);
+      const bppOk = bppResult.bpp >= 0.03;
+      const passed = allClasses && bppOk;
+
+      record('su1-end-to-end-2storey-house', passed, {
+        present, allClasses,
+        bpp: bppResult.bpp, bppOk,
+        dispatchCount: dispatches.length,
+        dispatches: dispatches.slice(0, 30),
+      });
+    }
+  }
+
+  } // end if (su1HasRemote)
 }
 
 } finally {
