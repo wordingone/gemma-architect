@@ -60,7 +60,20 @@ let _webgpuFallbackEngaged = false;
 
 // ---- Model loading (in-browser path) ---------------------------------------
 
-const MODEL_ID = "onnx-community/gemma-4-E2B-it-ONNX";
+// Model candidates — switch via ?gemma_model=e4b URL param (E2B is default).
+export const MODEL_ID_CANDIDATES = {
+  e2b: "onnx-community/gemma-4-E2B-it-ONNX",
+  e4b: "onnx-community/gemma-4-E4B-it-ONNX",
+} as const;
+
+const _modelParam =
+  typeof window !== "undefined"
+    ? (new URLSearchParams(window.location.search).get("gemma_model") ?? "").toLowerCase()
+    : "";
+const MODEL_ID: string =
+  _modelParam === "e4b" ? MODEL_ID_CANDIDATES.e4b : MODEL_ID_CANDIDATES.e2b;
+const MODEL_LABEL: string = _modelParam === "e4b" ? "E4B" : "E2B";
+
 const BADGE_ID = "ai-model-badge";
 
 let _model: PreTrainedModel | null = null;
@@ -79,9 +92,9 @@ type ProgressInfo = {
   progress?: number;
 };
 
-// P10-4: VRAM ceiling pre-check. Gemma 4 E2B q4f16 needs ~2GB GPU memory.
+// P10-4: VRAM ceiling pre-check. E2B q4f16 needs ~2GB GPU memory; E4B needs ~4GB.
 // If the adapter reports less usable headroom, skip in-browser load and force remote.
-const VRAM_FLOOR_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+const VRAM_FLOOR_BYTES = MODEL_LABEL === "E4B" ? 4 * 1024 * 1024 * 1024 : 2 * 1024 * 1024 * 1024;
 
 async function checkVramCeiling(): Promise<boolean> {
   try {
@@ -111,7 +124,7 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
   if (_loadPromise) return _loadPromise;
 
   _loadPromise = (async () => {
-    updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LOADING…`);
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LOADING…`);
     window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
 
     const progressCb = (info: ProgressInfo) => {
@@ -119,12 +132,12 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
         const pct = info.progress != null ? `${Math.round(info.progress)}%` : "";
         const file = info.name?.split("/").pop() ?? "";
         const label = [pct, file].filter(Boolean).join(" ");
-        updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  ${label}`);
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ${label}`);
         window.dispatchEvent(
           new CustomEvent("agentmodel:loading", { detail: { progress: info.progress ?? 0, file } }),
         );
       } else if (info.status === "loading") {
-        updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  INITIALIZING`);
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  INITIALIZING`);
       }
     };
 
@@ -168,14 +181,14 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
 
         _model = model;
         _processor = processor;
-        updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · ${label}`);
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${label}`);
         window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device, label } }));
         return { model, processor };
       } catch (e) {
         lastErr = e as Error;
         if (device === "webgpu") {
           console.warn("[agent-harness] WebGPU unavailable, trying CPU fallback:", (e as Error).message);
-          updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LOADING CPU…`);
+          updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LOADING CPU…`);
         }
       }
     }
@@ -193,13 +206,13 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
 export function prefetchModel(): void {
   if (REMOTE_URL) {
     // Remote path: mark as ready immediately so bench + UI don't wait for an in-browser load.
-    updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE`);
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
     return;
   }
   // P10-4: run VRAM ceiling check before starting the heavy model load.
   checkVramCeiling().then((ceilingExceeded) => {
     if (ceilingExceeded) {
-      updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  VRAM LIMIT — REMOTE REQUIRED`);
+      updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  VRAM LIMIT — REMOTE REQUIRED`);
       _webgpuFallbackEngaged = true; // re-use P10-2 flag to force remote routing
       return;
     }
@@ -649,7 +662,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     { role: "user" as const, content: userContent },
   ];
 
-  updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE ·  ⟳`);
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE ·  ⟳`);
 
   const resp = await fetch(`${REMOTE_URL}/v1/chat/completions`, {
     method: "POST",
@@ -689,7 +702,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     if (!compResp.ok) throw new Error(`remote agent fallback: HTTP ${compResp.status}`);
     const compJson = (await compResp.json()) as { content: string; tokens_predicted?: number };
     const content = compJson.content ?? "";
-    updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE`);
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
     const { dispatches, text } = parseDispatches(content);
     return { dispatches, text: text || content, raw: compJson };
   }
@@ -697,7 +710,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const content = json.choices[0]?.message?.content ?? "";
   const tpsLabel = json._tps != null ? ` · ${json._tps.toFixed(0)} t/s` : "";
   const mtpLabel = json._mtp_enabled ? " · MTP" : "";
-  updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE${mtpLabel}${tpsLabel}`);
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE${mtpLabel}${tpsLabel}`);
 
   const { dispatches, text } = parseDispatches(content);
   return { dispatches, text: text || content, raw: json };
@@ -788,7 +801,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     console.warn("[agent-harness] OrtRun failure during generation — engaging remote fallback.", msg.slice(0, 120));
     _webgpuFallbackEngaged = true;
     window.dispatchEvent(new CustomEvent("agent:telemetry", { detail: { event: "webgpu_fallback_engaged", reason: msg.slice(0, 120) } }));
-    updateBadge(`<span class="v">G</span>EMMA·4·E2B  ·  LIVE · REMOTE (fallback)`);
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE (fallback)`);
     if (REMOTE_URL) return runRemoteAgentTurn(req);
     throw new Error(`WebGPU OrtRun failed and no REMOTE_URL configured: ${msg.slice(0, 200)}`);
   }
