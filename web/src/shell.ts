@@ -197,13 +197,16 @@ const RIBBON_SAMPLES = [
 ];
 
 function appendRibbonAssets(toolsEl: HTMLElement) {
-  const sectionLabel = document.createElement("div");
-  sectionLabel.className = "ribbon-section-label";
-  sectionLabel.textContent = "IFC Samples";
-  toolsEl.appendChild(sectionLabel);
-
   const wrap = document.createElement("div");
   wrap.className = "ribbon-assets";
+
+  const header = document.createElement("div");
+  header.className = "ribbon-assets-header";
+  header.textContent = "IFC Samples";
+  wrap.appendChild(header);
+
+  const cardsRow = document.createElement("div");
+  cardsRow.className = "ribbon-assets-cards";
 
   for (const s of RIBBON_SAMPLES) {
     const card = document.createElement("div");
@@ -221,7 +224,7 @@ function appendRibbonAssets(toolsEl: HTMLElement) {
     card.appendChild(name);
     card.appendChild(sub);
     card.addEventListener("click", () => {
-      wrap.querySelectorAll(".ribbon-asset-card.selected").forEach((c: Element) => c.classList.remove("selected"));
+      cardsRow.querySelectorAll(".ribbon-asset-card.selected").forEach((c: Element) => c.classList.remove("selected"));
       card.classList.add("selected");
       const sel = document.getElementById("sample-select") as HTMLSelectElement | null;
       if (sel) {
@@ -229,8 +232,9 @@ function appendRibbonAssets(toolsEl: HTMLElement) {
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       }
     });
-    wrap.appendChild(card);
+    cardsRow.appendChild(card);
   }
+  wrap.appendChild(cardsRow);
   toolsEl.appendChild(wrap);
 }
 
