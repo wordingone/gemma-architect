@@ -24,6 +24,7 @@ import {
   type SdArg,
   type ChoiceOption,
 } from "./dictionary";
+import { checkDimensionGuardrails } from "./dimension-guardrails";
 
 // ============================================================
 // Types
@@ -43,6 +44,7 @@ export type DispatchResultErr = {
   error:
     | "UnknownVerb"
     | "ArgValidationError"
+    | "DimensionGuardrailError"
     | "NoHandler"
     | "HandlerThrew"
     | "NeedsChoiceError";
@@ -274,6 +276,11 @@ export async function dispatch(
     return { ok: false, canonical, error: "ArgValidationError", detail: argsErr };
   }
 
+  const guardrailErr = checkDimensionGuardrails(canonical, args);
+  if (guardrailErr) {
+    return { ok: false, canonical, error: "DimensionGuardrailError", detail: guardrailErr };
+  }
+
   const handler = handlers.get(canonical);
   if (!handler) {
     return { ok: false, canonical, error: "NoHandler" };
@@ -313,6 +320,8 @@ export function dispatchSync(verb: string, args: DispatchArgs = {}): DispatchRes
   }
   const argsErr = validateArgs(args, entry.args);
   if (argsErr) return { ok: false, canonical, error: "ArgValidationError", detail: argsErr };
+  const guardrailErrSync = checkDimensionGuardrails(canonical, args);
+  if (guardrailErrSync) return { ok: false, canonical, error: "DimensionGuardrailError", detail: guardrailErrSync };
   const handler = handlers.get(canonical);
   if (!handler) return { ok: false, canonical, error: "NoHandler" };
   try {
