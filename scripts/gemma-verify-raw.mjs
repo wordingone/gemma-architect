@@ -322,8 +322,11 @@ async function resetToBaseState(label = '') {
 }
 
 // ── Pre-surface-4 setup: inject mesh via DSL console ─────────────────────────
-// Reset base state first: S1 layout switch moves camera; re-establish select+model.
+// Reset UI + scene before injection: prior runs persist boxes to localStorage and
+// Page.reload restores them. resetScene() clears DSL objects so the child-count
+// delta from injection is always exactly 1 regardless of run order (#396).
 await resetToBaseState('before-box-inject');
+await resetScene('before-box-inject');
 {
   await evaluate(`
     (async () => {
@@ -1417,34 +1420,10 @@ await resetToBaseState('before-box-inject');
   // pathology that SdZoomExtents exhibits with IFC files.
 
   async function normalizeAndCapture(label) {
-    // Reset camera via fitCamera using only IFC-model bounds (not accumulated drawn geometry).
-    // currentBounds drifts as surfaces add walls/slabs; IFC-only bounds keep both captures consistent.
+    // Reset camera via fitCamera (avoids broken SdZoomExtents → frameAllVisible)
     await evaluate(`(function() {
       const v = window.__viewer;
-      if (!v) return;
-      const IFC_PREFIXES = ['Ifc'];
-      let hasIfc = false;
-      const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
-      v.scene.traverse(obj => {
-        const c = obj.userData?.creator ?? '';
-        if (!IFC_PREFIXES.some(p => c.startsWith(p))) return;
-        hasIfc = true;
-        const g = obj.geometry;
-        if (!g) return;
-        const pos = g.attributes?.position;
-        if (!pos) return;
-        for (let i = 0; i < pos.count; i++) {
-          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-          if (x < box.minX) box.minX = x; if (x > box.maxX) box.maxX = x;
-          if (y < box.minY) box.minY = y; if (y > box.maxY) box.maxY = y;
-          if (z < box.minZ) box.minZ = z; if (z > box.maxZ) box.maxZ = z;
-        }
-      });
-      if (hasIfc && isFinite(box.minX)) {
-        v.fitCamera({ min: [box.minX, box.minY, box.minZ], max: [box.maxX, box.maxY, box.maxZ] });
-      } else if (v.currentBounds) {
-        v.fitCamera(v.currentBounds);
-      }
+      if (v && v.currentBounds) v.fitCamera(v.currentBounds);
     })()`);
     await delay(600);
     // Clamp canvas height to visible viewport so both captures use same region size
