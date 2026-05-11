@@ -189,8 +189,8 @@ export class ScenePanel {
           for (const el of elems) {
             const label = el.name && el.name !== `#${el.expressID}` ? el.name : `#${el.expressID}`;
             outlinerHtml += `
-              <div class="outliner-row" style="--depth:2">
-                <span class="name" title="${escapeAttr(el.guid)}">${escapeHtml(label)}</span>
+              <div class="outliner-row" data-express-id="${el.expressID}" style="--depth:2">
+                <span class="name" data-action="ifc-select" data-express-id="${el.expressID}" title="${escapeAttr(el.guid)}" style="cursor:pointer;">${escapeHtml(label)}</span>
               </div>`;
           }
           outlinerHtml += `</div>`;
@@ -238,6 +238,7 @@ export class ScenePanel {
     const metaRow = `<div class="sp-meta-row" style="padding:6px 10px; font-family:var(--mono); font-size:10px; color:var(--ink-faint); border-bottom:1px solid var(--hairline-soft);">${fmtStr}${filenameStr}${entityStr}${schemaStr} &middot; ${this.nodes.length} mesh${this.nodes.length === 1 ? "" : "es"} &middot; ${totalTris.toLocaleString()} tri</div>`;
     this.root.innerHTML = metaRow + outlinerHtml;
     this.wireRowActions();
+    if (summary.hierarchy && summary.hierarchy.length > 0) this.autoSelectFirstIfc();
   }
 
   private wireRowActions(): void {
@@ -285,6 +286,19 @@ export class ScenePanel {
           row?.classList.add("selected");
           this.viewer.frameObjectOnly(node.mesh);
         }
+      });
+    });
+
+    // IFC hierarchy rows — click selects the corresponding mesh in the viewer.
+    this.root.querySelectorAll<HTMLElement>("[data-action='ifc-select']").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const expressId = parseInt((el as HTMLElement).dataset.expressId ?? "0", 10);
+        const node = this.nodes.find((n) => n.mesh.userData.expressID === expressId);
+        this.root.querySelectorAll(".outliner-row.selected").forEach((r) => r.classList.remove("selected"));
+        const row = (e.currentTarget as HTMLElement).closest<HTMLElement>(".outliner-row");
+        row?.classList.add("selected");
+        if (node) this.viewer.frameObjectOnly(node.mesh);
       });
     });
 
@@ -336,6 +350,16 @@ export class ScenePanel {
         setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 0);
       });
     });
+  }
+
+  private autoSelectFirstIfc(): void {
+    const firstRow = this.root.querySelector<HTMLElement>(".outliner-row[data-express-id]");
+    if (!firstRow) return;
+    firstRow.classList.add("selected");
+    firstRow.scrollIntoView({ block: "nearest" });
+    const expressId = parseInt(firstRow.dataset.expressId ?? "0", 10);
+    const node = this.nodes.find((n) => n.mesh.userData.expressID === expressId);
+    if (node) this.viewer.selectObject(node.mesh);
   }
 }
 

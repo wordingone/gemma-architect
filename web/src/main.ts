@@ -2211,6 +2211,7 @@ function finalizeFileLoad(scene: LoadedScene, filename: string) {
     format: scene.format,
     triangles: scene.triangles,
     filename,
+    hierarchy: scene.hierarchy,
   };
   // Summary string for IFC looks like
   //   "<filename> · 7,123 entities · 56,832 triangles · IFC4"

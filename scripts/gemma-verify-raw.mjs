@@ -2351,28 +2351,13 @@ await resetScene('before-box-inject');
   const r = await evaluate(`
     (() => {
       try {
-        // Find a loaded mesh to isolate via the scene panel outliner.
-        const rows = document.querySelectorAll('.outliner-row[data-id]');
-        if (rows.length === 0) return { passed: false, evidence: { reason: 'no outliner rows' } };
-        const row = rows[0];
-        const id = row.dataset.id;
-
-        // Get the uuid from the viewer scene by matching userData.ifcId or mesh uuid.
+        // Get uuid of first mesh in the scene (works for both IFC hierarchy tree and flat mesh tree).
         if (!window.__viewer) return { passed: false, evidence: { reason: '__viewer not exposed' } };
         let targetUuid = null;
         window.__viewer.getScene().traverse((obj) => {
           if (targetUuid) return;
-          if (obj.userData && (obj.userData.ifcId === id || obj.userData.id === id)) {
-            targetUuid = obj.uuid;
-          }
+          if (obj.isMesh) targetUuid = obj.uuid;
         });
-        if (!targetUuid) {
-          // Fallback: use first mesh in scene
-          window.__viewer.getScene().traverse((obj) => {
-            if (targetUuid) return;
-            if (obj.isMesh) targetUuid = obj.uuid;
-          });
-        }
         if (!targetUuid) return { passed: false, evidence: { reason: 'no mesh uuid found' } };
 
         // Dispatch SdIsolate.
@@ -2619,6 +2604,40 @@ await resetScene('before-box-inject');
   })()`, true, 75000);
   if (!r57) record('chat-plan-foldable', false, { reason: 'evaluate returned null (timeout)' });
   else record('chat-plan-foldable', r57.passed, r57.evidence);
+}
+
+// ── Surface 58: ifc-default-select (#277) ────────────────────────────────────
+{
+  // Load the Schultz Residence IFC sample and verify the scene panel
+  // auto-selects the first row (IFC default-select, #277).
+  // Trigger via the sample dropdown (#sampleSelect value="schultz-residence" or first IFC option).
+  const r58 = await evaluate(`(async () => {
+    // Reload via sample picker — pick Schultz Residence IFC.
+    const sel = document.getElementById('sample-select');
+    if (!sel) return { passed: false, evidence: { reason: 'no #sample-select' } };
+    const ifcOpt = Array.from(sel.options).find(o => o.value === 'schultz-residence') ||
+                   Array.from(sel.options).find(o => o.value && o.value.toLowerCase().includes('schultz')) ||
+                   Array.from(sel.options).find(o => o.value && o.value.toLowerCase().includes('ifc'));
+    if (!ifcOpt) return { passed: false, evidence: { reason: 'no IFC option found', opts: Array.from(sel.options).map(o=>o.value) } };
+    sel.value = ifcOpt.value;
+    sel.dispatchEvent(new Event('change'));
+    // Wait up to 20s for scene panel to render IFC hierarchy rows.
+    for (let i = 0; i < 40; i++) {
+      const selectedRow = document.querySelector('.outliner-row.selected[data-express-id]');
+      if (selectedRow) {
+        const expressId = selectedRow.dataset.expressId;
+        const name = selectedRow.querySelector('.name')?.textContent ?? '';
+        return { passed: true, evidence: { expressId, name, autoSelected: true } };
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    // Check if IFC tree even loaded (any hierarchy row present).
+    const anyRow = document.querySelector('.outliner-row[data-express-id]');
+    if (anyRow) return { passed: false, evidence: { reason: 'hierarchy rows present but none auto-selected' } };
+    return { passed: false, evidence: { reason: 'timeout: no IFC hierarchy rows appeared' } };
+  })()`, true, 25000);
+  if (!r58) record('ifc-default-select', false, { reason: 'evaluate returned null (timeout)' });
+  else record('ifc-default-select', r58.passed, r58.evidence);
 }
 
 } finally {
