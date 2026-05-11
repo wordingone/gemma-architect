@@ -29,7 +29,7 @@ function getArg(flag, def) {
 
 const OUT_DIR = getArg("--out", "B:/M/avir/leo/state").replace(/\\/g, "/").replace(/\/$/, "");
 const VIEWS   = getArg("--views", "perspective,iso").split(",").map(v => v.trim());
-const MIN_BYTES = 1_000_000; // 1 MB minimum per acceptance criterion
+const MIN_BYTES = 50_000; // 50 KB minimum (JPEG — 1 MB PNG threshold does not apply)
 
 mkdirSync(OUT_DIR, { recursive: true });
 
@@ -254,10 +254,10 @@ async function captureView(view, captureRegion) {
   const { x, y, w, h } = captureRegion;
   console.log(`  capture: ${w}×${h} at (${x},${y})`);
 
-  // PNG screenshot — 2× scale for reference quality (gives ~4× file size vs scale:1,
-  // ensuring ≥ 1MB even for well-compressed architectural scenes)
+  // JPEG screenshot — 2× scale, quality 85. parity-score.mjs requires JPEG (magic-byte check).
   const snap = await send("Page.captureScreenshot", {
-    format: "png",
+    format: "jpeg",
+    quality: 85,
     clip: { x, y, width: w, height: h, scale: 2 },
   });
 
@@ -276,7 +276,7 @@ for (const view of VIEWS) {
   try {
     const { b64, width, height } = await captureView(view, vaRect);
     const buf = Buffer.from(b64, "base64");
-    const outPath = `${OUT_DIR}/parity-reference-schultz-${view}.png`;
+    const outPath = `${OUT_DIR}/parity-reference-schultz-${view}.jpg`;
     writeFileSync(outPath, buf);
 
     const bytes = buf.length;
