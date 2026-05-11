@@ -103,7 +103,8 @@ async function evaluate(expr: string): Promise<unknown> {
     awaitPromise: true,
     returnByValue: true,
   });
-  return r.result?.value ?? null;
+  // CDP wraps returnByValue results as { result: { result: { type, value } } }
+  return (r.result as Record<string, Record<string, unknown>>)?.result?.value ?? null;
 }
 
 async function takeScreenshot(savePath: string): Promise<void> {
