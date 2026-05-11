@@ -167,6 +167,58 @@ async function assertNoCmdkOverlay(afterSurface) {
   }
 }
 
+// ── State isolation helpers (#396) ───────────────────────────────────────────
+
+// Remove all user-created scene objects, detach gizmos, clear command session.
+// Call at surface-group boundaries to prevent scene-state accumulation (#396).
+async function resetScene(label = '') {
+  await evaluate(`(function() {
+    const v = window.__viewer;
+    if (!v) return;
+    if (v.gizmos) v.gizmos.forEach(g => { try { g.detach(); } catch (_) {} });
+    if (typeof v.selectObject === 'function') {
+      v.selectObject(null);
+    } else {
+      v.targetObject = null;
+    }
+    const toRemove = [];
+    v.scene.traverse(obj => {
+      if (obj.userData?.kind || obj.userData?.creator || obj.userData?.layerId) toRemove.push(obj);
+    });
+    toRemove.forEach(obj => obj.parent?.remove(obj));
+    window.__clearCommandSession?.();
+    window.__dispatch?.('SdSectionBoxOff', {});
+    window.__dispatch?.('SdClippingPlanesClear', {});
+  })()`);
+  await delay(150);
+  if (label) console.log(`  ↺ scene reset (${label})`);
+}
+
+// Reset to known base state: select tool, model mode, no cmdk, no gizmo, no
+// sub-object selection. Call before surface groups that require clean UI state.
+async function resetToBaseState(label = '') {
+  await closeCmdkIfOpen();
+  await evaluate(`(async () => {
+    // Two Escape passes: first clears sub-object mode, second clears selection.
+    for (let i = 0; i < 2; i++) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+      await new Promise(r => setTimeout(r, 80));
+    }
+    const v = window.__viewer;
+    if (v?.gizmos) v.gizmos.forEach(g => { try { g.detach(); } catch (_) {} });
+    if (v) v.targetObject = null;
+    // Return to model mode
+    const modelTab = document.querySelector('.mode-tab[data-mode="model"]');
+    if (modelTab) { modelTab.click(); await new Promise(r => setTimeout(r, 300)); }
+    // Return to select tool
+    window.__dispatch?.('setActiveTool', { toolId: 'select' });
+    window.__clearCommandSession?.();
+    await new Promise(r => setTimeout(r, 100));
+  })()`);
+  if (label) console.log(`  ↺ base state reset (${label})`);
+}
+
 // ── Surface 0: initial-scene-clean (#218 regression guard) ───────────────────
 // Asserts: immediately after a fresh page reload, the viewer scene contains
 // no user-created building elements (no IfcWall, SdBox, etc.).
@@ -270,6 +322,8 @@ async function assertNoCmdkOverlay(afterSurface) {
 }
 
 // ── Pre-surface-4 setup: inject mesh via DSL console ─────────────────────────
+// Reset base state first: S1 layout switch moves camera; re-establish select+model.
+await resetToBaseState('before-box-inject');
 {
   await evaluate(`
     (async () => {
@@ -296,6 +350,12 @@ async function assertNoCmdkOverlay(afterSurface) {
     })()`);
   if (!setup.ok) { console.error("SETUP FAILED:", JSON.stringify(setup)); process.exit(3); }
   console.log(`  setup: mesh injected (scene ${setup.before} → ${setup.after} children)`);
+  // Zoom extents so injected box is at viewport center for S4/S5/S6 (#396).
+  // selectObject() auto-attaches gizmos; reliable hit requires box at center.
+  await evaluate(`(async () => {
+    window.__dispatch?.('SdZoomExtents', {});
+    await new Promise(r => setTimeout(r, 600));
+  })()`);
 }
 
 // ── Surface 4: selection-roundtrip ───────────────────────────────────────────
@@ -1357,10 +1417,34 @@ async function assertNoCmdkOverlay(afterSurface) {
   // pathology that SdZoomExtents exhibits with IFC files.
 
   async function normalizeAndCapture(label) {
-    // Reset camera via fitCamera (avoids broken SdZoomExtents → frameAllVisible)
+    // Reset camera via fitCamera using only IFC-model bounds (not accumulated drawn geometry).
+    // currentBounds drifts as surfaces add walls/slabs; IFC-only bounds keep both captures consistent.
     await evaluate(`(function() {
       const v = window.__viewer;
-      if (v && v.currentBounds) v.fitCamera(v.currentBounds);
+      if (!v) return;
+      const IFC_PREFIXES = ['Ifc'];
+      let hasIfc = false;
+      const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
+      v.scene.traverse(obj => {
+        const c = obj.userData?.creator ?? '';
+        if (!IFC_PREFIXES.some(p => c.startsWith(p))) return;
+        hasIfc = true;
+        const g = obj.geometry;
+        if (!g) return;
+        const pos = g.attributes?.position;
+        if (!pos) return;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          if (x < box.minX) box.minX = x; if (x > box.maxX) box.maxX = x;
+          if (y < box.minY) box.minY = y; if (y > box.maxY) box.maxY = y;
+          if (z < box.minZ) box.minZ = z; if (z > box.maxZ) box.maxZ = z;
+        }
+      });
+      if (hasIfc && isFinite(box.minX)) {
+        v.fitCamera({ min: [box.minX, box.minY, box.minZ], max: [box.maxX, box.maxY, box.maxZ] });
+      } else if (v.currentBounds) {
+        v.fitCamera(v.currentBounds);
+      }
     })()`);
     await delay(600);
     // Clamp canvas height to visible viewport so both captures use same region size
@@ -2201,6 +2285,48 @@ async function assertNoCmdkOverlay(afterSurface) {
     })()`);
   if (!r) record('cplane-status-reactive', false, { reason: 'evaluate returned null' });
   else record('cplane-status-reactive', r.passed, r.evidence);
+}
+
+// ── Surface 49: comp-scope-toggle (#276) ─────────────────────────────────────
+// COMP button in SCENE tab header toggles compScope state.
+// When ON: subsections hidden, button has .active class, hint reads "select an object".
+// When OFF: subsections visible, hint reads "scene".
+{
+  const r = await evaluate(`
+    (() => {
+      try {
+        // Ensure SCENE tab is active — earlier surfaces may have switched to ASSETS.
+        const sceneTab = document.querySelector('.sb-tab[data-tab="scene"]');
+        if (sceneTab) sceneTab.click();
+        const btn = document.querySelector('#comp-scope-btn');
+        if (!btn) return { passed: false, evidence: { reason: '#comp-scope-btn not found' } };
+        const hint = document.querySelector('#comp-scope-hint');
+
+        // Initial state: COMP off — hint should read "scene".
+        const initHint = hint?.textContent ?? '';
+        const initActive = btn.classList.contains('active');
+
+        // Click to enable COMP.
+        btn.click();
+        const onHint = hint?.textContent ?? '';
+        const onActive = btn.classList.contains('active');
+
+        // Click to disable COMP.
+        btn.click();
+        const offHint = hint?.textContent ?? '';
+        const offActive = btn.classList.contains('active');
+
+        const passed = !initActive && onActive && !offActive && offHint === 'scene';
+        return {
+          passed,
+          evidence: { initHint, initActive, onHint, onActive, offHint, offActive },
+        };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!r) record('comp-scope-toggle', false, { reason: 'evaluate returned null' });
+  else record('comp-scope-toggle', r.passed, r.evidence);
 }
 
 } finally {
