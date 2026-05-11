@@ -45,7 +45,7 @@ import {
 import { SAMPLES } from "./sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState } from "./app-state";
-import { initCreateMode, emitClickWorld } from "./viewer/create-mode";
+import { initCreateMode, emitClickWorld, getSnapTarget } from "./viewer/create-mode";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform } from "./history";
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
@@ -126,10 +126,20 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 (window as unknown as { __getActiveCPlane: () => CPlane }).__getActiveCPlane = () => viewer.activeCPlane;
 (window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 (window as unknown as { __runIteration: typeof runIteration }).__runIteration = runIteration;
-// Expose snap test hooks for CDP verification (#374).
+// Expose snap test hooks for CDP verification (#374, #327).
 (window as unknown as { __snapPoint: typeof snapPoint }).__snapPoint = snapPoint;
 (window as unknown as { __snapSetStep: typeof snapSetStep }).__snapSetStep = snapSetStep;
 (window as unknown as { __snapGetStep: typeof snapGetStep }).__snapGetStep = snapGetStep;
+(window as unknown as { __getSnapTarget: typeof getSnapTarget }).__getSnapTarget = getSnapTarget;
+(window as unknown as { __projectToScreen: (x: number, y: number, z?: number) => { x: number; y: number } | null })
+  .__projectToScreen = (x, y, z = 0) => {
+    const canvas = viewer.getCanvas();
+    const rect = canvas.getBoundingClientRect();
+    const camera = viewer.getCamera();
+    const v = new THREE.Vector3(x, y, z).project(camera as THREE.PerspectiveCamera);
+    if (v.z > 1) return null;
+    return { x: (v.x * 0.5 + 0.5) * rect.width + rect.left, y: (-v.y * 0.5 + 0.5) * rect.height + rect.top };
+  };
 // Expose parity notification hook for CDP loop orchestrators and gemma-verify (#321).
 (window as unknown as { __notifyParityChanged: (detail: unknown) => void })
   .__notifyParityChanged = (detail) => {

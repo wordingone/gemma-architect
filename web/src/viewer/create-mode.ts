@@ -21,7 +21,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Viewer } from "./viewer";
 import { setState } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
-import { snapPoint } from "./snap-state";
+import { snapPoint, getSnap } from "./snap-state";
 import { pushAction } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
@@ -125,6 +125,51 @@ function readActiveTool(): string | null {
   if (!id || id === "select" || id === "move" || id === "rotate" || id === "scale") return null;
   return id;
 }
+
+// ── Vertex snap ──────────────────────────────────────────────────────────────
+// Snap candidates are explicit endpoint lists stored on each geometry mesh as
+// userData.endpoints. Builders that set endpoints: buildWall, buildLine,
+// buildPolyline. Others fall through to grid-only snap.
+
+type SnapVertex = { x: number; y: number; z: number; id: string };
+let _snapTarget: SnapVertex | null = null;
+export function getSnapTarget(): SnapVertex | null { return _snapTarget; }
+
+function makeSnapId(x: number, y: number, z = 0): string {
+  return `v:${Math.round(x * 1000)},${Math.round(y * 1000)},${Math.round(z * 1000)}`;
+}
+
+function collectSnapVertices(viewer: Viewer): SnapVertex[] {
+  const scene = viewer.getScene();
+  const out: SnapVertex[] = [];
+  const seen = new Set<string>();
+  scene.traverse((obj) => {
+    const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
+    if (!eps) return;
+    for (const ep of eps) {
+      if (!seen.has(ep.id)) { seen.add(ep.id); out.push(ep); }
+    }
+  });
+  return out;
+}
+
+const VERTEX_SNAP_PX = 20;
+function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): SnapVertex | null {
+  const snap = getSnap();
+  if (!snap.snapOn || !snap.vertexSnapOn) return null;
+  const verts = collectSnapVertices(viewer);
+  let best: SnapVertex | null = null;
+  let bestD = VERTEX_SNAP_PX;
+  for (const v of verts) {
+    const sc = projectToScreen(viewer, v.x, v.y, v.z);
+    if (!sc) continue;
+    const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+    if (d < bestD) { bestD = d; best = v; }
+  }
+  return best;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Project a world-space XY point to screen (client) coordinates.
 // Returns null when the point is behind the camera.
@@ -258,6 +303,11 @@ function buildWall(a: { x: number; y: number }, b: { x: number; y: number }): { 
   mesh.rotation.z = (angDeg * Math.PI) / 180;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "wall";
+  mesh.userData.endpoints = [
+    { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
+    { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
+    { x: midX, y: midY, z: 0, id: makeSnapId(midX, midY, 0) },
+  ] as SnapVertex[];
   const chain = `const wall = makeBox(${round(length)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0, 0, 0], [0, 0, 1]).translate([${round(midX)}, ${round(midY)}, 0]);`;
   return { mesh, chain };
 }
@@ -325,6 +375,11 @@ function buildLine(a: { x: number; y: number }, b: { x: number; y: number }): { 
   mesh.userData.kind = "line";
   mesh.userData.creator = "line";
   mesh.userData.controlPoints = [new THREE.Vector3(a.x - cx, a.y - cy, 0), new THREE.Vector3(b.x - cx, b.y - cy, 0)];
+  mesh.userData.endpoints = [
+    { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
+    { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
+    { x: cx, y: cy, z: 0, id: makeSnapId(cx, cy, 0) },
+  ] as SnapVertex[];
   const chain = `const line = drawPolyline([[${round(a.x)}, ${round(a.y)}], [${round(b.x)}, ${round(b.y)}]]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
 }
@@ -983,11 +1038,24 @@ function ensureCursorDot(): HTMLElement {
   return el;
 }
 
-function moveCursorDot(_viewer: Viewer, _pt: { x: number; y: number }, clientX: number, clientY: number): void {
+function moveCursorDot(_viewer: Viewer, _pt: { x: number; y: number }, clientX: number, clientY: number, vertexSnap = false): void {
   const dot = ensureCursorDot();
   dot.style.display = "block";
   dot.style.left = clientX + "px";
   dot.style.top = clientY + "px";
+  if (vertexSnap) {
+    dot.style.background = "#4caf50";
+    dot.style.border = "2px solid #1b5e20";
+    dot.style.boxShadow = "0 0 0 1px #4caf50,0 0 8px rgba(76,175,80,0.5)";
+    dot.style.width = "14px";
+    dot.style.height = "14px";
+  } else {
+    dot.style.background = "#ffffff";
+    dot.style.border = "2px solid #111111";
+    dot.style.boxShadow = "0 0 0 1px #ffffff";
+    dot.style.width = "12px";
+    dot.style.height = "12px";
+  }
 }
 
 function hideCursorDot(): void {
@@ -1168,7 +1236,8 @@ export function initCreateMode(viewer: Viewer): void {
     if (!world) return;
     ev.stopImmediatePropagation();
     _lastPointerClient = { x: ev.clientX, y: ev.clientY };
-    const snapped = snapPoint(world.x, world.y);
+    const vertex = !ev.altKey ? nearestSnapVertex(viewer, ev.clientX, ev.clientY) : null;
+    const snapped = vertex ?? snapPoint(world.x, world.y);
     // For level placement, raycast against scene geometry to inherit Z elevation (AC B.1).
     const z = tool === "level" ? getGeometryZ(viewer, ev.clientX, ev.clientY) : undefined;
     emitClickWorld(viewer, { ...snapped, z }, { tool });
@@ -1177,17 +1246,32 @@ export function initCreateMode(viewer: Viewer): void {
   // Cursor dot + rubber-band preview on every pointer move.
   vpBody.addEventListener("pointermove", (ev) => {
     const tool = readActiveTool();
-    if (!tool) { hideCursorDot(); return; }
+    if (!tool) { hideCursorDot(); _snapTarget = null; return; }
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
     if (!world) {
       // No ground-plane hit (near-horizontal camera) — show dot at raw mouse position.
       moveCursorDot(viewer, { x: 0, y: 0 }, ev.clientX, ev.clientY);
       return;
     }
-    const snapped = snapPoint(world.x, world.y);
+    // Alt key bypasses snap (raw mouse position). Otherwise: vertex snap first,
+    // fall back to grid snap.
+    let snapped: { x: number; y: number };
+    if (ev.altKey) {
+      _snapTarget = null;
+      snapped = world;
+    } else {
+      const vertex = nearestSnapVertex(viewer, ev.clientX, ev.clientY);
+      if (vertex) {
+        _snapTarget = vertex;
+        snapped = vertex;
+      } else {
+        _snapTarget = null;
+        snapped = snapPoint(world.x, world.y);
+      }
+    }
     // Project snapped world position back to screen so the dot visually snaps (#327).
     const screen = projectToScreen(viewer, snapped.x, snapped.y, 0);
-    moveCursorDot(viewer, snapped, screen?.x ?? ev.clientX, screen?.y ?? ev.clientY);
+    moveCursorDot(viewer, snapped, screen?.x ?? ev.clientX, screen?.y ?? ev.clientY, _snapTarget !== null);
     if (_pending.length === 0) return;
     const handler = TOOL_HANDLERS[tool];
     // Show rubber band for multi-click tools (clicks≥2) and unlimited tools (clicks=-1).
