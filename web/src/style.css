@@ -282,7 +282,7 @@ html[data-mode="night"] .snap-dock::after {
 
 .app {
   display: grid;
-  grid-template-rows: 24px 30px 68px 1fr 22px;
+  grid-template-rows: 24px 30px 90px 1fr 22px;
   grid-template-columns: 100%;
   height: 100dvh;
   width: 100vw;
@@ -1205,68 +1205,98 @@ html[data-mode="night"] .paper-stage {
   min-width: 0;
 }
 
+/* ── Ribbon asset palette ─────────────────────────────────────────────────── */
 .ribbon-assets {
-  flex: 1;
+  margin-left: auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 16px;
+  align-items: stretch;
+  border-left: var(--lw-construction) solid var(--ink-construction);
+  flex-shrink: 0;
+  /* Sticky to right: panel stays visible when ribbon-tools scrolls horizontally */
+  position: sticky;
+  right: 0;
+  background: var(--paper);
+  z-index: 1;
 }
-
-.ribbon-assets-header {
-  font-size: 8.5px;
-  letter-spacing: 0.16em;
+.ribbon-assets-header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 14px;
+  padding: 0 4px;
+  border-bottom: var(--lw-construction) solid var(--ink-construction);
+  flex-shrink: 0;
+}
+.ribbon-assets-header-sep {
+  width: 1px;
+  height: 60%;
+  background: var(--chrome-seam);
+  flex-shrink: 0;
+  align-self: center;
+}
+.ribbon-asset-section-header {
+  flex: 1;
+  font-size: 7.5px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-dim);
+  color: var(--ink-faint);
   font-weight: 600;
   user-select: none;
+  white-space: nowrap;
+  text-align: center;
 }
-
+.ribbon-assets-card-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 1;
+}
 .ribbon-assets-cards {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  padding: 0 10px;
+  height: 100%;
 }
-
+.ribbon-asset-divider {
+  width: 1px;
+  height: 60%;
+  background: var(--chrome-seam);
+  flex-shrink: 0;
+  align-self: center;
+}
 .ribbon-asset-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 44px;
+  gap: 3px;
+  padding: 2px;
   border-radius: 4px;
   cursor: pointer;
-  background: var(--paper-2, rgba(0,0,0,0.04));
-  border: var(--lw-edge) solid var(--chrome-seam);
-  gap: 3px;
-  color: var(--ink-dim);
-  text-align: center;
-  transition: background 0.12s, border-color 0.12s;
+  border: 1.5px solid transparent;
+  transition: border-color 0.12s;
   flex-shrink: 0;
 }
 .ribbon-asset-card:hover {
-  background: var(--paper-3, rgba(0,0,0,0.08));
-  color: var(--ink);
+  border-color: var(--chrome-seam);
 }
 .ribbon-asset-card.selected {
   border-color: var(--gemma, oklch(0.55 0.15 28));
-  color: var(--ink);
 }
-.asset-card-name {
-  font-size: 8.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-align: center;
-  line-height: 1.2;
-  padding: 0 3px;
+.ribbon-card-img {
+  width: 72px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 2px;
+  display: block;
 }
-.asset-card-sub {
-  font-size: 7px;
+.ribbon-card-name {
+  font-size: 8px;
   color: var(--ink-dim);
   text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .tool-group {

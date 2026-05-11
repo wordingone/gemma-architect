@@ -189,52 +189,92 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
 }
 
 // SAMPLES displayed as ribbon asset cards in MODEL mode (far right of ribbon-tools).
-const RIBBON_SAMPLES = [
-  { name: "Schultz",   sub: "IFC", v: "schultz-residence" },
-  { name: "FZK-Haus",  sub: "IFC", v: "kit-fzk-haus" },
-  { name: "Institute", sub: "IFC", v: "kit-office" },
-  { name: "Bonsai",    sub: "IFC", v: "bonsai-openings" },
+// Projects = full building scenes; Elements = individual components (naming subject to Leo review).
+const RIBBON_SCENE_SAMPLES = [
+  { name: "Schultz",   v: "schultz-residence", thumb: "/thumbnails/schultz-residence.png" },
+  { name: "FZK-Haus",  v: "kit-fzk-haus",      thumb: "/thumbnails/kit-fzk-haus.png" },
+  { name: "Institute", v: "kit-office",          thumb: "/thumbnails/kit-office.png" },
+  { name: "Bonsai",    v: "bonsai-openings",     thumb: "/thumbnails/bonsai-openings.png" },
 ];
+const RIBBON_ELEMENT_SAMPLES = [
+  { name: "Wall",  v: "wall-with-opening", thumb: "/thumbnails/wall-with-opening.png" },
+  { name: "Sweep", v: "simple-sweep",      thumb: "/thumbnails/simple-sweep.png" },
+];
+
+function buildAssetCard(
+  s: { name: string; v: string; thumb: string },
+  wrap: HTMLElement,
+): HTMLElement {
+  const card = document.createElement("div");
+  card.className = "ribbon-asset-card";
+  card.dataset.sample = s.v;
+
+  const img = document.createElement("img");
+  img.className = "ribbon-card-img";
+  img.src = s.thumb;
+  img.alt = s.name;
+
+  const lbl = document.createElement("span");
+  lbl.className = "ribbon-card-name";
+  lbl.textContent = s.name;
+
+  card.appendChild(img);
+  card.appendChild(lbl);
+  card.addEventListener("click", () => {
+    wrap.querySelectorAll(".ribbon-asset-card.selected").forEach((c: Element) => c.classList.remove("selected"));
+    card.classList.add("selected");
+    const sel = document.getElementById("sample-select") as HTMLSelectElement | null;
+    if (sel) {
+      sel.value = s.v;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
+  return card;
+}
 
 function appendRibbonAssets(toolsEl: HTMLElement) {
   const wrap = document.createElement("div");
   wrap.className = "ribbon-assets";
 
-  const header = document.createElement("div");
-  header.className = "ribbon-assets-header";
-  header.textContent = "IFC Samples";
-  wrap.appendChild(header);
+  // Header row — locked to top of ribbon, labels both sections
+  const headerRow = document.createElement("div");
+  headerRow.className = "ribbon-assets-header-row";
 
-  const cardsRow = document.createElement("div");
-  cardsRow.className = "ribbon-assets-cards";
+  const projectsLbl = document.createElement("span");
+  projectsLbl.className = "ribbon-asset-section-header";
+  projectsLbl.textContent = "Projects";
+  headerRow.appendChild(projectsLbl);
 
-  for (const s of RIBBON_SAMPLES) {
-    const card = document.createElement("div");
-    card.className = "ribbon-asset-card";
-    card.dataset.sample = s.v;
+  const headerSep = document.createElement("div");
+  headerSep.className = "ribbon-assets-header-sep";
+  headerRow.appendChild(headerSep);
 
-    const name = document.createElement("span");
-    name.className = "asset-card-name";
-    name.textContent = s.name;
+  const elementsLbl = document.createElement("span");
+  elementsLbl.className = "ribbon-asset-section-header";
+  elementsLbl.textContent = "Elements";
+  headerRow.appendChild(elementsLbl);
 
-    const sub = document.createElement("span");
-    sub.className = "asset-card-sub";
-    sub.textContent = s.sub;
+  wrap.appendChild(headerRow);
 
-    card.appendChild(name);
-    card.appendChild(sub);
-    card.addEventListener("click", () => {
-      cardsRow.querySelectorAll(".ribbon-asset-card.selected").forEach((c: Element) => c.classList.remove("selected"));
-      card.classList.add("selected");
-      const sel = document.getElementById("sample-select") as HTMLSelectElement | null;
-      if (sel) {
-        sel.value = s.v;
-        sel.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    });
-    cardsRow.appendChild(card);
-  }
-  wrap.appendChild(cardsRow);
+  // Card row — thumbnails, scrollable
+  const cardRow = document.createElement("div");
+  cardRow.className = "ribbon-assets-card-row";
+
+  const scenesCards = document.createElement("div");
+  scenesCards.className = "ribbon-assets-cards";
+  for (const s of RIBBON_SCENE_SAMPLES) scenesCards.appendChild(buildAssetCard(s, wrap));
+  cardRow.appendChild(scenesCards);
+
+  const divider = document.createElement("div");
+  divider.className = "ribbon-asset-divider";
+  cardRow.appendChild(divider);
+
+  const elementsCards = document.createElement("div");
+  elementsCards.className = "ribbon-assets-cards";
+  for (const s of RIBBON_ELEMENT_SAMPLES) elementsCards.appendChild(buildAssetCard(s, wrap));
+  cardRow.appendChild(elementsCards);
+
+  wrap.appendChild(cardRow);
   toolsEl.appendChild(wrap);
 }
 

@@ -2799,8 +2799,8 @@ await resetScene('before-box-inject');
   const r60 = await evaluate(`(() => {
     try {
       const cards = [...document.querySelectorAll('.ribbon-tools .ribbon-asset-card')];
-      if (cards.length !== 4)
-        return { passed: false, evidence: { reason: 'expected 4 cards, got ' + cards.length } };
+      if (cards.length !== 6)
+        return { passed: false, evidence: { reason: 'expected 6 cards, got ' + cards.length } };
       const rects = cards.map(c => c.getBoundingClientRect());
       const y0 = rects[0].top;
       const allSameY = rects.every(r => Math.abs(r.top - y0) <= 2);
