@@ -2561,10 +2561,11 @@ await resetScene('before-box-inject');
   await resetScene('after-demo-prompt-house');
 }
 
-// ── Surface 57: chat-plan-foldable (#413/SU-7) ────────────────────────────────
-// Sends a design-like prompt via the chat input and checks that
-// .chat-plan-details (foldable plan pane) OR a regular assistant response
-// renders in the chat list — verifying _pushPlanMsg or _executeAndPush ran.
+// ── Surface 57: chat-plan-foldable (#413/SU-7, #487) ─────────────────────────
+// Sends a design-like prompt via the chat input. When a complex plan is returned
+// the PLAN pane renders with a RUN PLAN button — the test must click it immediately
+// and wait for execution to complete (button removed + .chat-plan-turn elements appear).
+// Simple plans auto-execute without a button; that path still passes immediately.
 {
   const r57 = await evaluate(`(async () => {
     const tab = document.querySelector('.dock-tab[data-tab="prompt"]');
@@ -2580,31 +2581,72 @@ await resetScene('before-box-inject');
     chatInput.dispatchEvent(new Event('input', { bubbles: true }));
     sendBtn.click();
 
-    // Wait up to 60s for plan pane or assistant message to appear
+    // Phase 1: Wait up to 60s for plan pane or assistant message to appear.
+    let planDetails = null;
     const start = Date.now();
     while (Date.now() - start < 60000) {
-      const planDetails = document.querySelector('.chat-plan-details');
-      if (planDetails) {
-        return {
-          passed: true,
-          evidence: {
-            planPaneRendered: true,
-            isOpen: planDetails.hasAttribute('open'),
-            hasSummary: !!planDetails.querySelector('.chat-plan-summary'),
-            hasPlanBlock: !!planDetails.querySelector('.chat-plan-block'),
-          },
-        };
-      }
+      planDetails = document.querySelector('.chat-plan-details');
+      if (planDetails) break;
       const assistantMsgs = document.querySelectorAll('.chat-msg-assistant .chat-msg-content');
       if (assistantMsgs.length > 0) {
         return { passed: true, evidence: { simplePlanPath: true, msgCount: assistantMsgs.length } };
       }
       await new Promise(r => setTimeout(r, 500));
     }
-    return { passed: false, evidence: { reason: 'timeout: no plan pane or assistant response' } };
-  })()`, true, 75000);
+    if (!planDetails) {
+      return { passed: false, evidence: { reason: 'timeout: no plan pane or assistant response' } };
+    }
+
+    // Phase 2: Plan pane appeared — click RUN PLAN button if present.
+    // Complex plans (>3 dispatches) surface a .chat-plan-run-btn that must be clicked.
+    // Simple plans auto-execute; no button present.
+    const runBtn = document.querySelector('.chat-plan-run-btn:not([disabled])');
+    if (!runBtn) {
+      return {
+        passed: true,
+        evidence: {
+          planPaneRendered: true,
+          isOpen: planDetails.hasAttribute('open'),
+          runBtnFound: false,
+          reason: 'no run-plan button — simple plan auto-executed',
+        },
+      };
+    }
+    runBtn.click();
+
+    // Phase 3: Wait up to 120s for execution to complete.
+    // Completion: _pushPlanMsg calls runBtn.remove() after all turns finish.
+    const execStart = Date.now();
+    while (Date.now() - execStart < 120000) {
+      const btnGone = !document.querySelector('.chat-plan-run-btn');
+      const turns = document.querySelectorAll('.chat-plan-turn');
+      if (btnGone && turns.length > 0) {
+        return {
+          passed: true,
+          evidence: {
+            planPaneRendered: true,
+            runBtnClicked: true,
+            turnCount: turns.length,
+            turnTexts: Array.from(turns).map(t => t.textContent.trim()),
+          },
+        };
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return {
+      passed: false,
+      evidence: {
+        planPaneRendered: true,
+        runBtnClicked: true,
+        reason: 'timeout: plan execution did not complete within 120s',
+        turnsPresent: document.querySelectorAll('.chat-plan-turn').length,
+        btnStillPresent: !!document.querySelector('.chat-plan-run-btn'),
+      },
+    };
+  })()`, true, 195000);
   if (!r57) record('chat-plan-foldable', false, { reason: 'evaluate returned null (timeout)' });
   else record('chat-plan-foldable', r57.passed, r57.evidence);
+  await resetScene('after-chat-plan-foldable');
 }
 
 // ── Surface 58: ifc-default-select (#277) ────────────────────────────────────
