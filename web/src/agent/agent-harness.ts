@@ -294,6 +294,7 @@ BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apa
 - IfcWindow: width=1.2, height=1.2, sillH=0.9. Minimum 2 per exterior elevation (south + north or east + west).
 - IfcColumn: size=0.3 at building corners and wall junctions; height = floor height. Add when span >6m.
 - IfcRoof: roofType=pitched (residential house/tiny home), roofType=hipped (villa), roofType=flat (apartment/office), roofType=shed (lean-to/mono-pitch, industrial annexe). pitchDeg=35 default.
+- IfcCeiling: one per storey, placed at floor_height elevation. width/depth = room footprint. elevation = floor_index × floor_height + floor_height (top of room). IFC convention: explicit IfcCovering element; do NOT rely on slab-above as implicit ceiling.
 - SdExport: always end with format=ifc, target=scene.
 - Room sizes (net internal): bedroom 9-15m², living 18-25m², kitchen 8-12m², bathroom 4-6m².
 - Floor heights: residential 3.0m, office 3.5m, industrial/bay 4.5m.
@@ -396,9 +397,10 @@ Assistant: 12m wide, 8m deep, 1 floor × 2.4m. Footprint [[0,0],[12,0],[12,8],[0
 4. IfcWall — east, profile=[[12,0],[12,8]], thickness=0.2, height=2.4
 5. IfcWall — west, profile=[[0,8],[0,0]], thickness=0.2, height=2.4
 6. IfcSlab — profile=[[0,0],[12,0],[12,8],[0,8]], thickness=0.2
-7. IfcSpace — footprint=[[1,1],[7,1],[7,7],[1,7]], height=2.4, name="main hall"
-8. IfcSpace — footprint=[[7,1],[11,1],[11,7],[7,7]], height=2.4, name="kitchenette"
-9. IfcDoor — width=0.91, height=2.1
+7. IfcCeiling — width=12, depth=8, elevation=2.4
+8. IfcSpace — footprint=[[1,1],[7,1],[7,7],[1,7]], height=2.4, name="main hall"
+9. IfcSpace — footprint=[[7,1],[11,1],[11,7],[7,7]], height=2.4, name="kitchenette"
+10. IfcDoor — width=0.91, height=2.1
 </plan>
 <tool_call>{"command":"IfcLevel","parameters":{"name":"Ground","elevation":0,"extent":12},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[12,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
@@ -406,6 +408,7 @@ Assistant: 12m wide, 8m deep, 1 floor × 2.4m. Footprint [[0,0],[12,0],[12,8],[0
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[12,0],[12,8]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcCeiling","parameters":{"width":12,"depth":8,"elevation":2.4},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSpace","parameters":{"footprint":[[1,1],[7,1],[7,7],[1,7]],"height":2.4,"name":"main hall"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSpace","parameters":{"footprint":[[7,1],[11,1],[11,7],[7,7]],"height":2.4,"name":"kitchenette"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcDoor","parameters":{"width":0.91,"height":2.1},"metadata":{"source":"agent"}}</tool_call>
@@ -421,16 +424,18 @@ Assistant: 20m wide, 12m deep, 2 floors × 3.5m = 7m total. Ground Floor at 0m, 
 6. IfcWall — east ground, profile=[[20,0],[20,12]], thickness=0.2, height=3.5
 7. IfcWall — west ground, profile=[[0,12],[0,0]], thickness=0.2, height=3.5
 8. IfcSlab — mid-floor at elev 3.5, profile=[[0,0],[20,0],[20,12],[0,12]]
-9. IfcSpace — name="reception", footprint=[[0,0],[6,0],[6,12],[0,12]], height=3.5
-10. IfcSpace — name="open office", footprint=[[6,0],[20,0],[20,12],[6,12]], height=3.5
-11. setActiveLevel — id=level/1
-12. IfcWall — south upper, profile=[[0,0],[20,0]], thickness=0.2, height=3.5
-13. IfcWall — north upper, profile=[[20,12],[0,12]], thickness=0.2, height=3.5
-14. IfcWall — east upper, profile=[[20,0],[20,12]], thickness=0.2, height=3.5
-15. IfcWall — west upper, profile=[[0,12],[0,0]], thickness=0.2, height=3.5
-16. IfcSlab — roof at elev 7.0, profile=[[0,0],[20,0],[20,12],[0,12]]
-17. IfcSpace — name="conference room", footprint=[[0,0],[10,0],[10,12],[0,12]], height=3.5
-18. IfcSpace — name="office suite", footprint=[[10,0],[20,0],[20,12],[10,12]], height=3.5
+9. IfcCeiling — ground floor ceiling, width=20, depth=12, elevation=3.5
+10. IfcSpace — name="reception", footprint=[[0,0],[6,0],[6,12],[0,12]], height=3.5
+11. IfcSpace — name="open office", footprint=[[6,0],[20,0],[20,12],[6,12]], height=3.5
+12. setActiveLevel — id=level/1
+13. IfcWall — south upper, profile=[[0,0],[20,0]], thickness=0.2, height=3.5
+14. IfcWall — north upper, profile=[[20,12],[0,12]], thickness=0.2, height=3.5
+15. IfcWall — east upper, profile=[[20,0],[20,12]], thickness=0.2, height=3.5
+16. IfcWall — west upper, profile=[[0,12],[0,0]], thickness=0.2, height=3.5
+17. IfcSlab — roof at elev 7.0, profile=[[0,0],[20,0],[20,12],[0,12]]
+18. IfcCeiling — upper floor ceiling, width=20, depth=12, elevation=7.0
+19. IfcSpace — name="conference room", footprint=[[0,0],[10,0],[10,12],[0,12]], height=3.5
+20. IfcSpace — name="office suite", footprint=[[10,0],[20,0],[20,12],[10,12]], height=3.5
 </plan>
 <tool_call>{"command":"IfcLevel","parameters":{"name":"Ground Floor","elevation":0,"extent":20},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcLevel","parameters":{"name":"Floor 2","elevation":3.5,"extent":20},"metadata":{"source":"agent"}}</tool_call>
@@ -440,6 +445,7 @@ Assistant: 20m wide, 12m deep, 2 floors × 3.5m = 7m total. Ground Floor at 0m, 
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[20,0],[20,12]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,12],[0,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[20,0],[20,12],[0,12]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcCeiling","parameters":{"width":20,"depth":12,"elevation":3.5},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSpace","parameters":{"footprint":[[0,0],[6,0],[6,12],[0,12]],"height":3.5,"name":"reception"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSpace","parameters":{"footprint":[[6,0],[20,0],[20,12],[6,12]],"height":3.5,"name":"open office"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
@@ -448,6 +454,7 @@ Assistant: 20m wide, 12m deep, 2 floors × 3.5m = 7m total. Ground Floor at 0m, 
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[20,0],[20,12]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,12],[0,0]],"thickness":0.2,"height":3.5},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[20,0],[20,12],[0,12]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcCeiling","parameters":{"width":20,"depth":12,"elevation":7.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSpace","parameters":{"footprint":[[0,0],[10,0],[10,12],[0,12]],"height":3.5,"name":"conference room"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSpace","parameters":{"footprint":[[10,0],[20,0],[20,12],[10,12]],"height":3.5,"name":"office suite"},"metadata":{"source":"agent"}}</tool_call>
 
