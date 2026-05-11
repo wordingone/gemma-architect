@@ -2557,7 +2557,11 @@ await resetScene('before-box-inject');
       for (const c of toRemove) window.__viewer.scene.remove(c);
     }
     await new Promise(r => setTimeout(r, 300));
-    const result = await window.__runDesignLoop('Design a house', [], undefined, 3);
+    const timeoutMs = 120000;
+    const result = await Promise.race([
+      window.__runDesignLoop('Design a house', [], undefined, 3),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('design-loop timeout ' + timeoutMs + 'ms')), timeoutMs)),
+    ]);
     const dispatches = result?.dispatches ?? [];
     const verbCounts = {};
     for (const d of dispatches) verbCounts[d.verb] = (verbCounts[d.verb] ?? 0) + 1;
