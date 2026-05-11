@@ -30,10 +30,10 @@ const STATE_DIR = join(ROOT, "state");
 const RUNS_DIR  = join(STATE_DIR, "gemma-verify-runs");
 const LOCK_PATH = join(STATE_DIR, "gemma-verify.lock");
 const LAST_PATH = join(STATE_DIR, "gemma-verify-last.json");
-const RAW       = join(__dirname, "gemma-verify-raw.mjs");
+const RAW       = process.env.GEMMA_VERIFY_RAW_OVERRIDE ?? join(__dirname, "gemma-verify-raw.mjs");
 
 const POLL_MS        = 2_000;
-const WAIT_TIMEOUT_S = 10 * 60;  // 10 min poll cap
+const WAIT_TIMEOUT_S = parseInt(process.env.GEMMA_VERIFY_LOCK_WAIT_S ?? "") || (10 * 60);
 const STALE_S        = 15 * 60;  // 15 min → stale takeover
 
 // ── Argument parsing ─────────────────────────────────────────────────────────
