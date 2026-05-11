@@ -1155,7 +1155,7 @@ html[data-mode="night"] .paper-stage {
   /* -webkit-backdrop-filter: var(--glass-blur); */
   box-shadow: inset 0 0.5px 0 0 var(--glass-edge-light);
   position: relative;
-  height: 68px;
+  height: 90px;
   grid-row: 3;
 }
 .ribbon::before, .ribbon::after { display: none; }

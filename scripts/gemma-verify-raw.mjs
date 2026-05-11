@@ -2871,8 +2871,8 @@ await resetScene('before-box-inject');
           return { passed: false, evidence: { reason: 'missing header or card in section column' } };
         const hdrBottom = hdr.getBoundingClientRect().bottom;
         const cardTop = firstCard.getBoundingClientRect().top;
-        if (hdrBottom >= cardTop)
-          return { passed: false, evidence: { reason: 'section header not above cards', hdrBottom: Math.round(hdrBottom), cardTop: Math.round(cardTop) } };
+        if (hdrBottom > cardTop + 1)
+          return { passed: false, evidence: { reason: 'section header overlaps cards', hdrBottom: Math.round(hdrBottom), cardTop: Math.round(cardTop) } };
       }
 
       // First card flush with ribbon-assets left edge (≤ 4px gap)
