@@ -149,7 +149,7 @@ const stairs = s0.fuse(s1).fuse(s2).fuse(s3);`,
   },
   {
     id: "schultz-residence",
-    label: "9. Schultz Residence (14-element compound — multi-fuse + cuts)",
+    label: "9. Schultz Residence (14-component compound — multi-fuse + cuts)",
     prompt: "Build a single-story residence in the style of the Schultz Residence: rectangular 12m by 8m footprint, 0.2m floor slab, four perimeter exterior walls 2.8m tall and 0.2m thick, one interior partition splitting the plan east-west at x=7m (0.15m thick, full height), two square columns 0.3m by 0.3m at the front corners, a 1m by 2.1m doorway in the south wall centered on the front entry (4m from the west edge), a 2m by 1.4m window in the north wall centered (6m from the west edge), and a flat roof slab 0.2m thick at z=2.8m. Fuse all walls and slabs into a single composite.",
     js: `const slabFloor = drawRectangle(12, 8).sketchOnPlane("XY").extrude(0.2).translate([6, 4, -0.2]);
 const slabRoof = drawRectangle(12, 8).sketchOnPlane("XY").extrude(0.2).translate([6, 4, 2.8]);

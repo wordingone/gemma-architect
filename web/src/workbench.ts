@@ -445,7 +445,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   const compBtn = el("button");
   compBtn.id = "comp-scope-btn";
   compBtn.textContent = "COMP";
-  compBtn.title = "Toggle component scope — filter tree to selected element";
+  compBtn.title = "Toggle component scope — filter tree to selected component";
   compBtn.style.cssText = "font-family:var(--mono); font-size:9px; letter-spacing:0.1em; padding:2px 6px; border-radius:3px; border:1px solid var(--hairline-soft); background:none; cursor:pointer; color:var(--ink-dim);";
   const compHint = el("span");
   compHint.id = "comp-scope-hint";
@@ -665,7 +665,7 @@ function buildInspectTab(): HTMLElement {
     // Multi-select path: Ctrl+click set has > 1 element.
     const multi = getMultiSelected();
     if (multi.length > 1) {
-      if (title) title.textContent = `${multi.length} elements selected`;
+      if (title) title.textContent = `${multi.length} components selected`;
       const types = [...new Set(
         multi.map((s) => (s.object.userData?.ifcClass as string | undefined) || s.topology)
       )].sort().join(", ");
@@ -1172,7 +1172,7 @@ const PROMPT_CHIPS: { label: string; demoId: string }[] = [
   { label: "L-shape walls",                     demoId: "l-walls" },
   { label: "Four-walled room",                  demoId: "four-walled-room" },
   { label: "Stair-step",                        demoId: "stair-step" },
-  { label: "Schultz Residence · 14 elements",   demoId: "schultz-residence" },
+  { label: "Schultz Residence · 14 components",  demoId: "schultz-residence" },
 ];
 
 // localStorage-backed real session history — populated when user generates geometry.
