@@ -197,6 +197,11 @@ const RIBBON_SAMPLES = [
 ];
 
 function appendRibbonAssets(toolsEl: HTMLElement) {
+  const sectionLabel = document.createElement("div");
+  sectionLabel.className = "ribbon-section-label";
+  sectionLabel.textContent = "IFC Samples";
+  toolsEl.appendChild(sectionLabel);
+
   const wrap = document.createElement("div");
   wrap.className = "ribbon-assets";
 
