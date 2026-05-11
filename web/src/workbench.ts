@@ -158,10 +158,9 @@ const PALETTE_SECTIONS: PaletteSection[] = [
 
 type DockTab = { id: string; icon: string; label: string };
 const DOCK_TABS: DockTab[] = [
-  { id: "prompt",     icon: "sparkle",  label: "CREATE" },
-  { id: "nodes",      icon: "graph",    label: "SKILL NODES" },
-  { id: "parameters", icon: "sliders",  label: "PARAMETERS" },
-  { id: "history",    icon: "history",  label: "HISTORY" },
+  { id: "prompt",  icon: "sparkle", label: "CREATE" },
+  { id: "skills",  icon: "graph",   label: "SKILLS" },
+  { id: "history", icon: "history", label: "HISTORY" },
 ];
 
 // Merged PROMPT/CONSOLE input: one tab, two modes. Shift+Tab toggles.
@@ -1553,9 +1552,15 @@ async function renderSkillNodes(): Promise<void> {
 let _canvasInstance: SkillCanvas | null = null;
 let _activateNodesCanvas: (() => void) | null = null;
 
-function buildNodesTabBody(): HTMLElement {
-  const outer = el("div", "tab-body nodes-tab");
-  outer.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden;";
+function buildSkillsTabBody(): HTMLElement {
+  // Split layout: left = skill nodes (list + canvas); right = parameter sidecar.
+  const outer = el("div", "tab-body skills-tab");
+  outer.style.cssText = "display:flex; flex-direction:row; height:100%; overflow:hidden;";
+
+  // ── Left: nodes column ────────────────────────────────────────────────────
+  const nodesCol = document.createElement("div");
+  nodesCol.className = "skills-nodes-col";
+  nodesCol.style.cssText = "flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; border-right:var(--lw-construction) solid var(--border);";
 
   // View switcher: LIST | CANVAS
   const switcher = document.createElement("div");
@@ -1569,16 +1574,14 @@ function buildNodesTabBody(): HTMLElement {
   switcher.appendChild(listBtn);
   switcher.appendChild(canvasBtn);
 
-  // List pane — _skillsWrap is the single render target (renderNodes removed #237).
   const listPane = document.createElement("div");
   listPane.style.cssText = "flex:1; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:4px;";
   _skillsWrap = listPane;
 
-  // Canvas pane (hidden by default)
   const canvasPane = document.createElement("div");
   canvasPane.style.cssText = "flex:1; overflow:hidden; display:none;";
 
-  const activate = (view: "list" | "canvas") => {
+  const activateView = (view: "list" | "canvas") => {
     if (view === "list") {
       listBtn.classList.add("active");
       canvasBtn.classList.remove("active");
@@ -1595,13 +1598,28 @@ function buildNodesTabBody(): HTMLElement {
     }
   };
 
-  listBtn.addEventListener("click",   () => activate("list"));
-  canvasBtn.addEventListener("click", () => activate("canvas"));
-  _activateNodesCanvas = () => activate("canvas");
+  listBtn.addEventListener("click",   () => activateView("list"));
+  canvasBtn.addEventListener("click", () => activateView("canvas"));
+  _activateNodesCanvas = () => activateView("canvas");
 
-  outer.appendChild(switcher);
-  outer.appendChild(listPane);
-  outer.appendChild(canvasPane);
+  nodesCol.appendChild(switcher);
+  nodesCol.appendChild(listPane);
+  nodesCol.appendChild(canvasPane);
+
+  // ── Right: parameter sidecar ──────────────────────────────────────────────
+  const paramsCol = document.createElement("div");
+  paramsCol.className = "skills-params-col";
+  paramsCol.style.cssText = "width:180px; flex-shrink:0; overflow-y:auto; padding:8px 10px;";
+  _paramsWrap = paramsCol;
+
+  renderParameters(null);
+  window.addEventListener("viewer:select", (rawEv) => {
+    const uuid: string | null = (rawEv as CustomEvent<{ uuid: string | null }>).detail?.uuid ?? null;
+    renderParameters(uuid);
+  });
+
+  outer.appendChild(nodesCol);
+  outer.appendChild(paramsCol);
 
   void renderSkillNodes();
   return outer;
@@ -1847,36 +1865,18 @@ function renderParameters(uuid: string | null): void {
   }
 }
 
-function buildParametersTabBody(_paramPanel: HTMLElement | null): HTMLElement {
-  const wrap = el("div", "tab-body parameters-tab");
-  wrap.style.cssText = "display:flex; flex-direction:column; height:100%; overflow-y:auto; padding:8px 12px;";
-  _paramsWrap = wrap;
-
-  // Render initial empty state.
-  renderParameters(null);
-
-  // Subscribe to selection changes.
-  window.addEventListener("viewer:select", (rawEv) => {
-    const uuid: string | null = (rawEv as CustomEvent<{ uuid: string | null }>).detail?.uuid ?? null;
-    renderParameters(uuid);
-  });
-
-  return wrap;
-}
-
 function buildDock(
   tabsHost: HTMLElement,
   bodyHost: HTMLElement,
   promptPane: HTMLElement | null,
-  paramPanel: HTMLElement | null,
+  _paramPanel: HTMLElement | null,
 ) {
   tabsHost.innerHTML = "";
 
   const panes: Record<string, HTMLElement> = {
-    prompt:     buildPromptTabBody(promptPane),
-    nodes:      buildNodesTabBody(),
-    parameters: buildParametersTabBody(paramPanel),
-    history:    buildHistoryTabBody(),
+    prompt:  buildPromptTabBody(promptPane),
+    skills:  buildSkillsTabBody(),
+    history: buildHistoryTabBody(),
   };
 
   for (const t of DOCK_TABS) {
@@ -1909,10 +1909,10 @@ function buildDock(
   activate("prompt");
   initLiveTabSubscriptions();
 
-  // P5b: when chat-panel fires "skill:animate", switch to NODES→Canvas and run.
+  // P5b: when chat-panel fires "skill:animate", switch to SKILLS→Canvas and run.
   window.addEventListener("skill:animate", (e) => {
     const { steps } = (e as CustomEvent<{ steps: SkillStep[] }>).detail;
-    activate("nodes");
+    activate("skills");
     _activateNodesCanvas?.();
     void _canvasInstance?.runWithAnimation(steps);
   });
