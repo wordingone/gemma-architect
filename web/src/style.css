@@ -1357,6 +1357,10 @@ html[data-mode="night"] .paper-stage {
   /* -webkit-backdrop-filter: var(--glass-blur); */
   box-shadow: inset -0.5px 0 0 0 var(--glass-edge-light);
   padding: 4px 0;
+  /* isolation:isolate (set on .palette by the chrome-panel rule) caps the tooltip
+     z-index within the palette's stacking context. z-index:20 raises the palette's
+     stacking context above the viewport canvas so tooltips paint on top. */
+  z-index: 20;
 }
 .palette-section {
   display: grid;
