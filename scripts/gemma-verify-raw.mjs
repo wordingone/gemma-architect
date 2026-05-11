@@ -2769,8 +2769,53 @@ await resetScene('before-box-inject');
         }
       }
 
+      // ── Optional-arg side-effect tests (#473 addendum) ───────────────────
+      // Verbs whose args are all optional pass {} without ArgValidationError.
+      // That proves the verb is recognised — not that the arg reached the handler.
+      // Pass realistic args and assert the gemma:command event carries them.
+      // (dispatchEvent is synchronous, so a sync listener captures the event.)
+      const optFails  = [];
+      const optPasses = [];
+
+      function testOptArg(verb, args, checkFn) {
+        let eventDetail = null;
+        const h = (e) => { eventDetail = e.detail; };
+        window.addEventListener('gemma:command', h);
+        const r = dispatch(verb, args);
+        window.removeEventListener('gemma:command', h);
+        if (!r || r.error === 'ArgValidationError' || r.error === 'NeedsChoiceError') {
+          optFails.push({ verb, stage: 'dispatch', error: r?.error ?? 'null_result' });
+          return;
+        }
+        if (!eventDetail) {
+          optFails.push({ verb, stage: 'event', error: 'gemma:command not emitted' });
+          return;
+        }
+        const chk = checkFn(eventDetail, r);
+        if (!chk.ok) optFails.push({ verb, stage: 'side-effect', error: chk.reason });
+        else          optPasses.push(verb);
+      }
+
+      // SdSave: filename optional — assert arg propagated to kernel event
+      testOptArg('SdSave', { filename: 'verify-test.json' }, (ev) => {
+        if (ev.id !== 'saveProject')
+          return { ok: false, reason: 'event id mismatch: ' + ev.id };
+        if (ev.args?.filename !== 'verify-test.json')
+          return { ok: false, reason: 'filename not in event args: ' + JSON.stringify(ev.args) };
+        return { ok: true };
+      });
+
+      // SdOpen: filename optional — assert arg propagated to kernel event
+      testOptArg('SdOpen', { filename: 'verify-test.json' }, (ev) => {
+        if (ev.id !== 'openProject')
+          return { ok: false, reason: 'event id mismatch: ' + ev.id };
+        if (ev.args?.filename !== 'verify-test.json')
+          return { ok: false, reason: 'filename not in event args: ' + JSON.stringify(ev.args) };
+        return { ok: true };
+      });
+
       return {
-        passed: fails.length === 0,
+        passed: fails.length === 0 && optFails.length === 0,
         evidence: {
           fixture: { wallOk: wallRes?.ok, box1Ok: box1Res?.ok, box2Ok: box2Res?.ok },
           total: VERB_TESTS.length,
@@ -2778,6 +2823,13 @@ await resetScene('before-box-inject');
           failed: fails.length,
           fails,
           passes,
+          optionalArgTests: {
+            total: optPasses.length + optFails.length,
+            passed: optPasses.length,
+            failed: optFails.length,
+            fails: optFails,
+            passes: optPasses,
+          },
         },
       };
     })()`);
