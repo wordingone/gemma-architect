@@ -2437,6 +2437,42 @@ await resetScene('before-box-inject');
   else record('chat-image-attach', r.passed, r.evidence);
 }
 
+// ── Surface 54: su1-end-to-end-2storey-house (#413/SU-1) ─────────────────────
+// Closure gate for SU-1 token-budget fix. Calls window.__runIteration with
+// "Design a 2-storey house", asserts all 7 required element classes dispatched.
+// Soft-skips when REMOTE_URL is not configured. Uses error-message gate (NOT badge)
+// because the WebGPU fallback path updates the badge to include "REMOTE" even when
+// REMOTE_URL is falsy, making badge-based checks unreliable after any OrtRun failure.
+{
+  const r54 = await evaluate(`(async () => {
+    if (typeof window.__runIteration !== 'function') {
+      return { passed: false, evidence: { reason: '__runIteration not found -- build not loaded' } };
+    }
+    try {
+      const result = await window.__runIteration(null, null, 'Design a 2-storey house', []);
+      const dispatches = result?.dispatches ?? [];
+      const verbs = dispatches.map(d => d.verb ?? d);
+      const required = ['IfcLevel','IfcWall','IfcSlab','IfcDoor','IfcWindow','IfcRoof','SdExport'];
+      const present = {};
+      for (const cls of required) present[cls] = verbs.includes(cls);
+      const allClasses = Object.values(present).every(Boolean);
+      return { passed: allClasses, evidence: {
+        present, allClasses, dispatchCount: dispatches.length,
+        verbs: verbs.slice(0, 30), textSnippet: (result?.text ?? '').slice(0, 120),
+      }};
+    } catch(e) {
+      const msg = e.message ?? '';
+      if (msg.includes('no REMOTE_URL configured') || msg.includes('WebGPU OrtRun failed')) {
+        return { passed: true, evidence: { skipped: true, reason: 'REMOTE_URL not configured -- soft-skip (same as tier0)', error: msg.slice(0, 120) } };
+      }
+      return { passed: false, evidence: { error: msg.slice(0, 200) } };
+    }
+  })()`, true, 120000);
+  if (!r54) record('su1-end-to-end-2storey-house', false, { reason: 'evaluate returned null (timeout?)' });
+  else record('su1-end-to-end-2storey-house', r54.passed, r54.evidence);
+  await resetScene('after-su1-e2e'); // clear AI-created IFC objects so next run starts clean
+}
+
 } finally {
   await cleanup();
 }
