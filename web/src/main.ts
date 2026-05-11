@@ -51,7 +51,7 @@ import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTr
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
-import { runIteration } from "./chat-panel";
+import { runIteration, runDesignLoop } from "./chat-panel";
 import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs-primitives";
 import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePointAt, domain as curveDomain } from "./nurbs-curves";
 import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
@@ -126,6 +126,7 @@ const viewer = new Viewer(canvas, viewportAreaEl);
 (window as unknown as { __getActiveCPlane: () => CPlane }).__getActiveCPlane = () => viewer.activeCPlane;
 (window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 (window as unknown as { __runIteration: typeof runIteration }).__runIteration = runIteration;
+(window as unknown as { __runDesignLoop: typeof runDesignLoop }).__runDesignLoop = runDesignLoop;
 // Expose snap test hooks for CDP verification (#374, #327).
 (window as unknown as { __snapPoint: typeof snapPoint }).__snapPoint = snapPoint;
 (window as unknown as { __snapSetStep: typeof snapSetStep }).__snapSetStep = snapSetStep;

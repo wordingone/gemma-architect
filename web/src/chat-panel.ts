@@ -5,7 +5,7 @@
 // each model turn; their verb names are shown as inline pills.
 
 import { runAgentTurn } from "./agent/agent-harness";
-import type { AgentDispatch, AgentResponse } from "./agent/agent-harness";
+import type { AgentDispatch, AgentRequest, AgentResponse } from "./agent/agent-harness";
 import { invokeCommand } from "./commands/command-session";
 import type { Skill } from "./agent/skills-loader";
 import { findSkillsForPrompt } from "./agent/skills-loader";
@@ -421,9 +421,70 @@ export async function runIteration(
     userImage = canvas.toDataURL("image/jpeg", 0.8);
   }
 
+  // Delegate to multi-turn planning loop for design-intent prompts (#413/SU-2).
+  if (!vpImg && !refImg && DESIGN_RE.test(deltaText)) {
+    return runDesignLoop(deltaText, [], undefined, 3);
+  }
+
   return runAgentTurn({
     prompt: lines.join("\n"),
     userImage,
     maxNewTokens: 1024,
   });
+}
+
+// Multi-turn design loop (#413/SU-2).
+//
+// For "Design a house / apartment / 2-storey house" style prompts: the full
+// building exceeds what a single model turn can reliably dispatch without
+// running out of context. This loop:
+//   Turn 1 — agent emits <plan> + first batch (foundation, levels, walls, ≤10 cmds)
+//   Turn N — "Continue" prompt with dispatch summary; agent emits next batch
+//   Stops   — when SdExport fires, no new dispatches, or maxTurns reached
+//
+// History and dispatch summary carry forward so the model knows what's been done.
+
+const DESIGN_RE = /\b(design|build|create|model)\b.*\b(house|apartment|office|cabin|building|studio|home|tiny home|residence)\b|\b(house|apartment|office|cabin|building|studio|home)\b/i;
+
+export async function runDesignLoop(
+  prompt: string,
+  history: Array<{ role: "user" | "assistant"; content: string }> = [],
+  skills?: import("./agent/skills-loader").Skill[],
+  maxTurns = 3,
+): Promise<AgentResponse> {
+  const allDispatches: AgentDispatch[] = [];
+  let planText: string | undefined;
+  let lastText = "";
+  const localHistory: Array<{ role: "user" | "assistant"; content: string }> = [...history];
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    const isFirst = turn === 0;
+    const dispatchedSoFar = allDispatches.map((d) => d.verb).join(", ");
+    const continuationHint = dispatchedSoFar
+      ? `Already dispatched: ${dispatchedSoFar}.`
+      : "";
+
+    const req: AgentRequest = {
+      prompt: isFirst
+        ? prompt
+        : `Continue plan execution. ${continuationHint} Dispatch the next batch of building elements (up to 10 commands). End with SdExport when all plan items are complete.`,
+      history: localHistory,
+      maxNewTokens: 1024,
+      skills,
+    };
+
+    const resp = await runAgentTurn(req);
+
+    if (isFirst && resp.plan) planText = resp.plan;
+    lastText = resp.text;
+    allDispatches.push(...resp.dispatches);
+
+    localHistory.push({ role: "user", content: req.prompt });
+    localHistory.push({ role: "assistant", content: resp.text });
+
+    if (resp.dispatches.some((d) => d.verb === "SdExport")) break;
+    if (resp.dispatches.length === 0) break;
+  }
+
+  return { dispatches: allDispatches, text: lastText, plan: planText };
 }
