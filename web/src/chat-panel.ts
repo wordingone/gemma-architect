@@ -221,6 +221,24 @@ export class ChatPanel {
         return;
       }
 
+      // §testMode: bypass real inference — inject fixture plan so verify can test
+      // foldable plan pane UI without a live model. SdExport as last dispatch
+      // terminates the run-plan loop on turn 1 (guarded by __testMode in SdExport handler).
+      if ((window as unknown as { __testMode?: boolean }).__testMode) {
+        this._removeThinking(thinking);
+        this._pushPlanMsg({
+          text: "Plan: small house fixture",
+          plan: "1. IfcWall\n2. IfcWall\n3. IfcSlab\n4. SdExport",
+          dispatches: [
+            { verb: "IfcWall", args: {} },
+            { verb: "IfcWall", args: {} },
+            { verb: "IfcSlab", args: {} },
+            { verb: "SdExport", args: { format: "gltf" } },
+          ],
+        });
+        return;
+      }
+
       const skillsToPass = matchedSkills.length > 0 ? matchedSkills : this._skills;
       const resp = await runAgentTurn({
         prompt: text,
