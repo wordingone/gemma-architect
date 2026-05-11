@@ -192,7 +192,7 @@ async function proposeDispatch(
   sceneVerbs: string[],
   refBpp: number,
   vpBpp: number,
-): Promise<Proposal> {
+): Promise<Proposal | null> {
   if (MOCK) {
     return {
       verb: MOCK_VERBS[_mockCallN % MOCK_VERBS.length],
@@ -234,7 +234,7 @@ async function proposeDispatch(
 
   const first = result?.dispatches?.[0];
   if (!first) {
-    return { verb: "IfcWall", args: {}, rationale: "__runDesignLoop returned no dispatch; fallback" };
+    return null;
   }
   return {
     verb: first.verb,
@@ -304,6 +304,11 @@ while (iterationN < MAX_ITERATIONS) {
     beforeResult?.ref_bpp ?? 0,
     beforeResult?.vp_bpp ?? 0,
   );
+  if (proposal === null) {
+    console.log(`  ↷ No dispatch proposed — skipping iteration (non-imp counter unchanged).`);
+    log({ ts: new Date().toISOString(), iteration_n: iterationN, active_tier: activeTier, dispatches: [], delta_before: beforeResult, delta_after: null, scorer_note: "skip: __runDesignLoop returned no dispatch", score: currentScore, action: "skip" });
+    continue;
+  }
   console.log(`  → ${proposal.verb} ${JSON.stringify(proposal.args)}: ${proposal.rationale}`);
 
   // 4. Execute dispatch
