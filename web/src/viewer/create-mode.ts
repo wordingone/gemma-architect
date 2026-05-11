@@ -135,6 +135,48 @@ type SnapVertex = { x: number; y: number; z: number; id: string };
 let _snapTarget: SnapVertex | null = null;
 export function getSnapTarget(): SnapVertex | null { return _snapTarget; }
 
+// ── Host-aware placement (door / window / opening) ───────────────────────────
+// On click, raycast against scene objects before committing the tool. If no valid
+// host is hit, reject the click and show a prompt. The host object's ID is stored
+// in _pendingHostId so builders can stamp it onto userData.hostExpressID.
+
+const HOST_TOOL_CREATORS: Record<string, string[]> = {
+  door:    ["wall"],
+  window:  ["wall"],
+  opening: ["wall", "slab", "ceiling", "roof"],
+};
+
+let _pendingHostId: string | null = null;
+
+function findHostMesh(
+  viewer: Viewer,
+  clientX: number,
+  clientY: number,
+  validCreators: string[],
+): THREE.Object3D | null {
+  const canvas = viewer.getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1,
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
+  const hits = raycaster.intersectObjects(viewer.getScene().children, true);
+  for (const hit of hits) {
+    const obj = hit.object;
+    const creator = (obj.userData as { creator?: string }).creator ?? "";
+    if (validCreators.includes(creator)) return obj;
+    // Also check parent (some builders wrap geometry in a Group)
+    const parent = obj.parent;
+    if (parent) {
+      const parentCreator = (parent.userData as { creator?: string }).creator ?? "";
+      if (validCreators.includes(parentCreator)) return parent;
+    }
+  }
+  return null;
+}
+
 function makeSnapId(x: number, y: number, z = 0): string {
   return `v:${Math.round(x * 1000)},${Math.round(y * 1000)},${Math.round(z * 1000)}`;
 }
@@ -395,6 +437,7 @@ function buildDoor(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: stri
   mesh.position.set(p.x, p.y, 0);
   mesh.userData.kind = "mesh";
   mesh.userData.creator = "door";
+  if (_pendingHostId) mesh.userData.hostExpressID = _pendingHostId;
   const chain = `// door: cut against host wall — wall.cut(makeBox(${round(w)}, ${round(t)}, ${round(h)}).translate([${round(p.x)}, ${round(p.y)}, 0]))`;
   return { mesh, chain };
 }
@@ -411,6 +454,7 @@ function buildWindow(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: st
   mesh.position.set(p.x, p.y, sill);
   mesh.userData.kind = "mesh";
   mesh.userData.creator = "window";
+  if (_pendingHostId) mesh.userData.hostExpressID = _pendingHostId;
   const chain = `// window: cut against host wall — wall.cut(makeBox(${round(w)}, ${round(t)}, ${round(h)}).translate([${round(p.x)}, ${round(p.y)}, ${round(sill)}]))`;
   return { mesh, chain };
 }
@@ -766,6 +810,7 @@ function buildOpening(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: s
   mesh.position.set(p.x, p.y, 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "opening";
+  if (_pendingHostId) mesh.userData.hostExpressID = _pendingHostId;
   const chain = `// opening: ${round(w)}×${round(h)} void at [${round(p.x)}, ${round(p.y)}, 0]`;
   return { mesh, chain };
 }
@@ -1238,9 +1283,23 @@ export function initCreateMode(viewer: Viewer): void {
     _lastPointerClient = { x: ev.clientX, y: ev.clientY };
     const vertex = !ev.altKey ? nearestSnapVertex(viewer, ev.clientX, ev.clientY) : null;
     const snapped = vertex ?? snapPoint(world.x, world.y);
+    // For host-placement tools (door/window/opening) raycast to find a valid host.
+    // Reject the click and prompt if no host is found.
+    const hostCreators = HOST_TOOL_CREATORS[tool];
+    if (hostCreators) {
+      const host = findHostMesh(viewer, ev.clientX, ev.clientY, hostCreators);
+      if (!host) {
+        const label = hostCreators.length === 1 ? hostCreators[0] : hostCreators.join(" or ");
+        setPickerHint(`click a ${label} to place`);
+        return;
+      }
+      _pendingHostId = (host.userData as { expressID?: string; uuid?: string }).expressID ?? host.uuid;
+      setPickerHint(null);
+    }
     // For level placement, raycast against scene geometry to inherit Z elevation (AC B.1).
     const z = tool === "level" ? getGeometryZ(viewer, ev.clientX, ev.clientY) : undefined;
     emitClickWorld(viewer, { ...snapped, z }, { tool });
+    _pendingHostId = null;
   }, { capture: true });
 
   // Cursor dot + rubber-band preview on every pointer move.

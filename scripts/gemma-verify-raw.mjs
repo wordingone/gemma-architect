@@ -2051,6 +2051,82 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('point-tool-places-marker', r.passed, r.evidence);
 }
 
+// ── Surface 46: host-aware-door-placement (#323) ──────────────────────────────
+// 1. Create wall, synthesize pointerdown on the wall surface → door placed with
+//    userData.hostExpressID set.
+// 2. Synthesize pointerdown on empty space → scene count unchanged (rejection).
+{
+  const r = await evaluate(`
+    (() => {
+      try {
+        // 1. Create wall from (0,0) to (5,0)
+        window.__emitClickWorld({ x: 0, y: 0 }, { tool: 'wall' });
+        const w = window.__emitClickWorld({ x: 5, y: 0 }, { tool: 'wall' });
+        if (!w) return { passed: false, evidence: { reason: 'wall not created' } };
+
+        const wallMesh = w.mesh;
+        const wallUuid = wallMesh.uuid;
+
+        // 2. Project wall center (midpoint x=2.5, y=0, z=1.5) to screen
+        const sc = window.__projectToScreen(2.5, 0, 1.5);
+        if (!sc) return { passed: false, evidence: { reason: '__projectToScreen returned null for wall center' } };
+
+        // 3. Activate door tool and dispatch real pointerdown on wall face
+        window.__dispatch('setActiveTool', { toolId: 'door' });
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+
+        const countBefore = window.__viewer.scene.children.length;
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, composed: true,
+          clientX: sc.x, clientY: sc.y,
+          pointerId: 1, pointerType: 'mouse', button: 0, buttons: 1,
+        }));
+        canvas.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, cancelable: true, composed: true,
+          clientX: sc.x, clientY: sc.y,
+          pointerId: 1, pointerType: 'mouse', button: 0, buttons: 0,
+        }));
+        const countAfter = window.__viewer.scene.children.length;
+
+        // 4. Find the door in scene and check hostExpressID
+        const doors = window.__viewer.scene.children.filter(c => c.userData?.creator === 'door');
+        const hasDoor = doors.length > 0;
+        const hostSet = doors.some(d => !!d.userData?.hostExpressID);
+
+        // 5. Rejection test: empty space click (far from any geometry)
+        // Canvas center near (500, 400) is typically a ground-plane-only area when
+        // scene only has grid + our test wall. We pick a corner far from the wall.
+        const countBeforeReject = window.__viewer.scene.children.length;
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, composed: true,
+          clientX: 50, clientY: 50,
+          pointerId: 1, pointerType: 'mouse', button: 0, buttons: 1,
+        }));
+        const countAfterReject = window.__viewer.scene.children.length;
+        const rejected = countAfterReject === countBeforeReject;
+
+        const passed = hasDoor && hostSet && rejected;
+        return {
+          passed,
+          evidence: {
+            hasDoor,
+            hostSet,
+            rejected,
+            doorCount: doors.length,
+            hostExpressID: doors[0]?.userData?.hostExpressID ?? null,
+            wallUuid,
+            screenCoord: sc,
+          },
+        };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!r) record('host-aware-door-placement', false, { reason: 'evaluate returned null' });
+  else record('host-aware-door-placement', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }
