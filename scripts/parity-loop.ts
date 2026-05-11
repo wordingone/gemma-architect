@@ -159,7 +159,7 @@ async function proposeDispatch(
     ? lastDeltas.map(d => `${d.dimension}: ${d.description}`).join("; ")
     : "no specific visual gaps identified";
   const attemptSummary = lastAttempts.length > 0
-    ? `Already dispatched: ${lastAttempts.slice(-5).join(", ")}.`
+    ? `Prior attempts (REVERTED=worsened bpp, kept otherwise): ${lastAttempts.slice(-3).join(", ")}.`
     : "No prior dispatches yet.";
 
   const prompt = [
@@ -302,7 +302,7 @@ while (iterationN < MAX_ITERATIONS) {
     score: scoreAfter,
     action,
   });
-  lastAttempts.push(`${proposal.verb}(${scoreBefore}→${scoreAfter})`);
+  lastAttempts.push(`${proposal.verb}(${scoreBefore}→${scoreAfter}${action === "revert" ? " REVERTED" : ""})`);
 
   // 7. Halt checks
   if (action === "halt") break;
