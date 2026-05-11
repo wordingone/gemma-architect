@@ -1211,6 +1211,14 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdClearScene
+  kernel_op: clearScene
+  args: []
+  topology_role: system
+  kg_predicates: []
+  synonyms: [clear scene, clear all, unload, unload all, reset scene, new scene]
+  alias_source: generic_cad_vocabulary
+
 - canonical_name: SdUndo
   kernel_op: undo
   args: []

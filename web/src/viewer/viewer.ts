@@ -892,7 +892,15 @@ export class Viewer {
   deleteSelected(): boolean {
     const removed = this.targetObject;
     if (!removed) return false;
-    this.scene.remove(removed);
+    // IFC sub-meshes are children of currentObject (not direct scene children);
+    // remove from their actual parent so scene.remove() doesn't silently no-op.
+    if (removed.parent === this.scene) {
+      this.scene.remove(removed);
+    } else if (removed.parent) {
+      removed.parent.remove(removed);
+    } else {
+      return false;
+    }
     removed.traverse((child) => {
       const c = child as THREE.Mesh;
       if (!c.geometry) return;
@@ -1633,7 +1641,7 @@ export class Viewer {
     this.renderer.setScissorTest(false);
   };
 
-  private clearScene(): void {
+  clearScene(): void {
     if (this.currentMesh) {
       this.scene.remove(this.currentMesh);
       this.currentMesh.geometry.dispose();
@@ -1659,6 +1667,35 @@ export class Viewer {
       });
       this.currentObject = null;
     }
+    // Remove any remaining non-infrastructure scene children (dispatch-created
+    // objects, IFC sample-picker loads not tracked by currentObject, etc.).
+    const infraSet = new Set<THREE.Object3D>([
+      this.grid, this.axes, ...this.axisLabels,
+      ...(this.pivotProxy ? [this.pivotProxy] : []),
+      ...(this.snapMarker ? [this.snapMarker] : []),
+      ...this.gizmos,
+    ]);
+    const toRemove = this.scene.children.filter(
+      (c) => !infraSet.has(c) && !(c instanceof THREE.Light),
+    );
+    for (const obj of toRemove) {
+      this.scene.remove(obj);
+      obj.traverse((child) => {
+        const m = child as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+        const mat = m.material;
+        if (mat) {
+          if (Array.isArray(mat)) (mat as THREE.Material[]).forEach((mm) => mm.dispose());
+          else (mat as THREE.Material).dispose();
+        }
+      });
+    }
+    // Reset gumball / selection state.
+    this.targetObject = null;
+    this.pivotOffset.identity();
+    this.relocate.active = false;
+    for (const g of this.gizmos) g.detach();
+    this.updateRelocateBadge();
   }
 
   setMesh(mesh: MeshIn, bounds: Bounds): void {

@@ -169,23 +169,13 @@ async function assertNoCmdkOverlay(afterSurface) {
 
 // ── State isolation helpers (#396) ───────────────────────────────────────────
 
-// Remove all user-created scene objects, detach gizmos, clear command session.
-// Call at surface-group boundaries to prevent scene-state accumulation (#396).
+// Remove all user-created scene objects (including IFC sample-picker loads),
+// detach gizmos, clear command session. Uses SdClearScene dispatch (#475) so
+// the same path that clears the scene panel also covers IFC objects that
+// resetScene previously missed (they lacked userData.kind/creator/layerId).
 async function resetScene(label = '') {
   await evaluate(`(function() {
-    const v = window.__viewer;
-    if (!v) return;
-    if (v.gizmos) v.gizmos.forEach(g => { try { g.detach(); } catch (_) {} });
-    if (typeof v.selectObject === 'function') {
-      v.selectObject(null);
-    } else {
-      v.targetObject = null;
-    }
-    const toRemove = [];
-    v.scene.traverse(obj => {
-      if (obj.userData?.kind || obj.userData?.creator || obj.userData?.layerId) toRemove.push(obj);
-    });
-    toRemove.forEach(obj => obj.parent?.remove(obj));
+    window.__dispatch?.('SdClearScene', {});
     window.__clearCommandSession?.();
     window.__dispatch?.('SdSectionBoxOff', {});
     window.__dispatch?.('SdClippingPlanesClear', {});
@@ -2649,6 +2639,7 @@ await resetScene('before-box-inject');
   })()`, true, 25000);
   if (!r58) record('ifc-default-select', false, { reason: 'evaluate returned null (timeout)' });
   else record('ifc-default-select', r58.passed, r58.evidence);
+}
 
 // ── Surface 59: dispatch-sweep (#473) ────────────────────────────────────────
 // Verbs with realistic args sourced from spatial-api.yaml.

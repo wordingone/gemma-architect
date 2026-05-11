@@ -235,13 +235,18 @@ export class ScenePanel {
     }
     outlinerHtml += `</div>`;
 
-    const metaRow = `<div class="sp-meta-row" style="padding:6px 10px; font-family:var(--mono); font-size:10px; color:var(--ink-faint); border-bottom:1px solid var(--hairline-soft);">${fmtStr}${filenameStr}${entityStr}${schemaStr} &middot; ${this.nodes.length} mesh${this.nodes.length === 1 ? "" : "es"} &middot; ${totalTris.toLocaleString()} tri</div>`;
+    const metaRow = `<div class="sp-meta-row" style="padding:6px 10px; font-family:var(--mono); font-size:10px; color:var(--ink-faint); border-bottom:1px solid var(--hairline-soft); display:flex; align-items:center; justify-content:space-between;"><span>${fmtStr}${filenameStr}${entityStr}${schemaStr} &middot; ${this.nodes.length} mesh${this.nodes.length === 1 ? "" : "es"} &middot; ${totalTris.toLocaleString()} tri</span><button class="sp-unload-btn" data-action="clear-scene" title="Unload scene" type="button" style="background:none; border:none; cursor:pointer; color:var(--ink-faint); font-size:10px; padding:0 2px; line-height:1;">&#xD7; Unload</button></div>`;
     this.root.innerHTML = metaRow + outlinerHtml;
     this.wireRowActions();
     if (summary.hierarchy && summary.hierarchy.length > 0) this.autoSelectFirstIfc();
   }
 
   private wireRowActions(): void {
+    // × Unload button — clears the entire scene via SdClearScene dispatch.
+    const unloadBtn = this.root.querySelector<HTMLButtonElement>("[data-action='clear-scene']");
+    if (unloadBtn) {
+      unloadBtn.addEventListener("click", () => { dispatchSync("SdClearScene", {}); });
+    }
     // Collapsible section headers.
     this.root.querySelectorAll<HTMLElement>(".outliner-section-header").forEach((header) => {
       header.style.cursor = "pointer";

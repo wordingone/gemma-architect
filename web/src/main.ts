@@ -57,7 +57,7 @@ import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePoin
 import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
 import { tessellateSurface } from "./nurbs-surfaces";
 import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "./nurbs-surface-algorithms";
-import { addToMultiSelected, clearMultiSelected, getFilters, getSelected, setSelected, topologyAllowed } from "./viewer/selection-state";
+import { addToMultiSelected, clearMultiSelected, clearSelected, getFilters, getSelected, setSelected, topologyAllowed } from "./viewer/selection-state";
 import { initRenderModes, setRenderMode, type RenderMode } from "./render-modes";
 import * as THREE from "three";
 
@@ -1836,6 +1836,14 @@ registerHandler("SdResetCPlane", () => {
 installDefaultHandlers();
 
 const scenePanel = new ScenePanel(scenePanelEl, viewer);
+
+registerHandler("SdClearScene", () => {
+  viewer.clearScene();
+  scenePanel.clear();
+  clearSelected();
+  window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
+  return { ok: true, cleared: true };
+});
 
 // Isolate status bar indicator — show/hide #sb-isolate on viewer:isolate-changed.
 document.addEventListener("viewer:isolate-changed", (e) => {
