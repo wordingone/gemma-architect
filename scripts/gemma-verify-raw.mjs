@@ -2168,6 +2168,41 @@ async function assertNoCmdkOverlay(afterSurface) {
   else record('polyline-render-after-4-click', r.passed, r.evidence);
 }
 
+// ── Surface 48: cplane-status-reactive (#362) ────────────────────────────────
+// Snap dock CPlane label reads "World XY" on init; after SdSetCPlane mode=top,
+// it updates to show the new mode. Tests reactive viewer:cplane-changed listener.
+{
+  const r = await evaluate(`
+    (() => {
+      try {
+        // 1. Check initial label reads "World XY"
+        const label = document.querySelector('#snap-cplane-label');
+        if (!label) return { passed: false, evidence: { reason: '#snap-cplane-label not found in snap dock' } };
+        const initText = label.textContent;
+        const initOk = initText === 'World XY';
+
+        // 2. Dispatch SdSetCPlane mode=top
+        window.__dispatch('SdSetCPlane', { mode: 'top' });
+
+        // 3. Check label updated to reflect new plane
+        const afterText = label.textContent;
+        const afterOk = afterText !== 'World XY' && afterText.length > 0;
+
+        // 4. Reset to world
+        window.__dispatch('SdResetCPlane', {});
+        const resetText = label.textContent;
+        const resetOk = resetText === 'World XY';
+
+        const passed = initOk && afterOk && resetOk;
+        return { passed, evidence: { initText, afterText, resetText, initOk, afterOk, resetOk } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!r) record('cplane-status-reactive', false, { reason: 'evaluate returned null' });
+  else record('cplane-status-reactive', r.passed, r.evidence);
+}
+
 } finally {
   await cleanup();
 }

@@ -280,7 +280,7 @@ function buildSnapDock(): HTMLElement {
     </div>
     <div class="snap-row"><span class="k">step</span><input class="snap-input" id="snap-step-input" type="number" min="0.001" step="0.1" value="${snap.step.toFixed(2)}"><span class="u">m</span></div>
     <div class="snap-row"><span class="k">angle</span><input class="snap-input" id="snap-angle-input" type="number" min="0.1" step="1" value="${snap.angleStep}"><span class="u">°</span></div>
-    <div class="snap-row"><span class="k">cplane</span><span class="v">XY · z=0</span></div>
+    <div class="snap-row snap-row--cplane" title="Click to change construction plane" style="cursor:pointer"><span class="k">cplane</span><span class="v" id="snap-cplane-label">World XY</span></div>
   `;
   // Wire each checkbox to its corresponding snap-state setter. Setters emit
   // so subscribed listeners (viewer grid rebuild, etc.) refresh automatically.
@@ -326,6 +326,41 @@ function buildSnapDock(): HTMLElement {
       }
     });
   }
+
+  // CPlane label — reactive update on viewer:cplane-changed (#362).
+  const cplaneLabel = root.querySelector<HTMLElement>("#snap-cplane-label");
+  if (cplaneLabel) {
+    const cplaneRow = root.querySelector<HTMLElement>(".snap-row--cplane");
+    // Map SdSetCPlane mode string + CPlane kind to a display label.
+    const cplaneDisplayName = (mode: string, kind: string): string => {
+      if (kind === "world") return "World XY";
+      if (kind === "view-derived") return `${mode.charAt(0).toUpperCase()}${mode.slice(1)} (view)`;
+      if (kind === "host-derived") return "Host surface";
+      if (mode && mode !== "world") return `${mode.charAt(0).toUpperCase()}${mode.slice(1)}`;
+      return "Custom";
+    };
+
+    window.addEventListener("viewer:cplane-changed", (e) => {
+      const { cplane, mode } = (e as CustomEvent<{ cplane: { kind: string }; mode: string }>).detail;
+      const label = cplaneDisplayName(mode ?? "", cplane?.kind ?? "world");
+      cplaneLabel.textContent = label;
+      // Highlight when non-default plane is active.
+      cplaneLabel.style.color = cplane?.kind === "world" ? "" : "var(--sanguine)";
+    });
+
+    // Click opens cmdk pre-filled with SdSetCPlane so user can pick a mode.
+    cplaneRow?.addEventListener("click", () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "k", code: "KeyK", ctrlKey: true, bubbles: true,
+      }));
+      // Pre-fill cmdk input with the verb after a tick (cmdk needs to mount first).
+      setTimeout(() => {
+        const cmdk = document.querySelector<HTMLInputElement>(".cmdk-input");
+        if (cmdk) { cmdk.value = "SdSetCPlane "; cmdk.dispatchEvent(new Event("input", { bubbles: true })); }
+      }, 80);
+    });
+  }
+
   return root;
 }
 
