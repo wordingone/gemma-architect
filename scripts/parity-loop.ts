@@ -165,6 +165,9 @@ async function proposeDispatch(
   _vpPath: string,
   lastDeltas: ScoreResult["deltas"],
   lastAttempts: string[],
+  sceneVerbs: string[],
+  refBpp: number,
+  vpBpp: number,
 ): Promise<Proposal> {
   if (MOCK) {
     return {
@@ -180,15 +183,25 @@ async function proposeDispatch(
   const attemptSummary = lastAttempts.length > 0
     ? `Prior attempts (REVERTED=worsened bpp, kept otherwise): ${lastAttempts.slice(-3).join(", ")}.`
     : "No prior dispatches yet.";
+  const sceneSummary = sceneVerbs.length > 0
+    ? `Scene has ${sceneVerbs.length} kept element(s): ${sceneVerbs.slice(-5).join(", ")}.`
+    : "Scene is empty.";
+  const bppHint = refBpp > 0
+    ? (vpBpp < refBpp
+      ? `ADD geometry/complexity — viewport bpp (${vpBpp.toFixed(4)}) is BELOW reference bpp (${refBpp.toFixed(4)}); scene needs more detail.`
+      : `SIMPLIFY/REDUCE — viewport bpp (${vpBpp.toFixed(4)}) is ABOVE reference bpp (${refBpp.toFixed(4)}); scene is already more complex than reference.`)
+    : "";
 
   const prompt = [
     `Visual parity score: ${currentScore}/${activeTier} (targeting ${activeTier}% match).`,
+    sceneSummary,
+    bppHint,
     attemptSummary,
     `Visual gaps: ${deltaSummary}.`,
     `Dispatch ONE building element that closes the largest visual gap.`,
     `Prefer IFC primitives: IfcWall, IfcSlab, IfcColumn, IfcBeam, IfcDoor, IfcWindow, IfcRoof.`,
     `Return only the dispatch command — no explanation.`,
-  ].join(" ");
+  ].filter(s => s.length > 0).join(" ");
 
   type LoopResult = { dispatches?: Array<{ verb: string; args?: Record<string, unknown> }>; text?: string };
   const result = await evaluate(
@@ -218,6 +231,7 @@ mkdirSync(PARITY_BANK_DIR, { recursive: true });
 
 const TMP = tmpdir();
 const lastAttempts: string[] = [];
+const sceneVerbs: string[] = [];
 let consecutiveNonImprovements = 0;
 let iterationN = 0;
 let currentScore = 0;
@@ -258,7 +272,14 @@ while (iterationN < MAX_ITERATIONS) {
   const scoreBefore = beforeResult?.score ?? currentScore;
 
   // 3. Propose dispatch
-  const proposal = await proposeDispatch(vpBefore, beforeResult?.deltas ?? [], lastAttempts);
+  const proposal = await proposeDispatch(
+    vpBefore,
+    beforeResult?.deltas ?? [],
+    lastAttempts,
+    sceneVerbs,
+    beforeResult?.ref_bpp ?? 0,
+    beforeResult?.vp_bpp ?? 0,
+  );
   console.log(`  → ${proposal.verb} ${JSON.stringify(proposal.args)}: ${proposal.rationale}`);
 
   // 4. Execute dispatch
@@ -327,6 +348,7 @@ while (iterationN < MAX_ITERATIONS) {
     action,
   });
   lastAttempts.push(`${proposal.verb}(${scoreBefore}→${scoreAfter}${action === "revert" ? " REVERTED" : ""})`);
+  if (action !== "revert") sceneVerbs.push(proposal.verb);
 
   // 7. Halt checks
   if (action === "halt") break;
