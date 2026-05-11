@@ -25,7 +25,7 @@ import { compileDsl } from "./commands/dsl-eval";
 import { dispatchSync, type DispatchArgs } from "./commands/dispatch";
 import { startCommandSession } from "./commands/command-session";
 import { setPickerHint } from "./viewer/create-mode";
-import { setState, subscribe as subscribeAppState, type ViewName } from "./app-state";
+import { getState, setState, subscribe as subscribeAppState, type ViewName } from "./app-state";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "./viewer/snap-state";
 import { buildSelectionFiltersPanel } from "./scene-panel";
 import { levelStore, type Level } from "./levels";
@@ -439,8 +439,34 @@ function buildParitySubsection(): HTMLElement {
   return body;
 }
 
+function ifcClassOf(name: string): string {
+  const n = name.toLowerCase();
+  if (/(wall|slab|floor|roof|covering|space)/.test(n)) return "ARCHITECTURE";
+  if (/(column|beam|footing|pile|member|brace|truss)/.test(n)) return "STRUCTURE";
+  if (/(door|window|opening|reveal)/.test(n)) return "OPENINGS";
+  if (/(stair|ramp|railing|hand)/.test(n)) return "CIRCULATION";
+  return "MESHES";
+}
+
 function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body hier-tab");
+
+  // COMP scope header bar
+  const compBar = el("div");
+  compBar.style.cssText = "display:flex; align-items:center; gap:6px; padding:4px 8px 4px 10px; border-bottom:1px solid var(--hairline-soft); user-select:none;";
+  const compBtn = el("button");
+  compBtn.id = "comp-scope-btn";
+  compBtn.textContent = "COMP";
+  compBtn.title = "Toggle component scope — filter tree to selected element";
+  compBtn.style.cssText = "font-family:var(--mono); font-size:9px; letter-spacing:0.1em; padding:2px 6px; border-radius:3px; border:1px solid var(--hairline-soft); background:none; cursor:pointer; color:var(--ink-dim);";
+  const compHint = el("span");
+  compHint.id = "comp-scope-hint";
+  compHint.style.cssText = "font-family:var(--mono); font-size:9px; color:var(--ink-faint); flex:1;";
+  compHint.textContent = "scene";
+  compBar.appendChild(compBtn);
+  compBar.appendChild(compHint);
+  wrap.appendChild(compBar);
+
   if (scenePanel) {
     scenePanel.classList.add("scene-panel-embed");
     wrap.appendChild(scenePanel);
@@ -451,7 +477,9 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
     wrap.appendChild(hint);
   }
 
-  // Collapsible sub-section divider: title bar + body.
+  // Track subsection header+body pairs for COMP hide/show
+  const subsectionEls: HTMLElement[] = [];
+
   function addSubsection(title: string, body: HTMLElement): void {
     const hdr = el("div");
     hdr.style.cssText =
@@ -473,6 +501,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
       body.style.display = open ? "" : "none";
       arrow.textContent = open ? "▾" : "▸";
     });
+    subsectionEls.push(hdr, body);
     wrap.appendChild(hdr);
     wrap.appendChild(body);
   }
@@ -485,6 +514,56 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   addSubsection("REFERENCE GEOMETRY", refBody);
   addSubsection("PARITY", buildParitySubsection());
   addSubsection("VIEW STATE", buildViewStateSection());
+
+  // COMP scope logic
+  let _compScopeUuid: string | null = null;
+
+  function applyCompFilter(uuid: string | null): void {
+    _compScopeUuid = uuid;
+    if (!getState("compScope") || !scenePanel) return;
+    if (!uuid) {
+      compHint.textContent = "select an object";
+      scenePanel.querySelectorAll<HTMLElement>(".outliner-section").forEach(s => { s.style.display = ""; });
+      return;
+    }
+    const viewer = (window as unknown as { __viewer?: { getActiveObject?: () => { name?: string } | null } }).__viewer;
+    const objName = viewer?.getActiveObject?.()?.name ?? "";
+    const ifcClass = ifcClassOf(objName);
+    compHint.textContent = ifcClass.toLowerCase();
+    scenePanel.querySelectorAll<HTMLElement>(".outliner-section").forEach(section => {
+      const key = section.dataset["section"] ?? "";
+      if (key.startsWith("class-")) {
+        section.style.display = key === `class-${ifcClass}` ? "" : "none";
+      } else {
+        section.style.display = "";
+      }
+    });
+  }
+
+  function setCompScope(on: boolean): void {
+    compBtn.classList.toggle("active", on);
+    compBtn.style.background = on ? "var(--sanguine)" : "";
+    compBtn.style.color = on ? "#fff" : "";
+    compBtn.style.borderColor = on ? "var(--sanguine)" : "";
+    subsectionEls.forEach(e => { e.style.display = on ? "none" : ""; });
+    if (!on) {
+      compHint.textContent = "scene";
+      if (scenePanel) scenePanel.querySelectorAll<HTMLElement>(".outliner-section").forEach(s => { s.style.display = ""; });
+    } else {
+      applyCompFilter(_compScopeUuid);
+    }
+  }
+
+  compBtn.addEventListener("click", () => {
+    const next = !getState("compScope");
+    setState("compScope", next);
+    setCompScope(next);
+  });
+
+  window.addEventListener("viewer:select", (rawEv: Event) => {
+    const uuid: string | null = (rawEv as CustomEvent<{ uuid: string | null }>).detail?.uuid ?? null;
+    if (getState("compScope")) applyCompFilter(uuid);
+  });
 
   return wrap;
 }
