@@ -2403,7 +2403,16 @@ await resetScene('before-box-inject');
 //   - window.__chatPanel or ChatPanel instance provides _pendingImage field plumbing
 //   (end-to-end model call not exercised here — intake wiring only)
 {
-  const r = await cdpEvaluate(page, `(() => {
+  // Ensure the prompt dock tab is active and inner mode is "chat" (not "console").
+  await evaluate(`(() => {
+    const tab = document.querySelector('.dock-tab[data-tab="prompt"]');
+    if (tab) tab.click();
+    // If mode-pill shows "console", click it to switch inner pane to chat.
+    const modePill = document.querySelector('.mode-pill[data-mode="console"]');
+    if (modePill) modePill.click();
+  })()`);
+  await new Promise(r => setTimeout(r, 200));
+  const r = await evaluate(`(() => {
     try {
       const attachBtn = document.querySelector('.chat-attach-btn');
       const previewEl = document.querySelector('.chat-image-preview');

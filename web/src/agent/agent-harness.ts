@@ -774,7 +774,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const resp = await fetch(`${REMOTE_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, max_tokens: 1024, temperature: 0.1 }),
+    body: JSON.stringify({ messages, max_tokens: 4096, temperature: 0.1 }),
   });
   if (!resp.ok) throw new Error(`remote agent: HTTP ${resp.status} from ${REMOTE_URL}`);
 
@@ -804,7 +804,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     const compResp = await fetch(`${REMOTE_URL}/completion`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, n_predict: 1024, temperature: 0.1, stop: ["<end_of_turn>"] }),
+      body: JSON.stringify({ prompt, n_predict: 4096, temperature: 0.1, stop: ["<end_of_turn>"] }),
     });
     if (!compResp.ok) throw new Error(`remote agent fallback: HTTP ${compResp.status}`);
     const compJson = (await compResp.json()) as { content: string; tokens_predicted?: number };
