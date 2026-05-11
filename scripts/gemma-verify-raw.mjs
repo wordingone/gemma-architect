@@ -1027,7 +1027,7 @@ await resetScene('before-box-inject');
             : (t.classList.contains('active') || t.getAttribute('aria-selected') === 'true')
               ? { ok: true } : { ok: false, reason: 'mode-tab ' + mode + ' not active after click' };
         }
-        const dockMap = { 'Prompt': 'prompt', 'Node graph': 'nodes', 'Parameters': 'parameters', 'History': 'history' };
+        const dockMap = { 'Prompt': 'prompt', 'Skills': 'skills', 'History': 'history' };
         if (dockMap[label]) {
           const t = document.querySelector('.dock-tab[data-tab="' + dockMap[label] + '"]');
           return !t ? { ok: false, reason: '.dock-tab[data-tab="' + dockMap[label] + '"] absent' }
