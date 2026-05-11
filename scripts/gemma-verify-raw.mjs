@@ -1239,8 +1239,9 @@ await resetScene('before-box-inject');
 }
 
 // ── Surface 25: sidebar-tab-cycle-preserves-geometry (#287/#296) ─────────────
-// Dispatch IfcWall, record visible mesh count, cycle SCENE→INSPECT→ASSETS→SCENE,
+// Dispatch IfcWall, record visible mesh count, cycle SCENE→INSPECT→SCENE,
 // assert count unchanged. Regression guard for eye-toggle inversion (#296).
+// ASSETS was removed from the sidebar in #400 (migrated to ribbon phone-slider).
 {
   const r = await evaluate(`
   (async () => {
@@ -1262,7 +1263,7 @@ await resetScene('before-box-inject');
     const before = countVisible();
     if (before === 0) return { passed: false, evidence: { reason: 'no visible geometry before cycle', before } };
 
-    for (const tabId of ['inspect', 'assets', 'scene']) {
+    for (const tabId of ['inspect', 'scene']) {
       const tab = document.querySelector('.sb-tab[data-tab="' + tabId + '"]');
       if (!tab) return { passed: false, evidence: { reason: 'tab not found', tabId } };
       tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
