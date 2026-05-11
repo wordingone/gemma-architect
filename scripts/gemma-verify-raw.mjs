@@ -344,12 +344,19 @@ await resetScene('before-box-inject');
       const before = v.scene.children.length;
       const input = document.querySelector("#console-input");
       if (!input) return { ok: false, reason: "no #console-input" };
+      const pill = document.querySelector(".mode-pill");
+      const pillMode = pill?.getAttribute("data-mode") ?? "unknown";
+      // Force console mode if not already there (resetToBaseState may have left prompt mode).
+      if (pill && pillMode !== "console") {
+        pill.click();
+        await new Promise(r => setTimeout(r, 300));
+      }
       input.value = "box (0 0) width=1 depth=1 height=1";
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
       input.dispatchEvent(new KeyboardEvent("keyup",   { key: "Enter", code: "Enter", keyCode: 13, bubbles: true }));
-      await new Promise(r => setTimeout(r, 800));
-      return { ok: v.scene.children.length > before, before, after: v.scene.children.length };
+      await new Promise(r => setTimeout(r, 1200));
+      return { ok: v.scene.children.length > before, before, after: v.scene.children.length, pillMode };
     })()`);
   if (!setup.ok) { console.error("SETUP FAILED:", JSON.stringify(setup)); process.exit(3); }
   console.log(`  setup: mesh injected (scene ${setup.before} → ${setup.after} children)`);
