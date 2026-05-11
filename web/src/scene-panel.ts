@@ -148,52 +148,30 @@ export class ScenePanel {
     let outlinerHtml = `<div class="outliner">`;
 
     if (summary.hierarchy && summary.hierarchy.length > 0) {
-      // Storey-organized IFC tree.
-      const storeyMap = new Map<string, { elevation: number; classes: Map<string, IfcHierarchyElement[]> }>();
+      // Group by IFC class — every element has one; eliminates "Unassigned" bucket
+      // caused by elements that reach storeys transitively (IfcSpace → IfcBuildingStorey)
+      // rather than via direct IfcRelContainedInSpatialStructure.
+      const classMap = new Map<string, IfcHierarchyElement[]>();
       for (const el of summary.hierarchy) {
-        const key = el.storeyName;
-        if (!storeyMap.has(key)) storeyMap.set(key, { elevation: el.storeyElevation, classes: new Map() });
-        const storey = storeyMap.get(key)!;
-        if (!storey.classes.has(el.ifcClass)) storey.classes.set(el.ifcClass, []);
-        storey.classes.get(el.ifcClass)!.push(el);
+        if (!classMap.has(el.ifcClass)) classMap.set(el.ifcClass, []);
+        classMap.get(el.ifcClass)!.push(el);
       }
-      // Sort storeys by elevation; "Unassigned" last.
-      const storeyKeys = [...storeyMap.keys()].sort((a, b) => {
-        if (a === "Unassigned") return 1;
-        if (b === "Unassigned") return -1;
-        return storeyMap.get(a)!.elevation - storeyMap.get(b)!.elevation;
-      });
-      for (const storeyKey of storeyKeys) {
-        const storey = storeyMap.get(storeyKey)!;
-        const elevStr = storeyKey !== "Unassigned" ? ` (${storey.elevation.toFixed(2)}m)` : "";
-        const storeyTotal = [...storey.classes.values()].reduce((s, arr) => s + arr.length, 0);
-        const sectionId = `storey-${storeyKey}`;
+      const classKeys = [...classMap.keys()].sort();
+      for (const cls of classKeys) {
+        const elems = classMap.get(cls)!;
         outlinerHtml += `
-          <div class="outliner-section" data-section="${escapeAttr(sectionId)}">
+          <div class="outliner-section" data-section="${escapeAttr(`class-${cls}`)}">
             <div class="outliner-section-header">
               ${iconSVG("chevron-down", 9)}
-              ${escapeHtml(storeyKey)}${escapeHtml(elevStr)}
-              <span class="count">${storeyTotal}</span>
+              ${escapeHtml(cls)}
+              <span class="count">${elems.length}</span>
             </div>`;
-        const classKeys = [...storey.classes.keys()].sort();
-        for (const cls of classKeys) {
-          const elems = storey.classes.get(cls)!;
-          const classSectionId = `class-${cls}`;
+        for (const el of elems) {
+          const label = el.name && el.name !== `#${el.expressID}` ? el.name : `#${el.expressID}`;
           outlinerHtml += `
-            <div class="outliner-section" data-section="${escapeAttr(classSectionId)}" style="margin-left:10px;">
-              <div class="outliner-section-header">
-                ${iconSVG("chevron-down", 9)}
-                ${escapeHtml(cls)}
-                <span class="count">${elems.length}</span>
-              </div>`;
-          for (const el of elems) {
-            const label = el.name && el.name !== `#${el.expressID}` ? el.name : `#${el.expressID}`;
-            outlinerHtml += `
-              <div class="outliner-row" data-express-id="${el.expressID}" style="--depth:2">
-                <span class="name" data-action="ifc-select" data-express-id="${el.expressID}" title="${escapeAttr(el.guid)}" style="cursor:pointer;">${escapeHtml(label)}</span>
-              </div>`;
-          }
-          outlinerHtml += `</div>`;
+            <div class="outliner-row" data-express-id="${el.expressID}" style="--depth:1">
+              <span class="name" data-action="ifc-select" data-express-id="${el.expressID}" title="${escapeAttr(label)}" style="cursor:pointer;">${escapeHtml(label)}</span>
+            </div>`;
         }
         outlinerHtml += `</div>`;
       }
