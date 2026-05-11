@@ -954,6 +954,28 @@ function buildRoofGeometry(
       geo.computeVertexNormals();
       return geo;
     }
+    case "shed": {
+      // Mono-pitched (lean-to): front edge low, back edge at ridgeH.
+      const v = new Float32Array([
+        -w/2, -d/2, 0,       // 0 front-left (low)
+         w/2, -d/2, 0,       // 1 front-right (low)
+         w/2,  d/2, ridgeH,  // 2 back-right (high)
+        -w/2,  d/2, ridgeH,  // 3 back-left (high)
+        -w/2,  d/2, 0,       // 4 back-left (base)
+         w/2,  d/2, 0,       // 5 back-right (base)
+      ]);
+      const idx = new Uint16Array([
+        0,1,2, 0,2,3,   // slope surface
+        0,3,4,          // left gable end
+        1,5,2,          // right gable end
+        0,4,5, 0,5,1,   // floor
+      ]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
+      geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      geo.computeVertexNormals();
+      return geo;
+    }
     default: {
       // flat: low box slab
       const geo = new THREE.BoxGeometry(w, d, Math.max(0.15, ridgeH * 0.3));
@@ -987,6 +1009,7 @@ registerHandler("IfcRoof", (args) => {
     flat: "FLAT_ROOF",
     pitched: "GABLE_ROOF",
     hipped: "HIP_ROOF",
+    shed: "SHED_ROOF",
     curved: "BARREL_ROOF",
     combination: "MANSARD_ROOF",
   } as Record<string, string>)[roofType] ?? "NOTDEFINED";

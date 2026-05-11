@@ -293,7 +293,7 @@ BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apa
 - IfcDoor: width=0.9, height=2.1, wallThickness=0.15. One per building minimum; front entry on south wall.
 - IfcWindow: width=1.2, height=1.2, sillH=0.9. Minimum 2 per exterior elevation (south + north or east + west).
 - IfcColumn: size=0.3 at building corners and wall junctions; height = floor height. Add when span >6m.
-- IfcRoof: roofType=pitched (residential house/tiny home), roofType=hipped (villa), roofType=flat (apartment/office). pitchDeg=35 default.
+- IfcRoof: roofType=pitched (residential house/tiny home), roofType=hipped (villa), roofType=flat (apartment/office), roofType=shed (lean-to/mono-pitch, industrial annexe). pitchDeg=35 default.
 - SdExport: always end with format=ifc, target=scene.
 - Room sizes (net internal): bedroom 9-15m², living 18-25m², kitchen 8-12m², bathroom 4-6m².
 - Floor heights: residential 3.0m, office 3.5m, industrial/bay 4.5m.
