@@ -115,25 +115,44 @@ async function takeScreenshot(savePath: string): Promise<void> {
 
 // ── Score via parity-score.mjs ─────────────────────────────────────────────
 
-interface ScoreResult { score: number; deltas: Array<{ dimension: string; description: string }> }
+interface ScoreResult {
+  score: number;
+  deltas: Array<{ dimension: string; description: string }>;
+  ref_bpp?: number;
+  vp_bpp?: number;
+  bpp_delta?: number;
+}
+
+interface ScoreOut { result: ScoreResult | null; note: string }
 
 let _mockCallN = 0;
 
-function scoreViewport(vpPath: string): ScoreResult | null {
+function scoreViewport(vpPath: string): ScoreOut {
   if (MOCK) {
     _mockCallN++;
-    return { score: Math.min(100, _mockCallN * 5), deltas: [] };
+    return { result: { score: Math.min(100, _mockCallN * 5), deltas: [] }, note: "mock" };
   }
   const r = spawnSync(
     "node", [PARITY_SCORER, refImagePath, vpPath],
     { timeout: 90_000, encoding: "utf8" },
   );
   if (r.status !== 0) {
-    console.error(`parity-score failed: ${(r.stderr as string).slice(0, 200)}`);
-    return null;
+    const detail = [
+      r.error ? `spawn_error=${(r.error as Error).message}` : null,
+      r.status !== null ? `exit=${r.status}` : "exit=null",
+      (r.stderr as string).trim() ? `stderr=${(r.stderr as string).slice(0, 200)}` : "stderr=empty",
+    ].filter(Boolean).join("; ");
+    const note = `parity-score failed: ${detail}`;
+    console.error(note);
+    return { result: null, note };
   }
-  try { return JSON.parse((r.stdout as string).trim()); }
-  catch { return null; }
+  try {
+    return { result: JSON.parse((r.stdout as string).trim()) as ScoreResult, note: "ok" };
+  } catch {
+    const note = "parity-score: JSON parse error";
+    console.error(note);
+    return { result: null, note };
+  }
 }
 
 // ── Dispatch proposal via __runDesignLoop ─────────────────────────────────
@@ -211,7 +230,7 @@ console.log(`JSONL → ${ITERATIONS_JSONL}`);
 // Initial score — advance activeTier past any already-banked tiers
 const vpInit = join(TMP, "parity-init.jpg");
 await takeScreenshot(vpInit);
-const initResult = scoreViewport(vpInit);
+const { result: initResult } = scoreViewport(vpInit);
 currentScore = initResult?.score ?? 0;
 while (activeTierIdx < TIER_LADDER.length && currentScore >= TIER_LADDER[activeTierIdx]) {
   activeTierIdx++;
@@ -235,7 +254,7 @@ while (iterationN < MAX_ITERATIONS) {
   await takeScreenshot(vpBefore);
 
   // 2. Score before
-  const beforeResult = scoreViewport(vpBefore);
+  const { result: beforeResult, note: beforeNote } = scoreViewport(vpBefore);
   const scoreBefore = beforeResult?.score ?? currentScore;
 
   // 3. Propose dispatch
@@ -246,10 +265,11 @@ while (iterationN < MAX_ITERATIONS) {
   await evaluate(`window.__dispatch(${JSON.stringify(proposal.verb)}, ${JSON.stringify(proposal.args)})`);
   await new Promise<void>(r => setTimeout(r, 600));
 
-  // 5. Re-score after
+  // 5. Re-score after — brief pause lets Windows flush the file before child-process read
   const vpAfter = join(TMP, `parity-${iterationN}-after.jpg`);
   await takeScreenshot(vpAfter);
-  const afterResult = scoreViewport(vpAfter);
+  await new Promise<void>(r => setTimeout(r, 200));
+  const { result: afterResult, note: afterNote } = scoreViewport(vpAfter);
   const scoreAfter = afterResult?.score ?? scoreBefore;
 
   const improved = scoreAfter > scoreBefore;
@@ -291,6 +311,10 @@ while (iterationN < MAX_ITERATIONS) {
   }
 
   // 6. Log entry
+  const scorerErrors = [
+    beforeNote !== "ok" ? `before:${beforeNote}` : null,
+    afterNote !== "ok" ? `after:${afterNote}` : null,
+  ].filter(Boolean).join("; ");
   log({
     ts: new Date().toISOString(),
     iteration_n: iterationN,
@@ -298,7 +322,7 @@ while (iterationN < MAX_ITERATIONS) {
     dispatches: [{ verb: proposal.verb, args: proposal.args, rationale: proposal.rationale }],
     delta_before: beforeResult,
     delta_after: afterResult,
-    scorer_note: proposal.rationale,
+    scorer_note: scorerErrors || proposal.rationale,
     score: scoreAfter,
     action,
   });
