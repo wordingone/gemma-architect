@@ -1207,7 +1207,6 @@ html[data-mode="night"] .paper-stage {
 
 /* ── Ribbon asset palette ─────────────────────────────────────────────────── */
 .ribbon-assets {
-  margin-left: auto;
   display: flex;
   flex-direction: row;
   align-items: stretch;
