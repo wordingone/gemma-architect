@@ -645,6 +645,34 @@ export function buildSystemPrompt(skills?: Skill[]): string {
   ].join("\n\n");
 }
 
+// Compact system prompt for the on-device WebGPU path (#424 follow-up).
+// The E2B model's compiled context window (~2048 tokens) cannot fit the full
+// prompt (summariseDictionary alone is ~1200 tokens). This version:
+//   - drops BUILDING_DEFAULTS (large, inferred by model training)
+//   - uses 1 minimal few-shot example instead of 6
+//   - replaces summariseDictionary (full args) with verb-names-only list
+// Result: ~600-700 tokens vs ~3000, leaving ~1300+ tokens for generation.
+export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
+  const dict = getDictionary();
+  const implemented = new Set(listHandlers());
+  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.canonical_name)) : dict;
+  const verbNames = available.map((e) => e.canonical_name).join(", ");
+  const verbList = verbNames.length > 0
+    ? `Available verbs (use ONLY these exact names): ${verbNames}`
+    : "No verbs currently available. Do not emit function calls.";
+
+  return [
+    "You are Gemma·Architect, a parametric CAD assistant. Be direct — no preamble.",
+    "PLAN BEFORE DISPATCH: emit <plan> block first, then <tool_call> blocks.\nExample:\n<plan>\n1. IfcWall — profile=[[0,0],[5,0]], height=2.8\n</plan>\n<tool_call>{\"command\":\"IfcWall\",\"parameters\":{\"profile\":[[0,0],[5,0]],\"height\":2.8},\"metadata\":{\"source\":\"agent\"}}</tool_call>",
+    "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
+    DIMENSION_RULES,
+    verbList,
+    `Current scene: ${buildSceneContext()}`,
+    summariseSkills(skills),
+    "For questions (no geometry): plain text only, ≤60 words.",
+  ].join("\n\n");
+}
+
 export function buildToolDefinitions(): Record<string, unknown>[] {
   // Not used in the WebGPU path (function calls are text-parsed, not schema-validated).
   return [];
@@ -874,7 +902,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
 
   const messages = [
-    { role: "system" as const, content: buildSystemPrompt(req.skills) },
+    { role: "system" as const, content: buildWebGPUSystemPrompt(req.skills) },
     ...trimmedHistory,
     { role: "user" as const, content: userContent },
   ];
