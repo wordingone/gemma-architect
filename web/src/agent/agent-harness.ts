@@ -58,6 +58,12 @@ const REMOTE_URL: string = (import.meta.env as Record<string, string>).VITE_GEMM
 // whether the model loaded successfully in-browser.
 let _webgpuFallbackEngaged = false;
 
+// On-device WebGPU context size limit (#424). Shared with prefill warmup (#492).
+const WEBGPU_CONTEXT_LIMIT = 2048;
+
+// System-prompt prefill deduplication guard (#492).
+let _prefillDone = false;
+
 // ---- Model loading (in-browser path) ---------------------------------------
 
 // Model candidates — switch via ?gemma_model=e4b URL param (E2B is default).
@@ -201,12 +207,12 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
   return _loadPromise!;
 }
 
-/** Fire-and-forget model prefetch. Safe to call early (CREATE tab focus).
- *  No-op when remote inference is configured — badge is set to LIVE·REMOTE immediately. */
+/** Fire-and-forget model prefetch + system-prompt KV warmup (#492).
+ *  Safe to call early (prompt tab focus / DOMContentLoaded).
+ *  Badge flow: PRIMING → READY (remote) | LOADING → LIVE → PRIMING → READY (on-device). */
 export function prefetchModel(): void {
   if (REMOTE_URL) {
-    // Remote path: mark as ready immediately so bench + UI don't wait for an in-browser load.
-    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
+    void prefillSystemPromptAsync();
     return;
   }
   // P10-4: run VRAM ceiling check before starting the heavy model load.
@@ -216,8 +222,64 @@ export function prefetchModel(): void {
       _webgpuFallbackEngaged = true; // re-use P10-2 flag to force remote routing
       return;
     }
-    getModel().catch(() => { /* errors surface on first runAgentTurn */ });
+    getModel()
+      .then(() => prefillSystemPromptAsync())
+      .catch(() => { /* errors surface on first runAgentTurn */ });
   });
+}
+
+/** System-prompt KV warmup (#492). Fires once per session.
+ *  Remote: primes llama-server KV prefix cache so subsequent prompts skip system-prompt re-prefill.
+ *  On-device: warms GPU shader pipeline and ONNX execution context. */
+async function prefillSystemPromptAsync(): Promise<void> {
+  if (_prefillDone) return;
+  _prefillDone = true;
+
+  if (REMOTE_URL) {
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · ⟳ PRIMING`);
+    try {
+      const messages = [
+        { role: "system" as const, content: buildSystemPrompt() },
+        { role: "user" as const, content: "." },
+      ];
+      await fetch(`${REMOTE_URL}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, max_tokens: 1, temperature: 0.1 }),
+      });
+      updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · READY`);
+    } catch {
+      _prefillDone = false;
+      updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
+    }
+    return;
+  }
+
+  // On-device path: warm GPU shader pipeline with a 1-token probe generation.
+  try {
+    const { model, processor } = await getModel();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const proc = processor as any;
+    const label = document.getElementById(BADGE_ID)?.innerHTML?.includes("CPU") ? "CPU" : "GPU";
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${label} · ⟳ PRIMING`);
+    const chatText: string = proc.apply_chat_template(
+      [
+        { role: "system", content: buildWebGPUSystemPrompt() },
+        { role: "user", content: "." },
+      ],
+      { add_generation_prompt: true, tokenize: false },
+    ) as string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inputs: any = await proc(chatText, null);
+    const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
+    if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (model as any).generate({ ...inputs, max_new_tokens: 1, do_sample: false });
+    }
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${label} · READY`);
+  } catch {
+    _prefillDone = false; // allow retry on first real prompt
+  }
 }
 
 // ---- System prompt --------------------------------------------------------
@@ -934,7 +996,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // SafeIntOnOverflow in OrtRun buffer shape computation.
   // Route to REMOTE for long inputs without permanently engaging _webgpuFallbackEngaged —
   // WebGPU remains available for shorter prompts within the same session.
-  const WEBGPU_CONTEXT_LIMIT = 2048;
+  // WEBGPU_CONTEXT_LIMIT is now at module level (shared with prefill warmup #492).
   const preCheckLen: number = inputs.input_ids?.dims?.[1] ?? 0;
   const safeMaxNewTokens = Math.min(req.maxNewTokens ?? 512, WEBGPU_CONTEXT_LIMIT - preCheckLen);
   if (preCheckLen + 64 > WEBGPU_CONTEXT_LIMIT || safeMaxNewTokens <= 0) {
