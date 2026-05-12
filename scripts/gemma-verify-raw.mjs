@@ -1607,12 +1607,12 @@ await resetScene('before-box-inject');
 
 // ── Surface 33: assets-ribbon (#400) ─────────────────────────────────────────
 // SAMPLES strip is permanently visible in ribbon-tools (MODEL mode default).
-// No sidebar ASSETS tab — cards live in .ribbon-tools .ribbon-assets at page load.
+// No sidebar ASSETS tab — cards live in .ribbon .ribbon-assets (flex sibling of .ribbon-tools) at page load.
 {
   const r = await evaluate(`
     (() => {
-      const assetsWrap = document.querySelector('.ribbon-tools .ribbon-assets');
-      const cards = document.querySelectorAll('.ribbon-tools .ribbon-asset-card');
+      const assetsWrap = document.querySelector('.ribbon .ribbon-assets');
+      const cards = document.querySelectorAll('.ribbon .ribbon-asset-card');
       return {
         passed: !!assetsWrap && cards.length > 0,
         evidence: { ribbonAssets: !!assetsWrap, cardCount: cards.length }
@@ -2021,9 +2021,9 @@ await resetScene('before-box-inject');
         return { passed: false, evidence: { reason: 'tool-group elements present in ribbon-tools', count: toolGroups.length } };
       }
       // 2. Asset cards in ribbon-tools without any click
-      const cards = document.querySelectorAll('.ribbon-tools .ribbon-asset-card');
+      const cards = document.querySelectorAll('.ribbon .ribbon-asset-card');
       if (cards.length === 0) {
-        return { passed: false, evidence: { reason: 'no .ribbon-tools .ribbon-asset-card at page load' } };
+        return { passed: false, evidence: { reason: 'no .ribbon .ribbon-asset-card at page load' } };
       }
       // 3. Ribbon height >= 60px
       const ribbon = document.querySelector('.ribbon');
@@ -2315,7 +2315,7 @@ await resetScene('before-box-inject');
 {
   const r = await evaluate(`
     (() => {
-      const card = document.querySelector('.ribbon-tools .ribbon-asset-card[data-sample="schultz-residence"]');
+      const card = document.querySelector('.ribbon .ribbon-asset-card[data-sample="schultz-residence"]');
       if (!card) return { passed: false, evidence: { reason: 'no schultz ribbon-asset-card' } };
       const sel = document.getElementById('sample-select');
       if (!sel) return { passed: false, evidence: { reason: 'no #sample-select' } };
@@ -2337,11 +2337,11 @@ await resetScene('before-box-inject');
 
     layoutTab.click();
     await new Promise(r => setTimeout(r, 600));
-    const layoutCards = document.querySelectorAll('.ribbon-tools .ribbon-asset-card').length;
+    const layoutCards = document.querySelectorAll('.ribbon .ribbon-asset-card').length;
 
     modelTab.click();
     await new Promise(r => setTimeout(r, 600));
-    const modelCards = document.querySelectorAll('.ribbon-tools .ribbon-asset-card').length;
+    const modelCards = document.querySelectorAll('.ribbon .ribbon-asset-card').length;
 
     const passed = layoutCards === 0 && modelCards > 0;
     return { passed, evidence: { layoutCards, modelCards } };
@@ -2848,7 +2848,7 @@ await resetScene('before-box-inject');
 {
   const r60 = await evaluate(`(() => {
     try {
-      const cards = [...document.querySelectorAll('.ribbon-tools .ribbon-asset-card')];
+      const cards = [...document.querySelectorAll('.ribbon .ribbon-asset-card')];
       if (cards.length !== 6)
         return { passed: false, evidence: { reason: 'expected 6 cards, got ' + cards.length } };
       const rects = cards.map(c => c.getBoundingClientRect());
@@ -2881,7 +2881,7 @@ await resetScene('before-box-inject');
       }
 
       // First card flush with ribbon-assets left edge (≤ 4px gap)
-      const assetsEl = document.querySelector('.ribbon-assets');
+      const assetsEl = document.querySelector('.ribbon .ribbon-assets');
       const firstCardEl = cards[0];
       if (assetsEl && firstCardEl) {
         const assetsLeft = assetsEl.getBoundingClientRect().left;
