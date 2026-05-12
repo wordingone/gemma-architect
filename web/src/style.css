@@ -1165,9 +1165,6 @@ html[data-mode="night"] .paper-stage {
 
 .ribbon-tabs {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  overflow: hidden;
   border-right: var(--lw-edge) solid var(--chrome-seam);
   align-items: stretch;
   flex-shrink: 0;
@@ -1522,6 +1519,7 @@ html[data-mode="night"] .paper-stage {
 .phone-slider {
   position: relative;
   display: flex;
+  align-self: center;
   background: var(--paper-2, oklch(0.93 0.004 250));
   border-radius: 4px;
   padding: 2px;
