@@ -2686,6 +2686,7 @@ await resetScene('before-box-inject');
   })()`, true, 25000);
   if (!r58) record('ifc-default-select', false, { reason: 'evaluate returned null (timeout)' });
   else record('ifc-default-select', r58.passed, r58.evidence);
+}
 
 // ── Surface 59: dispatch-sweep (#473) ────────────────────────────────────────
 // Verbs with realistic args sourced from spatial-api.yaml.
