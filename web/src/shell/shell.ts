@@ -135,7 +135,7 @@ let _elemCardWrapEl: HTMLElement | null = null; // the wrap passed to buildAsset
 let _elemChipsEl: HTMLElement | null = null;
 
 function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab: string) {
-  tabsEl.innerHTML = "";
+  tabsEl.querySelectorAll<HTMLElement>(".ribbon-tab").forEach(el => el.remove());
   for (const t of tabs) {
     const tab = document.createElement("div");
     tab.className = "ribbon-tab";
