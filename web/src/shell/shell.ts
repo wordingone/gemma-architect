@@ -611,7 +611,7 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
 
   const toolsEl = document.createElement("div");
   toolsEl.className = "ribbon-tools";
-  ribbonHost.appendChild(toolsEl);
+  tabsEl.appendChild(toolsEl);
   _ribbonToolsEl = toolsEl;
   _ribbonEl = ribbonHost;
 
