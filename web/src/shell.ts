@@ -125,6 +125,7 @@ type RibbonTab = typeof RIBBON_TABS[number];
 // Module-level refs used by setRibbonMode to swap ribbon content in-place.
 let _ribbonTabsEl: HTMLElement | null = null;
 let _ribbonToolsEl: HTMLElement | null = null;
+let _ribbonEl: HTMLElement | null = null;
 // Live reference to the Elements section's cards container, updated each time
 // appendRibbonAssets builds it. Used by setRibbonElementTypes / reset.
 let _elemCardsEl: HTMLElement | null = null;
@@ -240,7 +241,7 @@ function buildAssetCard(
   return card;
 }
 
-function appendRibbonAssets(toolsEl: HTMLElement) {
+function appendRibbonAssets(ribbonHost: HTMLElement) {
   const wrap = document.createElement("div");
   wrap.className = "ribbon-assets";
 
@@ -273,7 +274,9 @@ function appendRibbonAssets(toolsEl: HTMLElement) {
   wrap.appendChild(divider);
 
   wrap.appendChild(buildColumn("Elements", RIBBON_ELEMENT_SAMPLES));
-  toolsEl.appendChild(wrap);
+  const rightEl = ribbonHost.querySelector(".ribbon-right");
+  if (rightEl) ribbonHost.insertBefore(wrap, rightEl);
+  else ribbonHost.appendChild(wrap);
 }
 
 // Map IFC class name to an icon key in icons.ts (fallback "model").
@@ -349,6 +352,7 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
     // Refs lost (HMR or race before buildRibbon ran). Re-query rather than silently drop.
     _ribbonTabsEl  = document.querySelector(".ribbon-tabs")  as HTMLElement | null;
     _ribbonToolsEl = document.querySelector(".ribbon-tools") as HTMLElement | null;
+    _ribbonEl      = document.querySelector(".ribbon")       as HTMLElement | null;
     if (!_ribbonTabsEl || !_ribbonToolsEl) return;
   }
   if (mode === "layout") {
@@ -361,7 +365,8 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, []);
     appendArchCompSlider(_ribbonTabsEl);
-    appendRibbonAssets(_ribbonToolsEl);
+    _ribbonEl?.querySelector(".ribbon-assets")?.remove();
+    if (_ribbonEl) appendRibbonAssets(_ribbonEl);
   }
 }
 
@@ -601,12 +606,13 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
   toolsEl.className = "ribbon-tools";
   ribbonHost.appendChild(toolsEl);
   _ribbonToolsEl = toolsEl;
+  _ribbonEl = ribbonHost;
 
   // Fill with model ribbon content initially.
   fillRibbonTabs(tabsEl, RIBBON_TABS, RIBBON_TABS[0]);
   fillRibbonTools(toolsEl, []);
   appendArchCompSlider(tabsEl);
-  appendRibbonAssets(toolsEl);
+  appendRibbonAssets(ribbonHost);
 
   // .ribbon-right — quick actions (palette + export + viewport split).
   const rightEl = document.createElement("div");

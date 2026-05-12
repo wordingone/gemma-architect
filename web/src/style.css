@@ -1165,6 +1165,9 @@ html[data-mode="night"] .paper-stage {
 
 .ribbon-tabs {
   display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
   border-right: var(--lw-edge) solid var(--chrome-seam);
   align-items: stretch;
   flex-shrink: 0;
@@ -1216,11 +1219,6 @@ html[data-mode="night"] .paper-stage {
   align-items: stretch;
   border-left: var(--lw-construction) solid var(--ink-construction);
   flex-shrink: 0;
-  /* Sticky to right: panel stays visible when ribbon-tools scrolls horizontally */
-  position: sticky;
-  right: 0;
-  background: var(--paper);
-  z-index: 1;
 }
 .ribbon-section-col {
   display: flex;
