@@ -5,52 +5,80 @@ export interface PhoneSliderOpts {
   onChange: (tab: SliderTab) => void;
 }
 
+// Disc rotates → squares orbit around the center.
+// Each square counter-rotates by the same amount so it stays axis-aligned (no spin).
+// Labels inside the squares need no rotation of their own.
 export function buildPhoneSlider(opts: PhoneSliderOpts): { root: HTMLElement; setTab: (t: SliderTab) => void } {
   let active: SliderTab = opts.initial ?? "ARCH";
+  let totalRot = active === "COMP" ? 180 : 0;
 
   const root = document.createElement("div");
-  root.className = "phone-slider";
-  root.setAttribute("role", "tablist");
-  root.setAttribute("aria-label", "Palette section");
+  root.className = "yin-toggle";
+  root.setAttribute("role", "button");
+  root.setAttribute("aria-label", "Switch palette section");
+  root.setAttribute("tabindex", "0");
 
-  const thumb = document.createElement("div");
-  thumb.className = "phone-slider-thumb";
-  thumb.setAttribute("aria-hidden", "true");
-  root.appendChild(thumb);
+  const disc = document.createElement("div");
+  disc.className = "yin-disc";
+  root.appendChild(disc);
 
-  const tabs: SliderTab[] = ["ARCH", "COMP"];
-  for (const tab of tabs) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "phone-slider-btn";
-    btn.dataset.tab = tab;
-    btn.textContent = tab;
-    btn.setAttribute("role", "tab");
-    btn.setAttribute("aria-selected", tab === active ? "true" : "false");
-    btn.addEventListener("click", () => {
-      if (active === tab) return;
-      active = tab;
-      sync();
-      opts.onChange(tab);
-    });
-    root.appendChild(btn);
+  function makeHalf(cls: string, text: string) {
+    const half = document.createElement("div");
+    half.className = `yin-half ${cls}`;
+    const span = document.createElement("span");
+    span.className = "yin-label";
+    span.textContent = text;
+    half.appendChild(span);
+    disc.appendChild(half);
+    return half;
   }
 
-  function sync() {
-    root.querySelectorAll<HTMLButtonElement>(".phone-slider-btn").forEach((btn) => {
-      const isActive = btn.dataset.tab === active;
-      btn.classList.toggle("active", isActive);
-      btn.setAttribute("aria-selected", isActive ? "true" : "false");
-    });
-    thumb.style.transform = active === "COMP" ? "translateX(100%)" : "translateX(0)";
+  const archHalf = makeHalf("yin-half--top", "ARCH");
+  const compHalf = makeHalf("yin-half--btm", "COMP");
+
+  disc.addEventListener("transitionend", (e) => {
+    if ((e as TransitionEvent).propertyName === "transform" && e.target === disc) {
+      disc.classList.toggle("is-comp", active === "COMP");
+    }
+  });
+
+  function applyRotation(skipTransition = false) {
+    if (skipTransition) {
+      disc.style.transition = "none";
+      archHalf.style.transition = "none";
+      compHalf.style.transition = "none";
+      void disc.offsetWidth;
+    }
+    disc.style.transform = `rotate(${totalRot}deg)`;
+    // Counter-rotate each square so it stays upright while orbiting
+    archHalf.style.transform = `rotate(${-totalRot}deg)`;
+    compHalf.style.transform = `rotate(${-totalRot}deg)`;
+    if (skipTransition) {
+      disc.style.transition = "";
+      archHalf.style.transition = "";
+      compHalf.style.transition = "";
+    }
   }
+
+  function doSwitch() {
+    totalRot += 180;
+    active = active === "ARCH" ? "COMP" : "ARCH";
+    applyRotation();
+    opts.onChange(active);
+  }
+
+  root.addEventListener("click", doSwitch);
+  root.addEventListener("keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); doSwitch(); }
+  });
+
+  disc.classList.toggle("is-comp", active === "COMP");
+  applyRotation(true);
 
   function setTab(t: SliderTab) {
     if (active === t) return;
-    active = t;
-    sync();
+    doSwitch();
   }
 
-  sync();
   return { root, setTab };
 }

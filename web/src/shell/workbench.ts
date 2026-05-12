@@ -205,6 +205,16 @@ const COMP_SECTION_IDX = 4;
 function buildPalette(host: HTMLElement) {
   host.innerHTML = "";
 
+  // Single portal tooltip in document.body — position: fixed escapes palette overflow clipping.
+  let tip = document.getElementById("palette-tip") as HTMLDivElement | null;
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.id = "palette-tip";
+    tip.className = "palette-tip";
+    document.body.appendChild(tip);
+  }
+  const tipEl = tip;
+
   const sectionEls: HTMLElement[] = [];
 
   for (let i = 0; i < PALETTE_SECTIONS.length; i++) {
@@ -213,9 +223,16 @@ function buildPalette(host: HTMLElement) {
     if (i === COMP_SECTION_IDX) sec.classList.add("palette-section--hidden");
     for (const tool of section.tools) {
       const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
-      btn.innerHTML = iconSVG(tool.icon, 18) +
-        `<span class="palette-tooltip">${tool.label}</span><span class="corner"></span>`;
+      btn.innerHTML = iconSVG(tool.icon, 18) + `<span class="corner"></span>`;
       btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
+      btn.addEventListener("mouseenter", () => {
+        const r = btn.getBoundingClientRect();
+        tipEl.textContent = tool.label;
+        tipEl.style.left = `${r.right + 8}px`;
+        tipEl.style.top = `${r.top + r.height / 2}px`;
+        tipEl.classList.add("is-visible");
+      });
+      btn.addEventListener("mouseleave", () => tipEl.classList.remove("is-visible"));
       sec.appendChild(btn);
     }
     host.appendChild(sec);

@@ -756,10 +756,10 @@ export class Viewer {
     });
     if (!hitPane) return;
 
-    // For transform tools: gizmo mode is already set by the subscribe handler.
-    // Mousedown in transform mode does not re-pick; let OrbitControls and
-    // TransformControls handle the drag natively.
-    if (tool === "move" || tool === "rotate" || tool === "scale") return;
+    // Transform tools skip re-picking when something is already selected so
+    // OrbitControls/TransformControls own the drag natively. But with nothing
+    // selected, fall through to the picker so the user can click to select.
+    if ((tool === "move" || tool === "rotate" || tool === "scale") && this.targetObject !== null) return;
     // If a gumball handle is hovered/active (axis set) or dragging, do not
     // run selection picking on this pointerdown. Otherwise selection updates
     // race with TransformControls pointerdown and break handle drags.

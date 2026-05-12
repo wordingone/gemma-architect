@@ -19,7 +19,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Viewer } from "./viewer";
-import { setState } from "../app-state";
+import { setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { snapPoint, getSnap } from "./snap-state";
 import { pushAction } from "../history";
@@ -28,6 +28,7 @@ import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../geometry/grids";
 import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
+import { getSelected } from "./selection-state";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -1232,11 +1233,242 @@ export function resetPending(): void {
   _pending = [];
 }
 
+// ── Precision Transform state machine ────────────────────────────────────────
+// Move:   pick_start → pick_end   → translate by (end - start)
+// Rotate: pick_base  → hover/pick → rotate around Z by computed angle
+// Scale:  pick_base  → type/pick  → uniform scale
+
+type PTPhase =
+  | { kind: "start";      tool: "move" | "rotate" | "scale" }
+  | { kind: "end_move";   start: THREE.Vector3 }
+  | { kind: "angle_end";  base: THREE.Vector3 }
+  | { kind: "scale_ref";  base: THREE.Vector3 }
+  | { kind: "scale_end";  base: THREE.Vector3; refPt: THREE.Vector3 };
+
+let _ptPhase: PTPhase | null = null;
+let _ptCoordInputEl: HTMLInputElement | null = null;
+let _ptCoordWrapEl: HTMLElement | null = null;
+let _ptPreviewLine: THREE.Line | null = null;
+let _ptViewer: Viewer | null = null;
+
+function ptGetTarget(): THREE.Object3D | null {
+  return getSelected()?.transformTarget ?? null;
+}
+
+function ptCentroid(obj: THREE.Object3D): THREE.Vector3 {
+  const box = new THREE.Box3().setFromObject(obj);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  return center;
+}
+
+function ptPrompt(msg: string): void { setPickerHint(msg); }
+function ptClearPrompt(): void { setPickerHint(null); }
+
+function ptShowCoordInput(placeholder: string): void {
+  if (!_ptCoordWrapEl) return;
+  if (_ptCoordInputEl) _ptCoordInputEl.placeholder = placeholder;
+  _ptCoordWrapEl.classList.add("visible");
+  _ptCoordInputEl?.focus();
+}
+
+function ptHideCoordInput(): void {
+  if (!_ptCoordWrapEl) return;
+  _ptCoordWrapEl.classList.remove("visible");
+  if (_ptCoordInputEl) _ptCoordInputEl.value = "";
+}
+
+function ptClearPreviewLine(viewer: Viewer): void {
+  if (_ptPreviewLine) {
+    viewer.getScene().remove(_ptPreviewLine);
+    _ptPreviewLine.geometry.dispose();
+    (_ptPreviewLine.material as THREE.Material).dispose();
+    _ptPreviewLine = null;
+  }
+}
+
+function ptSetPreviewLine(viewer: Viewer, from: THREE.Vector3, to: THREE.Vector3): void {
+  ptClearPreviewLine(viewer);
+  const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+  const mat = new THREE.LineBasicMaterial({ color: 0x4488ff, depthTest: false });
+  _ptPreviewLine = new THREE.Line(geo, mat);
+  _ptPreviewLine.renderOrder = 99;
+  viewer.getScene().add(_ptPreviewLine);
+}
+
+function ptCancel(viewer: Viewer): void {
+  _ptPhase = null;
+  ptClearPrompt();
+  ptHideCoordInput();
+  hideCursorDot();
+  ptClearPreviewLine(viewer);
+  dispatchSync("setActiveTool", { toolId: "select" });
+}
+
+function ptCommitMove(obj: THREE.Object3D, delta: THREE.Vector3): void {
+  obj.position.add(delta);
+  obj.updateMatrix();
+  obj.updateMatrixWorld(true);
+}
+
+function ptCommitRotate(obj: THREE.Object3D, base: THREE.Vector3, angleDeg: number): void {
+  const rad = angleDeg * Math.PI / 180;
+  const axis = new THREE.Vector3(0, 0, 1);
+  obj.position.sub(base);
+  obj.position.applyAxisAngle(axis, rad);
+  obj.position.add(base);
+  const q = new THREE.Quaternion().setFromAxisAngle(axis, rad);
+  obj.quaternion.premultiply(q);
+  obj.updateMatrix();
+  obj.updateMatrixWorld(true);
+}
+
+function ptCommitScale(obj: THREE.Object3D, base: THREE.Vector3, factor: number): void {
+  if (!Number.isFinite(factor) || factor <= 0) return;
+  obj.position.sub(base);
+  obj.position.multiplyScalar(factor);
+  obj.position.add(base);
+  obj.scale.multiplyScalar(factor);
+  obj.updateMatrix();
+  obj.updateMatrixWorld(true);
+}
+
+function ptHandlePoint(viewer: Viewer, worldPt: THREE.Vector3): void {
+  const phase = _ptPhase;
+  if (!phase) return;
+  const obj = ptGetTarget();
+  if (!obj) { ptCancel(viewer); return; }
+
+  if (phase.kind === "start") {
+    const pt = worldPt.clone();
+    if (phase.tool === "move") {
+      _ptPhase = { kind: "end_move", start: pt };
+      ptPrompt("Target point — click, type x,y,z, or Enter for original position");
+      ptShowCoordInput("x, y  or  x, y, z");
+    } else if (phase.tool === "rotate") {
+      _ptPhase = { kind: "angle_end", base: pt };
+      ptPrompt("Rotation angle — hover and click, or type degrees");
+      ptShowCoordInput("angle in degrees");
+    } else {
+      _ptPhase = { kind: "scale_ref", base: pt };
+      ptPrompt("Scale — type factor (e.g. 2.0) or click reference start point");
+      ptShowCoordInput("scale factor");
+    }
+    return;
+  }
+
+  if (phase.kind === "end_move") {
+    const delta = worldPt.clone().sub(phase.start);
+    ptCommitMove(obj, delta);
+    ptClearPreviewLine(viewer);
+    ptCancel(viewer);
+    return;
+  }
+
+  if (phase.kind === "angle_end") {
+    const dx = worldPt.x - phase.base.x;
+    const dy = worldPt.y - phase.base.y;
+    const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+    ptCommitRotate(obj, phase.base, angleDeg);
+    ptClearPreviewLine(viewer);
+    ptCancel(viewer);
+    return;
+  }
+
+  if (phase.kind === "scale_ref") {
+    _ptPhase = { kind: "scale_end", base: phase.base, refPt: worldPt.clone() };
+    ptPrompt("Scale end — click target point to define scale from reference distance");
+    ptHideCoordInput();
+    return;
+  }
+
+  if (phase.kind === "scale_end") {
+    const refDist = phase.refPt.distanceTo(phase.base);
+    const newDist = worldPt.distanceTo(phase.base);
+    if (refDist > 1e-6) {
+      ptCommitScale(obj, phase.base, newDist / refDist);
+    }
+    ptClearPreviewLine(viewer);
+    ptCancel(viewer);
+  }
+}
+
+function ptHandleCoordSubmit(viewer: Viewer, raw: string): void {
+  const phase = _ptPhase;
+  if (!phase) return;
+  const obj = ptGetTarget();
+  if (!obj) { ptCancel(viewer); return; }
+
+  const parts = raw.split(/[,\s]+/).map(Number);
+
+  if (phase.kind === "start" || phase.kind === "end_move") {
+    if (parts.length >= 2 && parts.every(Number.isFinite)) {
+      const pt = new THREE.Vector3(parts[0], parts[1], parts[2] ?? 0);
+      ptHandlePoint(viewer, pt);
+    }
+    return;
+  }
+
+  if (phase.kind === "angle_end") {
+    const deg = parts[0];
+    if (Number.isFinite(deg)) {
+      ptCommitRotate(obj, phase.base, deg);
+      ptClearPreviewLine(viewer);
+      ptCancel(viewer);
+    }
+    return;
+  }
+
+  if (phase.kind === "scale_ref") {
+    // Single number = direct scale factor; two or more = reference point for distance-based scale.
+    if (parts.length === 1 && Number.isFinite(parts[0]) && parts[0] > 0) {
+      ptCommitScale(obj, phase.base, parts[0]);
+      ptClearPreviewLine(viewer);
+      ptCancel(viewer);
+    } else if (parts.length >= 2 && parts.every(Number.isFinite)) {
+      ptHandlePoint(viewer, new THREE.Vector3(parts[0], parts[1], parts[2] ?? 0));
+    }
+    return;
+  }
+
+  if (phase.kind === "scale_end") {
+    const factor = parts[0];
+    if (Number.isFinite(factor) && factor > 0) {
+      ptCommitScale(obj, phase.base, factor);
+      ptClearPreviewLine(viewer);
+      ptCancel(viewer);
+    }
+  }
+}
+
+function ptHandleEnter(viewer: Viewer): void {
+  const phase = _ptPhase;
+  if (!phase) return;
+  const obj = ptGetTarget();
+  if (!obj) { ptCancel(viewer); return; }
+
+  if (phase.kind === "start") {
+    const centroid = ptCentroid(obj);
+    ptHandlePoint(viewer, new THREE.Vector3(centroid.x, centroid.y, centroid.z));
+  }
+  // other phases: Enter does nothing (user must click or type)
+}
+
+function ptStartTool(tool: "move" | "rotate" | "scale"): void {
+  const obj = ptGetTarget();
+  if (!obj) return;
+  _ptPhase = { kind: "start", tool };
+  const toolLabel = { move: "Move", rotate: "Rotate", scale: "Scale" }[tool];
+  ptPrompt(`${toolLabel} — reference point: click, type x,y,z, or Enter for centroid`);
+  ptShowCoordInput("x, y  or  x, y, z");
+}
+
 // Bind the create-mode pipeline to viewport mousedown. Coexists with the
 // selection raycaster — when no create-tool is active, mousedown just falls
 // through to viewer.onPointerDown for selection.
 export function initCreateMode(viewer: Viewer): void {
   _viewer = viewer;
+  _ptViewer = viewer;
   // The THREE.js canvas has pointer-events:none — clicks land on .vp-body
   // children of the viewport area. Register on the viewport-area-host ancestor
   // (always present in static HTML) so the capture listener fires before any
@@ -1254,12 +1486,55 @@ export function initCreateMode(viewer: Viewer): void {
   _chooserEl.className = "chooser-overlay";
   vpBody.appendChild(_chooserEl);
 
+  // Precision transform coord input overlay.
+  const ptWrap = document.createElement("div");
+  ptWrap.className = "pt-coord-wrap";
+  const ptInput = document.createElement("input");
+  ptInput.type = "text";
+  ptInput.className = "pt-coord-input";
+  ptInput.setAttribute("autocomplete", "off");
+  ptInput.setAttribute("spellcheck", "false");
+  ptWrap.appendChild(ptInput);
+  vpBody.appendChild(ptWrap);
+  _ptCoordWrapEl = ptWrap;
+  _ptCoordInputEl = ptInput;
+
+  ptInput.addEventListener("keydown", (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Enter") {
+      const raw = ptInput.value.trim();
+      if (raw) ptHandleCoordSubmit(viewer, raw);
+      else ptHandleEnter(viewer);
+      ptInput.value = "";
+    } else if (ev.key === "Escape") {
+      if (_ptPhase) ptCancel(viewer);
+    }
+  });
+
+  // When activeTool changes to a PT tool, start the state machine.
+  subscribe("activeTool", (tool) => {
+    if (tool === "move" || tool === "rotate" || tool === "scale") {
+      ptStartTool(tool as "move" | "rotate" | "scale");
+    } else if (_ptPhase) {
+      ptCancel(viewer);
+    }
+  });
+
   // Capture-phase listener — runs before the viewer's own pointerdown so we
   // can swallow the event when a create-tool is active or a session needs picks.
   vpBody.addEventListener("pointerdown", (ev) => {
     if (ev.button !== 0) return;
     const tool = readActiveTool();
     if (!tool) {
+      // Precision transform click — intercept when PT is active.
+      if (_ptPhase) {
+        const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
+        if (!world) return;
+        ev.stopImmediatePropagation();
+        const snapped = snapPoint(world.x, world.y);
+        ptHandlePoint(viewer, new THREE.Vector3(snapped.x, snapped.y, 0));
+        return;
+      }
       const session = getActiveCommandSession();
       if (session?.state === "collecting_args") {
         const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
@@ -1305,7 +1580,7 @@ export function initCreateMode(viewer: Viewer): void {
   // Cursor dot + rubber-band preview on every pointer move.
   vpBody.addEventListener("pointermove", (ev) => {
     const tool = readActiveTool();
-    if (!tool) { hideCursorDot(); _snapTarget = null; return; }
+    if (!tool && !_ptPhase) { hideCursorDot(); _snapTarget = null; return; }
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
     if (!world) {
       // No ground-plane hit (near-horizontal camera) — show dot at raw mouse position.
@@ -1331,6 +1606,31 @@ export function initCreateMode(viewer: Viewer): void {
     // Project snapped world position back to screen so the dot visually snaps (#327).
     const screen = projectToScreen(viewer, snapped.x, snapped.y, 0);
     moveCursorDot(viewer, snapped, screen?.x ?? ev.clientX, screen?.y ?? ev.clientY, _snapTarget !== null);
+
+    // PT preview: for angle_end phase show line from base to cursor + live angle readout.
+    if (_ptPhase?.kind === "angle_end") {
+      const cursorPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+      ptSetPreviewLine(viewer, _ptPhase.base, cursorPt);
+      const dx = cursorPt.x - _ptPhase.base.x;
+      const dy = cursorPt.y - _ptPhase.base.y;
+      const deg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI);
+      ptPrompt(`Rotation angle — hover and click  [${deg}°]  or type degrees`);
+    } else if (_ptPhase?.kind === "scale_end") {
+      const cursorPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+      ptSetPreviewLine(viewer, _ptPhase.base, cursorPt);
+      const refDist = _ptPhase.refPt.distanceTo(_ptPhase.base);
+      const newDist = cursorPt.distanceTo(_ptPhase.base);
+      const factor = refDist > 1e-6 ? (newDist / refDist).toFixed(3) : "—";
+      ptPrompt(`Scale end — click  [factor: ${factor}]`);
+    } else if (_ptPhase?.kind === "end_move") {
+      const cursorPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+      ptSetPreviewLine(viewer, _ptPhase.start, cursorPt);
+      const dx = (cursorPt.x - _ptPhase.start.x).toFixed(2);
+      const dy = (cursorPt.y - _ptPhase.start.y).toFixed(2);
+      ptPrompt(`Target point — click, type x,y,z  [Δ ${dx}, ${dy}]`);
+    }
+
+    if (!tool) return;
     if (_pending.length === 0) return;
     const handler = TOOL_HANDLERS[tool];
     // Show rubber band for multi-click tools (clicks≥2) and unlimited tools (clicks=-1).
@@ -1342,9 +1642,10 @@ export function initCreateMode(viewer: Viewer): void {
     hideCursorDot();
   });
 
-  // Esc cancels; Enter commits unlimited tools (curve).
+  // Esc cancels; Enter commits unlimited tools (curve) or PT centroid.
   window.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape") {
+      if (_ptPhase) { ptCancel(viewer); return; }
       if (_pending.length > 0) {
         clearTemporary(viewer);
         hideCursorDot();
@@ -1359,6 +1660,10 @@ export function initCreateMode(viewer: Viewer): void {
       return;
     }
     if (ev.key === "Enter") {
+      if (_ptPhase && document.activeElement !== _ptCoordInputEl) {
+        ptHandleEnter(viewer);
+        return;
+      }
       commitUnlimited(viewer);
       void commitCommandSession().then((r) => {
         if (r) {

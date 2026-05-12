@@ -36,6 +36,8 @@
     "demo:drive": "node scripts/demo-drive.mjs",
     "verify:cdp": "node -e \"process.stderr.write('DEPRECATED: verify:cdp removed — use: bun run verify:raw\\n'); process.exit(2);\"",
     "cdp": "node --experimental-strip-types scripts/cdp.ts",
+    "kg:build": "bun scripts/kg-build.ts",
+    "kg:stats": "bun scripts/kg-build.ts --stats",
     "capability-bench": "bun scripts/capability-bench.ts",
     "snapshot": "bun scripts/capability-bench.ts",
     "judge": "bun web/test/capability/judge.ts",

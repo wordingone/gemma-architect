@@ -160,6 +160,32 @@
 .picker-prompt.visible { display: block; }
 #viewport-area-host:has(.picker-prompt.visible) { cursor: crosshair; }
 
+/* Precision transform coord input — appears below the picker prompt */
+.pt-coord-wrap {
+  display: none;
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  pointer-events: auto;
+}
+.pt-coord-wrap.visible { display: block; }
+.pt-coord-input {
+  background: rgba(0, 0, 0, 0.82);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: var(--mono);
+  width: 180px;
+  outline: none;
+  text-align: center;
+}
+.pt-coord-input::placeholder { color: rgba(255,255,255,0.35); }
+.pt-coord-input:focus { border-color: rgba(68, 136, 255, 0.7); box-shadow: 0 0 0 2px rgba(68,136,255,0.15); }
+
 /* Chooser overlay — shown when a command session awaits enum_choice (#345) */
 .chooser-overlay {
   display: none;

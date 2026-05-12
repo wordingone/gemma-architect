@@ -52,7 +52,6 @@
      stacking context above the viewport canvas so tooltips paint on top. */
   z-index: 20;
   overflow-y: auto;
-  overflow-x: hidden;
   min-height: 0;
 }
 .palette-section {
@@ -84,45 +83,61 @@
   box-shadow: inset 2px 0 0 var(--sanguine);
 }
 .palette-btn svg { width: 18px; height: 18px; stroke-width: 1.25; }
-.phone-slider {
+/* ── Yin-toggle: two orbiting squares, NW + SE, swap on click ───────────────── */
+.yin-toggle {
+  width: 74px;
+  height: 74px;
   position: relative;
-  display: flex;
+  cursor: pointer;
   align-self: center;
-  background: var(--paper-2, oklch(0.93 0.004 250));
-  border-radius: 4px;
-  padding: 2px;
-  margin: 4px 6px 2px;
+  flex-shrink: 0;
+  margin: 0 3px;
   user-select: none;
+  overflow: hidden;
 }
-.phone-slider-thumb {
+
+.yin-disc {
   position: absolute;
-  top: 2px; bottom: 2px;
-  left: 2px;
-  width: calc(50% - 2px);
-  background: var(--paper, oklch(0.97 0.003 250));
-  border-radius: 3px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-  transition: transform 0.15s ease;
-  pointer-events: none;
+  inset: 0;
+  transition: transform 0.42s cubic-bezier(0.4, 0, 0.25, 1);
 }
-.phone-slider-btn {
-  flex: 1;
-  padding: 4px 0;
-  font-size: 8.5px;
-  letter-spacing: 0.1em;
+
+/* Each square: 38×38 with rounded corners */
+.yin-half {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--lw-edge) solid var(--chrome-seam);
+  background: var(--paper);
+  transition: background 0.18s, transform 0.42s cubic-bezier(0.4, 0, 0.25, 1);
+}
+
+/* NW square (ARCH initially) */
+.yin-half--top { top: 4px; left: 4px; }
+/* SE square (COMP initially) */
+.yin-half--btm { bottom: 4px; right: 4px; }
+
+/* Active square: solid background. Inactive: muted background. */
+.yin-half--top { background: var(--paper-solid); }
+.yin-half--btm { background: var(--paper-2-solid); }
+
+.yin-disc.is-comp .yin-half--top { background: var(--paper-2-solid); }
+.yin-disc.is-comp .yin-half--btm { background: var(--paper-solid); }
+
+.yin-half:hover { border-color: var(--ink-faint); }
+
+.yin-label {
+  font-size: 10px;
   font-weight: 700;
   font-family: var(--mono);
-  text-align: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--ink-faint);
-  position: relative;
-  z-index: 1;
-  transition: color 0.15s;
-  border-radius: 2px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  display: inline-block;
 }
-.phone-slider-btn.active { color: var(--ink); }
 
 .palette-btn .corner {
   position: absolute;
@@ -132,12 +147,9 @@
   border-bottom: 4px solid var(--ink-faint);
 }
 
-.palette-tooltip {
-  position: absolute;
-  left: 100%;
-  top: 50%;
+.palette-tip {
+  position: fixed;
   transform: translateY(-50%);
-  margin-left: 8px;
   background: var(--ink);
   color: var(--paper);
   padding: 3px 7px;
@@ -149,7 +161,7 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity 80ms;
-  z-index: 100;
+  z-index: 9999;
   font-family: var(--mono);
 }
-.palette-btn:hover .palette-tooltip { opacity: 1; }
+.palette-tip.is-visible { opacity: 1; }
