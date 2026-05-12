@@ -2605,6 +2605,7 @@ html[data-mode="night"] .paper-stage {
     position: fixed;
     left: 0;
     top: 0;
+    width: var(--palette-w);
     height: 100dvh;
     z-index: 240;
     overflow-y: auto;
@@ -2615,6 +2616,7 @@ html[data-mode="night"] .paper-stage {
     position: fixed;
     right: 0;
     top: 0;
+    width: var(--sidebar-w, 280px);
     height: 100dvh;
     z-index: 240;
     overflow-y: auto;
