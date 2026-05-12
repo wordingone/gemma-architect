@@ -1184,9 +1184,6 @@ html[data-mode="night"] .paper-stage {
   border-right: var(--lw-construction) solid var(--ink-construction);
   position: relative;
   font-weight: 600;
-  /* compact height matching palette button row — ribbon-tabs column remains full ribbon height */
-  align-self: flex-start;
-  height: 36px;
 }
 .ribbon-tab:last-child { border-right: none; }
 .ribbon-tab:hover { color: var(--ink); }
@@ -1203,7 +1200,7 @@ html[data-mode="night"] .paper-stage {
 }
 
 .ribbon-tools {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: stretch;
   padding: 0;
