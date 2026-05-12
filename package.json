@@ -32,6 +32,8 @@
     "master-autofwd:status": "powershell -File scripts/gemma-master-autofwd-task.ps1 status",
     "master-autofwd:restart": "powershell -File scripts/gemma-master-autofwd-task.ps1 restart",
     "verify:raw": "node scripts/gemma-verify-raw.mjs",
+    "demo:record": "node scripts/demo-record.mjs",
+    "demo:drive": "node scripts/demo-drive.mjs",
     "verify:cdp": "node -e \"process.stderr.write('DEPRECATED: verify:cdp removed — use: bun run verify:raw\\n'); process.exit(2);\"",
     "cdp": "node --experimental-strip-types scripts/cdp.ts",
     "capability-bench": "bun scripts/capability-bench.ts",
