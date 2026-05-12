@@ -239,6 +239,12 @@ export class ChatPanel {
         return;
       }
 
+      // Auto-clear scene for fresh design prompts — file-loaded IFC or prior geometry
+      // pollutes the agent context and produces geometry on top of existing structure (#476).
+      if (DESIGN_RE.test(text)) {
+        await invokeCommand({ command: "SdClearScene", parameters: {} });
+      }
+
       const skillsToPass = matchedSkills.length > 0 ? matchedSkills : this._skills;
       const resp = await runAgentTurn({
         prompt: text,
