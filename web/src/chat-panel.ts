@@ -217,7 +217,7 @@ export class ChatPanel {
       // bypass model inference. Covers the K=0 wrong-args case for building-type prompts.
       if (matchedSkills.length === 1 && matchedSkills[0].steps && matchedSkills[0].steps.length > 0) {
         this._removeThinking(thinking);
-        await this._executeSkillDirect(matchedSkills[0]);
+        this._executeSkillDirect(matchedSkills[0]);
         return;
       }
 
@@ -275,25 +275,13 @@ export class ChatPanel {
       `tg ${t.tg_tps.toFixed(1)} t/s · pp ${t.pp_tps.toFixed(0)} t/s · in ${t.tokens_in} · out ${t.tokens_out} · prefill ${Math.round(t.prefill_ms)}ms · decode ${Math.round(t.decode_ms)}ms`;
   }
 
-  private async _executeSkillDirect(skill: Skill): Promise<void> {
+  private _executeSkillDirect(skill: Skill): void {
     const steps = skill.steps!;
-    const execSummaries: string[] = [];
-    const dispatches: AgentDispatch[] = [];
-    for (const step of steps) {
-      const out = await invokeCommand({
-        command: step.verb,
-        parameters: step.args,
-        metadata: { source: "skill" },
-      });
-      execSummaries.push(out.summary);
-      dispatches.push({ verb: step.verb, args: step.args });
-    }
-    const content = execSummaries.some((s) => s.length > 0)
-      ? execSummaries.join(" ")
-      : `Built: ${skill.name} (${steps.length} steps)`;
+    window.dispatchEvent(new CustomEvent("skill:animate", { detail: { steps } }));
+    const dispatches: AgentDispatch[] = steps.map((s) => ({ verb: s.verb, args: s.args }));
+    const content = `${skill.name} (${steps.length} steps)`;
     this._pushMsg({ role: "assistant", content, dispatches });
     this._history.push({ role: "assistant", content });
-    (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
   }
 
   private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; fired: string[] }> {
