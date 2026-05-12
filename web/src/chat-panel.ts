@@ -23,8 +23,8 @@ type Message = {
 };
 
 const STARTER_PROMPTS = [
-  "Draw a 5m wall, 0.2m thick, 2.8m tall",
-  "Create a rectangular room 6×4m with 2.8m ceilings",
+  "Design a 6×8m single-story cabin: bedroom + ensuite, kitchenette, deck, pitched roof",
+  "Design a 25-desk office: open plan, 2 conference rooms, kitchenette, 2 restrooms",
   "What's currently in the scene?",
   "What arguments does makeBox accept?",
 ];
