@@ -2989,6 +2989,67 @@ await resetScene('before-box-inject');
   else record('agent-turn-complete-event', r63.passed, r63.evidence);
 }
 
+// ── Surface 64: responsive-layout (#516) ──────────────────────────────────────
+// Tests four breakpoints via Emulation.setDeviceMetricsOverride.
+// All four widths (1024–1920) are > 800px → palette + sidebar must be visible.
+{
+  const breakpoints = [
+    { label: '1920x1080', w: 1920, h: 1080 },
+    { label: '1440x900',  w: 1440, h: 900  },
+    { label: '1216x690',  w: 1216, h: 690  },
+    { label: '1024x768',  w: 1024, h: 768  },
+  ];
+
+  const bpResults = [];
+  let overallPassed = true;
+
+  for (const bp of breakpoints) {
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: bp.w, height: bp.h, deviceScaleFactor: 1, mobile: false,
+    });
+    // Allow CSS reflow to settle after viewport resize.
+    await new Promise(r => setTimeout(r, 250));
+
+    const rbp = await evaluate(`(() => {
+      try {
+        const viewportEl = document.querySelector('.viewport-area');
+        const paletteEl  = document.querySelector('.palette');
+        const sidebarEl  = document.querySelector('.sidebar');
+        const getRect = el => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { w: Math.round(r.width), h: Math.round(r.height) };
+        };
+        const vr = getRect(viewportEl);
+        const pr = getRect(paletteEl);
+        const sr = getRect(sidebarEl);
+        const passed = !!(
+          vr && vr.w > 0 && vr.h > 0 &&
+          pr && pr.w > 0 && pr.h > 0 &&
+          sr && sr.w > 0 && sr.h > 0
+        );
+        return { passed, evidence: { viewport: vr, palette: pr, sidebar: sr } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+
+    const bpPassed = rbp?.passed ?? false;
+    if (!bpPassed) overallPassed = false;
+    bpResults.push({
+      breakpoint: bp.label,
+      passed: bpPassed,
+      ...(rbp?.evidence ?? { error: 'evaluate returned null' }),
+    });
+  }
+
+  // Restore original viewport so subsequent surfaces see normal dimensions.
+  await send('Emulation.clearDeviceMetricsOverride');
+  await new Promise(r => setTimeout(r, 150));
+
+  record('responsive-layout', overallPassed, { breakpoints: bpResults });
+}
+
 } finally {
   await cleanup();
 }
