@@ -2586,10 +2586,11 @@ await resetScene('before-box-inject');
     chatInput.dispatchEvent(new Event('input', { bubbles: true }));
     sendBtn.click();
 
-    // Phase 1: Wait up to 60s for plan pane or assistant message to appear.
+    // Phase 1: Wait up to 60s (5s in testMode — fixture is synchronous) for plan pane.
+    const phase1Timeout = window.__testMode ? 5000 : 60000;
     let planDetails = null;
     const start = Date.now();
-    while (Date.now() - start < 60000) {
+    while (Date.now() - start < phase1Timeout) {
       planDetails = document.querySelector('.chat-plan-details');
       if (planDetails) break;
       const assistantMsgs = document.querySelectorAll('.chat-msg-assistant .chat-msg-content');
@@ -2619,10 +2620,10 @@ await resetScene('before-box-inject');
     }
     runBtn.click();
 
-    // Phase 3: Wait up to 120s for execution to complete.
-    // Completion: _pushPlanMsg calls runBtn.remove() after all turns finish.
+    // Phase 3: Wait up to 120s (10s in testMode — SdExport fixture exits loop immediately).
+    const phase3Timeout = window.__testMode ? 10000 : 120000;
     const execStart = Date.now();
-    while (Date.now() - execStart < 120000) {
+    while (Date.now() - execStart < phase3Timeout) {
       const btnGone = !document.querySelector('.chat-plan-run-btn');
       const turns = document.querySelectorAll('.chat-plan-turn');
       if (btnGone && turns.length > 0) {

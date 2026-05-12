@@ -1,2 +1,3 @@
 snap-cursor-vertex  # #484  camera-fit timing race: midpoint vs endpoint snap nondeterministic at varying viewport widths
 demo-prompt-design-house  # #494  NL agent verb output nondeterministic: model sometimes omits IfcLevel/IfcSlab
+chat-plan-foldable  # #538  surface timeout when inference endpoint unconfigured; fix: testMode short-circuit
