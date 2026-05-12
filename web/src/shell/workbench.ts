@@ -2254,7 +2254,15 @@ function initRenderModePopover(): void {
     }
   });
 
-  // RENDER ribbon tab fires this event; position popover below the tab button.
+  // Wire each per-viewport RENDER button to fire render-mode-toggle with its own rect.
+  document.querySelectorAll<HTMLElement>('.vp-render-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.dispatchEvent(new CustomEvent('render-mode-toggle', { detail: { rect: btn.getBoundingClientRect() } }));
+    });
+  });
+
+  // RENDER button in each vp-header fires this event; position popover below it.
   window.addEventListener("render-mode-toggle", (rawEv) => {
     const rect = (rawEv as CustomEvent<{ rect: DOMRect }>).detail?.rect;
     open = !open;

@@ -87,6 +87,15 @@
 .vp-view-btn:hover { color: var(--ink); }
 .vp-view-btn .vp-caret { font-size: 8px; color: var(--ink-faint); line-height: 1; }
 
+.vp-render-btn {
+  display: inline-flex; align-items: center;
+  background: none; border: none; padding: 0 6px 0 0; margin: 0;
+  font: inherit; font-size: inherit; color: inherit; letter-spacing: inherit;
+  font-weight: 600; cursor: pointer; user-select: none;
+  border-right: var(--lw-construction) solid var(--ink-construction);
+}
+.vp-render-btn:hover { color: var(--ink); }
+
 /* View-switcher popover */
 .vs-backdrop { position: fixed; inset: 0; z-index: 199; }
 .vs-backdrop--hidden { display: none; }

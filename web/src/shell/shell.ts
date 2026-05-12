@@ -78,8 +78,8 @@ const MENUS: MenuItem[] = [
     { label: "Realistic", onAction: () => dispatchSync("SdRenderMode", { mode: "realistic" }) },
     { separator: true },
     { label: "Render settings…", onAction: () => {
-      const tab = document.querySelector('.ribbon-tab[data-tab="RENDER"]') as HTMLElement | null;
-      if (tab) window.dispatchEvent(new CustomEvent("render-mode-toggle", { detail: { rect: tab.getBoundingClientRect() } }));
+      const btn = document.querySelector('.vp-render-btn') as HTMLElement | null;
+      if (btn) window.dispatchEvent(new CustomEvent("render-mode-toggle", { detail: { rect: btn.getBoundingClientRect() } }));
     }},
   ]},
   { label: "Window", entries: [
@@ -96,7 +96,7 @@ const MENUS: MenuItem[] = [
 ];
 
 type ToolGroup = { label: string; tools: string[] };
-const LAYOUT_RIBBON_TABS = ["RENDER"] as const;
+const LAYOUT_RIBBON_TABS = [] as const;
 type LayoutRibbonTab = typeof LAYOUT_RIBBON_TABS[number];
 
 const LAYOUT_TOOL_GROUPS: ToolGroup[] = [
@@ -119,7 +119,7 @@ const MODES: ModeDef[] = [
   { key: "research", num: "03", label: "RESEARCH" },
 ];
 
-const RIBBON_TABS = ["RENDER"] as const;
+const RIBBON_TABS = [] as const;
 type RibbonTab = typeof RIBBON_TABS[number];
 
 // Module-level refs used by setRibbonMode to swap ribbon content in-place.
@@ -361,7 +361,7 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
     if (!_ribbonTabsEl || !_ribbonToolsEl) return;
   }
   if (mode === "layout") {
-    fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, LAYOUT_RIBBON_TABS[0]);
+    fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, "");
     fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
   } else if (mode === "research") {
@@ -369,7 +369,7 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
     fillRibbonTools(_ribbonToolsEl, RESEARCH_TOOL_GROUPS);
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
   } else {
-    fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
+    fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, "");
     fillRibbonTools(_ribbonToolsEl, []);
     appendArchCompSlider(_ribbonToolsEl);
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
@@ -616,7 +616,7 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
   _ribbonEl = ribbonHost;
 
   // Fill with model ribbon content initially.
-  fillRibbonTabs(tabsEl, RIBBON_TABS, RIBBON_TABS[0]);
+  fillRibbonTabs(tabsEl, RIBBON_TABS, "");
   fillRibbonTools(toolsEl, []);
   appendArchCompSlider(toolsEl);
   appendRibbonAssets(ribbonHost);
