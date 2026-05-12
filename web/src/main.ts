@@ -21,7 +21,7 @@ import { getLayerForCreator, layerStore } from "./layers";
 import { levelStore, getActiveLevelId } from "./levels";
 import { gridStore } from "./grids";
 import { snapPoint, setStep as snapSetStep, getStep as snapGetStep } from "./viewer/snap-state";
-import { buildIfc, buildIfcScene, ifcRoundTrip, type IfcSceneElement } from "./ifc";
+import { buildIfc, buildIfcScene, ifcRoundTrip, type IfcSceneElement, type IfcLevel } from "./ifc";
 import {
   detectFormat,
   loadMainThreadFormat,
@@ -507,6 +507,7 @@ registerHandler("IfcWall", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcWall", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   pushAction(mesh, "IfcWall");
   return { created: "wall", length: len, thickness: t, height: wallH };
@@ -527,6 +528,7 @@ registerHandler("IfcSlab", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcSlab", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   pushAction(mesh, "IfcSlab");
   return { created: "slab", width: w, depth: d };
@@ -548,6 +550,7 @@ registerHandler("IfcColumn", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcColumn", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   pushAction(mesh, "IfcColumn");
   return { created: "column", height: h };
@@ -570,6 +573,7 @@ registerHandler("IfcBeam", (args) => {
   mesh.userData.creator = "IfcBeam";
   mesh.userData.layerId = resolveLayerId("IfcBeam", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "beam", length: len };
 });
@@ -596,6 +600,7 @@ registerHandler("IfcMember", (args) => {
   mesh.userData.creator = "IfcMember";
   mesh.userData.layerId = resolveLayerId("IfcMember", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "member", length, profile_points: pts.length };
 });
@@ -620,6 +625,7 @@ registerHandler("IfcStair", (args) => {
   mesh.userData.creator = "IfcStair";
   mesh.userData.layerId = resolveLayerId("IfcStair", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "stair", steps, run, height: totalH };
 });
@@ -783,6 +789,7 @@ registerHandler("IfcDoor", (args) => {
   group.userData.cplaneKind = cplane.kind;
   group.userData.layerId = resolveLayerId("IfcDoor", args);
   group.userData.levelId = getActiveLevelId();
+  group.userData.dispatchArgs = args;
   viewer.addMesh(group, "brep");
   pushAction(group, "IfcDoor");
   let voidCut = false;
@@ -826,6 +833,7 @@ registerHandler("IfcWindow", (args) => {
   group.userData.cplaneKind = cplane.kind;
   group.userData.layerId = resolveLayerId("IfcWindow", args);
   group.userData.levelId = getActiveLevelId();
+  group.userData.dispatchArgs = args;
   viewer.addMesh(group, "brep");
   pushAction(group, "IfcWindow");
   let voidCut = false;
@@ -1015,6 +1023,7 @@ registerHandler("IfcRoof", (args) => {
   } as Record<string, string>)[roofType] ?? "NOTDEFINED";
   mesh.userData.layerId = resolveLayerId("IfcRoof", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "roof", roofType, width: w, depth: d, ridgeHeight: ridgeH, ifcPredefinedType: mesh.userData.ifcPredefinedType };
 });
@@ -1038,6 +1047,7 @@ registerHandler("IfcSpace", (args) => {
   mesh.userData.creator = "IfcSpace";
   mesh.userData.layerId = resolveLayerId("IfcSpace", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   if (args.name) mesh.userData.spaceName = args.name as string;
   viewer.addMesh(mesh, "brep");
   return { created: "space", width: w, depth: d, height: h };
@@ -1060,6 +1070,7 @@ registerHandler("IfcFoundation", (args) => {
   mesh.userData.creator = "IfcFoundation";
   mesh.userData.layerId = resolveLayerId("IfcFoundation", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "foundation", width: w, depth: d };
 });
@@ -1078,6 +1089,7 @@ registerHandler("IfcCeiling", (args) => {
   mesh.userData.creator = "IfcCeiling";
   mesh.userData.layerId = resolveLayerId("IfcCeiling", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "ceiling", width: w, depth: d, elevation: elev };
 });
@@ -1097,6 +1109,7 @@ registerHandler("IfcCurtainWall", (args) => {
   mesh.userData.creator = "IfcCurtainWall";
   mesh.userData.layerId = resolveLayerId("IfcCurtainWall", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "curtainwall", length: wallLen, height: h };
 });
@@ -1123,6 +1136,7 @@ registerHandler("IfcPlate", (args) => {
   mesh.userData.creator = "IfcPlate";
   mesh.userData.layerId = resolveLayerId("IfcPlate", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "plate", thickness, profile_points: pts.length };
 });
@@ -1141,6 +1155,7 @@ registerHandler("IfcSkylight", (args) => {
   mesh.userData.creator = "IfcSkylight";
   mesh.userData.layerId = resolveLayerId("IfcSkylight", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "skylight", width: w, depth: d };
 });
@@ -1174,6 +1189,7 @@ registerHandler("IfcOpening", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("IfcOpening", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   let voidCut = false;
   const hostUuid = args.hostUuid as string | undefined;
@@ -1205,6 +1221,7 @@ registerHandler("IfcRamp", (args) => {
   mesh.userData.creator = "IfcRamp";
   mesh.userData.layerId = resolveLayerId("IfcRamp", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "ramp", run, width: w };
 });
@@ -1225,6 +1242,7 @@ registerHandler("IfcRailing", (args) => {
   mesh.userData.creator = "IfcRailing";
   mesh.userData.layerId = resolveLayerId("IfcRailing", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "railing", length: len, height: h };
 });
@@ -1381,6 +1399,7 @@ registerHandler("IfcFurnishingElement", (args) => {
   mesh.userData.creator = "IfcFurnishingElement";
   mesh.userData.layerId = resolveLayerId("IfcFurnishingElement", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "furnishing", width: w, depth: d, height: h };
 });
@@ -2438,6 +2457,8 @@ function sceneElementsForExport(): IfcSceneElement[] {
         mesh: { vertices: new Float32Array(verts), indices: new Uint32Array(idx) },
         creator,
         label: creator,
+        levelId: obj.userData.levelId as string | undefined,
+        dispatchArgs: obj.userData.dispatchArgs as Record<string, unknown> | undefined,
       });
     }
   });
@@ -2449,8 +2470,13 @@ async function exportIfc(stem: string): Promise<void> {
   try {
     let bytes: Uint8Array;
     const sceneElements = sceneElementsForExport();
+    const exportLevels: IfcLevel[] = levelStore.all().map((l) => ({
+      levelId: l.id,
+      name: l.name,
+      elevation: l.elevation,
+    }));
     if (sceneElements.length > 0) {
-      bytes = buildIfcScene(sceneElements);
+      bytes = buildIfcScene(sceneElements, exportLevels);
     } else {
       // Fallback: kernel BREP mesh for single-object scenes (replicad / file import).
       const data = viewer.getActiveMeshData();

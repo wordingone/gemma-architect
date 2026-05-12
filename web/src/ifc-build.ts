@@ -42,7 +42,13 @@ export type IfcSceneElement = {
   mesh: IfcMesh;
   creator: string;  // e.g. "IfcWall", "IfcSlab", "IfcColumn"
   label?: string;
+  levelId?: string;                        // #243: storey assignment — matches IfcLevel.levelId
+  dispatchArgs?: Record<string, unknown>;  // #244: numeric/string args → IfcPropertySet
 };
+
+// Caller passes one entry per level (from levelStore). buildIfcScene emits one
+// IFCBUILDINGSTOREY per entry and groups elements accordingly (#243).
+export type IfcLevel = { levelId: string; name: string; elevation: number };
 
 // IFC4 entity name + trailing args after productShape for each creator.
 // Entities not in this map fall back to IFCBUILDINGELEMENTPROXY.
@@ -60,9 +66,10 @@ const IFC4_ENTITY: Record<string, { name: string; tail: string }> = {
   IfcSpace:   { name: "IFCSPACE",               tail: ",$,.SPACE.,$" },
 };
 
-// Returns the shared header + hierarchy (project/site/building/storey) lines and refs.
+// Returns the shared header + hierarchy (project/site/building) lines and refs.
+// Storey(s) are emitted by the caller (one or many) under `building`.
 function buildIfcHeader(lines: string[], next: () => string): {
-  ownerHistory: string; ctx: string; localPlacement: string; axis3: string; storey: string;
+  ownerHistory: string; ctx: string; localPlacement: string; axis3: string; building: string;
 } {
   const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "");
 
@@ -118,17 +125,39 @@ function buildIfcHeader(lines: string[], next: () => string): {
   lines.push(`${site}=IFCSITE(${stepString(ifcGuid())},${ownerHistory},${stepString("Default Site")},$,$,${localPlacement},$,$,.ELEMENT.,$,$,$,$,$);`);
   const building = next();
   lines.push(`${building}=IFCBUILDING(${stepString(ifcGuid())},${ownerHistory},${stepString("Default Building")},$,$,${localPlacement},$,$,.ELEMENT.,$,$,$);`);
-  const storey = next();
-  lines.push(`${storey}=IFCBUILDINGSTOREY(${stepString(ifcGuid())},${ownerHistory},${stepString("Default Storey")},$,$,${localPlacement},$,$,.ELEMENT.,0.);`);
 
   const projAggSite = next();
   lines.push(`${projAggSite}=IFCRELAGGREGATES(${stepString(ifcGuid())},${ownerHistory},$,$,${project},(${site}));`);
   const siteAggBld = next();
   lines.push(`${siteAggBld}=IFCRELAGGREGATES(${stepString(ifcGuid())},${ownerHistory},$,$,${site},(${building}));`);
-  const bldAggStorey = next();
-  lines.push(`${bldAggStorey}=IFCRELAGGREGATES(${stepString(ifcGuid())},${ownerHistory},$,$,${building},(${storey}));`);
 
-  return { ownerHistory, ctx, localPlacement, axis3, storey };
+  return { ownerHistory, ctx, localPlacement, axis3, building };
+}
+
+// Emit IFCPROPERTYSET + IFCRELDEFINESBYPROPERTIES for numeric/string dispatchArgs (#244).
+function emitElementPropertySet(
+  el: IfcSceneElement,
+  entityRef: string,
+  ownerHistory: string,
+  lines: string[],
+  next: () => string,
+): void {
+  if (!el.dispatchArgs) return;
+  const propRefs: string[] = [];
+  for (const [key, val] of Object.entries(el.dispatchArgs)) {
+    if (typeof val !== "number" && typeof val !== "string") continue;
+    const propRef = next();
+    const valStr = typeof val === "number"
+      ? `IFCREAL(${stepFloat(val)})`
+      : `IFCLABEL(${stepString(String(val))})`;
+    lines.push(`${propRef}=IFCPROPERTYSINGLEVALUE(${stepString(key)},$,${valStr},$);`);
+    propRefs.push(propRef);
+  }
+  if (propRefs.length === 0) return;
+  const pset = next();
+  lines.push(`${pset}=IFCPROPERTYSET(${stepString(ifcGuid())},${ownerHistory},${stepString("Pset_GemmaArchitectParams")},$,(${propRefs.join(",")}));`);
+  const relDef = next();
+  lines.push(`${relDef}=IFCRELDEFINESBYPROPERTIES(${stepString(ifcGuid())},${ownerHistory},$,$,(${entityRef}),${pset});`);
 }
 
 // Emit brep geometry for one mesh, return the IFCFACETEDBREP ref.
@@ -155,14 +184,45 @@ function emitMeshBrep(mesh: IfcMesh, lines: string[], next: () => string): strin
   return brep;
 }
 
-export function buildIfcScene(elements: IfcSceneElement[]): Uint8Array {
+// Sentinel key for elements with no matching levelId.
+const FALLBACK_LEVEL_ID = "__default__";
+
+export function buildIfcScene(elements: IfcSceneElement[], levels?: IfcLevel[]): Uint8Array {
   const lines: string[] = [];
   let id = 0;
   const next = () => `#${++id}`;
 
-  const { ownerHistory, ctx, localPlacement, axis3, storey } = buildIfcHeader(lines, next);
+  const { ownerHistory, ctx, localPlacement, axis3, building } = buildIfcHeader(lines, next);
 
-  const elementRefs: string[] = [];
+  // ── Storey setup (#243) ──────────────────────────────────────────────────
+  type StoreyBucket = { ref: string; entityRefs: string[] };
+  const storeyMap = new Map<string, StoreyBucket>();
+
+  if (levels && levels.length > 0) {
+    const storeyRefs: string[] = [];
+    for (const lev of levels) {
+      const storeyRef = next();
+      lines.push(`${storeyRef}=IFCBUILDINGSTOREY(${stepString(ifcGuid())},${ownerHistory},${stepString(lev.name)},$,$,${localPlacement},$,$,.ELEMENT.,${stepFloat(lev.elevation)});`);
+      storeyMap.set(lev.levelId, { ref: storeyRef, entityRefs: [] });
+      storeyRefs.push(storeyRef);
+    }
+    // Unassigned storey for elements with no matching levelId.
+    const unassigned = next();
+    lines.push(`${unassigned}=IFCBUILDINGSTOREY(${stepString(ifcGuid())},${ownerHistory},${stepString("Unassigned")},$,$,${localPlacement},$,$,.ELEMENT.,0.);`);
+    storeyMap.set(FALLBACK_LEVEL_ID, { ref: unassigned, entityRefs: [] });
+    storeyRefs.push(unassigned);
+    const bldAgg = next();
+    lines.push(`${bldAgg}=IFCRELAGGREGATES(${stepString(ifcGuid())},${ownerHistory},$,$,${building},(${storeyRefs.join(",")}));`);
+  } else {
+    // Single default storey — backward-compatible path.
+    const storey = next();
+    lines.push(`${storey}=IFCBUILDINGSTOREY(${stepString(ifcGuid())},${ownerHistory},${stepString("Default Storey")},$,$,${localPlacement},$,$,.ELEMENT.,0.);`);
+    storeyMap.set(FALLBACK_LEVEL_ID, { ref: storey, entityRefs: [] });
+    const bldAgg = next();
+    lines.push(`${bldAgg}=IFCRELAGGREGATES(${stepString(ifcGuid())},${ownerHistory},$,$,${building},(${storey}));`);
+  }
+
+  // ── Element geometry + property sets ────────────────────────────────────
   for (const el of elements) {
     const spec = IFC4_ENTITY[el.creator] ?? { name: "IFCBUILDINGELEMENTPROXY", tail: ",$,.NOTDEFINED." };
     const label = el.label ?? el.creator;
@@ -177,11 +237,22 @@ export function buildIfcScene(elements: IfcSceneElement[]): Uint8Array {
 
     const entityRef = next();
     lines.push(`${entityRef}=${spec.name}(${stepString(ifcGuid())},${ownerHistory},${stepString(label)},$,$,${elPlacement},${productShape}${spec.tail});`);
-    elementRefs.push(entityRef);
+
+    // #244: property set for dispatch args (numeric/string only).
+    emitElementPropertySet(el, entityRef, ownerHistory, lines, next);
+
+    // #243: route element into its storey bucket.
+    const bucket = storeyMap.get(el.levelId ?? FALLBACK_LEVEL_ID)
+      ?? storeyMap.get(FALLBACK_LEVEL_ID)!;
+    bucket.entityRefs.push(entityRef);
   }
 
-  const containedIn = next();
-  lines.push(`${containedIn}=IFCRELCONTAINEDINSPATIALSTRUCTURE(${stepString(ifcGuid())},${ownerHistory},$,$,(${elementRefs.join(",")}),${storey});`);
+  // ── IFCRELCONTAINEDINSPATIALSTRUCTURE per storey ──────────────────────────
+  for (const { ref, entityRefs } of storeyMap.values()) {
+    if (entityRefs.length === 0) continue;
+    const containedIn = next();
+    lines.push(`${containedIn}=IFCRELCONTAINEDINSPATIALSTRUCTURE(${stepString(ifcGuid())},${ownerHistory},$,$,(${entityRefs.join(",")}),${ref});`);
+  }
 
   lines.push("ENDSEC;");
   lines.push("END-ISO-10303-21;");

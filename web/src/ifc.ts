@@ -8,7 +8,7 @@ import * as WebIFC from "web-ifc";
 // @ts-ignore
 import webIfcWasmUrl from "web-ifc/web-ifc.wasm?url";
 
-export { buildIfc, buildIfcScene, type IfcMesh, type IfcSceneElement } from "./ifc-build.js";
+export { buildIfc, buildIfcScene, type IfcMesh, type IfcSceneElement, type IfcLevel } from "./ifc-build.js";
 
 // --- Round-trip verification via web-ifc -------------------------------------
 
