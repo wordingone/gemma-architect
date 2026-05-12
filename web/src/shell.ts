@@ -358,9 +358,11 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   if (mode === "layout") {
     fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, LAYOUT_RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);
+    _ribbonEl?.querySelector(".ribbon-assets")?.remove();
   } else if (mode === "research") {
     fillRibbonTabs(_ribbonTabsEl, [], "");
     fillRibbonTools(_ribbonToolsEl, RESEARCH_TOOL_GROUPS);
+    _ribbonEl?.querySelector(".ribbon-assets")?.remove();
   } else {
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, RIBBON_TABS[0]);
     fillRibbonTools(_ribbonToolsEl, []);
