@@ -16,7 +16,7 @@
 
 import { setOC } from "replicad";
 import * as tier1 from "../src/tools/tier1.js";
-import { buildIfc, type IfcMesh } from "../web/src/ifc-build.js";
+import { buildIfc, type IfcMesh } from "../web/src/ifc/ifc-build.js";
 
 let _ocReady: Promise<void> | null = null;
 async function ensureOC(): Promise<void> {

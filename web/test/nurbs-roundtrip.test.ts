@@ -10,8 +10,8 @@ import {
   exportNurbsToIfc,
   importNurbsFromIfc,
   evalSurface,
-} from "../src/nurbs-kernel.js";
-import { kernelFor, KERNEL_TABLE } from "../src/kernel.js";
+} from "../src/nurbs/nurbs-kernel.js";
+import { kernelFor, KERNEL_TABLE } from "../src/viewer/kernel.js";
 
 test("hand-built NURBS surface has nonzero control points", () => {
   const s = buildSampleNurbsSurface();

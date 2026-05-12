@@ -27,7 +27,7 @@ import {
 import * as WebIFC from "web-ifc";
 // @ts-ignore — wasm asset URL resolved by vite-plugin-wasm
 import webIfcWasmUrl from "web-ifc/web-ifc.wasm?url";
-import type { IfcHierarchyElement } from "./ifc-types";
+import type { IfcHierarchyElement } from "./ifc/ifc-types";
 
 type Pt = [number, number];
 

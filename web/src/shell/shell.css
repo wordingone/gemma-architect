@@ -1,0 +1,66 @@
+/* ============================================================
+   APP SHELL GRID
+   ============================================================ */
+
+/* App is the GLASS layer — its panels sit over the body grid.
+   Crucially: do NOT set z-index/position on .app or its children, or
+   we create a stacking context that hides body::before from each
+   child's backdrop-filter. */
+.app::before { display: none !important; }
+
+/* ============================================================
+   CHROME PANEL TEXTURE MASK
+   // LIQUID GLASS: intent not satisfied at all — replaced with a
+   // luminance opacity-map driven by a real paper texture.
+   ============================================================ */
+.menubar, .modebar, .ribbon, .palette, .sidebar, .dock, .dock-tabs,
+.snap-dock {
+  position: relative;
+  isolation: isolate;
+}
+.menubar::after, .modebar::after, .ribbon::after, .palette::after,
+.sidebar::after, .dock::after, .dock-tabs::after, .snap-dock::after {
+  /* texture mask removed per user request */
+  display: none;
+}
+.menubar > *, .modebar > *, .ribbon > *, .palette > *,
+.sidebar > *, .dock > *, .dock-tabs > *, .snap-dock > * {
+  position: relative;
+  z-index: 1;
+}
+html[data-mode="night"] .menubar::after,
+html[data-mode="night"] .modebar::after,
+html[data-mode="night"] .ribbon::after,
+html[data-mode="night"] .palette::after,
+html[data-mode="night"] .sidebar::after,
+html[data-mode="night"] .dock::after,
+html[data-mode="night"] .dock-tabs::after,
+html[data-mode="night"] .snap-dock::after {
+  mix-blend-mode: overlay;
+  opacity: 0.40;
+}
+
+/* Viewport area is OPAQUE (gets its own paper) so 3D drawings sit on a clean ground */
+.viewport-area {
+  background: var(--paper-base);
+  position: relative;
+}
+.viewport-area::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: var(--paper-base);
+  z-index: -1;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: 24px 30px 90px 1fr 22px;
+  grid-template-columns: 100%;
+  height: 100dvh;
+  width: 100vw;
+  background: transparent;
+  /* SILHOUETTE — single hairline, the page edge */
+  border: var(--lw-silhouette) solid var(--ink-silhouette);
+  /* No position/z-index here — would create a stacking context that
+     hides body::before from descendants' backdrop-filter. */
+}

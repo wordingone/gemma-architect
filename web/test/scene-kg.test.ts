@@ -19,7 +19,7 @@ import {
   toSidecar,
   fromSidecar,
   tripleCount,
-} from "../src/scene-kg";
+} from "../src/scene/scene-kg";
 
 beforeEach(() => {
   clearKG();

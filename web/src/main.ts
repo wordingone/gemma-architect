@@ -8,20 +8,20 @@
 // Export menu is shared: the active source (whether replicad-generated or
 // loaded-from-file) is queried via viewer.getActiveMeshData().
 
-import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell";
-import { buildWorkbench } from "./workbench";
-import { buildModes, activateMode } from "./modes";
-import { initCmdK } from "./cmdk";
-import { initExportDrawer, openExportDrawer } from "./export-drawer";
+import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell/shell";
+import { buildWorkbench } from "./shell/workbench";
+import { buildModes, activateMode } from "./shell/modes";
+import { initCmdK } from "./ui/cmdk";
+import { initExportDrawer, openExportDrawer } from "./io/export-drawer";
 import { Viewer } from "./viewer/viewer";
-import { ScenePanel, type SceneSummary } from "./scene-panel";
-import { applyDrafting, removeDrafting, isDrafting } from "./drafting";
-import { DEMOS, applyParams, type DemoPrompt, type Param } from "./demo-prompts";
-import { getLayerForCreator, layerStore } from "./layers";
-import { levelStore, getActiveLevelId } from "./levels";
-import { gridStore } from "./grids";
+import { ScenePanel, type SceneSummary } from "./scene/scene-panel";
+import { applyDrafting, removeDrafting, isDrafting } from "./geometry/drafting";
+import { DEMOS, applyParams, type DemoPrompt, type Param } from "./agent/demo-prompts";
+import { getLayerForCreator, layerStore } from "./geometry/layers";
+import { levelStore, getActiveLevelId } from "./geometry/levels";
+import { gridStore } from "./geometry/grids";
 import { snapPoint, setStep as snapSetStep, getStep as snapGetStep } from "./viewer/snap-state";
-import { buildIfc, buildIfcScene, ifcRoundTrip, type IfcSceneElement, type IfcLevel } from "./ifc";
+import { buildIfc, buildIfcScene, ifcRoundTrip, type IfcSceneElement, type IfcLevel } from "./ifc/ifc";
 import {
   detectFormat,
   loadMainThreadFormat,
@@ -32,7 +32,7 @@ import {
   ALL_FORMATS,
   isSupported,
   type LoadedScene,
-} from "./loader";
+} from "./io/loader";
 import {
   exportObj,
   exportGltfJson,
@@ -41,8 +41,8 @@ import {
   exportSvg,
   exportDxf,
   exportPdf,
-} from "./exporters";
-import { SAMPLES } from "./sample-files";
+} from "./io/exporters";
+import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState } from "./app-state";
 import { initCreateMode, emitClickWorld, getSnapTarget } from "./viewer/create-mode";
@@ -51,14 +51,14 @@ import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTr
 import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
-import { runIteration, runDesignLoop } from "./chat-panel";
-import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs-primitives";
-import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePointAt, domain as curveDomain } from "./nurbs-curves";
-import { nurbsCurveFromArc } from "./nurbs-curve-algorithms";
-import { tessellateSurface } from "./nurbs-surfaces";
-import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "./nurbs-surface-algorithms";
+import { runIteration, runDesignLoop } from "./chat/chat-panel";
+import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs/nurbs-primitives";
+import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePointAt, domain as curveDomain } from "./nurbs/nurbs-curves";
+import { nurbsCurveFromArc } from "./nurbs/nurbs-curve-algorithms";
+import { tessellateSurface } from "./nurbs/nurbs-surfaces";
+import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "./nurbs/nurbs-surface-algorithms";
 import { addToMultiSelected, clearMultiSelected, clearSelected, getFilters, getSelected, setSelected, topologyAllowed } from "./viewer/selection-state";
-import { initRenderModes, setRenderMode, type RenderMode } from "./render-modes";
+import { initRenderModes, setRenderMode, type RenderMode } from "./viewer/render-modes";
 import * as THREE from "three";
 
 const $ = <T extends HTMLElement>(id: string): T => {

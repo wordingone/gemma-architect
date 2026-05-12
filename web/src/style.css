@@ -4,14 +4,14 @@
    ============================================================ */
 
 @import "./styles/tokens.css";
-@import "./styles/shell.css";
-@import "./styles/menubar.css";
-@import "./styles/modes.css";
-@import "./styles/ribbon.css";
-@import "./styles/workbench.css";
-@import "./styles/viewport.css";
+@import "./shell/shell.css";
+@import "./shell/menubar.css";
+@import "./shell/modes.css";
+@import "./shell/ribbon.css";
+@import "./shell/workbench.css";
+@import "./viewer/viewport.css";
 @import "./styles/dock.css";
 @import "./styles/responsive.css";
-@import "./styles/skills.css";
+@import "./skills/skills.css";
 @import "./styles/overlays.css";
 @import "./styles/legacy.css";

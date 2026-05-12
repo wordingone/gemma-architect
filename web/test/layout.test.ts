@@ -9,7 +9,7 @@ import {
   exportLayoutAsPdf,
   exportLayoutAsAi,
   exportLayoutAsDwgFallback,
-} from "../src/layout";
+} from "../src/shell/layout";
 
 function freshHost(): HTMLElement {
   const host = document.createElement("div");

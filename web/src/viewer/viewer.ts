@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { axesGizmoSVG } from "../icons.js";
+import { axesGizmoSVG } from "../ui/icons.js";
 import { getState, subscribe } from "../app-state.js";
 import { setSelected, clearSelected } from "./selection-state.js";
 import { emitChainFragment } from "./transforms.js";

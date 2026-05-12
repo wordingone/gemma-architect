@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildDispatchSummary } from "../src/chat-dispatch-summary";
+import { buildDispatchSummary } from "../src/chat/chat-dispatch-summary";
 import type { AgentDispatch } from "../src/agent/agent-harness";
 
 function d(verb: string): AgentDispatch {

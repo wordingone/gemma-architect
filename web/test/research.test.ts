@@ -15,7 +15,7 @@ import {
   queryResearch,
   createCitationTracker,
   type CorpusEntry,
-} from "../src/research-index";
+} from "../src/research/research-index";
 
 // Build a corpus that mirrors the shipped research-corpus/ markdown.
 // Uses readFileSync so any drift between the shipped fixtures and the

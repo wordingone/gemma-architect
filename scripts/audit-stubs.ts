@@ -45,11 +45,11 @@ const EXCLUDE_FILES = new Set([
 // Known stubs awaiting Tiers 1-6 of #58. Remove each entry as the corresponding
 // Tier PR lands and eliminates the stub. Format: "web/src/file.ts:line".
 const KNOWN_STUBS_ALLOWLIST = new Set([
-  "web/src/kernel.ts:89",
-  "web/src/kernel.ts:108",
-  "web/src/kernel.ts:113",
-  "web/src/kernel.ts:119",
-  "web/src/ifc-nurbs.ts:30",
+  "web/src/viewer/kernel.ts:89",
+  "web/src/viewer/kernel.ts:108",
+  "web/src/viewer/kernel.ts:113",
+  "web/src/viewer/kernel.ts:119",
+  "web/src/ifc/ifc-nurbs.ts:30",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

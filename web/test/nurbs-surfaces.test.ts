@@ -5,9 +5,9 @@ import {
   type PlaneSurface, type RevSurface, type SumSurface,
   pointAtUV, normalAtUV, frameAtUV, domainU, domainV,
   getNurbsForm, transposeSurface, tessellateSurface,
-} from "../src/nurbs-surfaces";
-import { Plane, Point3, Interval, Vector3 } from "../src/nurbs-primitives";
-import { type LineCurve, type ArcCurve } from "../src/nurbs-curves";
+} from "../src/nurbs/nurbs-surfaces";
+import { Plane, Point3, Interval, Vector3 } from "../src/nurbs/nurbs-primitives";
+import { type LineCurve, type ArcCurve } from "../src/nurbs/nurbs-curves";
 
 const EPS = 1e-6;
 const close = (a: number, b: number, tol = EPS) => Math.abs(a - b) <= tol;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { buildIfcScene } from "../src/ifc-build.js";
-import type { IfcSceneElement, IfcLevel } from "../src/ifc-build.js";
+import { buildIfcScene } from "../src/ifc/ifc-build.js";
+import type { IfcSceneElement, IfcLevel } from "../src/ifc/ifc-build.js";
 
 // Minimal triangle mesh for test elements.
 function minimalMesh() {

@@ -24,7 +24,7 @@ import {
   importNurbsFromIfc,
   type NurbsSurface,
   type Vec3,
-} from "../web/src/nurbs-kernel.ts";
+} from "../web/src/nurbs/nurbs-kernel.ts";
 
 const SAMPLES_DIR = "web/public/samples";
 

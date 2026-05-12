@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   Point2, Point3, Vector3,
   Line, Polyline, Rectangle, Plane, BoundingBox, Interval, Xform,
-} from "../src/nurbs-primitives";
+} from "../src/nurbs/nurbs-primitives";
 
 // ── Point2 ──────────────────────────────────────────────────────────────────
 

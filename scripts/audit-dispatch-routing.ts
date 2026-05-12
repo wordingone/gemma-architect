@@ -22,13 +22,13 @@ import { readFileSync, existsSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
-const SHELL_TS = join(REPO_ROOT, "web/src/shell.ts");
-const WORKBENCH_TS = join(REPO_ROOT, "web/src/workbench.ts");
+const SHELL_TS = join(REPO_ROOT, "web/src/shell/shell.ts");
+const WORKBENCH_TS = join(REPO_ROOT, "web/src/shell/workbench.ts");
 const VIEWER_TS = join(REPO_ROOT, "web/src/viewer/viewer.ts");
 const INDEX_HTML = join(REPO_ROOT, "web/index.html");
 const STYLE_CSS = join(REPO_ROOT, "web/src/style.css");
 const DSL_EVAL_TS = join(REPO_ROOT, "web/src/commands/dsl-eval.ts");
-const LAYOUT_TS = join(REPO_ROOT, "web/src/layout.ts");
+const LAYOUT_TS = join(REPO_ROOT, "web/src/shell/layout.ts");
 
 type Violation = { file: string; line: number; rule: string; detail: string };
 
@@ -43,7 +43,7 @@ function readLines(path: string): string[] {
 // assignments on tool-btn elements.
 function checkRibbonIcons(): Violation[] {
   const lines = readLines(SHELL_TS);
-  if (lines.length === 0) return [{ file: "web/src/shell.ts", line: 0, rule: "R1", detail: "shell.ts not found" }];
+  if (lines.length === 0) return [{ file: "web/src/shell/shell.ts", line: 0, rule: "R1", detail: "shell.ts not found" }];
 
   let inRibbonLoop = false;
   let loopStart = -1;
@@ -72,7 +72,7 @@ function checkRibbonIcons(): Violation[] {
     }
   }
   if (loopStart === -1) {
-    return [{ file: "web/src/shell.ts", line: 0, rule: "R1", detail: "ribbon-tool render loop (`for (const group of TOOL_GROUPS)` or `function fillRibbonTools`) not found — shell.ts shape changed" }];
+    return [{ file: "web/src/shell/shell.ts", line: 0, rule: "R1", detail: "ribbon-tool render loop (`for (const group of TOOL_GROUPS)` or `function fillRibbonTools`) not found — shell.ts shape changed" }];
   }
 
   const violations: Violation[] = [];
@@ -83,7 +83,7 @@ function checkRibbonIcons(): Violation[] {
     // Any direct textContent assignment of the loop variable to a tool-btn is a violation.
     if (/btn\.textContent\s*=\s*tool\b/.test(line)) {
       violations.push({
-        file: "web/src/shell.ts",
+        file: "web/src/shell/shell.ts",
         line: i + 1,
         rule: "R1",
         detail: "ribbon tool-btn renders raw text (`btn.textContent = tool`); should call iconSVG(tool.toLowerCase(), 16) and inject as innerHTML",
@@ -92,7 +92,7 @@ function checkRibbonIcons(): Violation[] {
   }
   if (!sawIconSVG) {
     violations.push({
-      file: "web/src/shell.ts",
+      file: "web/src/shell/shell.ts",
       line: loopStart,
       rule: "R1",
       detail: `ribbon-tool render loop (lines ${loopStart}-${loopEnd}) does not call iconSVG() — buttons render text not icons`,
@@ -149,7 +149,7 @@ function checkThemeToggleLocation(): Violation[] {
   const sawBlueprint = shell.some((l) => /\bBLUEPRINT\b/.test(l));
   if (!sawBlueprint) {
     violations.push({
-      file: "web/src/shell.ts",
+      file: "web/src/shell/shell.ts",
       line: 0,
       rule: "R2",
       detail: "no BLUEPRINT label found in shell.ts — menubar-right pill (◑ BLUEPRINT / ○ VELLUM) not built",
@@ -164,14 +164,14 @@ function checkThemeToggleLocation(): Violation[] {
 // route through the same handler set.
 function checkPaletteDispatch(): Violation[] {
   const lines = readLines(WORKBENCH_TS);
-  if (lines.length === 0) return [{ file: "web/src/workbench.ts", line: 0, rule: "R3a", detail: "workbench.ts not found" }];
+  if (lines.length === 0) return [{ file: "web/src/shell/workbench.ts", line: 0, rule: "R3a", detail: "workbench.ts not found" }];
 
   const violations: Violation[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/setState\s*\(\s*["']activeTool["']/.test(line)) {
       violations.push({
-        file: "web/src/workbench.ts",
+        file: "web/src/shell/workbench.ts",
         line: i + 1,
         rule: "R3a",
         detail: "palette button click sets activeTool directly via setState; must route through dispatchSync(\"setActiveTool\", { toolId })",
@@ -222,10 +222,18 @@ function checkViewerSelection(): Violation[] {
 // R4d — workbench.ts dock-drag clamp ceiling must reference innerHeight
 function readAllCssLines(): string[] {
   const lines = readLines(STYLE_CSS);
-  const modulesDir = join(REPO_ROOT, "web/src/styles");
-  if (existsSync(modulesDir)) {
-    for (const f of readdirSync(modulesDir).filter((n) => n.endsWith(".css"))) {
-      lines.push(...readLines(join(modulesDir, f)));
+  // Scan global styles/ dir + feature-area dirs that now co-locate CSS
+  const cssDirs = [
+    join(REPO_ROOT, "web/src/styles"),
+    join(REPO_ROOT, "web/src/shell"),
+    join(REPO_ROOT, "web/src/skills"),
+    join(REPO_ROOT, "web/src/viewer"),
+  ];
+  for (const dir of cssDirs) {
+    if (existsSync(dir)) {
+      for (const f of readdirSync(dir).filter((n) => n.endsWith(".css"))) {
+        lines.push(...readLines(join(dir, f)));
+      }
     }
   }
   return lines;
@@ -295,7 +303,7 @@ function checkCropping(): Violation[] {
       const sawInnerHeight = /innerHeight/.test(block);
       if (!sawInnerHeight) {
         violations.push({
-          file: "web/src/workbench.ts",
+          file: "web/src/shell/workbench.ts",
           line: mousemoveIdx + 1,
           rule: "R4d",
           detail: "dock-drag clamp does not reference window.innerHeight; user can drag dock past viewport ceiling. Bound the upper Math.min to Math.min(560, window.innerHeight * 0.5)",
@@ -349,7 +357,7 @@ function checkConsoleDslScope(): Violation[] {
 // implementation has zero such imports — that's the failure mode.
 function checkLayoutFunctional(): Violation[] {
   const lines = readLines(LAYOUT_TS);
-  if (lines.length === 0) return [{ file: "web/src/layout.ts", line: 0, rule: "R6", detail: "layout.ts not found" }];
+  if (lines.length === 0) return [{ file: "web/src/shell/layout.ts", line: 0, rule: "R6", detail: "layout.ts not found" }];
 
   const violations: Violation[] = [];
   const text = lines.join("\n");
@@ -360,7 +368,7 @@ function checkLayoutFunctional(): Violation[] {
   for (let i = 0; i < Math.min(40, lines.length); i++) {
     if (/Panels\s+render\s+an\s+SVG\s+placeholder/i.test(lines[i])) {
       violations.push({
-        file: "web/src/layout.ts",
+        file: "web/src/shell/layout.ts",
         line: i + 1,
         rule: "R6",
         detail: "layout.ts header documents 'Panels render an SVG placeholder' as active implementation; T15 requires real viewport-content rendering at scale. Replace placeholder with WebGL render-target into a per-panel canvas region.",
@@ -377,7 +385,7 @@ function checkLayoutFunctional(): Violation[] {
   const usesRenderTarget = /WebGLRenderTarget|WebGLRenderer|render\s*\(\s*scene\b/.test(text);
   if (!integratesWithViewer && !usesRenderTarget) {
     violations.push({
-      file: "web/src/layout.ts",
+      file: "web/src/shell/layout.ts",
       line: 0,
       rule: "R6",
       detail: "layout.ts has no integration with viewer.ts and no WebGLRenderer/RenderTarget reference. Panel rendering is decoupled from real geometry; cannot match Rhino Layout/Detail viewport behavior. Wire layout panels to the real render pipeline (offscreen render target → texture → panel canvas).",

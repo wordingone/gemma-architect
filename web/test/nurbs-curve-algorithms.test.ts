@@ -5,11 +5,11 @@ import {
   nurbsCurveFromArc,
   intersectCurveCurve,
   closestPointOnCurve,
-} from "../src/nurbs-curve-algorithms";
-import { type NurbsCurve } from "../src/nurbs-curves";
-import { pointAt, domain } from "../src/nurbs-curves";
-import { Plane, type Arc } from "../src/nurbs-primitives";
-import type { LineCurve } from "../src/nurbs-curves";
+} from "../src/nurbs/nurbs-curve-algorithms";
+import { type NurbsCurve } from "../src/nurbs/nurbs-curves";
+import { pointAt, domain } from "../src/nurbs/nurbs-curves";
+import { Plane, type Arc } from "../src/nurbs/nurbs-primitives";
+import type { LineCurve } from "../src/nurbs/nurbs-curves";
 
 const EPS = 1e-9;
 const close = (a: number, b: number, tol = EPS) => Math.abs(a - b) <= tol;

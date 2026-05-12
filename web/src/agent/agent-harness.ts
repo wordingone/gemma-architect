@@ -20,10 +20,10 @@
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
-import { snapshotAsText } from "../scene-kg";
-import { captureViewport } from "../viewport-capture";
+import { snapshotAsText } from "../scene/scene-kg";
+import { captureViewport } from "./viewport-capture";
 import type { Skill } from "./skills-loader";
-import { recordTurn } from "../telemetry";
+import { recordTurn } from "./telemetry";
 
 export type AgentDispatch = {
   verb: string;

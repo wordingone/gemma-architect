@@ -25,9 +25,9 @@ import { snapPoint, getSnap } from "./snap-state";
 import { pushAction } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
-import { gridStore } from "../grids";
-import { levelStore } from "../levels";
-import { refLineStore } from "../ref-lines";
+import { gridStore } from "../geometry/grids";
+import { levelStore } from "../geometry/levels";
+import { refLineStore } from "../geometry/ref-lines";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;

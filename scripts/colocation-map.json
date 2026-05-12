@@ -1,0 +1,110 @@
+{
+  "comment": "Option B co-location map. Migration script reads this to git mv TS files and rewrite all import paths (src + test files). CSS entries update web/src/style.css @import lines.",
+  "keep_at_root": [
+    "web/src/main.ts",
+    "web/src/worker.ts",
+    "web/src/webgpu.d.ts",
+    "web/src/app-state.ts",
+    "web/src/history.ts"
+  ],
+  "moves": [
+    { "from": "web/src/ai-generate.ts",              "to": "web/src/agent/ai-generate.ts",              "type": "ts" },
+    { "from": "web/src/demo-prompts.ts",             "to": "web/src/agent/demo-prompts.ts",             "type": "ts" },
+    { "from": "web/src/image-to-ifc-agent.ts",      "to": "web/src/agent/image-to-ifc-agent.ts",      "type": "ts" },
+    { "from": "web/src/plan.ts",                     "to": "web/src/agent/plan.ts",                     "type": "ts" },
+    { "from": "web/src/telemetry.ts",               "to": "web/src/agent/telemetry.ts",               "type": "ts" },
+    { "from": "web/src/two-d-to-three-d.ts",        "to": "web/src/agent/two-d-to-three-d.ts",        "type": "ts" },
+    { "from": "web/src/viewport-capture.ts",        "to": "web/src/agent/viewport-capture.ts",        "type": "ts" },
+
+    { "from": "web/src/chat-dispatch-routing.ts",   "to": "web/src/chat/chat-dispatch-routing.ts",    "type": "ts" },
+    { "from": "web/src/chat-dispatch-summary.ts",   "to": "web/src/chat/chat-dispatch-summary.ts",   "type": "ts" },
+    { "from": "web/src/chat-panel.ts",              "to": "web/src/chat/chat-panel.ts",               "type": "ts" },
+
+    { "from": "web/src/datums.ts",                  "to": "web/src/geometry/datums.ts",               "type": "ts" },
+    { "from": "web/src/drafting.ts",                "to": "web/src/geometry/drafting.ts",             "type": "ts" },
+    { "from": "web/src/grids.ts",                   "to": "web/src/geometry/grids.ts",                "type": "ts" },
+    { "from": "web/src/layers.ts",                  "to": "web/src/geometry/layers.ts",               "type": "ts" },
+    { "from": "web/src/levels.ts",                  "to": "web/src/geometry/levels.ts",               "type": "ts" },
+    { "from": "web/src/predicates.ts",              "to": "web/src/geometry/predicates.ts",           "type": "ts" },
+    { "from": "web/src/ref-lines.ts",               "to": "web/src/geometry/ref-lines.ts",            "type": "ts" },
+
+    { "from": "web/src/ifc.ts",                     "to": "web/src/ifc/ifc.ts",                       "type": "ts" },
+    { "from": "web/src/ifc-build.ts",               "to": "web/src/ifc/ifc-build.ts",                 "type": "ts" },
+    { "from": "web/src/ifc-nurbs.ts",               "to": "web/src/ifc/ifc-nurbs.ts",                 "type": "ts" },
+    { "from": "web/src/ifc-types.ts",               "to": "web/src/ifc/ifc-types.ts",                 "type": "ts" },
+
+    { "from": "web/src/bonsai-client.ts",           "to": "web/src/io/bonsai-client.ts",              "type": "ts" },
+    { "from": "web/src/export-drawer.ts",           "to": "web/src/io/export-drawer.ts",              "type": "ts" },
+    { "from": "web/src/exporters.ts",               "to": "web/src/io/exporters.ts",                  "type": "ts" },
+    { "from": "web/src/loader.ts",                  "to": "web/src/io/loader.ts",                     "type": "ts" },
+    { "from": "web/src/sample-files.ts",            "to": "web/src/io/sample-files.ts",               "type": "ts" },
+    { "from": "web/src/video-recorder.ts",          "to": "web/src/io/video-recorder.ts",             "type": "ts" },
+
+    { "from": "web/src/nurbs-curve-algorithms.ts",  "to": "web/src/nurbs/nurbs-curve-algorithms.ts",  "type": "ts" },
+    { "from": "web/src/nurbs-curves.ts",            "to": "web/src/nurbs/nurbs-curves.ts",            "type": "ts" },
+    { "from": "web/src/nurbs-kernel.ts",            "to": "web/src/nurbs/nurbs-kernel.ts",            "type": "ts" },
+    { "from": "web/src/nurbs-primitives.ts",        "to": "web/src/nurbs/nurbs-primitives.ts",        "type": "ts" },
+    { "from": "web/src/nurbs-surface-algorithms.ts","to": "web/src/nurbs/nurbs-surface-algorithms.ts","type": "ts" },
+    { "from": "web/src/nurbs-surfaces.ts",          "to": "web/src/nurbs/nurbs-surfaces.ts",          "type": "ts" },
+
+    { "from": "web/src/research-corpus-loader.ts",  "to": "web/src/research/research-corpus-loader.ts","type": "ts" },
+    { "from": "web/src/research-index.ts",          "to": "web/src/research/research-index.ts",       "type": "ts" },
+    { "from": "web/src/research-md.ts",             "to": "web/src/research/research-md.ts",          "type": "ts" },
+
+    { "from": "web/src/scene-kg.ts",                "to": "web/src/scene/scene-kg.ts",                "type": "ts" },
+    { "from": "web/src/scene-panel.ts",             "to": "web/src/scene/scene-panel.ts",             "type": "ts" },
+
+    { "from": "web/src/layout.ts",                  "to": "web/src/shell/layout.ts",                  "type": "ts" },
+    { "from": "web/src/modes.ts",                   "to": "web/src/shell/modes.ts",                   "type": "ts" },
+    { "from": "web/src/shell.ts",                   "to": "web/src/shell/shell.ts",                   "type": "ts" },
+    { "from": "web/src/workbench.ts",               "to": "web/src/shell/workbench.ts",               "type": "ts" },
+
+    { "from": "web/src/skill-canvas.ts",            "to": "web/src/skills/skill-canvas.ts",           "type": "ts" },
+    { "from": "web/src/skill-modal.ts",             "to": "web/src/skills/skill-modal.ts",            "type": "ts" },
+    { "from": "web/src/skill-store.ts",             "to": "web/src/skills/skill-store.ts",            "type": "ts" },
+
+    { "from": "web/src/cmdk.ts",                    "to": "web/src/ui/cmdk.ts",                       "type": "ts" },
+    { "from": "web/src/icons.ts",                   "to": "web/src/ui/icons.ts",                      "type": "ts" },
+    { "from": "web/src/phone-slider.ts",            "to": "web/src/ui/phone-slider.ts",               "type": "ts" },
+
+    { "from": "web/src/kernel.ts",                  "to": "web/src/viewer/kernel.ts",                 "type": "ts" },
+    { "from": "web/src/render-modes.ts",            "to": "web/src/viewer/render-modes.ts",           "type": "ts" },
+
+    { "from": "web/src/styles/shell.css",           "to": "web/src/shell/shell.css",                  "type": "css" },
+    { "from": "web/src/styles/menubar.css",         "to": "web/src/shell/menubar.css",                "type": "css" },
+    { "from": "web/src/styles/modes.css",           "to": "web/src/shell/modes.css",                  "type": "css" },
+    { "from": "web/src/styles/ribbon.css",          "to": "web/src/shell/ribbon.css",                 "type": "css" },
+    { "from": "web/src/styles/workbench.css",       "to": "web/src/shell/workbench.css",              "type": "css" },
+    { "from": "web/src/styles/skills.css",          "to": "web/src/skills/skills.css",                "type": "css" },
+    { "from": "web/src/styles/viewport.css",        "to": "web/src/viewer/viewport.css",              "type": "css" }
+  ],
+  "css_global_stays": [
+    "web/src/styles/tokens.css",
+    "web/src/styles/dock.css",
+    "web/src/styles/responsive.css",
+    "web/src/styles/overlays.css",
+    "web/src/styles/legacy.css"
+  ],
+  "style_css_imports_after": [
+    "@import \"./styles/tokens.css\";",
+    "@import \"./shell/shell.css\";",
+    "@import \"./shell/menubar.css\";",
+    "@import \"./shell/modes.css\";",
+    "@import \"./shell/ribbon.css\";",
+    "@import \"./shell/workbench.css\";",
+    "@import \"./viewer/viewport.css\";",
+    "@import \"./styles/dock.css\";",
+    "@import \"./styles/responsive.css\";",
+    "@import \"./skills/skills.css\";",
+    "@import \"./styles/overlays.css\";",
+    "@import \"./styles/legacy.css\";"
+  ],
+  "notes": [
+    "55 flat TS files: 5 stay at root, 50 move",
+    "12 CSS modules: 7 move to feature dirs, 5 stay global in styles/",
+    "Test files in web/test/ also need import path updates (../src/foo -> ../src/dir/foo)",
+    "Import rewriter must handle both .ts and .js extension variants in import strings",
+    "nurbs-kernel.LICENSE.md stays at root (only referenced in comments, not imported)",
+    "trademark-denylist.json stays at root (not imported by TS, only mentioned in LICENSE.md)"
+  ]
+}

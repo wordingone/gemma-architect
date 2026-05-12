@@ -1,10 +1,10 @@
 // nurbs-surface-algorithms.test.ts — Unit tests for Tier 3 algorithms (#78).
 
 import { describe, expect, test } from "bun:test";
-import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "../src/nurbs-surface-algorithms";
-import { pointAtUV, tessellateSurface } from "../src/nurbs-surfaces";
-import { type LineCurve, type ArcCurve } from "../src/nurbs-curves";
-import { Plane, Point3 } from "../src/nurbs-primitives";
+import { surfaceOfRevolution, sweepSurface, loftSurfaces } from "../src/nurbs/nurbs-surface-algorithms";
+import { pointAtUV, tessellateSurface } from "../src/nurbs/nurbs-surfaces";
+import { type LineCurve, type ArcCurve } from "../src/nurbs/nurbs-curves";
+import { Plane, Point3 } from "../src/nurbs/nurbs-primitives";
 
 const EPS = 1e-6;
 const close = (a: number, b: number, tol = EPS) => Math.abs(a - b) <= tol;

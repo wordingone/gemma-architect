@@ -1,0 +1,155 @@
+/* ============================================================
+   MAIN WORKBENCH
+   ============================================================ */
+
+.workbench {
+  display: grid;
+  grid-template-columns: var(--palette-w) 1fr var(--sidebar-w, 320px);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  border-bottom: var(--lw-edge) solid var(--chrome-seam);
+  background: transparent;
+  grid-row: 4;
+}
+
+/* Mode pane swap — when mode != model, hide workbench children and let
+   the active .mode-pane fill the area. */
+.workbench[data-mode="layout"],
+.workbench[data-mode="research"] {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;   /* constrain row to workbench height */
+  overflow: hidden;
+}
+.workbench[data-mode="layout"] > .palette,
+.workbench[data-mode="layout"] > .center-col,
+.workbench[data-mode="layout"] > .sidebar,
+.workbench[data-mode="research"] > .palette,
+.workbench[data-mode="research"] > .center-col,
+.workbench[data-mode="research"] > .sidebar {
+  display: none;
+}
+.workbench > .mode-pane { display: none; }
+.workbench[data-mode="layout"]   > .paper-mode    { display: flex; }
+.workbench[data-mode="research"] > .research-mode { display: grid; }
+
+/* ============================================================
+   TOOL PALETTE (left)
+   ============================================================ */
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border-right: var(--lw-edge) solid var(--chrome-seam);
+  background: var(--glass-bg);
+  /* backdrop-filter: var(--glass-blur); */ /* liquid glass: intent not satisfied at all */
+  /* -webkit-backdrop-filter: var(--glass-blur); */
+  box-shadow: inset -0.5px 0 0 0 var(--glass-edge-light);
+  padding: 4px 0;
+  /* isolation:isolate (set on .palette by the chrome-panel rule) caps the tooltip
+     z-index within the palette's stacking context. z-index:20 raises the palette's
+     stacking context above the viewport canvas so tooltips paint on top. */
+  z-index: 20;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+.palette-section {
+  display: grid;
+  grid-template-columns: repeat(2, 36px);
+  gap: 2px;
+  justify-content: center;
+  padding: 4px 2px;
+  border-bottom: 1px dashed var(--hairline);
+}
+.palette-section:last-child { border-bottom: none; }
+.palette-section--hidden { display: none; }
+.palette-btn {
+  width: 36px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  margin-bottom: 1px;
+  border-radius: var(--r-sm);
+  position: relative;
+}
+.palette-btn:hover { background: var(--paper-3); color: var(--ink); }
+.palette-btn.active {
+  background: var(--paper);
+  color: var(--sanguine);
+  border-color: var(--hairline);
+  box-shadow: inset 2px 0 0 var(--sanguine);
+}
+.palette-btn svg { width: 18px; height: 18px; stroke-width: 1.25; }
+.phone-slider {
+  position: relative;
+  display: flex;
+  align-self: center;
+  background: var(--paper-2, oklch(0.93 0.004 250));
+  border-radius: 4px;
+  padding: 2px;
+  margin: 4px 6px 2px;
+  user-select: none;
+}
+.phone-slider-thumb {
+  position: absolute;
+  top: 2px; bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  background: var(--paper, oklch(0.97 0.003 250));
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+.phone-slider-btn {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  font-family: var(--mono);
+  text-align: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-faint);
+  position: relative;
+  z-index: 1;
+  transition: color 0.15s;
+  border-radius: 2px;
+}
+.phone-slider-btn.active { color: var(--ink); }
+
+.palette-btn .corner {
+  position: absolute;
+  bottom: 2px; right: 2px;
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-bottom: 4px solid var(--ink-faint);
+}
+
+.palette-tooltip {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 3px 7px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-radius: var(--r-sm);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 80ms;
+  z-index: 100;
+  font-family: var(--mono);
+}
+.palette-btn:hover .palette-tooltip { opacity: 1; }

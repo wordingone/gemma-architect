@@ -23,7 +23,7 @@ const REPO_ROOT = resolve(import.meta.dir, "..");
 const APP_JSX =
   process.env.APP_JSX_PATH ??
   "B:/Downloads/gemma-architect-handoff/gemma-architect/project/app.jsx";
-const SHELL_TS = join(REPO_ROOT, "web/src/shell.ts");
+const SHELL_TS = join(REPO_ROOT, "web/src/shell/shell.ts");
 
 // Known TS-port adaptations. Each entry maps an app.jsx label to one or more
 // equivalent shell.ts labels (any one match counts as parity).

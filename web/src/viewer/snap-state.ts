@@ -2,7 +2,7 @@
 // Driven by the snap-dock widget in workbench.ts; consumed by create-mode.ts
 // (sketch-click quantising) and viewer.ts (gumball drag quantising).
 
-import { gridStore } from "../grids";
+import { gridStore } from "../geometry/grids";
 
 export interface SnapState {
   snapOn: boolean;       // master toggle — when off, all other snap flags inert

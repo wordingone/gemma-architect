@@ -17,8 +17,8 @@ import {
   split,
   tessellate,
   createClampedUniformNurbs,
-} from "../src/nurbs-curves";
-import { Plane, Point3, Xform } from "../src/nurbs-primitives";
+} from "../src/nurbs/nurbs-curves";
+import { Plane, Point3, Xform } from "../src/nurbs/nurbs-primitives";
 
 const EPS = 1e-9;
 const close = (a: number, b: number, tol = EPS) => Math.abs(a - b) <= tol;

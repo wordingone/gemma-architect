@@ -21,8 +21,8 @@
 // will break layer 2.
 
 import { describe, test, expect } from "bun:test";
-import { buildDispatchSummary } from "../src/chat-dispatch-summary";
-import { classifyDispatchResult } from "../src/chat-dispatch-routing";
+import { buildDispatchSummary } from "../src/chat/chat-dispatch-summary";
+import { classifyDispatchResult } from "../src/chat/chat-dispatch-routing";
 
 describe("#271 — agent self-correct loop regression net", () => {
   describe("Layer 1: dispatch routing (classifyDispatchResult)", () => {
