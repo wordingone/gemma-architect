@@ -130,6 +130,9 @@ let _ribbonEl: HTMLElement | null = null;
 // appendRibbonAssets builds it. Used by setRibbonElementTypes / reset.
 let _elemCardsEl: HTMLElement | null = null;
 let _elemCardWrapEl: HTMLElement | null = null; // the wrap passed to buildAssetCard
+// Separate chips container for dynamic IFC element-type chips — lives BELOW the static
+// Wall/Sweep cards. Hidden via :empty CSS when no IFC is loaded.
+let _elemChipsEl: HTMLElement | null = null;
 
 function fillRibbonTabs(tabsEl: HTMLElement, tabs: readonly string[], initialTab: string) {
   tabsEl.innerHTML = "";
@@ -248,6 +251,7 @@ function appendRibbonAssets(ribbonHost: HTMLElement) {
   function buildColumn(label: string, samples: typeof RIBBON_SCENE_SAMPLES): HTMLElement {
     const col = document.createElement("div");
     col.className = "ribbon-section-col";
+    col.dataset.section = label.toUpperCase();
 
     const hdr = document.createElement("span");
     hdr.className = "ribbon-asset-section-header";
@@ -262,6 +266,12 @@ function appendRibbonAssets(ribbonHost: HTMLElement) {
     if (label === "Elements") {
       _elemCardsEl = cards;
       _elemCardWrapEl = wrap;
+      // Chips container — dynamic IFC type chips sit below the static cards.
+      // :empty CSS hides it when no IFC is loaded.
+      const chips = document.createElement("div");
+      chips.className = "ribbon-assets-cards ribbon-assets-cards--chips";
+      col.appendChild(chips);
+      _elemChipsEl = chips;
     }
 
     return col;
@@ -300,12 +310,11 @@ function ifcClassIcon(cls: string): string {
   return "model";
 }
 
-// Replace the static sample cards in the ELEMENTS section with dynamic IFC
-// element-type chips derived from the currently loaded model's hierarchy.
+// Populate the dynamic IFC element-type chips below the always-visible static cards.
+// Static Wall/Sweep cards are untouched; chips appear in the separate _elemChipsEl row.
 export function setRibbonElementTypes(types: { cls: string; count: number }[]): void {
-  if (!_elemCardsEl) return;
-  _elemCardsEl.innerHTML = "";
-  _elemCardsEl.className = "ribbon-assets-cards ribbon-assets-cards--chips";
+  if (!_elemChipsEl) return;
+  _elemChipsEl.innerHTML = "";
   for (const { cls, count } of types) {
     const chip = document.createElement("div");
     chip.className = "ribbon-element-chip";
@@ -319,18 +328,14 @@ export function setRibbonElementTypes(types: { cls: string; count: number }[]): 
     chip.addEventListener("click", () => {
       window.dispatchEvent(new CustomEvent("ribbon:ifc-type", { detail: { cls } }));
     });
-    _elemCardsEl.appendChild(chip);
+    _elemChipsEl.appendChild(chip);
   }
 }
 
-// Restore the static sample cards (called on scene clear / non-IFC load).
+// Clear dynamic chips on scene clear / non-IFC load. Static cards remain.
 export function resetRibbonElementTypes(): void {
-  if (!_elemCardsEl || !_elemCardWrapEl) return;
-  _elemCardsEl.innerHTML = "";
-  _elemCardsEl.className = "ribbon-assets-cards";
-  for (const s of RIBBON_ELEMENT_SAMPLES) {
-    _elemCardsEl.appendChild(buildAssetCard(s, _elemCardWrapEl));
-  }
+  if (!_elemChipsEl) return;
+  _elemChipsEl.innerHTML = "";
 }
 
 // Append the ARCH|COMP toggle into the ribbon tabs strip (MODEL mode only).

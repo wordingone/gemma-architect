@@ -1285,7 +1285,8 @@ html[data-mode="night"] .paper-stage {
   white-space: nowrap;
 }
 
-/* Dynamic IFC element-type chips — shown in ELEMENTS section when a model is loaded */
+/* Dynamic IFC element-type chips — sibling row below the static .ribbon-assets-cards.
+   :empty hides the row when no IFC is loaded so no visual gap appears. */
 .ribbon-assets-cards--chips {
   flex-wrap: wrap;
   gap: 3px;
@@ -1293,6 +1294,7 @@ html[data-mode="night"] .paper-stage {
   overflow-y: auto;
   align-items: flex-start;
 }
+.ribbon-assets-cards--chips:empty { display: none; }
 .ribbon-element-chip {
   display: flex;
   flex-direction: column;
