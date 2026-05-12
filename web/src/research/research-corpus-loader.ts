@@ -8,11 +8,11 @@
 
 import type { CorpusEntry } from "./research-index";
 
-import wallThicknessMd from "../research-corpus/wall-thickness.md?raw";
-import ifc4Md from "../research-corpus/ifc4-schema-basics.md?raw";
-import gableRoofMd from "../research-corpus/gable-roof.md?raw";
-import daylightMd from "../research-corpus/daylight-calc.md?raw";
-import buildingCodesMd from "../research-corpus/building-codes-101.md?raw";
+import wallThicknessMd from "../../research-corpus/wall-thickness.md?raw";
+import ifc4Md from "../../research-corpus/ifc4-schema-basics.md?raw";
+import gableRoofMd from "../../research-corpus/gable-roof.md?raw";
+import daylightMd from "../../research-corpus/daylight-calc.md?raw";
+import buildingCodesMd from "../../research-corpus/building-codes-101.md?raw";
 
 export function defaultCorpus(): CorpusEntry[] {
   const local: CorpusEntry[] = [
