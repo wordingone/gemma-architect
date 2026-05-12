@@ -2294,19 +2294,64 @@ function initRenderModePopover(): void {
 }
 
 // Panel collapse toggles (#488). Alt+[ = palette, Alt+] = sidebar.
-// CSS classes .palette-collapsed / .sidebar-collapsed on .workbench
-// are defined in style.css responsive section.
+// At ≤600px, panels become slide-in drawers (#517); at >600px, the
+// palette-collapsed / sidebar-collapsed classes apply as before.
 function wirePanelToggles() {
   const workbench = document.querySelector<HTMLElement>(".workbench");
   if (!workbench) return;
+
+  // Backdrop and edge-tab toggle buttons (visible only at ≤600px via CSS).
+  const backdrop = document.createElement("div");
+  backdrop.className = "drawer-backdrop";
+  document.body.appendChild(backdrop);
+
+  const btnPalette = document.createElement("button");
+  btnPalette.type = "button";
+  btnPalette.className = "drawer-btn drawer-btn-palette";
+  btnPalette.title = "Show palette";
+  btnPalette.textContent = "≡";
+  document.body.appendChild(btnPalette);
+
+  const btnSidebar = document.createElement("button");
+  btnSidebar.type = "button";
+  btnSidebar.className = "drawer-btn drawer-btn-sidebar";
+  btnSidebar.title = "Show sidebar";
+  btnSidebar.textContent = "≡";
+  document.body.appendChild(btnSidebar);
+
+  function isDrawerMode(): boolean { return window.innerWidth <= 600; }
+
+  function closeDrawers(): void {
+    document.querySelector(".palette")?.classList.remove("drawer-open");
+    document.querySelector(".sidebar")?.classList.remove("drawer-open");
+    backdrop.classList.remove("active");
+  }
+
+  function toggleDrawer(panel: "palette" | "sidebar"): void {
+    const el = document.querySelector<HTMLElement>(`.${panel}`);
+    if (!el) return;
+    const wasOpen = el.classList.contains("drawer-open");
+    closeDrawers();
+    if (!wasOpen) {
+      el.classList.add("drawer-open");
+      backdrop.classList.add("active");
+    }
+  }
+
+  btnPalette.addEventListener("click", () => toggleDrawer("palette"));
+  btnSidebar.addEventListener("click",  () => toggleDrawer("sidebar"));
+  backdrop.addEventListener("click", closeDrawers);
+
   document.addEventListener("keydown", (e) => {
     if (e.altKey && e.key === "[") {
       e.preventDefault();
-      workbench.classList.toggle("palette-collapsed");
+      if (isDrawerMode()) toggleDrawer("palette");
+      else workbench.classList.toggle("palette-collapsed");
     }
     if (e.altKey && e.key === "]") {
       e.preventDefault();
-      workbench.classList.toggle("sidebar-collapsed");
+      if (isDrawerMode()) toggleDrawer("sidebar");
+      else workbench.classList.toggle("sidebar-collapsed");
     }
   });
 }
