@@ -2910,6 +2910,85 @@ await resetScene('before-box-inject');
   else record('ribbon-layout-no-overlap', r60.passed, r60.evidence);
 }
 
+// ── Surface 61: gemma-session-global (#409/QW-3) ──────────────────────────────
+{
+  const r61 = await evaluate(`(() => {
+    const gs = window.__gemmaSession;
+    if (!gs) return { passed: false, evidence: { reason: 'window.__gemmaSession not defined' } };
+    const hasFields =
+      typeof gs.startTs === 'number' &&
+      typeof gs.turnCount === 'number' &&
+      typeof gs.dispatchCount === 'number' &&
+      typeof gs.errorCount === 'number';
+    return {
+      passed: hasFields,
+      evidence: {
+        startTs: gs.startTs,
+        turnCount: gs.turnCount,
+        dispatchCount: gs.dispatchCount,
+        errorCount: gs.errorCount,
+        fieldTypes: {
+          startTs: typeof gs.startTs,
+          turnCount: typeof gs.turnCount,
+          dispatchCount: typeof gs.dispatchCount,
+          errorCount: typeof gs.errorCount,
+        },
+      },
+    };
+  })()`);
+  if (!r61) record('gemma-session-global', false, { reason: 'evaluate returned null' });
+  else record('gemma-session-global', r61.passed, r61.evidence);
+}
+
+// ── Surface 62: dispatch-hooks-registry (#409/QW-1) ───────────────────────────
+{
+  const r62 = await evaluate(`(() => {
+    const dh = window.__gemma_dispatch_hooks;
+    if (!dh) return { passed: false, evidence: { reason: 'window.__gemma_dispatch_hooks not defined' } };
+    const isArray = Array.isArray(dh.pre);
+    return {
+      passed: isArray,
+      evidence: {
+        preIsArray: isArray,
+        preLength: isArray ? dh.pre.length : null,
+        keys: Object.keys(dh),
+      },
+    };
+  })()`);
+  if (!r62) record('dispatch-hooks-registry', false, { reason: 'evaluate returned null' });
+  else record('dispatch-hooks-registry', r62.passed, r62.evidence);
+}
+
+// ── Surface 63: agent-turn-complete-event (#409/QW-2) ─────────────────────────
+{
+  const r63 = await evaluate(`(() => {
+    return new Promise(resolve => {
+      const received = [];
+      const handler = (e) => received.push(e.detail);
+      window.addEventListener('agent:turn-complete', handler);
+      const testDetail = { verbs: ['IfcWall'], sceneObjects: 3, turnMs: 42 };
+      window.dispatchEvent(new CustomEvent('agent:turn-complete', { detail: testDetail }));
+      setTimeout(() => {
+        window.removeEventListener('agent:turn-complete', handler);
+        const got = received[0];
+        if (!got) {
+          resolve({ passed: false, evidence: { reason: 'event not received' } });
+          return;
+        }
+        const hasVerbs = Array.isArray(got.verbs);
+        const hasSceneObjects = typeof got.sceneObjects === 'number';
+        const hasTurnMs = typeof got.turnMs === 'number';
+        resolve({
+          passed: hasVerbs && hasSceneObjects && hasTurnMs,
+          evidence: { received: got, hasVerbs, hasSceneObjects, hasTurnMs },
+        });
+      }, 50);
+    });
+  })()`);
+  if (!r63) record('agent-turn-complete-event', false, { reason: 'evaluate returned null' });
+  else record('agent-turn-complete-event', r63.passed, r63.evidence);
+}
+
 } finally {
   await cleanup();
 }
