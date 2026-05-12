@@ -2910,6 +2910,30 @@ await resetScene('before-box-inject');
   else record('ribbon-layout-no-overlap', r60.passed, r60.evidence);
 }
 
+// ── Surface 61: starter-prompts-no-wall-box (#471) ────────────────────────────
+// Asserts STARTER_PROMPTS[0] and [1] do not reference primitive geometry.
+{
+  const r61 = await evaluate(`(() => {
+    try {
+      const chips = Array.from(document.querySelectorAll('.starter-chip'));
+      if (chips.length < 2) {
+        return { passed: false, evidence: { reason: 'fewer than 2 starter chips found', found: chips.length } };
+      }
+      const texts = chips.slice(0, 2).map(c => c.textContent?.trim() ?? '');
+      const wallBoxRe = /\\b(wall|box)\\b/i;
+      const violations = texts.filter(t => wallBoxRe.test(t));
+      return {
+        passed: violations.length === 0,
+        evidence: { texts, violations },
+      };
+    } catch(e) {
+      return { passed: false, evidence: { error: e.message } };
+    }
+  })()`);
+  if (!r61) record('starter-prompts-no-wall-box', false, { reason: 'evaluate returned null' });
+  else record('starter-prompts-no-wall-box', r61.passed, r61.evidence);
+}
+
 } finally {
   await cleanup();
 }
