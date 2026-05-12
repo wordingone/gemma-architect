@@ -22,6 +22,12 @@ type Message = {
   error?: string;
 };
 
+// QW-3 (#409): session context global — mirrors avir-cli's session state.
+type GemmaSession = { startTs: number; turnCount: number; dispatchCount: number; errorCount: number };
+// QW-1 (#409): pre-dispatch hook registry — mirrors avir-cli PreToolUse hooks.
+type GemmaDispatchHooks = { pre: Array<(d: AgentDispatch) => void> };
+type _GemmaW = Window & typeof globalThis & { __gemmaSession: GemmaSession; __gemma_dispatch_hooks: GemmaDispatchHooks };
+
 const STARTER_PROMPTS = [
   "Draw a 5m wall, 0.2m thick, 2.8m tall",
   "Create a rectangular room 6×4m with 2.8m ceilings",
@@ -56,6 +62,10 @@ export class ChatPanel {
 
   constructor(private _root: HTMLElement) {
     this._build();
+    // QW-3 (#409): expose session counters for tooling + gemma-verify assertions.
+    (window as unknown as _GemmaW).__gemmaSession = { startTs: Date.now(), turnCount: 0, dispatchCount: 0, errorCount: 0 };
+    // QW-1 (#409): pre-dispatch hook registry — external code registers hooks here.
+    (window as unknown as _GemmaW).__gemma_dispatch_hooks = { pre: [] };
   }
 
   setSkills(skills: Skill[]): void {
@@ -198,6 +208,8 @@ export class ChatPanel {
     if (!text || this._sendBtn.disabled) return;
     this._inputEl.value = "";
     this._startersEl.style.display = "none";
+    // QW-3: count all user turns (including skill-direct and testMode paths).
+    (window as unknown as _GemmaW).__gemmaSession.turnCount++;
 
     // Capture + clear pending image before any await so it isn't cleared by a concurrent send.
     const userImage = this._pendingImage;
@@ -209,6 +221,7 @@ export class ChatPanel {
     this._sendBtn.disabled = true;
     this._sendBtn.textContent = "…";
     const thinking = this._appendThinking();
+    const _turnStart = Date.now();
 
     try {
       const matchedSkills = this._skills.length > 0 ? findSkillsForPrompt(this._skills, text) : [];
@@ -259,7 +272,7 @@ export class ChatPanel {
       this._updatePerfStrip();
 
       if (resp.dispatches.length === 0 || isSimplePlan(resp.dispatches)) {
-        await this._executeAndPush(resp);
+        await this._executeAndPush(resp, _turnStart);
       } else {
         this._pushPlanMsg(resp);
       }
@@ -267,6 +280,8 @@ export class ChatPanel {
       this._removeThinking(thinking);
       const err = e as Error;
       this._pushMsg({ role: "assistant", content: "", error: err.message });
+      // QW-3: track inference/dispatch errors for external monitoring.
+      (window as unknown as _GemmaW).__gemmaSession.errorCount++;
     } finally {
       this._sendBtn.disabled = false;
       this._sendBtn.textContent = "SEND";
@@ -293,7 +308,11 @@ export class ChatPanel {
   private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; fired: string[] }> {
     const fired: string[] = [];
     const errors: string[] = [];
+    // QW-1: read pre-dispatch hooks once per batch (fault-isolated — hook errors are silenced).
+    const preHooks = (window as unknown as _GemmaW).__gemma_dispatch_hooks.pre.slice();
     for (const d of resp.dispatches) {
+      // QW-1: call each registered pre-dispatch hook before invoking the command.
+      for (const hook of preHooks) { try { hook(d); } catch { /* silenced */ } }
       const out = await invokeCommand({
         command: d.verb,
         parameters: d.args,
@@ -303,6 +322,8 @@ export class ChatPanel {
       fired.push(cls.fired);
       if (out.status === "success") setPickerHint(null);
       if (cls.error) errors.push(cls.error);
+      // QW-3: count each dispatched verb.
+      (window as unknown as _GemmaW).__gemmaSession.dispatchCount++;
     }
     // #500: fit before next runAgentTurn screenshot; create-mode never hits this path.
     if (resp.dispatches.length > 0) {
@@ -314,11 +335,19 @@ export class ChatPanel {
     return { summary, fired };
   }
 
-  private async _executeAndPush(resp: AgentResponse): Promise<void> {
+  private async _executeAndPush(resp: AgentResponse, turnStartMs?: number): Promise<void> {
     const { summary } = await this._runDispatches(resp);
     this._pushMsg({ role: "assistant", content: summary, dispatches: resp.dispatches });
     this._history.push({ role: "assistant", content: summary });
     (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
+    // QW-2 (#409): emit turn-complete event — mirrors avir-cli Stop hook turn visibility.
+    window.dispatchEvent(new CustomEvent("agent:turn-complete", {
+      detail: {
+        verbs: resp.dispatches.map((d) => d.verb),
+        sceneObjects: (window as unknown as { __viewer?: { scene?: { children?: unknown[] } } }).__viewer?.scene?.children?.length ?? 0,
+        turnMs: turnStartMs != null ? Date.now() - turnStartMs : undefined,
+      },
+    }));
   }
 
   private _pushPlanMsg(resp: AgentResponse): void {
