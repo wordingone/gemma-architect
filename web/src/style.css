@@ -1488,6 +1488,7 @@ html[data-mode="night"] .paper-stage {
      stacking context above the viewport canvas so tooltips paint on top. */
   z-index: 20;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
 }
 .palette-section {
