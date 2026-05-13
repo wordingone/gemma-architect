@@ -43,7 +43,8 @@
     "judge": "bun web/test/capability/judge.ts",
     "baseline:bare-gemma": "bun web/test/capability/baselines/bare-gemma.ts",
     "baseline:blender-mcp": "bun web/test/capability/baselines/blender-mcp.ts",
-    "baseline:compare": "bun web/test/capability/baselines/post-comparison.ts"
+    "baseline:compare": "bun web/test/capability/baselines/post-comparison.ts",
+    "llama:proxy": "bun scripts/llama-proxy.ts"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
