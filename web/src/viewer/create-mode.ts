@@ -127,23 +127,35 @@ const OP_TOOL_IDS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "ang
 const EXTRUDABLE_CREATORS = new Set(["rect", "circle", "polygon", "polyline", "curve", "line", "wall", "slab", "column", "box", "beam", "roof", "space"]);
 
 // Object hovered during an op-tool select phase — highlighted with emissive tint.
-let _opHoverObj: THREE.Mesh | null = null;
+let _opHoverObj: THREE.Object3D | null = null;
 let _opHoverSavedEmissive: number | null = null;
-function opSetHover(obj: THREE.Mesh | null): void {
+function opSetHover(obj: THREE.Object3D | null): void {
   if (_opHoverObj === obj) return;
   // Un-highlight previous hover.
   if (_opHoverObj && _opHoverSavedEmissive !== null) {
-    const mat = _opHoverObj.material as THREE.MeshStandardMaterial;
-    if (mat?.emissive) mat.emissive.setHex(_opHoverSavedEmissive);
+    const prevMat = (_opHoverObj as THREE.Mesh | THREE.Line).material as THREE.Material;
+    if (_opHoverObj instanceof THREE.Line) {
+      (prevMat as THREE.LineBasicMaterial).color.setHex(_opHoverSavedEmissive);
+    } else {
+      const m = prevMat as THREE.MeshStandardMaterial;
+      if (m?.emissive) m.emissive.setHex(_opHoverSavedEmissive);
+    }
     _opHoverSavedEmissive = null;
   }
   _opHoverObj = obj;
   // Highlight new hover.
   if (obj) {
-    const mat = obj.material as THREE.MeshStandardMaterial;
-    if (mat?.emissive) {
-      _opHoverSavedEmissive = (mat.emissive as THREE.Color).getHex();
-      (mat.emissive as THREE.Color).setHex(0x334455);
+    const mat = (obj as THREE.Mesh | THREE.Line).material as THREE.Material;
+    if (obj instanceof THREE.Line) {
+      const lm = mat as THREE.LineBasicMaterial;
+      _opHoverSavedEmissive = lm.color.getHex();
+      lm.color.setHex(0x44aaff);
+    } else {
+      const m = mat as THREE.MeshStandardMaterial;
+      if (m?.emissive) {
+        _opHoverSavedEmissive = (m.emissive as THREE.Color).getHex();
+        (m.emissive as THREE.Color).setHex(0x334455);
+      }
     }
   }
 }
@@ -2680,10 +2692,10 @@ export function initCreateMode(viewer: Viewer): void {
     if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" || _opPhase?.kind === "fillet_select") {
       const profileOnly = _opPhase.kind === "extrude_select";
       const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, profileOnly);
-      opSetHover(hit ? hit.obj as THREE.Mesh : null);
+      opSetHover(hit ? hit.obj : null);
     } else if (_opPhase?.kind === "bool_b") {
       const hit = opRaycastObject(viewer, ev.clientX, ev.clientY);
-      const hoverable = hit && hit.obj !== _opPhase.objA ? hit.obj as THREE.Mesh : null;
+      const hoverable = hit && hit.obj !== _opPhase.objA ? hit.obj : null;
       opSetHover(hoverable);
     } else {
       opSetHover(null);
