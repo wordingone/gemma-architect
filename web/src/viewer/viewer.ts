@@ -62,6 +62,7 @@ export class Viewer {
   // palette Move/Rotate/Scale buttons are no longer required for switching.
   private gizmos: TransformControls[] = [];
   private gizmoCaptured: { position: THREE.Vector3; quaternion: THREE.Quaternion; scale: THREE.Vector3 } | null = null;
+  private _gumballEnabled = true;
   // Pivot proxy — Rhino "relocate gumball" needs the gumball pose to be
   // separable from the geometry pose. The three TransformControls always
   // attach to this proxy, never directly to the geometry. The proxy's
@@ -843,9 +844,22 @@ export class Viewer {
     }
     if (obj) {
       this.syncPivot();
-      for (const g of this.gizmos) g.attach(this.pivotProxy);
+      if (this._gumballEnabled) {
+        for (const g of this.gizmos) g.attach(this.pivotProxy);
+      }
     } else {
       for (const g of this.gizmos) g.detach();
+    }
+  }
+
+  /** Suppress or restore the gumball. Pass false while op-tools are running. */
+  setGumballEnabled(enabled: boolean): void {
+    this._gumballEnabled = enabled;
+    if (!enabled) {
+      for (const g of this.gizmos) g.detach();
+    } else if (this.targetObject && this.pivotProxy) {
+      this.syncPivot();
+      for (const g of this.gizmos) g.attach(this.pivotProxy);
     }
   }
 

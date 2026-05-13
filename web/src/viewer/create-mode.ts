@@ -22,7 +22,7 @@ import type { Viewer } from "./viewer";
 import { setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { snapPoint, getSnap } from "./snap-state";
-import { pushAction } from "../history";
+import { pushAction, pushTransformAction, captureTransform } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../geometry/grids";
@@ -122,6 +122,31 @@ export function setChooserHint(choice: { arg: string; options: ChoiceOption[] } 
 
 // Op tools are handled by the opPhase state machine, not the click-to-place pipeline.
 const OP_TOOL_IDS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure"]);
+
+// Creators that are valid extrude profiles (curves and surfaces).
+const EXTRUDABLE_CREATORS = new Set(["rect", "circle", "polygon", "polyline", "curve", "line", "wall", "slab", "column", "box", "beam", "roof", "space"]);
+
+// Object hovered during an op-tool select phase — highlighted with emissive tint.
+let _opHoverObj: THREE.Mesh | null = null;
+let _opHoverSavedEmissive: number | null = null;
+function opSetHover(obj: THREE.Mesh | null): void {
+  if (_opHoverObj === obj) return;
+  // Un-highlight previous hover.
+  if (_opHoverObj && _opHoverSavedEmissive !== null) {
+    const mat = _opHoverObj.material as THREE.MeshStandardMaterial;
+    if (mat?.emissive) mat.emissive.setHex(_opHoverSavedEmissive);
+    _opHoverSavedEmissive = null;
+  }
+  _opHoverObj = obj;
+  // Highlight new hover.
+  if (obj) {
+    const mat = obj.material as THREE.MeshStandardMaterial;
+    if (mat?.emissive) {
+      _opHoverSavedEmissive = (mat.emissive as THREE.Color).getHex();
+      (mat.emissive as THREE.Color).setHex(0x334455);
+    }
+  }
+}
 
 function readActiveTool(): string | null {
   const btn = document.querySelector<HTMLElement>(".palette-btn.active");
@@ -261,7 +286,57 @@ function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): Sn
     }
   }
 
-  // ── 2. Geometry raycasting — hits a mesh surface ───────────────────────────
+  // ── 2. Line/curve objects: vertex snap by screen-distance to each control point ──
+  // THREE.Raycaster has poor precision against Lines in perspective view (threshold
+  // tuning is fiddly). Instead, iterate each vertex of Line/LineLoop/LineSegments
+  // objects and snap by screen-distance — same as stored-endpoint snap in section 1.
+  const snapExclude = _ptPhase ? ptGetTarget() : null;
+  if (snap.vertexSnapOn || snap.edgeSnapOn) {
+    let lineVBest: SnapVertex | null = null;
+    let lineVBestD = VERTEX_SNAP_PX;
+    viewer.getScene().traverse((obj) => {
+      if (obj.userData.noSnap) return;
+      if (obj === snapExclude) return;
+      if (!(obj instanceof THREE.Line)) return; // covers Line, LineLoop, LineSegments
+      const posAttr = obj.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+      if (!posAttr) return;
+      const count = posAttr.count;
+      for (let i = 0; i < count; i++) {
+        const lv = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(obj.matrixWorld);
+        const sc = projectToScreen(viewer, lv.x, lv.y, lv.z);
+        if (!sc) continue;
+        const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+        if (d < lineVBestD) {
+          lineVBestD = d;
+          lineVBest = { id: makeSnapId(lv.x, lv.y, lv.z), x: lv.x, y: lv.y, z: lv.z };
+        }
+      }
+      // Edge snap along segments for Line objects.
+      if (snap.edgeSnapOn) {
+        const looped = obj instanceof THREE.LineLoop;
+        for (let i = 0; i < count - (looped ? 0 : 1); i++) {
+          const A = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(obj.matrixWorld);
+          const B = new THREE.Vector3().fromBufferAttribute(posAttr, (i + 1) % count).applyMatrix4(obj.matrixWorld);
+          const ep = closestPtOnSegToRay(viewer, clientX, clientY, A, B);
+          if (!ep) continue;
+          const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
+          if (!sc) continue;
+          const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+          if (d < lineVBestD) {
+            lineVBestD = d;
+            const edgeDir = B.clone().sub(A).normalize();
+            lineVBest = { id: makeSnapId(ep.x, ep.y, ep.z), x: ep.x, y: ep.y, z: ep.z, edgeDir };
+          }
+        }
+      }
+    });
+    if (lineVBest) {
+      if ((lineVBest as SnapVertex).edgeDir) _lastSnapEdgeDir = (lineVBest as SnapVertex).edgeDir!;
+      return lineVBest;
+    }
+  }
+
+  // ── 3. Geometry raycasting — hits a mesh surface ───────────────────────────
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
   const ndc = new THREE.Vector2(
@@ -273,7 +348,6 @@ function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): Sn
 
   // Filter to real Mesh objects; skip helpers, noSnap-tagged objects, and the
   // object currently being transformed (prevents snapping to itself).
-  const snapExclude = _ptPhase ? ptGetTarget() : null;
   const meshes: THREE.Mesh[] = [];
   viewer.getScene().traverse((obj) => {
     if (obj.userData.noSnap) return;
@@ -307,16 +381,10 @@ function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): Sn
     if (candidate) return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
   }
 
-  if (snap.midpointSnapOn) {
-    for (let i = 0; i < 3; i++) {
-      const mid = facePts[i].clone().add(facePts[(i + 1) % 3]).multiplyScalar(0.5);
-      const sc = projectToScreen(viewer, mid.x, mid.y, mid.z);
-      if (!sc) continue;
-      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-      if (d < candidateD) { candidateD = d; candidate = mid; }
-    }
-    if (candidate) return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
-  }
+  // Note: triangle-face midpoint snap is intentionally omitted here.
+  // Snapping to midpoints of invisible internal triangulation edges produces
+  // "snaps to unknown point" UX. Midpoint snap applies only to stored endpoint
+  // pairs (section 1 above), where the segments are user-visible sketch lines.
 
   if (snap.edgeSnapOn) {
     // Snap to closest point anywhere along each of the 3 triangle edges.
@@ -1406,7 +1474,8 @@ function ptShowCoordInput(placeholder: string): void {
   if (!_ptCoordWrapEl) return;
   if (_ptCoordInputEl) _ptCoordInputEl.placeholder = placeholder;
   _ptCoordWrapEl.classList.add("visible");
-  _ptCoordInputEl?.focus();
+  // Defer focus past the current click event so the viewport doesn't steal it back.
+  setTimeout(() => _ptCoordInputEl?.focus(), 30);
 }
 
 function ptHideCoordInput(): void {
@@ -1594,7 +1663,15 @@ function ptHandlePoint(viewer: Viewer, worldPt: THREE.Vector3): void {
   }
 
   if (phase.kind === "rotate_axis_b") {
-    const axisDir = worldPt.clone().sub(phase.axisA);
+    // Apply Shift axis lock to constrain the rotation axis to a cardinal direction.
+    let endPt = worldPt.clone();
+    if (_ptAxisLock) {
+      const lockDir = ptEffectiveAxisDir();
+      const constrained = unprojectToAxisLine(viewer, 0, 0, phase.axisA, lockDir);
+      // If lock is active, use the lock direction from axisA instead.
+      endPt = phase.axisA.clone().add(lockDir);
+    }
+    const axisDir = endPt.clone().sub(phase.axisA);
     if (axisDir.length() < 1e-6) {
       ptPrompt("Rotation axis — points too close, click a different end point");
       return;
@@ -1611,10 +1688,11 @@ function ptHandlePoint(viewer: Viewer, worldPt: THREE.Vector3): void {
   }
 
   if (phase.kind === "end_move") {
-    // Object is already at preview position from pointermove; re-apply from initial for exact snap.
     if (_ptInitPos) {
+      const before = { pos: _ptInitPos.clone(), quat: _ptInitQuat!.clone(), scale: _ptInitScale!.clone() };
       obj.position.copy(_ptInitPos).add(worldPt.clone().sub(phase.start));
       obj.updateMatrix(); obj.updateMatrixWorld(true);
+      pushTransformAction(obj, before);
     }
     ptFinish(viewer);
     return;
@@ -1628,9 +1706,11 @@ function ptHandlePoint(viewer: Viewer, worldPt: THREE.Vector3): void {
     const angleDeg = (snap.snapOn && snap.polarOn)
       ? Math.round(raw / snap.angleStep) * snap.angleStep : raw;
     if (_ptInitPos && _ptInitQuat) {
+      const before = { pos: _ptInitPos.clone(), quat: _ptInitQuat.clone(), scale: _ptInitScale!.clone() };
       obj.position.copy(_ptInitPos);
       obj.quaternion.copy(_ptInitQuat);
       ptCommitRotate(obj, phase.base, angleDeg, phase.axisDir);
+      pushTransformAction(obj, before);
     }
     ptFinish(viewer);
     return;
@@ -1647,9 +1727,11 @@ function ptHandlePoint(viewer: Viewer, worldPt: THREE.Vector3): void {
     const refDist = phase.refPt.distanceTo(phase.base);
     const newDist = worldPt.distanceTo(phase.base);
     if (refDist > 1e-6 && _ptInitPos && _ptInitScale) {
+      const before = { pos: _ptInitPos.clone(), quat: _ptInitQuat!.clone(), scale: _ptInitScale.clone() };
       obj.position.copy(_ptInitPos);
       obj.scale.copy(_ptInitScale);
       ptCommitScale(obj, phase.base, newDist / refDist);
+      pushTransformAction(obj, before);
     }
     ptFinish(viewer);
   }
@@ -1678,8 +1760,10 @@ function ptHandleCoordSubmit(viewer: Viewer, raw: string): void {
       if (phase.kind === "start") {
         ptHandlePoint(viewer, pt);
       } else {
+        const before = { pos: _ptInitPos!.clone(), quat: _ptInitQuat!.clone(), scale: _ptInitScale!.clone() };
         resetToInit();
         ptCommitMove(obj, pt.clone().sub(phase.start));
+        pushTransformAction(obj, before);
         ptFinish(viewer);
       }
     }
@@ -1694,8 +1778,10 @@ function ptHandleCoordSubmit(viewer: Viewer, raw: string): void {
   if (phase.kind === "angle_end") {
     const deg = parts[0];
     if (Number.isFinite(deg)) {
+      const before = { pos: _ptInitPos!.clone(), quat: _ptInitQuat!.clone(), scale: _ptInitScale!.clone() };
       resetToInit();
       ptCommitRotate(obj, phase.base, deg, phase.axisDir);
+      pushTransformAction(obj, before);
       ptFinish(viewer);
     }
     return;
@@ -1703,8 +1789,10 @@ function ptHandleCoordSubmit(viewer: Viewer, raw: string): void {
 
   if (phase.kind === "scale_ref") {
     if (parts.length === 1 && Number.isFinite(parts[0]) && parts[0] > 0) {
+      const before = { pos: _ptInitPos!.clone(), quat: _ptInitQuat!.clone(), scale: _ptInitScale!.clone() };
       resetToInit();
       ptCommitScale(obj, phase.base, parts[0]);
+      pushTransformAction(obj, before);
       ptFinish(viewer);
     } else if (parts.length >= 2 && parts.every(Number.isFinite)) {
       ptHandlePoint(viewer, new THREE.Vector3(parts[0], parts[1], parts[2] ?? 0));
@@ -1715,8 +1803,10 @@ function ptHandleCoordSubmit(viewer: Viewer, raw: string): void {
   if (phase.kind === "scale_end") {
     const factor = parts[0];
     if (Number.isFinite(factor) && factor > 0) {
+      const before = { pos: _ptInitPos!.clone(), quat: _ptInitQuat!.clone(), scale: _ptInitScale!.clone() };
       resetToInit();
       ptCommitScale(obj, phase.base, factor);
+      pushTransformAction(obj, before);
       ptFinish(viewer);
     }
   }
@@ -1768,7 +1858,7 @@ function ptStartTool(tool: "move" | "rotate" | "scale"): void {
 
 type OpPhase =
   | { kind: "extrude_select" }
-  | { kind: "extrude_height"; obj: THREE.Object3D; footprint: { cx: number; cy: number; w: number; d: number } }
+  | { kind: "extrude_height"; profile: THREE.Object3D; cx: number; cy: number; w: number; d: number }
   | { kind: "bool_a" }
   | { kind: "bool_b"; objA: THREE.Object3D }
   | { kind: "bool_op"; objA: THREE.Object3D; objB: THREE.Object3D }
@@ -1803,23 +1893,28 @@ function opClearLabels(): void {
 
 function opFinish(viewer: Viewer): void {
   opClearPreview(viewer);
+  opSetHover(null);
   _opPhase = null;
   ptClearPrompt();
   ptHideCoordInput();
   hideCursorDot();
+  viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
 
 function opCancel(viewer: Viewer): void {
-  // Un-highlight any stored boolean selection A.
-  if (_opPhase?.kind === "bool_b") {
-    const m = _opPhase.objA as THREE.Mesh;
+  opSetHover(null);
+  // Un-highlight any stored boolean selections.
+  const restoreEmissive = (obj: THREE.Object3D) => {
+    const m = obj as THREE.Mesh;
     if (m.userData._savedEmissive !== undefined) {
       ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color)
         .setHex(m.userData._savedEmissive as number);
       delete m.userData._savedEmissive;
     }
-  }
+  };
+  if (_opPhase?.kind === "bool_b") restoreEmissive(_opPhase.objA);
+  if (_opPhase?.kind === "bool_op") { restoreEmissive(_opPhase.objA); restoreEmissive(_opPhase.objB); }
   opFinish(viewer);
 }
 
@@ -1854,8 +1949,70 @@ function opBuildAnnotLine(pts: THREE.Vector3[], color = 0x4488ff): THREE.Object3
   return line;
 }
 
+// Build extrude geometry from a profile object at the given height.
+// Returns a THREE.Mesh whose position is already set to world origin.
+function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
+  const creator = profile.userData.creator as string | undefined;
+  const box = new THREE.Box3().setFromObject(profile);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const ctr = new THREE.Vector3(); box.getCenter(ctr);
+
+  // Circle → cylinder
+  if (creator === "circle") {
+    const r = Math.max(0.05, size.x / 2);
+    const geom = new THREE.CylinderGeometry(r, r, h, 64);
+    // CylinderGeometry is Y-up; rotate so it extrudes along Z.
+    geom.rotateX(Math.PI / 2);
+    geom.translate(0, 0, h / 2);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.55, metalness: 0.05 });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(ctr.x, ctr.y, 0);
+    return mesh;
+  }
+
+  // Polyline or curve → vertical ruled surface from stored control points
+  if (creator === "polyline" || creator === "curve") {
+    const pts: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
+    const worldPts = pts.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
+    if (worldPts.length >= 2) {
+      const verts: number[] = [];
+      const idxs: number[] = [];
+      worldPts.forEach((p, i) => {
+        verts.push(p.x, p.y, 0, p.x, p.y, h);
+        if (i < worldPts.length - 1) {
+          const b = i * 2;
+          idxs.push(b, b+2, b+1, b+1, b+2, b+3);
+        }
+      });
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+      geom.setIndex(idxs);
+      geom.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(geom, mat);
+      return mesh;
+    }
+  }
+
+  // Rect or any other 2-D profile → box from bounding rect
+  const w = Math.max(0.05, size.x);
+  const d = Math.max(0.05, size.y || size.x);
+  const geom = new THREE.BoxGeometry(w, d, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(ctr.x, ctr.y, 0);
+  return mesh;
+}
+
 // Raycast scene geometry at clientX/Y, return first hit object.
-function opRaycastObject(viewer: Viewer, clientX: number, clientY: number): { obj: THREE.Object3D; point: THREE.Vector3 } | null {
+// For extrude profiles, also checks Line objects by screen-distance to their vertices.
+function opRaycastObject(
+  viewer: Viewer,
+  clientX: number,
+  clientY: number,
+  profileOnly = false,
+): { obj: THREE.Object3D; point: THREE.Vector3 } | null {
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
   const ndc = new THREE.Vector2(
@@ -1864,9 +2021,30 @@ function opRaycastObject(viewer: Viewer, clientX: number, clientY: number): { ob
   );
   const rc = new THREE.Raycaster();
   rc.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
+
+  // Line objects: nearest vertex within threshold wins.
+  let lineHit: { obj: THREE.Object3D; point: THREE.Vector3 } | null = null;
+  let lineHitD = 18; // px threshold for clicking Line objects
+  viewer.getScene().traverse((o) => {
+    if (o.userData.noSnap) return;
+    if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
+    if (!(o instanceof THREE.Line)) return;
+    const posAttr = o.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+    if (!posAttr) return;
+    for (let i = 0; i < posAttr.count; i++) {
+      const wp = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(o.matrixWorld);
+      const sc = projectToScreen(viewer, wp.x, wp.y, wp.z);
+      if (!sc) continue;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < lineHitD) { lineHitD = d; lineHit = { obj: o, point: wp }; }
+    }
+  });
+  if (lineHit) return lineHit;
+
   const meshes: THREE.Mesh[] = [];
   viewer.getScene().traverse((o) => {
     if (o.userData.noSnap) return;
+    if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
     if (!(o instanceof THREE.Mesh)) return;
     if (!o.geometry?.getAttribute("position")) return;
     meshes.push(o);
@@ -1880,21 +2058,24 @@ function opRaycastObject(viewer: Viewer, clientX: number, clientY: number): { ob
 function opStartTool(viewer: Viewer, tool: string): void {
   opClearPreview(viewer);
   opClearLabels();
+  opSetHover(null);
   _opPhase = null;
   ptClearPrompt();
   ptHideCoordInput();
+  viewer.setGumballEnabled(false);
 
   if (tool === "extrude") {
     const sel = ptGetTarget();
-    if (sel) {
-      const box = new THREE.Box3().setFromObject(sel);
+    const selIsProfile = sel && EXTRUDABLE_CREATORS.has(sel.userData.creator ?? "");
+    if (selIsProfile) {
+      const box = new THREE.Box3().setFromObject(sel!);
       const size = new THREE.Vector3(); box.getSize(size);
       const ctr = new THREE.Vector3(); box.getCenter(ctr);
-      _opPhase = { kind: "extrude_height", obj: sel, footprint: { cx: ctr.x, cy: ctr.y, w: size.x, d: size.y } };
+      _opPhase = { kind: "extrude_height", profile: sel!, cx: ctr.x, cy: ctr.y, w: size.x, d: size.y };
       ptPrompt("Extrude height — move cursor up/down to set height, click to commit  [Escape = cancel]");
     } else {
       _opPhase = { kind: "extrude_select" };
-      ptPrompt("Extrude — click a profile or object to extrude");
+      ptPrompt("Extrude — click a curve, rectangle, circle, or polygon profile");
     }
   } else if (tool === "boolean") {
     _opPhase = { kind: "bool_a" };
@@ -1915,6 +2096,67 @@ function opStartTool(viewer: Viewer, tool: string): void {
   }
 }
 
+function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D, op: "fuse" | "cut" | "intersect"): void {
+  const restoreEmissive = (obj: THREE.Object3D) => {
+    const m = obj as THREE.Mesh;
+    if (m.userData._savedEmissive !== undefined) {
+      ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(m.userData._savedEmissive as number);
+      delete m.userData._savedEmissive;
+    }
+  };
+  restoreEmissive(objA); restoreEmissive(objB);
+
+  if (op === "fuse") {
+    // Fuse: merge both geometries into one mesh at world space.
+    const mA = objA as THREE.Mesh;
+    const mB = objB as THREE.Mesh;
+    if (mA.geometry && mB.geometry) {
+      const gA = mA.geometry.clone().applyMatrix4(mA.matrixWorld);
+      const gB = mB.geometry.clone().applyMatrix4(mB.matrixWorld);
+      const merged = mergeGeometries([gA, gB], false);
+      gA.dispose(); gB.dispose();
+      if (merged) {
+        const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+        const fused = new THREE.Mesh(merged, mat);
+        fused.userData.kind = "brep";
+        fused.userData.creator = "boolean-fuse";
+        viewer.getScene().remove(objA);
+        viewer.getScene().remove(objB);
+        viewer.addMesh(fused, "brep");
+        pushAction(fused, "boolean-fuse");
+      }
+    }
+  } else {
+    // Cut / Intersect: full CSG not yet implemented — show message.
+    ptPrompt(`Boolean ${op}: solid CSG not yet implemented — use Fuse for merging`);
+    setTimeout(() => ptClearPrompt(), 2000);
+  }
+  setChooserHint(null);
+  opFinish(viewer);
+}
+
+function opShowBoolChooser(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D): void {
+  if (!_chooserEl) return;
+  _chooserEl.innerHTML = "";
+  const label = document.createElement("div");
+  label.className = "chooser-label";
+  label.textContent = "Boolean operation:";
+  _chooserEl.appendChild(label);
+  const ops: Array<["fuse" | "cut" | "intersect", string]> = [
+    ["fuse", "Fuse (union)"],
+    ["cut", "Cut (A − B)"],
+    ["intersect", "Intersect"],
+  ];
+  for (const [op, lbl] of ops) {
+    const chip = document.createElement("button");
+    chip.className = "chooser-chip";
+    chip.textContent = lbl;
+    chip.addEventListener("click", () => opExecBoolean(viewer, objA, objB, op));
+    _chooserEl.appendChild(chip);
+  }
+  _chooserEl.classList.add("visible");
+}
+
 function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolean {
   const phase = _opPhase;
   if (!phase) return false;
@@ -1929,30 +2171,27 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
 
   // ── Extrude ────────────────────────────────────────────────────────────────
   if (phase.kind === "extrude_select") {
-    const hit = opRaycastObject(viewer, clientX, clientY);
-    if (!hit) { ptPrompt("Extrude — click a profile or object to extrude"); return true; }
+    const hit = opRaycastObject(viewer, clientX, clientY, true);
+    if (!hit) { ptPrompt("Extrude — click a curve, rectangle, circle, or polygon profile"); return true; }
     const box = new THREE.Box3().setFromObject(hit.obj);
     const size = new THREE.Vector3(); box.getSize(size);
     const ctr = new THREE.Vector3(); box.getCenter(ctr);
-    _opPhase = { kind: "extrude_height", obj: hit.obj, footprint: { cx: ctr.x, cy: ctr.y, w: size.x, d: size.y } };
+    opSetHover(null);
+    _opPhase = { kind: "extrude_height", profile: hit.obj, cx: ctr.x, cy: ctr.y, w: size.x, d: size.y };
     ptPrompt("Extrude height — move cursor up/down to set height, click to commit");
     return true;
   }
 
   if (phase.kind === "extrude_height") {
-    // Commit the current preview.
+    // Commit the current preview height.
     const h = _opPreview ? (new THREE.Box3().setFromObject(_opPreview)).getSize(new THREE.Vector3()).z : 1;
     opClearPreview(viewer);
-    const { cx, cy, w, d } = phase.footprint;
-    const geom = new THREE.BoxGeometry(Math.max(0.05, w), Math.max(0.05, d), Math.max(0.05, h));
-    geom.translate(0, 0, h / 2);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.set(cx, cy, 0);
+    const h2 = Math.max(0.05, h);
+    const mesh = opBuildExtrudeMesh(phase.profile, h2);
     mesh.userData.kind = "brep";
     mesh.userData.creator = "extrude";
     viewer.addMesh(mesh, "brep");
-    _createSequence.push(`const ext = drawRectangle(${round(w)}, ${round(d)}).sketchOnPlane("XY").extrude(${round(h)}).translate([${round(cx)}, ${round(cy)}, 0]);`);
+    _createSequence.push(`// extrude h=${round(h2)} from profile creator=${phase.profile.userData.creator ?? "unknown"}`);
     pushAction(mesh, "extrude");
     opFinish(viewer);
     return true;
@@ -1962,41 +2201,36 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
   if (phase.kind === "bool_a") {
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit) { ptPrompt("Boolean — click the first solid"); return true; }
-    // Highlight solid A.
+    opSetHover(null); // clear hover highlight before locking A
     const m = hit.obj as THREE.Mesh;
     if (m.material && !Array.isArray(m.material) && (m.material as THREE.MeshStandardMaterial).emissive) {
       m.userData._savedEmissive = ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color).getHex();
       ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(0x003399);
     }
     _opPhase = { kind: "bool_b", objA: hit.obj };
-    ptPrompt("Boolean — click the second solid");
+    ptPrompt("Boolean — click the second solid (selected: first highlighted)");
     return true;
   }
 
   if (phase.kind === "bool_b") {
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit || hit.obj === phase.objA) { ptPrompt("Boolean — click a different second solid"); return true; }
-    _opPhase = { kind: "bool_op", objA: phase.objA, objB: hit.obj };
-    // Un-highlight A.
-    const m = phase.objA as THREE.Mesh;
-    if (m.userData._savedEmissive !== undefined) {
-      ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(m.userData._savedEmissive as number);
-      delete m.userData._savedEmissive;
+    const objB = hit.obj;
+    // Highlight B.
+    const mB = objB as THREE.Mesh;
+    if (mB.material && !Array.isArray(mB.material) && (mB.material as THREE.MeshStandardMaterial).emissive) {
+      mB.userData._savedEmissive = ((mB.material as THREE.MeshStandardMaterial).emissive as THREE.Color).getHex();
+      ((mB.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(0x330033);
     }
-    setChooserHint({
-      arg: "operation",
-      options: [
-        { value: "fuse",      label: "Fuse",      description: "Union of both solids" },
-        { value: "cut",       label: "Cut",        description: "Subtract B from A" },
-        { value: "intersect", label: "Intersect",  description: "Keep only overlapping volume" },
-      ],
-    });
-    ptPrompt("Boolean — choose operation (Fuse / Cut / Intersect)");
+    _opPhase = { kind: "bool_op", objA: phase.objA, objB };
+    // Wire chooser buttons directly to local op executor (not command session).
+    opShowBoolChooser(viewer, phase.objA, objB);
+    ptPrompt("Boolean — choose operation");
     return true;
   }
 
   if (phase.kind === "bool_op") {
-    // Chooser handles the op selection — clicks in 3D do nothing here.
+    // Chooser handles the op — clicks in 3D do nothing.
     return true;
   }
 
@@ -2115,8 +2349,8 @@ function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
   if (phase.kind === "fillet_radius") {
     const r = parseFloat(raw);
     if (!Number.isFinite(r) || r <= 0) { ptPrompt("Fillet radius — enter a positive number"); return; }
-    // Stub: fillet geometry op not yet implemented. Show confirmation and finish.
-    ptPrompt(`Fillet r=${r.toFixed(3)} m applied (geometry stub)`);
+    // Fillet geometry not yet wired to kernel — display the radius and finish.
+    ptPrompt(`Fillet r=${r.toFixed(3)} m — select an edge to apply (kernel integration pending)`);
     setTimeout(() => opFinish(viewer), 800);
   }
 }
@@ -2124,20 +2358,25 @@ function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
 // Live preview for extrude height (cursor Y in viewport → Z world height).
 function opUpdateExtrudePreview(viewer: Viewer, clientY: number): void {
   if (_opPhase?.kind !== "extrude_height") return;
-  const { cx, cy, w, d } = _opPhase.footprint;
   // Map viewport Y to height: top of canvas = 10m, bottom = 0.05m.
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
   const t = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
   const h = Math.max(0.05, t * 10);
   opClearPreview(viewer);
-  const geom = new THREE.BoxGeometry(Math.max(0.05, w), Math.max(0.05, d), h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, transparent: true, opacity: 0.45, depthWrite: false });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(cx, cy, 0);
-  mesh.renderOrder = 50;
-  mesh.userData.noSnap = true;
+  const mesh = opBuildExtrudeMesh(_opPhase.profile, h);
+  // Apply translucent preview material.
+  mesh.traverse((c) => {
+    if (c instanceof THREE.Mesh) {
+      const mat = c.material as THREE.MeshStandardMaterial;
+      c.material = new THREE.MeshStandardMaterial({
+        color: (mat as THREE.MeshStandardMaterial).color?.clone() ?? new THREE.Color(0xc9c0a8),
+        transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide,
+      });
+      mat.dispose();
+    }
+  });
+  mesh.traverse((c) => { c.renderOrder = 50; c.userData.noSnap = true; });
   _opPreview = mesh;
   viewer.getScene().add(mesh);
   ptPrompt(`Extrude height — ${h.toFixed(2)} m — click to commit  [Escape = cancel]`);
@@ -2382,10 +2621,17 @@ export function initCreateMode(viewer: Viewer): void {
       const cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
       ptPrompt(`Rotation axis — click start point  [${cursorPt.x.toFixed(2)}, ${cursorPt.y.toFixed(2)}, ${cursorPt.z.toFixed(2)}]`);
     } else if (_ptPhase?.kind === "rotate_axis_b") {
-      const cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
+      let cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
+      // If Shift+axis-lock: constrain to that cardinal direction from axisA.
+      if (_ptAxisLock) {
+        const axisDir = ptEffectiveAxisDir();
+        const projected = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, _ptPhase.axisA, axisDir);
+        if (projected) cursorPt = projected;
+      }
       ptSetPreviewLine(viewer, _ptPhase.axisA, cursorPt);
       const dir = cursorPt.clone().sub(_ptPhase.axisA).normalize();
-      ptPrompt(`Rotation axis — click end point  [dir ${dir.x.toFixed(2)}, ${dir.y.toFixed(2)}, ${dir.z.toFixed(2)}]`);
+      const lockTag = _ptAxisLock ? `  [${_ptAxisLock.toUpperCase()} AXIS]` : "";
+      ptPrompt(`Rotation axis — click end point  [dir ${dir.x.toFixed(2)}, ${dir.y.toFixed(2)}, ${dir.z.toFixed(2)}]${lockTag}`);
     } else if (_ptPhase?.kind === "angle_end") {
       const cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
       const dx = cursorPt.x - _ptPhase.base.x;
@@ -2426,9 +2672,21 @@ export function initCreateMode(viewer: Viewer): void {
       ptPrompt(`Scale end — click  [factor: ${factor.toFixed(3)}]${lockTag}`);
     }
 
-    // Op-tool live preview (extrude height follows cursor).
+    // Op-tool live preview + hover highlight.
     if (_opPhase?.kind === "extrude_height") {
       opUpdateExtrudePreview(viewer, ev.clientY);
+    }
+    // Hover highlight during object-select phases.
+    if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" || _opPhase?.kind === "fillet_select") {
+      const profileOnly = _opPhase.kind === "extrude_select";
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, profileOnly);
+      opSetHover(hit ? hit.obj as THREE.Mesh : null);
+    } else if (_opPhase?.kind === "bool_b") {
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY);
+      const hoverable = hit && hit.obj !== _opPhase.objA ? hit.obj as THREE.Mesh : null;
+      opSetHover(hoverable);
+    } else {
+      opSetHover(null);
     }
 
     if (!tool) return;
@@ -2445,15 +2703,16 @@ export function initCreateMode(viewer: Viewer): void {
 
   // Shift+X/Y/Z = hold-to-constrain axis lock. Release Shift to unlock.
   // Smart snap: if the last snap was an edge snap, Shift uses that edge direction.
+  // Also constrains the rotation axis direction during rotate_axis_b.
   window.addEventListener("keydown", (ev) => {
-    if (_ptPhase && _ptPhase.kind !== "start" && _ptPhase.kind !== "rotate_axis_a" && _ptPhase.kind !== "rotate_axis_b"
+    if (_ptPhase && _ptPhase.kind !== "start" && _ptPhase.kind !== "rotate_axis_a"
         && ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey
         && document.activeElement !== _ptCoordInputEl) {
       const key = ev.key.toLowerCase();
       if (key === "x" || key === "y" || key === "z") {
         ev.preventDefault();
         _ptAxisLock = key as "x" | "y" | "z";
-        const basePt = ptGetAxisBase();
+        const basePt = _ptPhase.kind === "rotate_axis_b" ? _ptPhase.axisA : ptGetAxisBase();
         if (basePt) ptSetAxisLockLine(viewer, basePt);
         return;
       }

@@ -17,7 +17,7 @@ export interface SnapState {
 }
 
 const _state: SnapState = {
-  snapOn: true, orthoOn: true, gridOn: true, polarOn: true,
+  snapOn: true, orthoOn: false, gridOn: true, polarOn: false,
   vertexSnapOn: true, edgeSnapOn: true, midpointSnapOn: false,
   step: 1.0, angleStep: 90,
 };
