@@ -90,6 +90,14 @@ let _markerMesh: THREE.Points | null = null;
 let _sketchShiftAxisLine: THREE.Line | null = null;
 // Cursor dot — CSS overlay div that tracks the pointer when a sketch tool is active.
 let _cursorDot: HTMLElement | null = null;
+
+// Smart-track: hovering a snap vertex for SMART_TRACK_MS promotes it to a temporary
+// reference point used as the Shift-constraint base even before the first pending click.
+const SMART_TRACK_MS = 750;
+let _smartTrackPt: { x: number; y: number } | null = null;
+let _smartTrackTimer: ReturnType<typeof setTimeout> | null = null;
+let _smartTrackCandidate: { x: number; y: number; id: string } | null = null;
+let _smartTrackMarker: THREE.Mesh | null = null;
 // Viewer reference set once by initCreateMode — used by resetPending.
 let _viewer: Viewer | null = null;
 
@@ -1307,6 +1315,31 @@ function updateSketchShiftLine(viewer: Viewer, base: THREE.Vector3, axis: "x" | 
   viewer.getScene().add(_sketchShiftAxisLine);
 }
 
+function setSmartTrackPt(viewer: Viewer, pt: { x: number; y: number } | null): void {
+  if (_smartTrackMarker) {
+    viewer.getScene().remove(_smartTrackMarker);
+    (_smartTrackMarker.geometry as THREE.BufferGeometry).dispose();
+    (_smartTrackMarker.material as THREE.Material).dispose();
+    _smartTrackMarker = null;
+  }
+  _smartTrackPt = pt;
+  if (pt) {
+    const geo = new THREE.SphereGeometry(0.05, 8, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00ccff, depthTest: false, transparent: true, opacity: 0.85 });
+    _smartTrackMarker = new THREE.Mesh(geo, mat);
+    _smartTrackMarker.position.set(pt.x, pt.y, 0.01);
+    _smartTrackMarker.renderOrder = 99;
+    _smartTrackMarker.userData.noSnap = true;
+    viewer.getScene().add(_smartTrackMarker);
+  }
+}
+
+function clearSmartTrack(viewer: Viewer): void {
+  if (_smartTrackTimer) { clearTimeout(_smartTrackTimer); _smartTrackTimer = null; }
+  _smartTrackCandidate = null;
+  setSmartTrackPt(viewer, null);
+}
+
 function clearTemporary(viewer: Viewer): void {
   clearPreview(viewer);
   clearMarker(viewer);
@@ -1479,7 +1512,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
 
 // Reset pending click buffer — used when switching tools.
 export function resetPending(): void {
-  if (_viewer) clearTemporary(_viewer);
+  if (_viewer) { clearTemporary(_viewer); clearSmartTrack(_viewer); }
   hideCursorDot();
   _pending = [];
 }
@@ -2634,10 +2667,11 @@ export function initCreateMode(viewer: Viewer): void {
     _lastPointerClient = { x: ev.clientX, y: ev.clientY };
     const vertex = !ev.altKey ? nearestSnapVertex(viewer, ev.clientX, ev.clientY) : null;
     let snapped = vertex ?? snapPoint(world.x, world.y);
-    // Shift-hold: axis-lock from last pending point (same as rubber-band preview).
-    if (ev.shiftKey && !ev.altKey && _pending.length > 0) {
-      const base = _pending[_pending.length - 1];
-      snapped = shiftAxisSnap(base, snapped, getSnap().step);
+    // Shift-hold: axis-lock from last pending point, or smart-track reference if no pending.
+    const clickShiftBase: { x: number; y: number } | null =
+      _pending.length > 0 ? _pending[_pending.length - 1] : _smartTrackPt ?? null;
+    if (ev.shiftKey && !ev.altKey && clickShiftBase) {
+      snapped = shiftAxisSnap(clickShiftBase, snapped, getSnap().step);
     }
     // For host-placement tools (door/window/opening) raycast to find a valid host.
     // Reject the click and prompt if no host is found.
@@ -2695,7 +2729,7 @@ export function initCreateMode(viewer: Viewer): void {
       return;
     }
     // Alt key bypasses snap (raw mouse position). Otherwise: vertex/edge snap first,
-    // fall back to grid snap. Shift+pending → axis-lock from last pending point.
+    // fall back to grid snap.
     let snapped: { x: number; y: number; z?: number };
     if (ev.altKey) {
       _snapTarget = null;
@@ -2712,15 +2746,38 @@ export function initCreateMode(viewer: Viewer): void {
         snapped = snapPoint(world.x, world.y);
       }
     }
+
+    // Smart-track: promote a hovered snap vertex to a reference point after SMART_TRACK_MS.
+    // This reference then acts as the Shift-constraint base even before the first pending click.
+    if (!ev.altKey && tool && !_ptPhase && !_opPhase) {
+      if (_snapTarget) {
+        const id = _snapTarget.id;
+        if (_smartTrackCandidate?.id !== id) {
+          if (_smartTrackTimer) clearTimeout(_smartTrackTimer);
+          _smartTrackCandidate = { x: _snapTarget.x, y: _snapTarget.y, id };
+          _smartTrackTimer = setTimeout(() => {
+            if (_smartTrackCandidate) setSmartTrackPt(viewer, _smartTrackCandidate);
+            _smartTrackTimer = null;
+          }, SMART_TRACK_MS);
+        }
+        // Candidate matches — timer already running.
+      } else if (!ev.shiftKey) {
+        // No snap vertex and shift not held — cancel pending timer, leave committed point.
+        if (_smartTrackTimer) { clearTimeout(_smartTrackTimer); _smartTrackTimer = null; _smartTrackCandidate = null; }
+      }
+    }
+
     // Shift-hold axis constraint for sketch draw tools (not PT / op tools).
-    // Draws a colored X (red) or Y (green) axis line through the last pending point.
-    if (ev.shiftKey && !ev.altKey && !_ptPhase && !_opPhase && _pending.length > 0 && tool) {
-      const base = _pending[_pending.length - 1];
-      const dx = snapped.x - base.x;
-      const dy = snapped.y - base.y;
+    // Base: last pending point if one exists, otherwise the smart-track reference.
+    const shiftBase: { x: number; y: number } | null =
+      _pending.length > 0 ? _pending[_pending.length - 1]
+      : _smartTrackPt ?? null;
+    if (ev.shiftKey && !ev.altKey && !_ptPhase && !_opPhase && tool && shiftBase) {
+      const dx = snapped.x - shiftBase.x;
+      const dy = snapped.y - shiftBase.y;
       const lockAxis: "x" | "y" = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
-      snapped = shiftAxisSnap(base, snapped, getSnap().step);
-      updateSketchShiftLine(viewer, new THREE.Vector3(base.x, base.y, 0), lockAxis);
+      snapped = shiftAxisSnap(shiftBase, snapped, getSnap().step);
+      updateSketchShiftLine(viewer, new THREE.Vector3(shiftBase.x, shiftBase.y, 0), lockAxis);
     } else {
       clearSketchShiftLine(viewer);
     }
