@@ -85,6 +85,8 @@ let _lastPointerClient: { x: number; y: number } = { x: 0, y: 0 };
 // Temporary scene objects — removed when the tool completes or is cancelled.
 let _previewMesh: THREE.Mesh | null = null;
 let _markerMesh: THREE.Points | null = null;
+// Axis-constraint indicator line shown when Shift is held during sketch drawing.
+let _sketchShiftAxisLine: THREE.Line | null = null;
 // Cursor dot — CSS overlay div that tracks the pointer when a sketch tool is active.
 let _cursorDot: HTMLElement | null = null;
 // Viewer reference set once by initCreateMode — used by resetPending.
@@ -1281,9 +1283,33 @@ function clearPreview(viewer: Viewer): void {
   _previewMesh = null;
 }
 
+function clearSketchShiftLine(viewer: Viewer): void {
+  if (!_sketchShiftAxisLine) return;
+  viewer.getScene().remove(_sketchShiftAxisLine);
+  _sketchShiftAxisLine.geometry.dispose();
+  (_sketchShiftAxisLine.material as THREE.Material).dispose();
+  _sketchShiftAxisLine = null;
+}
+
+function updateSketchShiftLine(viewer: Viewer, base: THREE.Vector3, axis: "x" | "y"): void {
+  clearSketchShiftLine(viewer);
+  const dir = axis === "x" ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  const color = axis === "x" ? 0xff4444 : 0x44cc44;
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    base.clone().addScaledVector(dir, -1000),
+    base.clone().addScaledVector(dir, 1000),
+  ]);
+  const mat = new THREE.LineBasicMaterial({ color, depthTest: false, opacity: 0.5, transparent: true });
+  _sketchShiftAxisLine = new THREE.Line(geo, mat);
+  _sketchShiftAxisLine.renderOrder = 98;
+  _sketchShiftAxisLine.userData.noSnap = true;
+  viewer.getScene().add(_sketchShiftAxisLine);
+}
+
 function clearTemporary(viewer: Viewer): void {
   clearPreview(viewer);
   clearMarker(viewer);
+  clearSketchShiftLine(viewer);
 }
 
 function ensureCursorDot(): HTMLElement {
@@ -2089,7 +2115,6 @@ function opRaycastObject(
   const meshes: THREE.Mesh[] = [];
   viewer.getScene().traverse((o) => {
     if (o.userData.noSnap) return;
-    if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
     if (!(o instanceof THREE.Mesh)) return;
     if (!o.geometry?.getAttribute("position")) return;
     meshes.push(o);
@@ -2683,9 +2708,16 @@ export function initCreateMode(viewer: Viewer): void {
       }
     }
     // Shift-hold axis constraint for sketch draw tools (not PT / op tools).
+    // Draws a colored X (red) or Y (green) axis line through the last pending point.
     if (ev.shiftKey && !ev.altKey && !_ptPhase && !_opPhase && _pending.length > 0 && tool) {
       const base = _pending[_pending.length - 1];
+      const dx = snapped.x - base.x;
+      const dy = snapped.y - base.y;
+      const lockAxis: "x" | "y" = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
       snapped = shiftAxisSnap(base, snapped, getSnap().step);
+      updateSketchShiftLine(viewer, new THREE.Vector3(base.x, base.y, 0), lockAxis);
+    } else {
+      clearSketchShiftLine(viewer);
     }
     // Project snapped world position back to screen so the dot visually snaps (#327).
     const screen = projectToScreen(viewer, snapped.x, snapped.y, snapped.z ?? 0);
@@ -2850,9 +2882,12 @@ export function initCreateMode(viewer: Viewer): void {
 
   // Release axis lock when Shift is released.
   window.addEventListener("keyup", (ev) => {
-    if (ev.key === "Shift" && _ptAxisLock && _ptViewer) {
-      _ptAxisLock = null;
-      ptClearAxisLockLine(_ptViewer);
+    if (ev.key === "Shift") {
+      if (_ptAxisLock && _ptViewer) {
+        _ptAxisLock = null;
+        ptClearAxisLockLine(_ptViewer);
+      }
+      if (_viewer) clearSketchShiftLine(_viewer);
     }
   });
 
