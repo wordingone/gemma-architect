@@ -286,6 +286,23 @@ function closestPtOnSegToRay(
 function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): SnapVertex | null {
   const snap = getSnap();
   if (!snap.snapOn) return null;
+
+  // ── 0. Point objects — highest priority: snap to placed point markers ───────
+  if (snap.pointSnapOn) {
+    let ptBest: SnapVertex | null = null;
+    let ptBestD = VERTEX_SNAP_PX;
+    viewer.getScene().traverse((obj) => {
+      if (obj.userData.noSnap) return;
+      if (!(obj instanceof THREE.Points) || obj.userData.kind !== "point") return;
+      const wp = new THREE.Vector3().setFromMatrixPosition(obj.matrixWorld);
+      const sc = projectToScreen(viewer, wp.x, wp.y, wp.z);
+      if (!sc) return;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < ptBestD) { ptBestD = d; ptBest = { id: makeSnapId(wp.x, wp.y, wp.z), x: wp.x, y: wp.y, z: wp.z }; }
+    });
+    if (ptBest) return ptBest;
+  }
+
   const anyGeomSnap = snap.vertexSnapOn || snap.edgeSnapOn || snap.midpointSnapOn;
   if (!anyGeomSnap) return null;
 
@@ -1300,10 +1317,10 @@ function clearSketchShiftLine(viewer: Viewer): void {
   _sketchShiftAxisLine = null;
 }
 
-function updateSketchShiftLine(viewer: Viewer, base: THREE.Vector3, axis: "x" | "y"): void {
+function updateSketchShiftLine(viewer: Viewer, base: THREE.Vector3, axis: "x" | "y" | "z"): void {
   clearSketchShiftLine(viewer);
-  const dir = axis === "x" ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  const color = axis === "x" ? 0xff4444 : 0x44cc44;
+  const dir = axis === "x" ? new THREE.Vector3(1, 0, 0) : axis === "y" ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+  const color = axis === "x" ? 0xff4444 : axis === "y" ? 0x44cc44 : 0x4488ff;
   const geo = new THREE.BufferGeometry().setFromPoints([
     base.clone().addScaledVector(dir, -1000),
     base.clone().addScaledVector(dir, 1000),
@@ -2490,6 +2507,8 @@ function opUpdateExtrudePreview(viewer: Viewer, clientX: number, clientY: number
     const t = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
     h = Math.max(0.05, t * 10);
   }
+  if (shiftKey) updateSketchShiftLine(viewer, profileBase, "z");
+  else clearSketchShiftLine(viewer);
   opClearPreview(viewer);
   const mesh = opBuildExtrudeMesh(_opPhase.profile, h);
   mesh.traverse((c) => {
@@ -2747,22 +2766,25 @@ export function initCreateMode(viewer: Viewer): void {
       }
     }
 
-    // Smart-track: promote a hovered snap vertex to a reference point after SMART_TRACK_MS.
-    // This reference then acts as the Shift-constraint base even before the first pending click.
+    // Smart-track: promote a hovered point (vertex snap OR grid intersection) to a reference
+    // point after SMART_TRACK_MS dwell. Reference acts as Shift-constraint base before first click.
     if (!ev.altKey && tool && !_ptPhase && !_opPhase) {
-      if (_snapTarget) {
-        const id = _snapTarget.id;
-        if (_smartTrackCandidate?.id !== id) {
+      const trackId = _snapTarget
+        ? _snapTarget.id
+        : (getSnap().snapOn && getSnap().gridOn)
+          ? `g:${Math.round(snapped.x * 1000)},${Math.round(snapped.y * 1000)}`
+          : null;
+      if (trackId) {
+        const trackPt = _snapTarget ?? snapped;
+        if (_smartTrackCandidate?.id !== trackId) {
           if (_smartTrackTimer) clearTimeout(_smartTrackTimer);
-          _smartTrackCandidate = { x: _snapTarget.x, y: _snapTarget.y, id };
+          _smartTrackCandidate = { x: trackPt.x, y: trackPt.y, id: trackId };
           _smartTrackTimer = setTimeout(() => {
             if (_smartTrackCandidate) setSmartTrackPt(viewer, _smartTrackCandidate);
             _smartTrackTimer = null;
           }, SMART_TRACK_MS);
         }
-        // Candidate matches — timer already running.
       } else if (!ev.shiftKey) {
-        // No snap vertex and shift not held — cancel pending timer, leave committed point.
         if (_smartTrackTimer) { clearTimeout(_smartTrackTimer); _smartTrackTimer = null; _smartTrackCandidate = null; }
       }
     }

@@ -12,13 +12,14 @@ export interface SnapState {
   vertexSnapOn: boolean;    // snap to mesh/endpoint vertices
   edgeSnapOn: boolean;      // snap to closest point anywhere along edge
   midpointSnapOn: boolean;  // snap to midpoints of edges
+  pointSnapOn: boolean;     // snap to placed point objects
   step: number;             // grid step in meters
   angleStep: number;        // polar snap in degrees
 }
 
 const _state: SnapState = {
   snapOn: true, orthoOn: false, gridOn: true, polarOn: false,
-  vertexSnapOn: true, edgeSnapOn: true, midpointSnapOn: false,
+  vertexSnapOn: true, edgeSnapOn: true, midpointSnapOn: false, pointSnapOn: true,
   step: 1.0, angleStep: 90,
 };
 
@@ -45,6 +46,7 @@ export function setPolarOn(on: boolean): void { _state.polarOn = on; emit(); }
 export function setVertexSnapOn(on: boolean): void { _state.vertexSnapOn = on; emit(); }
 export function setEdgeSnapOn(on: boolean): void { _state.edgeSnapOn = on; emit(); }
 export function setMidpointSnapOn(on: boolean): void { _state.midpointSnapOn = on; emit(); }
+export function setPointSnapOn(on: boolean): void { _state.pointSnapOn = on; emit(); }
 export function getStep(): number { return _state.step; }
 export function setStep(m: number): void { _state.step = Math.max(0.001, m); emit(); }
 export function getAngleStep(): number { return _state.angleStep; }
