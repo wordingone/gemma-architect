@@ -2486,26 +2486,37 @@ function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
   }
 }
 
+// Map cursor screen-Y to a world-space Z delta relative to a base point.
+// Positive = cursor above base's projected screen position = moving upward in world space.
+// Scale is derived from camera FOV and distance for a natural "1 pixel ≈ N metres" feel
+// that is consistent regardless of camera angle or zoom.
+function screenYtoDz(viewer: Viewer, screenY: number, base: { x: number; y: number; z?: number }): number {
+  const canvas = viewer.getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const cam = viewer.getCamera() as THREE.PerspectiveCamera;
+  const fovRad = THREE.MathUtils.degToRad(cam.fov);
+  const baseZ = base.z ?? 0;
+  const camDist = Math.max(0.5, cam.position.distanceTo(new THREE.Vector3(base.x, base.y, baseZ)));
+  const mPerPx = 2 * camDist * Math.tan(fovRad / 2) / rect.height;
+  const baseScreen = projectToScreen(viewer, base.x, base.y, baseZ);
+  const refScreenY = baseScreen?.y ?? (rect.top + rect.height / 2);
+  return (refScreenY - screenY) * mPerPx;
+}
+
 // Live preview for extrude height.
-// Projects cursor onto the Z axis through the profile center — moving cursor up in
-// 3D world space increases height. Shift snaps to the active grid step.
-// Falls back to viewport-Y mapping when the camera ray is parallel to Z (top-down).
+// Height = cursor screen-Y displacement above the profile base's projected position,
+// scaled by camera perspective. Shift grid-snaps the result.
 function opUpdateExtrudePreview(viewer: Viewer, clientX: number, clientY: number, shiftKey = false): void {
   if (_opPhase?.kind !== "extrude_height") return;
   const { cx, cy } = _opPhase;
   const profileBase = new THREE.Vector3(cx, cy, 0);
-  const zAxis = new THREE.Vector3(0, 0, 1);
-  const hitPt = unprojectToAxisLine(viewer, clientX, clientY, profileBase, zAxis);
+  const rawH = screenYtoDz(viewer, clientY, { x: cx, y: cy, z: 0 });
+  const step = getSnap().step;
   let h: number;
-  if (hitPt !== null && hitPt.z > 0) {
-    const step = getSnap().step;
-    h = shiftKey ? Math.max(step, Math.round(hitPt.z / step) * step) : Math.max(0.05, hitPt.z);
+  if (rawH > 0) {
+    h = shiftKey ? Math.max(step, Math.round(rawH / step) * step) : Math.max(0.05, rawH);
   } else {
-    // Top-down / degenerate camera: fall back to viewport-Y linear mapping (0.05–10 m).
-    const canvas = viewer.getCanvas();
-    const rect = canvas.getBoundingClientRect();
-    const t = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-    h = Math.max(0.05, t * 10);
+    h = 0.05;
   }
   if (shiftKey) updateSketchShiftLine(viewer, profileBase, "z");
   else clearSketchShiftLine(viewer);
@@ -2685,12 +2696,25 @@ export function initCreateMode(viewer: Viewer): void {
     ev.stopImmediatePropagation();
     _lastPointerClient = { x: ev.clientX, y: ev.clientY };
     const vertex = !ev.altKey ? nearestSnapVertex(viewer, ev.clientX, ev.clientY) : null;
-    let snapped = vertex ?? snapPoint(world.x, world.y);
+    let snapped: { x: number; y: number; z?: number } = vertex ?? snapPoint(world.x, world.y);
     // Shift-hold: axis-lock from last pending point, or smart-track reference if no pending.
-    const clickShiftBase: { x: number; y: number } | null =
+    const clickShiftBase: { x: number; y: number; z?: number } | null =
       _pending.length > 0 ? _pending[_pending.length - 1] : _smartTrackPt ?? null;
     if (ev.shiftKey && !ev.altKey && clickShiftBase) {
-      snapped = shiftAxisSnap(clickShiftBase, snapped, getSnap().step);
+      const dx = snapped.x - clickShiftBase.x;
+      const dy = snapped.y - clickShiftBase.y;
+      const dz = screenYtoDz(viewer, ev.clientY, clickShiftBase);
+      const baseZ = clickShiftBase.z ?? 0;
+      if (Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)) {
+        const step = getSnap().step;
+        const rawZ = baseZ + dz;
+        const lockedZ = getSnap().snapOn && getSnap().gridOn
+          ? Math.round(rawZ / step) * step : Math.round(rawZ * 1000) / 1000;
+        snapped = { x: clickShiftBase.x, y: clickShiftBase.y, z: lockedZ };
+      } else {
+        const axisSnapped = shiftAxisSnap(clickShiftBase, snapped, getSnap().step);
+        snapped = { ...snapped, x: axisSnapped.x, y: axisSnapped.y };
+      }
     }
     // For host-placement tools (door/window/opening) raycast to find a valid host.
     // Reject the click and prompt if no host is found.
@@ -2706,7 +2730,8 @@ export function initCreateMode(viewer: Viewer): void {
       setPickerHint(null);
     }
     // For level placement, raycast against scene geometry to inherit Z elevation (AC B.1).
-    const z = tool === "level" ? getGeometryZ(viewer, ev.clientX, ev.clientY) : undefined;
+    // For shift-Z-locked clicks, preserve the locked Z; level tool always overrides.
+    const z = tool === "level" ? getGeometryZ(viewer, ev.clientX, ev.clientY) : snapped.z;
     emitClickWorld(viewer, { ...snapped, z }, { tool });
     _pendingHostId = null;
   }, { capture: true });
@@ -2791,15 +2816,27 @@ export function initCreateMode(viewer: Viewer): void {
 
     // Shift-hold axis constraint for sketch draw tools (not PT / op tools).
     // Base: last pending point if one exists, otherwise the smart-track reference.
-    const shiftBase: { x: number; y: number } | null =
+    const shiftBase: { x: number; y: number; z?: number } | null =
       _pending.length > 0 ? _pending[_pending.length - 1]
       : _smartTrackPt ?? null;
     if (ev.shiftKey && !ev.altKey && !_ptPhase && !_opPhase && tool && shiftBase) {
       const dx = snapped.x - shiftBase.x;
       const dy = snapped.y - shiftBase.y;
-      const lockAxis: "x" | "y" = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
-      snapped = shiftAxisSnap(shiftBase, snapped, getSnap().step);
-      updateSketchShiftLine(viewer, new THREE.Vector3(shiftBase.x, shiftBase.y, 0), lockAxis);
+      // Z from cursor screen-Y relative to the base point's projected screen position.
+      const dz = screenYtoDz(viewer, ev.clientY, shiftBase);
+      const baseZ = shiftBase.z ?? 0;
+      if (Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)) {
+        const step = getSnap().step;
+        const rawZ = baseZ + dz;
+        const lockedZ = getSnap().snapOn && getSnap().gridOn
+          ? Math.round(rawZ / step) * step : Math.round(rawZ * 1000) / 1000;
+        snapped = { x: shiftBase.x, y: shiftBase.y, z: lockedZ };
+        updateSketchShiftLine(viewer, new THREE.Vector3(shiftBase.x, shiftBase.y, baseZ), "z");
+      } else {
+        const lockAxis: "x" | "y" = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+        snapped = shiftAxisSnap(shiftBase, snapped, getSnap().step);
+        updateSketchShiftLine(viewer, new THREE.Vector3(shiftBase.x, shiftBase.y, baseZ), lockAxis);
+      }
     } else {
       clearSketchShiftLine(viewer);
     }
