@@ -295,6 +295,7 @@ export class Viewer {
       // Pivot proxy — invisible Object3D the gumballs always attach to.
       // Synced from targetObject + pivotOffset between drags.
       this.pivotProxy = new THREE.Object3D();
+      this.pivotProxy.userData.noSnap = true;
       this.scene.add(this.pivotProxy);
 
       const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
@@ -397,6 +398,8 @@ export class Viewer {
             this.syncPivot();
           }
         });
+        g.userData.noSnap = true;
+        g.traverse((child) => { child.userData.noSnap = true; });
         this.scene.add(g);
         return g;
       };
@@ -1492,6 +1495,7 @@ export class Viewer {
       const mat = new THREE.MeshBasicMaterial({ color: 0x00ffaa, depthTest: false });
       this.snapMarker = new THREE.Mesh(geom, mat);
       this.snapMarker.renderOrder = 999;
+      this.snapMarker.userData.noSnap = true;
       this.scene.add(this.snapMarker);
     }
     this.snapMarker.position.copy(p);
@@ -1930,6 +1934,7 @@ export class Viewer {
     this.scene.remove(this.axes);
     this.axes.dispose();
     this.axes = new THREE.AxesHelper(triadLen);
+    this.axes.userData.noSnap = true;
     this.scene.add(this.axes);
     this.createAxisLabels(triadLen);
   }
