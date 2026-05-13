@@ -5,19 +5,20 @@
 import { gridStore } from "../geometry/grids";
 
 export interface SnapState {
-  snapOn: boolean;       // master toggle — when off, all other snap flags inert
-  orthoOn: boolean;      // axis-only constraint (gumball already does this per-handle)
-  gridOn: boolean;       // translate snaps to grid step
-  polarOn: boolean;      // rotate snaps to angleStep
-  vertexSnapOn: boolean; // gumball relocate snaps to host vertices
-  edgeSnapOn: boolean;   // gumball relocate snaps to host edge endpoints + midpoints
-  step: number;          // grid step in meters
-  angleStep: number;     // polar snap in degrees
+  snapOn: boolean;          // master toggle — when off, all other snap flags inert
+  orthoOn: boolean;         // axis-only constraint (gumball already does this per-handle)
+  gridOn: boolean;          // translate snaps to grid step
+  polarOn: boolean;         // rotate snaps to angleStep
+  vertexSnapOn: boolean;    // snap to mesh/endpoint vertices
+  edgeSnapOn: boolean;      // snap to closest point anywhere along edge
+  midpointSnapOn: boolean;  // snap to midpoints of edges
+  step: number;             // grid step in meters
+  angleStep: number;        // polar snap in degrees
 }
 
 const _state: SnapState = {
   snapOn: true, orthoOn: true, gridOn: true, polarOn: true,
-  vertexSnapOn: true, edgeSnapOn: true,
+  vertexSnapOn: true, edgeSnapOn: true, midpointSnapOn: false,
   step: 1.0, angleStep: 90,
 };
 
@@ -43,6 +44,7 @@ export function setOrthoOn(on: boolean): void { _state.orthoOn = on; emit(); }
 export function setPolarOn(on: boolean): void { _state.polarOn = on; emit(); }
 export function setVertexSnapOn(on: boolean): void { _state.vertexSnapOn = on; emit(); }
 export function setEdgeSnapOn(on: boolean): void { _state.edgeSnapOn = on; emit(); }
+export function setMidpointSnapOn(on: boolean): void { _state.midpointSnapOn = on; emit(); }
 export function getStep(): number { return _state.step; }
 export function setStep(m: number): void { _state.step = Math.max(0.001, m); emit(); }
 export function getAngleStep(): number { return _state.angleStep; }
