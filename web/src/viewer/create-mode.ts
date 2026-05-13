@@ -1997,8 +1997,8 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     return mesh;
   }
 
-  // Polyline or curve → vertical ruled surface from stored control points
-  if (creator === "polyline" || creator === "curve") {
+  // Line / polyline / curve → vertical ruled surface from stored control points
+  if (creator === "line" || creator === "polyline" || creator === "curve") {
     const pts: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
     const worldPts = pts.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
     if (worldPts.length >= 2) {
@@ -2414,17 +2414,29 @@ function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
   }
 }
 
-// Live preview for extrude height (cursor Y in viewport → Z world height).
-function opUpdateExtrudePreview(viewer: Viewer, clientY: number): void {
+// Live preview for extrude height.
+// Projects cursor onto the Z axis through the profile center — moving cursor up in
+// 3D world space increases height. Shift snaps to the active grid step.
+// Falls back to viewport-Y mapping when the camera ray is parallel to Z (top-down).
+function opUpdateExtrudePreview(viewer: Viewer, clientX: number, clientY: number, shiftKey = false): void {
   if (_opPhase?.kind !== "extrude_height") return;
-  // Map viewport Y to height: top of canvas = 10m, bottom = 0.05m.
-  const canvas = viewer.getCanvas();
-  const rect = canvas.getBoundingClientRect();
-  const t = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-  const h = Math.max(0.05, t * 10);
+  const { cx, cy } = _opPhase;
+  const profileBase = new THREE.Vector3(cx, cy, 0);
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const hitPt = unprojectToAxisLine(viewer, clientX, clientY, profileBase, zAxis);
+  let h: number;
+  if (hitPt !== null && hitPt.z > 0) {
+    const step = getSnap().step;
+    h = shiftKey ? Math.max(step, Math.round(hitPt.z / step) * step) : Math.max(0.05, hitPt.z);
+  } else {
+    // Top-down / degenerate camera: fall back to viewport-Y linear mapping (0.05–10 m).
+    const canvas = viewer.getCanvas();
+    const rect = canvas.getBoundingClientRect();
+    const t = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    h = Math.max(0.05, t * 10);
+  }
   opClearPreview(viewer);
   const mesh = opBuildExtrudeMesh(_opPhase.profile, h);
-  // Apply translucent preview material.
   mesh.traverse((c) => {
     if (c instanceof THREE.Mesh) {
       const mat = c.material as THREE.MeshStandardMaterial;
@@ -2438,7 +2450,8 @@ function opUpdateExtrudePreview(viewer: Viewer, clientY: number): void {
   mesh.traverse((c) => { c.renderOrder = 50; c.userData.noSnap = true; });
   _opPreview = mesh;
   viewer.getScene().add(mesh);
-  ptPrompt(`Extrude height — ${h.toFixed(2)} m — click to commit  [Escape = cancel]`);
+  const snapTag = shiftKey ? `  [grid snap ${getSnap().step} m]` : "";
+  ptPrompt(`Extrude height — ${h.toFixed(2)} m — click to commit  [Escape = cancel]${snapTag}`);
 }
 
 // Bind the create-mode pipeline to viewport mousedown. Coexists with the
@@ -2626,7 +2639,25 @@ export function initCreateMode(viewer: Viewer): void {
   // Cursor dot + rubber-band preview on every pointer move.
   vpBody.addEventListener("pointermove", (ev) => {
     const tool = readActiveTool();
-    if (!tool && !_ptPhase) { hideCursorDot(); _snapTarget = null; return; }
+    if (!tool && !_ptPhase && !_opPhase) { hideCursorDot(); _snapTarget = null; return; }
+
+    // Op-tool preview + hover — runs independent of ground-plane availability.
+    // (readActiveTool() returns null for op tools, so this must run before the world check.)
+    if (_opPhase?.kind === "extrude_height") {
+      opUpdateExtrudePreview(viewer, ev.clientX, ev.clientY, ev.shiftKey);
+    }
+    if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" || _opPhase?.kind === "fillet_select") {
+      const profileOnly = _opPhase.kind === "extrude_select";
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, profileOnly, true);
+      opSetHover(hit ? hit.obj : null);
+    } else if (_opPhase?.kind === "bool_b") {
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
+      const hoverable = hit && hit.obj !== _opPhase.objA ? hit.obj : null;
+      opSetHover(hoverable);
+    } else {
+      opSetHover(null);
+    }
+
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
     if (!world) {
       // No ground-plane hit (near-horizontal camera) — show dot at raw mouse position.
@@ -2739,23 +2770,6 @@ export function initCreateMode(viewer: Viewer): void {
       ptSetPreviewLine(viewer, _ptPhase.base, cursorPt);
       const lockTag = _ptAxisLock ? `  [${_ptAxisLock.toUpperCase()} LOCK]` : "";
       ptPrompt(`Scale end — click  [factor: ${factor.toFixed(3)}]${lockTag}`);
-    }
-
-    // Op-tool live preview + hover highlight.
-    if (_opPhase?.kind === "extrude_height") {
-      opUpdateExtrudePreview(viewer, ev.clientY);
-    }
-    // Hover highlight during object-select phases.
-    if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" || _opPhase?.kind === "fillet_select") {
-      const profileOnly = _opPhase.kind === "extrude_select";
-      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, profileOnly, true);
-      opSetHover(hit ? hit.obj : null);
-    } else if (_opPhase?.kind === "bool_b") {
-      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
-      const hoverable = hit && hit.obj !== _opPhase.objA ? hit.obj : null;
-      opSetHover(hoverable);
-    } else {
-      opSetHover(null);
     }
 
     if (!tool) return;
