@@ -18,6 +18,7 @@
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { csgUnion, csgDifference, csgIntersection } from "./csg";
 import type { Viewer } from "./viewer";
 import { setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
@@ -2177,46 +2178,41 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
   };
   restoreEmissive(objA); restoreEmissive(objB);
 
-  if (op === "union") {
-    // Union: merge both geometries into one mesh at world space.
-    // Normalise to non-indexed position-only so mergeGeometries never fails
-    // on attribute-count or index-vs-flat mismatches between dissimilar geometry types.
-    const mA = objA as THREE.Mesh;
-    const mB = objB as THREE.Mesh;
-    if (mA.geometry && mB.geometry) {
-      const toFlat = (mesh: THREE.Mesh): THREE.BufferGeometry => {
-        const c = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-        const flat = c.index ? c.toNonIndexed() : c;
-        const out = new THREE.BufferGeometry();
-        out.setAttribute("position", flat.getAttribute("position").clone());
-        c.dispose(); if (flat !== c) flat.dispose();
-        return out;
-      };
-      const gA = toFlat(mA);
-      const gB = toFlat(mB);
-      const merged = mergeGeometries([gA, gB], false);
-      gA.dispose(); gB.dispose();
-      if (merged) {
-        merged.computeVertexNormals();
-        const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-        const result = new THREE.Mesh(merged, mat);
-        result.userData.kind = "brep";
-        result.userData.creator = "boolean-union";
-        viewer.getScene().remove(objA);
-        viewer.getScene().remove(objB);
-        viewer.addMesh(result, "brep");
-        pushReplaceAction(result, [objA, objB], "boolean-union");
-      } else {
-        ptPrompt("Union failed — could not merge geometries");
-        setTimeout(() => ptClearPrompt(), 2500);
-      }
-    }
-  } else {
-    // Difference / Split require full CSG — not yet implemented without a CSG library.
-    const label = op === "difference" ? "Difference (A − B)" : "Split (A ∩ B)";
-    ptPrompt(`${label}: requires solid CSG — coming soon`);
-    setTimeout(() => ptClearPrompt(), 2500);
+  const mA = objA as THREE.Mesh;
+  const mB = objB as THREE.Mesh;
+  if (!mA.geometry || !mB.geometry) {
+    ptPrompt("Boolean — both objects must be solid meshes");
+    setTimeout(() => ptClearPrompt(), 2000);
+    opFinish(viewer); return;
   }
+
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
+  const tags: Record<string, string> = { union: "boolean-union", difference: "boolean-difference", split: "boolean-split" };
+
+  let result: THREE.Mesh;
+  try {
+    if      (op === "union")      result = csgUnion(mA, mB, mat);
+    else if (op === "difference") result = csgDifference(mA, mB, mat);
+    else                          result = csgIntersection(mA, mB, mat);
+  } catch {
+    ptPrompt("Boolean failed — geometry may be degenerate or non-manifold");
+    setTimeout(() => ptClearPrompt(), 2500);
+    opFinish(viewer); return;
+  }
+
+  if (!result.geometry.getAttribute("position") || result.geometry.getAttribute("position").count === 0) {
+    ptPrompt("Boolean produced empty result — objects may not overlap");
+    setTimeout(() => ptClearPrompt(), 2500);
+    opFinish(viewer); return;
+  }
+
+  const creator = tags[op];
+  result.userData.kind = "brep";
+  result.userData.creator = creator;
+  viewer.getScene().remove(objA);
+  viewer.getScene().remove(objB);
+  viewer.addMesh(result, "brep");
+  pushReplaceAction(result, [objA, objB], creator);
   opFinish(viewer);
 }
 
