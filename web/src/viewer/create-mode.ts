@@ -65,6 +65,21 @@ export function clearCreateSequence(): void {
 
 // Pending click buffer — z is only set for the "level" tool (geometry raycast elevation).
 let _pending: Array<{ x: number; y: number; z?: number }> = [];
+// Shift-axis constraint: when Shift is held and ≥1 pending point exists, lock to the
+// dominant world axis (X or Y) from the last pending point and grid-snap along it.
+function shiftAxisSnap(
+  base: { x: number; y: number },
+  cur: { x: number; y: number },
+  step: number,
+): { x: number; y: number } {
+  const dx = cur.x - base.x;
+  const dy = cur.y - base.y;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { x: base.x + Math.round(dx / step) * step, y: base.y };
+  } else {
+    return { x: base.x, y: base.y + Math.round(dy / step) * step };
+  }
+}
 // Last pointer screen position — used by inline chip after level/datum placement.
 let _lastPointerClient: { x: number; y: number } = { x: 0, y: 0 };
 // Temporary scene objects — removed when the tool completes or is cancelled.
@@ -2583,7 +2598,12 @@ export function initCreateMode(viewer: Viewer): void {
     ev.stopImmediatePropagation();
     _lastPointerClient = { x: ev.clientX, y: ev.clientY };
     const vertex = !ev.altKey ? nearestSnapVertex(viewer, ev.clientX, ev.clientY) : null;
-    const snapped = vertex ?? snapPoint(world.x, world.y);
+    let snapped = vertex ?? snapPoint(world.x, world.y);
+    // Shift-hold: axis-lock from last pending point (same as rubber-band preview).
+    if (ev.shiftKey && !ev.altKey && _pending.length > 0) {
+      const base = _pending[_pending.length - 1];
+      snapped = shiftAxisSnap(base, snapped, getSnap().step);
+    }
     // For host-placement tools (door/window/opening) raycast to find a valid host.
     // Reject the click and prompt if no host is found.
     const hostCreators = HOST_TOOL_CREATORS[tool];
@@ -2614,7 +2634,7 @@ export function initCreateMode(viewer: Viewer): void {
       return;
     }
     // Alt key bypasses snap (raw mouse position). Otherwise: vertex/edge snap first,
-    // fall back to grid snap.
+    // fall back to grid snap. Shift+pending → axis-lock from last pending point.
     let snapped: { x: number; y: number; z?: number };
     if (ev.altKey) {
       _snapTarget = null;
@@ -2630,6 +2650,11 @@ export function initCreateMode(viewer: Viewer): void {
         _snapTarget = null;
         snapped = snapPoint(world.x, world.y);
       }
+    }
+    // Shift-hold axis constraint for sketch draw tools (not PT / op tools).
+    if (ev.shiftKey && !ev.altKey && !_ptPhase && !_opPhase && _pending.length > 0 && tool) {
+      const base = _pending[_pending.length - 1];
+      snapped = shiftAxisSnap(base, snapped, getSnap().step);
     }
     // Project snapped world position back to screen so the dot visually snaps (#327).
     const screen = projectToScreen(viewer, snapped.x, snapped.y, snapped.z ?? 0);
