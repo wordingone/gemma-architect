@@ -147,21 +147,4 @@
   border-bottom: 4px solid var(--ink-faint);
 }
 
-.palette-tip {
-  position: fixed;
-  transform: translateY(-50%);
-  background: var(--ink);
-  color: var(--paper);
-  padding: 3px 7px;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  border-radius: var(--r-sm);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 80ms;
-  z-index: 9999;
-  font-family: var(--mono);
-}
-.palette-tip.is-visible { opacity: 1; }
+/* #palette-tip styles are set inline in buildPalette (cursor-following portal) */

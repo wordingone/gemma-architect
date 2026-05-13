@@ -202,18 +202,60 @@ function el(tag: string, cls?: string, attrs?: Record<string, string>): HTMLElem
 const ARCH_SECTION_IDX = 3;
 const COMP_SECTION_IDX = 4;
 
-function buildPalette(host: HTMLElement) {
-  host.innerHTML = "";
-
-  // Single portal tooltip in document.body — position: fixed escapes palette overflow clipping.
+// Single shared tooltip element — created once, reused across all palette instances.
+function getPaletteTip(): HTMLDivElement {
   let tip = document.getElementById("palette-tip") as HTMLDivElement | null;
   if (!tip) {
     tip = document.createElement("div");
     tip.id = "palette-tip";
-    tip.className = "palette-tip";
+    tip.style.cssText = [
+      "position:fixed",
+      "pointer-events:none",
+      "display:none",
+      "background:#111",
+      "color:#fff",
+      "padding:3px 8px",
+      "font-size:10px",
+      "font-family:var(--mono,monospace)",
+      "letter-spacing:.06em",
+      "text-transform:uppercase",
+      "border-radius:4px",
+      "white-space:nowrap",
+      "z-index:99999",
+    ].join(";");
     document.body.appendChild(tip);
+    // Follow cursor while visible.
+    document.addEventListener("mousemove", (e) => {
+      if (tip!.style.display === "none") return;
+      tip!.style.left = (e.clientX + 14) + "px";
+      tip!.style.top  = (e.clientY - 10) + "px";
+    });
   }
-  const tipEl = tip;
+  return tip;
+}
+
+function buildPalette(host: HTMLElement) {
+  host.innerHTML = "";
+
+  const tip = getPaletteTip();
+
+  // Event delegation on the palette host — avoids per-button listener setup.
+  host.addEventListener("mouseover", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>(".palette-btn");
+    if (!btn) return;
+    const label = btn.getAttribute("aria-label") ?? "";
+    tip.textContent = label;
+    tip.style.left = (e as MouseEvent).clientX + 14 + "px";
+    tip.style.top  = (e as MouseEvent).clientY - 10 + "px";
+    tip.style.display = "block";
+  });
+  host.addEventListener("mouseout", (e) => {
+    const leaving = (e.target as HTMLElement).closest<HTMLElement>(".palette-btn");
+    if (!leaving) return;
+    const to = (e as MouseEvent).relatedTarget as HTMLElement | null;
+    if (to && leaving.contains(to)) return;
+    tip.style.display = "none";
+  });
 
   const sectionEls: HTMLElement[] = [];
 
@@ -225,14 +267,6 @@ function buildPalette(host: HTMLElement) {
       const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
       btn.innerHTML = iconSVG(tool.icon, 18) + `<span class="corner"></span>`;
       btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
-      btn.addEventListener("mouseenter", () => {
-        const r = btn.getBoundingClientRect();
-        tipEl.textContent = tool.label;
-        tipEl.style.left = `${r.right + 8}px`;
-        tipEl.style.top = `${r.top + r.height / 2}px`;
-        tipEl.classList.add("is-visible");
-      });
-      btn.addEventListener("mouseleave", () => tipEl.classList.remove("is-visible"));
       sec.appendChild(btn);
     }
     host.appendChild(sec);
