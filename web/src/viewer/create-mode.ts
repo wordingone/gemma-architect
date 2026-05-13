@@ -2024,6 +2024,7 @@ function opRaycastObject(
   clientX: number,
   clientY: number,
   profileOnly = false,
+  hoverMode = false,
 ): { obj: THREE.Object3D; point: THREE.Vector3 } | null {
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
@@ -2034,21 +2035,38 @@ function opRaycastObject(
   const rc = new THREE.Raycaster();
   rc.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
 
-  // Line objects: nearest vertex within threshold wins.
+  // Line objects: check both vertex proximity AND segment proximity (edge snap).
+  // Vertex-only check misses the cursor when it falls between widely-spaced vertices
+  // (e.g., a large circle viewed from afar where vertices are 30-60px apart on screen).
+  const hitThresh = hoverMode ? 20 : 10;
   let lineHit: { obj: THREE.Object3D; point: THREE.Vector3 } | null = null;
-  let lineHitD = 18; // px threshold for clicking Line objects
+  let lineHitD = hitThresh;
   viewer.getScene().traverse((o) => {
     if (o.userData.noSnap) return;
     if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
     if (!(o instanceof THREE.Line)) return;
     const posAttr = o.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
     if (!posAttr) return;
-    for (let i = 0; i < posAttr.count; i++) {
+    const count = posAttr.count;
+    const looped = o instanceof THREE.LineLoop;
+    // Vertex proximity.
+    for (let i = 0; i < count; i++) {
       const wp = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(o.matrixWorld);
       const sc = projectToScreen(viewer, wp.x, wp.y, wp.z);
       if (!sc) continue;
       const d = Math.hypot(sc.x - clientX, sc.y - clientY);
       if (d < lineHitD) { lineHitD = d; lineHit = { obj: o, point: wp }; }
+    }
+    // Segment proximity — catches cursor between vertices.
+    for (let i = 0; i < count - (looped ? 0 : 1); i++) {
+      const A = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(o.matrixWorld);
+      const B = new THREE.Vector3().fromBufferAttribute(posAttr, (i + 1) % count).applyMatrix4(o.matrixWorld);
+      const ep = closestPtOnSegToRay(viewer, clientX, clientY, A, B);
+      if (!ep) continue;
+      const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
+      if (!sc) continue;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < lineHitD) { lineHitD = d; lineHit = { obj: o, point: ep }; }
     }
   });
   if (lineHit) return lineHit;
@@ -2705,10 +2723,10 @@ export function initCreateMode(viewer: Viewer): void {
     // Hover highlight during object-select phases.
     if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" || _opPhase?.kind === "fillet_select") {
       const profileOnly = _opPhase.kind === "extrude_select";
-      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, profileOnly);
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, profileOnly, true);
       opSetHover(hit ? hit.obj : null);
     } else if (_opPhase?.kind === "bool_b") {
-      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY);
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
       const hoverable = hit && hit.obj !== _opPhase.objA ? hit.obj : null;
       opSetHover(hoverable);
     } else {

@@ -222,9 +222,11 @@ export class Viewer {
       lm.opacity = 0.55;
       lm.needsUpdate = true;
     }
+    this.grid.userData.noSnap = true;
     this.scene.add(this.grid);
 
     this.axes = new THREE.AxesHelper(2);
+    this.axes.userData.noSnap = true;
     this.scene.add(this.axes);
     this.createAxisLabels();
 
@@ -702,6 +704,7 @@ export class Viewer {
       lm.opacity = 0.55;
       lm.needsUpdate = true;
     }
+    this.grid.userData.noSnap = true;
     (this.grid as unknown as { __lastSize?: number }).__lastSize = sceneSize;
     this.scene.add(this.grid);
   }
