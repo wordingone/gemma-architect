@@ -2120,15 +2120,26 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
 
   if (op === "fuse") {
     // Fuse: merge both geometries into one mesh at world space.
+    // Normalise to non-indexed position-only so mergeGeometries never fails
+    // on attribute-count or index-vs-flat mismatches between dissimilar geometry types.
     const mA = objA as THREE.Mesh;
     const mB = objB as THREE.Mesh;
     if (mA.geometry && mB.geometry) {
-      const gA = mA.geometry.clone().applyMatrix4(mA.matrixWorld);
-      const gB = mB.geometry.clone().applyMatrix4(mB.matrixWorld);
+      const toFlat = (mesh: THREE.Mesh): THREE.BufferGeometry => {
+        const c = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+        const flat = c.index ? c.toNonIndexed() : c;
+        const out = new THREE.BufferGeometry();
+        out.setAttribute("position", flat.getAttribute("position").clone());
+        c.dispose(); if (flat !== c) flat.dispose();
+        return out;
+      };
+      const gA = toFlat(mA);
+      const gB = toFlat(mB);
       const merged = mergeGeometries([gA, gB], false);
       gA.dispose(); gB.dispose();
       if (merged) {
-        const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+        merged.computeVertexNormals();
+        const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
         const fused = new THREE.Mesh(merged, mat);
         fused.userData.kind = "brep";
         fused.userData.creator = "boolean-fuse";
@@ -2136,6 +2147,9 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
         viewer.getScene().remove(objB);
         viewer.addMesh(fused, "brep");
         pushAction(fused, "boolean-fuse");
+      } else {
+        ptPrompt("Fuse failed — could not merge geometries");
+        setTimeout(() => ptClearPrompt(), 2500);
       }
     }
   } else {
