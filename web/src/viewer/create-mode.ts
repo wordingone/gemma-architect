@@ -197,23 +197,65 @@ function collectSnapVertices(viewer: Viewer): SnapVertex[] {
 }
 
 const VERTEX_SNAP_PX = 20;
+
+// Closest point on a 3-D segment [A,B] to the camera ray. Returns null when
+// ray and segment are nearly parallel. Used for edge snap.
+function closestPtOnSegToRay(
+  viewer: Viewer, clientX: number, clientY: number,
+  A: THREE.Vector3, B: THREE.Vector3,
+): THREE.Vector3 | null {
+  const segDir = B.clone().sub(A);
+  const segLen = segDir.length();
+  if (segLen < 1e-9) return null;
+  const unit = segDir.clone().divideScalar(segLen);
+  const pt = unprojectToAxisLine(viewer, clientX, clientY, A, unit);
+  if (!pt) return null;
+  const t = Math.max(0, Math.min(segLen, pt.clone().sub(A).dot(unit)));
+  return A.clone().addScaledVector(unit, t);
+}
+
 function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): SnapVertex | null {
   const snap = getSnap();
-  if (!snap.snapOn || !snap.vertexSnapOn) return null;
+  if (!snap.snapOn) return null;
+  const anyGeomSnap = snap.vertexSnapOn || snap.edgeSnapOn || snap.midpointSnapOn;
+  if (!anyGeomSnap) return null;
 
-  // Check stored endpoint vertices first (endpoints on sketch geometry).
-  const verts = collectSnapVertices(viewer);
-  let best: SnapVertex | null = null;
-  let bestD = VERTEX_SNAP_PX;
-  for (const v of verts) {
-    const sc = projectToScreen(viewer, v.x, v.y, v.z);
-    if (!sc) continue;
-    const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-    if (d < bestD) { bestD = d; best = v; }
+  // ── 1. Stored endpoint vertices (sketch geometry: wall, line, polyline) ─────
+  if (snap.vertexSnapOn) {
+    const verts = collectSnapVertices(viewer);
+    let best: SnapVertex | null = null;
+    let bestD = VERTEX_SNAP_PX;
+    for (const v of verts) {
+      const sc = projectToScreen(viewer, v.x, v.y, v.z);
+      if (!sc) continue;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    if (best) return best;
+
+    // Midpoint snap on stored endpoint pairs.
+    if (snap.midpointSnapOn) {
+      const midState = { best: null as THREE.Vector3 | null, bestD: VERTEX_SNAP_PX };
+      viewer.getScene().traverse((obj) => {
+        const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
+        if (!eps || eps.length < 2) return;
+        for (let i = 0; i < eps.length - 1; i++) {
+          const a = eps[i], b = eps[i + 1];
+          const mid = new THREE.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+          const sc = projectToScreen(viewer, mid.x, mid.y, mid.z);
+          if (!sc) return;
+          const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+          if (d < midState.bestD) { midState.bestD = d; midState.best = mid; }
+        }
+      });
+      if (midState.best) {
+        const v = midState.best;
+        return { id: makeSnapId(v.x, v.y, v.z), x: v.x, y: v.y, z: v.z };
+      }
+    }
   }
-  if (best) return best;
 
-  // Fallback: raycast against scene meshes and snap to nearest triangle vertex.
+  // ── 2. Geometry raycasting — hits a mesh surface ───────────────────────────
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
   const ndc = new THREE.Vector2(
@@ -222,39 +264,65 @@ function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): Sn
   );
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
-  const hits = raycaster.intersectObjects(viewer.getScene().children, true);
+
+  // Filter to real Mesh objects; skip helpers and noSnap-tagged objects.
+  const meshes: THREE.Mesh[] = [];
+  viewer.getScene().traverse((obj) => {
+    if (obj.userData.noSnap) return;
+    if (!(obj instanceof THREE.Mesh)) return;
+    if (!obj.geometry || !obj.geometry.getAttribute("position")) return;
+    meshes.push(obj);
+  });
+
+  const hits = raycaster.intersectObjects(meshes, false);
   if (hits.length === 0) return null;
   const hit = hits[0];
+  if (!hit.face) return null;
   const mesh = hit.object as THREE.Mesh;
-  const geo = mesh.geometry;
-  if (!geo || !hit.face) return null;
-  const pos = geo.getAttribute("position") as THREE.BufferAttribute | undefined;
-  if (!pos) return null;
+  const posAttr = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
   const matW = mesh.matrixWorld;
-  const faceIndices = [hit.face.a, hit.face.b, hit.face.c];
-  let fBest: THREE.Vector3 | null = null;
-  let fBestD = VERTEX_SNAP_PX;
-  for (const idx of faceIndices) {
-    const fv = new THREE.Vector3().fromBufferAttribute(pos, idx).applyMatrix4(matW);
-    const sc = projectToScreen(viewer, fv.x, fv.y, fv.z);
-    if (!sc) continue;
-    const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-    if (d < fBestD) { fBestD = d; fBest = fv; }
+  const faceIdx = [hit.face.a, hit.face.b, hit.face.c];
+  const facePts = faceIdx.map(i => new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(matW));
+
+  // Priority: vertex snap > midpoint snap > edge snap.
+  let candidate: THREE.Vector3 | null = null;
+  let candidateD = VERTEX_SNAP_PX;
+
+  if (snap.vertexSnapOn) {
+    for (const fv of facePts) {
+      const sc = projectToScreen(viewer, fv.x, fv.y, fv.z);
+      if (!sc) continue;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < candidateD) { candidateD = d; candidate = fv; }
+    }
+    if (candidate) return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
   }
-  if (!fBest) return null;
-  // Also check edge midpoints when edgeSnapOn.
-  if (snap.edgeSnapOn) {
-    const pts = faceIndices.map(i => new THREE.Vector3().fromBufferAttribute(pos!, i).applyMatrix4(matW));
+
+  if (snap.midpointSnapOn) {
     for (let i = 0; i < 3; i++) {
-      const mid = pts[i].clone().add(pts[(i + 1) % 3]).multiplyScalar(0.5);
+      const mid = facePts[i].clone().add(facePts[(i + 1) % 3]).multiplyScalar(0.5);
       const sc = projectToScreen(viewer, mid.x, mid.y, mid.z);
       if (!sc) continue;
       const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-      if (d < fBestD) { fBestD = d; fBest = mid; }
+      if (d < candidateD) { candidateD = d; candidate = mid; }
     }
+    if (candidate) return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
   }
-  if (!fBest) return null;
-  return { id: makeSnapId(fBest.x, fBest.y, fBest.z), x: fBest.x, y: fBest.y, z: fBest.z };
+
+  if (snap.edgeSnapOn) {
+    // Snap to closest point anywhere along each of the 3 triangle edges.
+    for (let i = 0; i < 3; i++) {
+      const ep = closestPtOnSegToRay(viewer, clientX, clientY, facePts[i], facePts[(i + 1) % 3]);
+      if (!ep) continue;
+      const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
+      if (!sc) continue;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < candidateD) { candidateD = d; candidate = ep; }
+    }
+    if (candidate) return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
+  }
+
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1343,6 +1411,7 @@ function ptSetPreviewLine(viewer: Viewer, from: THREE.Vector3, to: THREE.Vector3
   const mat = new THREE.LineBasicMaterial({ color: 0x4488ff, depthTest: false });
   _ptPreviewLine = new THREE.Line(geo, mat);
   _ptPreviewLine.renderOrder = 99;
+  _ptPreviewLine.userData.noSnap = true;
   viewer.getScene().add(_ptPreviewLine);
 }
 
@@ -1378,6 +1447,7 @@ function ptSetAxisLockLine(viewer: Viewer, basePt: THREE.Vector3): void {
   const mat = new THREE.LineBasicMaterial({ color, depthTest: false, opacity: 0.55, transparent: true });
   _ptAxisLockLine = new THREE.Line(geo, mat);
   _ptAxisLockLine.renderOrder = 98;
+  _ptAxisLockLine.userData.noSnap = true;
   viewer.getScene().add(_ptAxisLockLine);
 }
 
@@ -1708,10 +1778,16 @@ export function initCreateMode(viewer: Viewer): void {
           clickPt = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, axisDir);
         }
         if (!clickPt) {
-          const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
-          if (!world) return;
-          const snapped = snapPoint(world.x, world.y);
-          clickPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+          // Try geometry vertex/edge snap first.
+          const sv = nearestSnapVertex(viewer, ev.clientX, ev.clientY);
+          if (sv) {
+            clickPt = new THREE.Vector3(sv.x, sv.y, sv.z);
+          } else {
+            const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
+            if (!world) return;
+            const snapped = snapPoint(world.x, world.y);
+            clickPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+          }
         }
         ev.stopImmediatePropagation();
         ptHandlePoint(viewer, clickPt);
@@ -1769,9 +1845,9 @@ export function initCreateMode(viewer: Viewer): void {
       moveCursorDot(viewer, { x: 0, y: 0 }, ev.clientX, ev.clientY);
       return;
     }
-    // Alt key bypasses snap (raw mouse position). Otherwise: vertex snap first,
+    // Alt key bypasses snap (raw mouse position). Otherwise: vertex/edge snap first,
     // fall back to grid snap.
-    let snapped: { x: number; y: number };
+    let snapped: { x: number; y: number; z?: number };
     if (ev.altKey) {
       _snapTarget = null;
       snapped = world;
@@ -1786,7 +1862,7 @@ export function initCreateMode(viewer: Viewer): void {
       }
     }
     // Project snapped world position back to screen so the dot visually snaps (#327).
-    const screen = projectToScreen(viewer, snapped.x, snapped.y, 0);
+    const screen = projectToScreen(viewer, snapped.x, snapped.y, snapped.z ?? 0);
     moveCursorDot(viewer, snapped, screen?.x ?? ev.clientX, screen?.y ?? ev.clientY, _snapTarget !== null);
 
     // PT preview: live transform + readout for each active phase.
@@ -1806,7 +1882,7 @@ export function initCreateMode(viewer: Viewer): void {
         cursorPt = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, _ptPhase.start, axisDir)
           ?? new THREE.Vector3(snapped.x, snapped.y, 0);
       } else {
-        cursorPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+        cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
       }
       // Live preview: move object.
       const ptObj = ptGetTarget();
@@ -1819,7 +1895,7 @@ export function initCreateMode(viewer: Viewer): void {
       const lockTag = _ptAxisLock ? `  [${_ptAxisLock.toUpperCase()} LOCK]` : "";
       ptPrompt(`Target point — click, type x,y,z  [Δ ${delta.x.toFixed(2)}, ${delta.y.toFixed(2)}, ${delta.z.toFixed(2)}]${lockTag}`);
     } else if (_ptPhase?.kind === "angle_end") {
-      const cursorPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+      const cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
       const dx = cursorPt.x - _ptPhase.base.x;
       const dy = cursorPt.y - _ptPhase.base.y;
       const raw = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -1844,7 +1920,7 @@ export function initCreateMode(viewer: Viewer): void {
         cursorPt = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, _ptPhase.base, axisDir)
           ?? new THREE.Vector3(snapped.x, snapped.y, 0);
       } else {
-        cursorPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+        cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
       }
       const refDist = _ptPhase.refPt.distanceTo(_ptPhase.base);
       const newDist = cursorPt.distanceTo(_ptPhase.base);
@@ -1873,22 +1949,17 @@ export function initCreateMode(viewer: Viewer): void {
     hideCursorDot();
   });
 
-  // Esc cancels; Enter commits unlimited tools (curve) or PT centroid.
+  // Shift+X/Y/Z = hold-to-constrain axis lock. Release Shift to unlock.
   window.addEventListener("keydown", (ev) => {
-    // X / Y / Z toggle axis lock when a PT phase (past "start") is active.
-    if (_ptPhase && _ptPhase.kind !== "start" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+    if (_ptPhase && _ptPhase.kind !== "start" && ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey
+        && document.activeElement !== _ptCoordInputEl) {
       const key = ev.key.toLowerCase();
       if (key === "x" || key === "y" || key === "z") {
-        // Don't steal key if a text input is focused.
-        if (document.activeElement === _ptCoordInputEl) { /* fall through */ }
-        else {
-          ev.preventDefault();
-          _ptAxisLock = _ptAxisLock === key ? null : (key as "x" | "y" | "z");
-          const basePt = ptGetAxisBase();
-          if (basePt) ptSetAxisLockLine(viewer, basePt);
-          else ptClearAxisLockLine(viewer);
-          return;
-        }
+        ev.preventDefault();
+        _ptAxisLock = key as "x" | "y" | "z";
+        const basePt = ptGetAxisBase();
+        if (basePt) ptSetAxisLockLine(viewer, basePt);
+        return;
       }
     }
     if (ev.key === "Escape") {
@@ -1922,6 +1993,14 @@ export function initCreateMode(viewer: Viewer): void {
           }
         }
       });
+    }
+  });
+
+  // Release axis lock when Shift is released.
+  window.addEventListener("keyup", (ev) => {
+    if (ev.key === "Shift" && _ptAxisLock && _ptViewer) {
+      _ptAxisLock = null;
+      ptClearAxisLockLine(_ptViewer);
     }
   });
 

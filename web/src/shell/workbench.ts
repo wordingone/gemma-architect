@@ -26,7 +26,7 @@ import { dispatchSync, type DispatchArgs } from "../commands/dispatch";
 import { startCommandSession } from "../commands/command-session";
 import { setPickerHint } from "../viewer/create-mode";
 import { getState, setState, subscribe as subscribeAppState, type ViewName } from "../app-state";
-import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setStep, setAngleStep, getSnap } from "../viewer/snap-state";
+import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setMidpointSnapOn, setStep, setAngleStep, getSnap } from "../viewer/snap-state";
 import { buildSelectionFiltersPanel } from "../scene/scene-panel";
 import { levelStore, type Level } from "../geometry/levels";
 import { gridStore, type Grid } from "../geometry/grids";
@@ -297,12 +297,13 @@ function buildSnapDock(): HTMLElement {
   // quantising) and viewer.ts (gumball drag + relocate snapping) read from
   // the singleton, so changing a box here flows everywhere automatically.
   const SNAP_KEYS: Array<{ key: keyof typeof snap; label: string }> = [
-    { key: "snapOn",       label: "Snap" },
-    { key: "orthoOn",      label: "Ortho" },
-    { key: "gridOn",       label: "Grid" },
-    { key: "polarOn",      label: "Polar" },
-    { key: "vertexSnapOn", label: "Vertex" },
-    { key: "edgeSnapOn",   label: "Edge" },
+    { key: "snapOn",          label: "Snap" },
+    { key: "orthoOn",         label: "Ortho" },
+    { key: "gridOn",          label: "Grid" },
+    { key: "polarOn",         label: "Polar" },
+    { key: "vertexSnapOn",    label: "Vertex" },
+    { key: "edgeSnapOn",      label: "Edge" },
+    { key: "midpointSnapOn",  label: "Midpt" },
   ];
   const rows = SNAP_KEYS.map(({ key, label }) => {
     const checked = snap[key] ? "checked" : "";
@@ -331,8 +332,9 @@ function buildSnapDock(): HTMLElement {
         case "orthoOn":      setOrthoOn(on); break;
         case "gridOn":       setGridOn(on); break;
         case "polarOn":      setPolarOn(on); break;
-        case "vertexSnapOn": setVertexSnapOn(on); break;
-        case "edgeSnapOn":   setEdgeSnapOn(on); break;
+        case "vertexSnapOn":   setVertexSnapOn(on); break;
+        case "edgeSnapOn":     setEdgeSnapOn(on); break;
+        case "midpointSnapOn": setMidpointSnapOn(on); break;
       }
     });
   });
