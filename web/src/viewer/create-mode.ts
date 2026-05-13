@@ -18,11 +18,12 @@
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { csgUnion, csgDifference, csgIntersection } from "./csg";
 import type { Viewer } from "./viewer";
 import { setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { snapPoint, getSnap } from "./snap-state";
-import { pushAction, pushTransformAction, captureTransform } from "../history";
+import { pushAction, pushTransformAction, captureTransform, pushReplaceAction } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../geometry/grids";
@@ -1951,6 +1952,7 @@ function opFinish(viewer: Viewer): void {
   ptClearPrompt();
   ptHideCoordInput();
   hideCursorDot();
+  setChooserHint(null);
   viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
@@ -2166,7 +2168,7 @@ function opStartTool(viewer: Viewer, tool: string): void {
   }
 }
 
-function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D, op: "fuse" | "cut" | "intersect"): void {
+function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D, op: "union" | "difference" | "split"): void {
   const restoreEmissive = (obj: THREE.Object3D) => {
     const m = obj as THREE.Mesh;
     if (m.userData._savedEmissive !== undefined) {
@@ -2176,46 +2178,41 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
   };
   restoreEmissive(objA); restoreEmissive(objB);
 
-  if (op === "fuse") {
-    // Fuse: merge both geometries into one mesh at world space.
-    // Normalise to non-indexed position-only so mergeGeometries never fails
-    // on attribute-count or index-vs-flat mismatches between dissimilar geometry types.
-    const mA = objA as THREE.Mesh;
-    const mB = objB as THREE.Mesh;
-    if (mA.geometry && mB.geometry) {
-      const toFlat = (mesh: THREE.Mesh): THREE.BufferGeometry => {
-        const c = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-        const flat = c.index ? c.toNonIndexed() : c;
-        const out = new THREE.BufferGeometry();
-        out.setAttribute("position", flat.getAttribute("position").clone());
-        c.dispose(); if (flat !== c) flat.dispose();
-        return out;
-      };
-      const gA = toFlat(mA);
-      const gB = toFlat(mB);
-      const merged = mergeGeometries([gA, gB], false);
-      gA.dispose(); gB.dispose();
-      if (merged) {
-        merged.computeVertexNormals();
-        const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-        const fused = new THREE.Mesh(merged, mat);
-        fused.userData.kind = "brep";
-        fused.userData.creator = "boolean-fuse";
-        viewer.getScene().remove(objA);
-        viewer.getScene().remove(objB);
-        viewer.addMesh(fused, "brep");
-        pushAction(fused, "boolean-fuse");
-      } else {
-        ptPrompt("Fuse failed — could not merge geometries");
-        setTimeout(() => ptClearPrompt(), 2500);
-      }
-    }
-  } else {
-    // Cut / Intersect: full CSG not yet implemented — show message.
-    ptPrompt(`Boolean ${op}: solid CSG not yet implemented — use Fuse for merging`);
+  const mA = objA as THREE.Mesh;
+  const mB = objB as THREE.Mesh;
+  if (!mA.geometry || !mB.geometry) {
+    ptPrompt("Boolean — both objects must be solid meshes");
     setTimeout(() => ptClearPrompt(), 2000);
+    opFinish(viewer); return;
   }
-  setChooserHint(null);
+
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
+  const tags: Record<string, string> = { union: "boolean-union", difference: "boolean-difference", split: "boolean-split" };
+
+  let result: THREE.Mesh;
+  try {
+    if      (op === "union")      result = csgUnion(mA, mB, mat);
+    else if (op === "difference") result = csgDifference(mA, mB, mat);
+    else                          result = csgIntersection(mA, mB, mat);
+  } catch {
+    ptPrompt("Boolean failed — geometry may be degenerate or non-manifold");
+    setTimeout(() => ptClearPrompt(), 2500);
+    opFinish(viewer); return;
+  }
+
+  if (!result.geometry.getAttribute("position") || result.geometry.getAttribute("position").count === 0) {
+    ptPrompt("Boolean produced empty result — objects may not overlap");
+    setTimeout(() => ptClearPrompt(), 2500);
+    opFinish(viewer); return;
+  }
+
+  const creator = tags[op];
+  result.userData.kind = "brep";
+  result.userData.creator = creator;
+  viewer.getScene().remove(objA);
+  viewer.getScene().remove(objB);
+  viewer.addMesh(result, "brep");
+  pushReplaceAction(result, [objA, objB], creator);
   opFinish(viewer);
 }
 
@@ -2226,10 +2223,10 @@ function opShowBoolChooser(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Obj
   label.className = "chooser-label";
   label.textContent = "Boolean operation:";
   _chooserEl.appendChild(label);
-  const ops: Array<["fuse" | "cut" | "intersect", string]> = [
-    ["fuse", "Fuse (union)"],
-    ["cut", "Cut (A − B)"],
-    ["intersect", "Intersect"],
+  const ops: Array<["union" | "difference" | "split", string]> = [
+    ["union",      "Union"],
+    ["difference", "Difference (A − B)"],
+    ["split",      "Split (A ∩ B)"],
   ];
   for (const [op, lbl] of ops) {
     const chip = document.createElement("button");
@@ -2681,6 +2678,14 @@ export function initCreateMode(viewer: Viewer): void {
       opSetHover(hoverable);
     } else {
       opSetHover(null);
+    }
+
+    // Snap cursor suppressed during object-selection op phases — user is picking geometry, not placing points.
+    if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" ||
+        _opPhase?.kind === "bool_b" || _opPhase?.kind === "bool_op" || _opPhase?.kind === "fillet_select") {
+      hideCursorDot();
+      _snapTarget = null;
+      return;
     }
 
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
