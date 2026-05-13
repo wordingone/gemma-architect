@@ -13,7 +13,8 @@ export type TransformSnapshot = {
 type CreateAction    = { kind: "create";    obj: THREE.Object3D; chain: string };
 type TransformAction = { kind: "transform"; obj: THREE.Object3D; before: TransformSnapshot; after: TransformSnapshot };
 type BatchAction     = { kind: "batch";     objs: THREE.Object3D[]; chain: string };
-type Action = CreateAction | TransformAction | BatchAction;
+type ReplaceAction   = { kind: "replace";   added: THREE.Object3D; removed: THREE.Object3D[]; chain: string };
+type Action = CreateAction | TransformAction | BatchAction | ReplaceAction;
 
 const _undo: Action[] = [];
 const _redo: Action[] = [];
@@ -43,6 +44,13 @@ export function pushBatchAction(objs: THREE.Object3D[], chain: string): void {
   _redo.length = 0;
 }
 
+// Record an atomic replace: one object added, one or more removed.
+// Undo restores the removed objects and removes the added one.
+export function pushReplaceAction(added: THREE.Object3D, removed: THREE.Object3D[], chain: string): void {
+  _undo.push({ kind: "replace", added, removed, chain });
+  _redo.length = 0;
+}
+
 export function undo(viewer: Viewer): boolean {
   const a = _undo.pop();
   if (!a) return false;
@@ -55,6 +63,10 @@ export function undo(viewer: Viewer): boolean {
     a.obj.scale.copy(a.before.scale);
     a.obj.updateMatrix();
     a.obj.updateMatrixWorld(true);
+    _redo.push(a);
+  } else if (a.kind === "replace") {
+    viewer.getScene().remove(a.added);
+    for (const obj of a.removed) viewer.getScene().add(obj);
     _redo.push(a);
   } else {
     for (const obj of a.objs) viewer.getScene().remove(obj);
@@ -75,6 +87,10 @@ export function redo(viewer: Viewer): boolean {
     a.obj.scale.copy(a.after.scale);
     a.obj.updateMatrix();
     a.obj.updateMatrixWorld(true);
+    _undo.push(a);
+  } else if (a.kind === "replace") {
+    for (const obj of a.removed) viewer.getScene().remove(obj);
+    viewer.getScene().add(a.added);
     _undo.push(a);
   } else {
     for (const obj of a.objs) viewer.getScene().add(obj);

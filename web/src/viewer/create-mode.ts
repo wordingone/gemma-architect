@@ -22,7 +22,7 @@ import type { Viewer } from "./viewer";
 import { setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { snapPoint, getSnap } from "./snap-state";
-import { pushAction, pushTransformAction, captureTransform } from "../history";
+import { pushAction, pushTransformAction, captureTransform, pushReplaceAction } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../geometry/grids";
@@ -1951,6 +1951,7 @@ function opFinish(viewer: Viewer): void {
   ptClearPrompt();
   ptHideCoordInput();
   hideCursorDot();
+  setChooserHint(null);
   viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
@@ -2166,7 +2167,7 @@ function opStartTool(viewer: Viewer, tool: string): void {
   }
 }
 
-function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D, op: "fuse" | "cut" | "intersect"): void {
+function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D, op: "union" | "difference" | "split"): void {
   const restoreEmissive = (obj: THREE.Object3D) => {
     const m = obj as THREE.Mesh;
     if (m.userData._savedEmissive !== undefined) {
@@ -2176,8 +2177,8 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
   };
   restoreEmissive(objA); restoreEmissive(objB);
 
-  if (op === "fuse") {
-    // Fuse: merge both geometries into one mesh at world space.
+  if (op === "union") {
+    // Union: merge both geometries into one mesh at world space.
     // Normalise to non-indexed position-only so mergeGeometries never fails
     // on attribute-count or index-vs-flat mismatches between dissimilar geometry types.
     const mA = objA as THREE.Mesh;
@@ -2198,24 +2199,24 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
       if (merged) {
         merged.computeVertexNormals();
         const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-        const fused = new THREE.Mesh(merged, mat);
-        fused.userData.kind = "brep";
-        fused.userData.creator = "boolean-fuse";
+        const result = new THREE.Mesh(merged, mat);
+        result.userData.kind = "brep";
+        result.userData.creator = "boolean-union";
         viewer.getScene().remove(objA);
         viewer.getScene().remove(objB);
-        viewer.addMesh(fused, "brep");
-        pushAction(fused, "boolean-fuse");
+        viewer.addMesh(result, "brep");
+        pushReplaceAction(result, [objA, objB], "boolean-union");
       } else {
-        ptPrompt("Fuse failed — could not merge geometries");
+        ptPrompt("Union failed — could not merge geometries");
         setTimeout(() => ptClearPrompt(), 2500);
       }
     }
   } else {
-    // Cut / Intersect: full CSG not yet implemented — show message.
-    ptPrompt(`Boolean ${op}: solid CSG not yet implemented — use Fuse for merging`);
-    setTimeout(() => ptClearPrompt(), 2000);
+    // Difference / Split require full CSG — not yet implemented without a CSG library.
+    const label = op === "difference" ? "Difference (A − B)" : "Split (A ∩ B)";
+    ptPrompt(`${label}: requires solid CSG — coming soon`);
+    setTimeout(() => ptClearPrompt(), 2500);
   }
-  setChooserHint(null);
   opFinish(viewer);
 }
 
@@ -2226,10 +2227,10 @@ function opShowBoolChooser(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Obj
   label.className = "chooser-label";
   label.textContent = "Boolean operation:";
   _chooserEl.appendChild(label);
-  const ops: Array<["fuse" | "cut" | "intersect", string]> = [
-    ["fuse", "Fuse (union)"],
-    ["cut", "Cut (A − B)"],
-    ["intersect", "Intersect"],
+  const ops: Array<["union" | "difference" | "split", string]> = [
+    ["union",      "Union"],
+    ["difference", "Difference (A − B)"],
+    ["split",      "Split (A ∩ B)"],
   ];
   for (const [op, lbl] of ops) {
     const chip = document.createElement("button");
@@ -2681,6 +2682,14 @@ export function initCreateMode(viewer: Viewer): void {
       opSetHover(hoverable);
     } else {
       opSetHover(null);
+    }
+
+    // Snap cursor suppressed during object-selection op phases — user is picking geometry, not placing points.
+    if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" ||
+        _opPhase?.kind === "bool_b" || _opPhase?.kind === "bool_op" || _opPhase?.kind === "fillet_select") {
+      hideCursorDot();
+      _snapTarget = null;
+      return;
     }
 
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
