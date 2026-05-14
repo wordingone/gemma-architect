@@ -1473,6 +1473,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   const handler = TOOL_HANDLERS[tool];
   if (!handler || handler.clicks !== -1 || _pending.length < 2) return null;
   clearTemporary(viewer);
+  clearSmartTrack(viewer);
   const out = handler.handler(_pending);
   _pending = [];
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh");
@@ -1504,6 +1505,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
 
   // All clicks collected — build final mesh.
   clearTemporary(viewer);
+  clearSmartTrack(viewer);
   const out = handler.handler(_pending);
   _pending = [];
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep");
@@ -2958,6 +2960,7 @@ export function initCreateMode(viewer: Viewer): void {
       if (_opPhase) { opCancel(viewer); return; }
       if (_pending.length > 0) {
         clearTemporary(viewer);
+        clearSmartTrack(viewer);
         hideCursorDot();
         _pending = [];
         dispatchSync("setActiveTool", { toolId: "select" });
