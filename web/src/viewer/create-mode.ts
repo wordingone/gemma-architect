@@ -1864,10 +1864,7 @@ function ptHandlePoint(viewer: Viewer, worldPt: THREE.Vector3): void {
     // Apply Shift axis lock to constrain the rotation axis to a cardinal direction.
     let endPt = worldPt.clone();
     if (_ptAxisLock) {
-      const lockDir = ptEffectiveAxisDir();
-      const constrained = unprojectToAxisLine(viewer, 0, 0, phase.axisA, lockDir);
-      // If lock is active, use the lock direction from axisA instead.
-      endPt = phase.axisA.clone().add(lockDir);
+      endPt = phase.axisA.clone().add(ptEffectiveAxisDir());
     }
     const axisDir = endPt.clone().sub(phase.axisA);
     if (axisDir.length() < 1e-6) {
@@ -2052,8 +2049,12 @@ function ptHandleEnter(viewer: Viewer): void {
   } else if (phase.kind === "rotate_axis_b") {
     // Enter on axis end: use centroid + Z unit as a default Z axis.
     ptHandlePoint(viewer, phase.axisA.clone().add(new THREE.Vector3(0, 0, 1)));
+  } else if (phase.kind === "end_move") {
+    // Enter during move: cancel — restore to pre-move position.
+    if (_ptInitPos) { obj.position.copy(_ptInitPos); obj.updateMatrix(); obj.updateMatrixWorld(true); }
+    ptFinish(viewer);
   }
-  // angle_end / move / scale: Enter does nothing (user must click or type)
+  // angle_end / scale: Enter does nothing (user must click or type)
 }
 
 function ptStartTool(tool: "move" | "rotate" | "scale" | "scale-1d" | "scale-2d"): void {
@@ -2133,6 +2134,7 @@ function opFinish(viewer: Viewer): void {
   ptClearPrompt();
   ptHideCoordInput();
   hideCursorDot();
+  clearSketchShiftLine(viewer);
   setChooserHint(null);
   removeSelOverlay();
   _rawChooserDefault = null;
@@ -2351,6 +2353,7 @@ function opRaycastObject(
     if (o.userData.noSnap) return;
     if (!(o instanceof THREE.Mesh)) return;
     if (!o.geometry?.getAttribute("position")) return;
+    if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
     meshes.push(o);
   });
   const hits = rc.intersectObjects(meshes, false);
@@ -2616,13 +2619,13 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
   };
   restoreEmissive(objA); restoreEmissive(objB);
 
-  const mA = objA as THREE.Mesh;
-  const mB = objB as THREE.Mesh;
-  if (!mA.geometry || !mB.geometry) {
-    ptPrompt("Boolean — both objects must be solid meshes");
+  if (!(objA instanceof THREE.Mesh) || !(objB instanceof THREE.Mesh)) {
+    ptPrompt("Boolean — both objects must be solid meshes, not curves or points");
     setTimeout(() => ptClearPrompt(), 2000);
     opFinish(viewer); return;
   }
+  const mA = objA as THREE.Mesh;
+  const mB = objB as THREE.Mesh;
 
   const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
   const tags: Record<string, string> = { union: "boolean-union", difference: "boolean-difference", split: "boolean-split" };
@@ -3089,6 +3092,7 @@ export function initCreateMode(viewer: Viewer): void {
   // When activeTool changes to a PT or op tool, start the state machine.
   subscribe("activeTool", (tool) => {
     if (tool === "move" || tool === "rotate" || tool === "scale" || tool === "scale-1d" || tool === "scale-2d") {
+      if (_ptPhase) ptCancel(viewer); // restore any live-preview transform before switching
       if (_opPhase) opCancel(viewer);
       viewer.setGumballEnabled(false);
       ptStartTool(tool as "move" | "rotate" | "scale" | "scale-1d" | "scale-2d");
@@ -3541,8 +3545,9 @@ export function initCreateMode(viewer: Viewer): void {
       ptPrompt(`Rotation axis — click end point  [dir ${dir.x.toFixed(2)}, ${dir.y.toFixed(2)}, ${dir.z.toFixed(2)}]${lockTag}`);
     } else if (_ptPhase?.kind === "angle_end") {
       const cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
-      const dx = cursorPt.x - _ptPhase.base.x;
-      const dy = cursorPt.y - _ptPhase.base.y;
+      // Use raw ground-plane XY for angle — axis-lock may have zeroed dx/dy if Z-locked.
+      const dx = world.x - _ptPhase.base.x;
+      const dy = world.y - _ptPhase.base.y;
       const raw = Math.atan2(dy, dx) * 180 / Math.PI;
       const snap2 = getSnap();
       const deg = (snap2.snapOn && snap2.polarOn)
@@ -3556,6 +3561,11 @@ export function initCreateMode(viewer: Viewer): void {
       }
       ptSetPreviewLine(viewer, _ptPhase.base, cursorPt);
       ptPrompt(`Rotation angle — hover and click  [${Math.round(deg)}°]  or type degrees`);
+    } else if (_ptPhase?.kind === "scale_ref") {
+      const cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
+      ptSetPreviewLine(viewer, _ptPhase.base, cursorPt);
+      const dist = cursorPt.distanceTo(_ptPhase.base);
+      ptPrompt(`Scale — click reference start point  [dist from anchor: ${dist.toFixed(3)} m]`);
     } else if (_ptPhase?.kind === "scale_end") {
       let cursorPt: THREE.Vector3;
       if (_ptAxisLock) {
