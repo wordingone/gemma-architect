@@ -101,6 +101,12 @@ let _smartTrackMarker: THREE.Mesh | null = null;
 // Viewer reference set once by initCreateMode — used by resetPending.
 let _viewer: Viewer | null = null;
 
+// ─── Selection-mode state ─────────────────────────────────────────────────────
+let _selOverlaySvg: SVGSVGElement | null = null;
+let _selDragging = false;
+let _rawChooserDefault: (() => void) | null = null;
+let _multiSelHighlighted: THREE.Object3D[] = [];
+
 let _pickerPromptEl: HTMLElement | null = null;
 let _chooserEl: HTMLElement | null = null;
 
@@ -147,7 +153,7 @@ export function setChooserHint(choice: { arg: string; options: ChoiceOption[] } 
 }
 
 // Op tools are handled by the opPhase state machine, not the click-to-place pipeline.
-const OP_TOOL_IDS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure"]);
+const OP_TOOL_IDS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure", "sel-window", "sel-lasso", "sel-boundary"]);
 
 // Creators that are valid extrude profiles (curves and surfaces).
 const EXTRUDABLE_CREATORS = new Set(["rect", "circle", "polygon", "polyline", "curve", "line", "wall", "slab", "column", "box", "beam", "roof", "space"]);
@@ -1970,6 +1976,13 @@ type OpPhase =
   | { kind: "bool_op"; objA: THREE.Object3D; objB: THREE.Object3D }
   | { kind: "fillet_select" }
   | { kind: "fillet_radius"; target: THREE.Object3D }
+  | { kind: "sel_window_sub" }
+  | { kind: "sel_window"; subMode: "crossing" | "window"; startX: number; startY: number }
+  | { kind: "sel_lasso_sub" }
+  | { kind: "sel_lasso"; subMode: "crossing" | "window"; points: Array<{ x: number; y: number }> }
+  | { kind: "sel_boundary_sub" }
+  | { kind: "sel_boundary_pick" }
+  | { kind: "sel_boundary_draw"; points: Array<{ x: number; y: number }> }
   | { kind: "dim_a";       tool: "aligned-dim" | "angular-dim" | "area-dim" | "volume-dim" }
   | { kind: "dim_b";       tool: "aligned-dim"; ptA: THREE.Vector3 }
   | { kind: "dim_c";       tool: "angular-dim"; ptA: THREE.Vector3; ptB: THREE.Vector3 }
@@ -2005,6 +2018,10 @@ function opFinish(viewer: Viewer): void {
   ptHideCoordInput();
   hideCursorDot();
   setChooserHint(null);
+  removeSelOverlay();
+  _rawChooserDefault = null;
+  _selDragging = false;
+  clearMultiSelHighlights();
   viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
@@ -2179,6 +2196,150 @@ function opRaycastObject(
   return { obj: hit.object, point: hit.point.clone() };
 }
 
+// ─── Inline raw chooser (no command session) ─────────────────────────────────
+function showRawChooser(
+  label: string,
+  options: Array<{ label: string; description: string; onSelect: () => void }>,
+  defaultFn: () => void,
+): void {
+  if (!_chooserEl) return;
+  _chooserEl.innerHTML = "";
+  const lbl = document.createElement("div");
+  lbl.className = "chooser-label";
+  lbl.textContent = label;
+  _chooserEl.appendChild(lbl);
+  for (const opt of options) {
+    const chip = document.createElement("button");
+    chip.className = "chooser-chip";
+    chip.textContent = opt.label;
+    chip.title = opt.description;
+    chip.addEventListener("click", () => {
+      _rawChooserDefault = null;
+      _chooserEl!.classList.remove("visible");
+      _chooserEl!.innerHTML = "";
+      opt.onSelect();
+    });
+    _chooserEl.appendChild(chip);
+  }
+  _chooserEl.classList.add("visible");
+  _rawChooserDefault = defaultFn;
+}
+
+// ─── SVG overlay for drag-select visuals ─────────────────────────────────────
+function getSelOverlay(viewer: Viewer): SVGSVGElement {
+  if (_selOverlaySvg) return _selOverlaySvg;
+  const canvas = viewer.getCanvas();
+  const parent = canvas.parentElement ?? document.body;
+  if (!parent.style.position || parent.style.position === "static") parent.style.position = "relative";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10;overflow:visible";
+  parent.appendChild(svg);
+  _selOverlaySvg = svg;
+  return svg;
+}
+function clearSelOverlay(): void { if (_selOverlaySvg) _selOverlaySvg.innerHTML = ""; }
+function removeSelOverlay(): void { if (_selOverlaySvg) { _selOverlaySvg.remove(); _selOverlaySvg = null; } }
+
+// ─── Screen-space bbox ────────────────────────────────────────────────────────
+function screenBboxOf(viewer: Viewer, obj: THREE.Object3D): { x1: number; y1: number; x2: number; y2: number; cx: number; cy: number } | null {
+  const box = new THREE.Box3().setFromObject(obj);
+  if (box.isEmpty()) return null;
+  const corners: [number, number, number][] = [
+    [box.min.x, box.min.y, box.min.z], [box.max.x, box.min.y, box.min.z],
+    [box.min.x, box.max.y, box.min.z], [box.max.x, box.max.y, box.min.z],
+    [box.min.x, box.min.y, box.max.z], [box.max.x, box.min.y, box.max.z],
+    [box.min.x, box.max.y, box.max.z], [box.max.x, box.max.y, box.max.z],
+  ];
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const [x, y, z] of corners) {
+    const s = projectToScreen(viewer, x, y, z);
+    if (!s) continue;
+    if (s.x < x1) x1 = s.x; if (s.x > x2) x2 = s.x;
+    if (s.y < y1) y1 = s.y; if (s.y > y2) y2 = s.y;
+  }
+  if (!isFinite(x1)) return null;
+  return { x1, y1, x2, y2, cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 };
+}
+
+function pointInPolygon2D(px: number, py: number, poly: Array<{ x: number; y: number }>): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+    if (((yi > py) !== (yj > py)) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// ─── Multi-select highlight ───────────────────────────────────────────────────
+function clearMultiSelHighlights(): void {
+  for (const obj of _multiSelHighlighted) {
+    const m = obj as THREE.Mesh;
+    if (m instanceof THREE.Mesh && m.userData._selHL !== undefined) {
+      (m.material as THREE.MeshStandardMaterial).emissive?.setHex(m.userData._selHL as number);
+      delete m.userData._selHL;
+    }
+  }
+  _multiSelHighlighted = [];
+}
+function applyMultiSelHL(obj: THREE.Object3D): void {
+  const m = obj as THREE.Mesh;
+  if (!(m instanceof THREE.Mesh) || !(m.material as THREE.MeshStandardMaterial).emissive) return;
+  if (m.userData._selHL !== undefined) return;
+  m.userData._selHL = (m.material as THREE.MeshStandardMaterial).emissive.getHex();
+  (m.material as THREE.MeshStandardMaterial).emissive.setHex(0x223355);
+  _multiSelHighlighted.push(obj);
+}
+
+// ─── Run selection ────────────────────────────────────────────────────────────
+function collectSelectable(viewer: Viewer): THREE.Object3D[] {
+  const out: THREE.Object3D[] = [];
+  viewer.getScene().traverse((o) => {
+    if (o.userData.noSnap || !o.visible) return;
+    if (!(o instanceof THREE.Mesh) && !(o instanceof THREE.Line)) return;
+    out.push(o);
+  });
+  return out;
+}
+function applySelResult(viewer: Viewer, matches: THREE.Object3D[]): void {
+  if (!matches.length) {
+    ptPrompt("No objects in selection — try again");
+    setTimeout(() => ptClearPrompt(), 1500);
+    return;
+  }
+  clearMultiSelHighlights();
+  viewer.selectObject(matches[0]);
+  window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: matches[0].uuid } }));
+  for (const o of matches) applyMultiSelHL(o);
+  ptPrompt(`Selected ${matches.length} object${matches.length > 1 ? "s" : ""}`);
+  setTimeout(() => ptClearPrompt(), 1200);
+}
+function runRectSel(viewer: Viewer, cx1: number, cy1: number, cx2: number, cy2: number, subMode: "crossing" | "window"): void {
+  const rx1 = Math.min(cx1, cx2), ry1 = Math.min(cy1, cy2);
+  const rx2 = Math.max(cx1, cx2), ry2 = Math.max(cy1, cy2);
+  if (rx2 - rx1 < 5 && ry2 - ry1 < 5) return;
+  const matches = collectSelectable(viewer).filter((o) => {
+    const bb = screenBboxOf(viewer, o);
+    if (!bb) return false;
+    return subMode === "crossing"
+      ? bb.x2 >= rx1 && bb.x1 <= rx2 && bb.y2 >= ry1 && bb.y1 <= ry2
+      : bb.x1 >= rx1 && bb.x2 <= rx2 && bb.y1 >= ry1 && bb.y2 <= ry2;
+  });
+  applySelResult(viewer, matches);
+}
+function runPolySel(viewer: Viewer, poly: Array<{ x: number; y: number }>, subMode: "crossing" | "window"): void {
+  if (poly.length < 3) return;
+  const matches = collectSelectable(viewer).filter((o) => {
+    const bb = screenBboxOf(viewer, o);
+    if (!bb) return false;
+    if (subMode === "crossing") {
+      const pb = poly.reduce((a, p) => ({ x1: Math.min(a.x1, p.x), y1: Math.min(a.y1, p.y), x2: Math.max(a.x2, p.x), y2: Math.max(a.y2, p.y) }), { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+      return bb.x2 >= pb.x1 && bb.x1 <= pb.x2 && bb.y2 >= pb.y1 && bb.y1 <= pb.y2 && pointInPolygon2D(bb.cx, bb.cy, poly);
+    }
+    return pointInPolygon2D(bb.cx, bb.cy, poly);
+  });
+  applySelResult(viewer, matches);
+}
+
 function opStartTool(viewer: Viewer, tool: string): void {
   opClearPreview(viewer);
   opClearLabels();
@@ -2217,6 +2378,44 @@ function opStartTool(viewer: Viewer, tool: string): void {
       "volume-dim":   "Volume — click an object to measure",
     };
     ptPrompt(msg[tool] ?? "Click to begin");
+  } else if (tool === "sel-window") {
+    _opPhase = { kind: "sel_window_sub" };
+    const activateWindow = (sub: "crossing" | "window") => {
+      _opPhase = { kind: "sel_window", subMode: sub, startX: -1, startY: -1 };
+      ptPrompt(`Window Select (${sub === "crossing" ? "Crossing" : "Window"}) — click and drag to define selection window  [Esc] cancel`);
+    };
+    showRawChooser("Window Select:", [
+      { label: "Crossing", description: "Objects that cross or are inside the window", onSelect: () => activateWindow("crossing") },
+      { label: "Window",   description: "Objects fully inside the window",              onSelect: () => activateWindow("window") },
+    ], () => activateWindow("crossing"));
+    ptPrompt("Window Select — choose mode above  [Enter=Crossing]");
+  } else if (tool === "sel-lasso") {
+    _opPhase = { kind: "sel_lasso_sub" };
+    const activateLasso = (sub: "crossing" | "window") => {
+      _opPhase = { kind: "sel_lasso", subMode: sub, points: [] };
+      ptPrompt(`Lasso Select (${sub === "crossing" ? "Crossing" : "Window"}) — click and drag to draw lasso  [Esc] cancel`);
+    };
+    showRawChooser("Lasso Select:", [
+      { label: "Crossing", description: "Objects that cross or are inside the lasso", onSelect: () => activateLasso("crossing") },
+      { label: "Window",   description: "Objects fully inside the lasso",              onSelect: () => activateLasso("window") },
+    ], () => activateLasso("crossing"));
+    ptPrompt("Lasso Select — choose mode above  [Enter=Crossing]");
+  } else if (tool === "sel-boundary") {
+    _opPhase = { kind: "sel_boundary_sub" };
+    showRawChooser("Boundary input:", [
+      { label: "Pick Curve",   description: "Click a closed curve/surface in the scene", onSelect: () => {
+        _opPhase = { kind: "sel_boundary_pick" };
+        ptPrompt("Boundary Select — click a closed curve in the scene  [Esc] cancel");
+      }},
+      { label: "Draw Polygon", description: "Click points to define boundary, Enter to close & select", onSelect: () => {
+        _opPhase = { kind: "sel_boundary_draw", points: [] };
+        ptPrompt("Boundary Select — click points to define polygon  [Enter] close & select  [Esc] cancel");
+      }},
+    ], () => {
+      _opPhase = { kind: "sel_boundary_draw", points: [] };
+      ptPrompt("Boundary Select — click points to define polygon  [Enter] close & select  [Esc] cancel");
+    });
+    ptPrompt("Boundary Select — choose input method above  [Enter=Draw Polygon]");
   }
 }
 
@@ -2441,6 +2640,62 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
     return true;
   }
 
+  // ── Selection modes (window/lasso sub-phases handled via pointer drag; boundary handled here) ──
+  if (phase.kind === "sel_window_sub" || phase.kind === "sel_lasso_sub" || phase.kind === "sel_boundary_sub") {
+    return true; // waiting for chooser input
+  }
+
+  if (phase.kind === "sel_boundary_pick") {
+    const hit = opRaycastObject(viewer, clientX, clientY);
+    if (!hit) { ptPrompt("Boundary Select — click a closed curve or shape"); return true; }
+    const box = new THREE.Box3().setFromObject(hit.obj);
+    const corners: [number, number, number][] = [
+      [box.min.x, box.min.y, box.min.z], [box.max.x, box.min.y, box.min.z],
+      [box.max.x, box.max.y, box.min.z], [box.min.x, box.max.y, box.min.z],
+    ];
+    const poly = corners.map(([x, y, z]) => {
+      const s = projectToScreen(viewer, x, y, z);
+      return s ? { x: s.x, y: s.y } : null;
+    }).filter((p): p is { x: number; y: number } => p !== null);
+    if (poly.length >= 3) {
+      runPolySel(viewer, poly, "crossing");
+      setTimeout(() => { removeSelOverlay(); opFinish(viewer); }, 600);
+    } else {
+      ptPrompt("Boundary Select — could not extract boundary; try a different object");
+    }
+    return true;
+  }
+
+  if (phase.kind === "sel_boundary_draw") {
+    const world = unprojectToXY(viewer, clientX, clientY);
+    if (!world) return true;
+    const s = projectToScreen(viewer, world.x, world.y, 0);
+    if (!s) return true;
+    phase.points.push({ x: s.x, y: s.y });
+    // Redraw polygon preview
+    const svg = getSelOverlay(viewer);
+    clearSelOverlay();
+    const canvas = viewer.getCanvas();
+    const rect = canvas.getBoundingClientRect();
+    if (phase.points.length >= 2) {
+      const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      pl.setAttribute("points", phase.points.map(p => `${p.x - rect.left},${p.y - rect.top}`).join(" "));
+      pl.setAttribute("fill", "rgba(68,170,255,0.12)");
+      pl.setAttribute("stroke", "#4af"); pl.setAttribute("stroke-width", "1.5");
+      svg.appendChild(pl);
+      if (phase.points.length >= 3) {
+        const cl = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        const last = phase.points[phase.points.length - 1];
+        cl.setAttribute("x1", String(last.x - rect.left)); cl.setAttribute("y1", String(last.y - rect.top));
+        cl.setAttribute("x2", String(phase.points[0].x - rect.left)); cl.setAttribute("y2", String(phase.points[0].y - rect.top));
+        cl.setAttribute("stroke", "#4af"); cl.setAttribute("stroke-width", "1"); cl.setAttribute("stroke-dasharray", "3 3");
+        svg.appendChild(cl);
+      }
+    }
+    ptPrompt(`Boundary Select — ${phase.points.length} point${phase.points.length > 1 ? "s" : ""}  [Enter] close & select`);
+    return true;
+  }
+
   return false;
 }
 
@@ -2448,6 +2703,21 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
 function opHandleEnter(viewer: Viewer): void {
   const phase = _opPhase;
   if (!phase) return;
+
+  // Raw chooser default (sel sub-phases: Enter = Crossing / Draw Polygon)
+  if (phase.kind === "sel_window_sub" || phase.kind === "sel_lasso_sub" || phase.kind === "sel_boundary_sub") {
+    if (_rawChooserDefault) { _rawChooserDefault(); _rawChooserDefault = null; }
+    if (_chooserEl) { _chooserEl.classList.remove("visible"); _chooserEl.innerHTML = ""; }
+    return;
+  }
+
+  // Boundary draw: Enter closes the polygon and runs selection
+  if (phase.kind === "sel_boundary_draw" && phase.points.length >= 3) {
+    removeSelOverlay();
+    runPolySel(viewer, phase.points, "crossing");
+    setTimeout(() => opFinish(viewer), 600);
+    return;
+  }
 
   if (phase.kind === "dim_area" && phase.pts.length >= 3) {
     // Shoelace formula for XY area (ignores Z).
@@ -2606,7 +2876,7 @@ export function initCreateMode(viewer: Viewer): void {
     }
   });
 
-  const OP_TOOLS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim"]);
+  const OP_TOOLS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "sel-window", "sel-lasso", "sel-boundary"]);
 
   // When activeTool changes to a PT or op tool, start the state machine.
   subscribe("activeTool", (tool) => {
@@ -2669,10 +2939,19 @@ export function initCreateMode(viewer: Viewer): void {
         ptHandlePoint(viewer, clickPt);
         return;
       }
-      // Op-tool click (extrude, boolean, fillet, annotations).
+      // Op-tool click (extrude, boolean, fillet, annotations, selection modes).
       if (_opPhase) {
         ev.stopImmediatePropagation();
-        opHandleClick(viewer, ev.clientX, ev.clientY);
+        if (_opPhase.kind === "sel_window") {
+          _selDragging = true;
+          _opPhase.startX = ev.clientX;
+          _opPhase.startY = ev.clientY;
+        } else if (_opPhase.kind === "sel_lasso") {
+          _selDragging = true;
+          _opPhase.points = [{ x: ev.clientX, y: ev.clientY }];
+        } else {
+          opHandleClick(viewer, ev.clientX, ev.clientY);
+        }
         return;
       }
 
@@ -2745,6 +3024,41 @@ export function initCreateMode(viewer: Viewer): void {
 
     // Op-tool preview + hover — runs independent of ground-plane availability.
     // (readActiveTool() returns null for op tools, so this must run before the world check.)
+
+    // Selection drag overlay updates.
+    if (_selDragging && _opPhase?.kind === "sel_window") {
+      const svg = getSelOverlay(viewer);
+      clearSelOverlay();
+      const canvas = viewer.getCanvas();
+      const rect = canvas.getBoundingClientRect();
+      const x1 = Math.min(_opPhase.startX, ev.clientX) - rect.left;
+      const y1 = Math.min(_opPhase.startY, ev.clientY) - rect.top;
+      const w = Math.abs(ev.clientX - _opPhase.startX);
+      const h = Math.abs(ev.clientY - _opPhase.startY);
+      const isWindow = _opPhase.subMode === "window";
+      const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      r.setAttribute("x", String(x1)); r.setAttribute("y", String(y1));
+      r.setAttribute("width", String(w)); r.setAttribute("height", String(h));
+      r.setAttribute("fill", isWindow ? "rgba(68,170,255,0.10)" : "rgba(68,255,170,0.10)");
+      r.setAttribute("stroke", isWindow ? "#4af" : "#4fa");
+      r.setAttribute("stroke-width", "1.5");
+      r.setAttribute("stroke-dasharray", isWindow ? "none" : "4 3");
+      svg.appendChild(r);
+    } else if (_selDragging && _opPhase?.kind === "sel_lasso") {
+      _opPhase.points.push({ x: ev.clientX, y: ev.clientY });
+      const svg = getSelOverlay(viewer);
+      clearSelOverlay();
+      const canvas = viewer.getCanvas();
+      const rect = canvas.getBoundingClientRect();
+      if (_opPhase.points.length >= 2) {
+        const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+        pl.setAttribute("points", _opPhase.points.map(p => `${p.x - rect.left},${p.y - rect.top}`).join(" "));
+        pl.setAttribute("fill", "rgba(68,170,255,0.10)");
+        pl.setAttribute("stroke", "#4af"); pl.setAttribute("stroke-width", "1.5");
+        svg.appendChild(pl);
+      }
+    }
+
     if (_opPhase?.kind === "extrude_height") {
       opUpdateExtrudePreview(viewer, ev.clientX, ev.clientY, ev.shiftKey);
     }
@@ -2937,6 +3251,29 @@ export function initCreateMode(viewer: Viewer): void {
 
   vpBody.addEventListener("pointerleave", () => {
     hideCursorDot();
+  });
+
+  // Finalize window / lasso drag selection on mouse-up.
+  vpBody.addEventListener("pointerup", (ev) => {
+    if (!_selDragging) return;
+    _selDragging = false;
+    if (_opPhase?.kind === "sel_window") {
+      const x1 = Math.min(_opPhase.startX, ev.clientX);
+      const y1 = Math.min(_opPhase.startY, ev.clientY);
+      const x2 = Math.max(_opPhase.startX, ev.clientX);
+      const y2 = Math.max(_opPhase.startY, ev.clientY);
+      if (x2 - x1 > 4 || y2 - y1 > 4) {
+        runRectSel(viewer, x1, y1, x2, y2, _opPhase.subMode);
+        setTimeout(() => { removeSelOverlay(); opFinish(viewer); }, 600);
+      } else {
+        removeSelOverlay();
+      }
+    } else if (_opPhase?.kind === "sel_lasso" && _opPhase.points.length >= 3) {
+      runPolySel(viewer, _opPhase.points, _opPhase.subMode);
+      setTimeout(() => { removeSelOverlay(); opFinish(viewer); }, 600);
+    } else {
+      removeSelOverlay();
+    }
   });
 
   // Shift+X/Y/Z = hold-to-constrain axis lock. Release Shift to unlock.

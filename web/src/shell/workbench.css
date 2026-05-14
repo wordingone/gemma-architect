@@ -142,9 +142,51 @@
 .palette-btn .corner {
   position: absolute;
   bottom: 2px; right: 2px;
+  width: 10px; height: 10px;
+  /* Invisible hit area overlaying the CSS triangle */
+  display: flex; align-items: flex-end; justify-content: flex-end;
+  cursor: pointer;
+}
+.palette-btn .corner::after {
+  content: "";
   width: 0; height: 0;
   border-left: 4px solid transparent;
   border-bottom: 4px solid var(--ink-faint);
+  pointer-events: none;
 }
 
 /* #palette-tip styles are set inline in buildPalette (cursor-following portal) */
+
+/* Select-mode dropdown menu */
+.sel-mode-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--paper-2, #2a2a2a);
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+  min-width: 200px;
+  padding: 4px 0;
+  outline: none;
+}
+.sel-mode-row {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px;
+  cursor: pointer;
+  gap: 1px;
+}
+.sel-mode-row:hover,
+.sel-mode-row:focus {
+  background: var(--paper-3, #333);
+  outline: none;
+}
+.sel-mode-label {
+  font-size: 12px;
+  color: var(--ink, #ddd);
+  font-weight: 500;
+}
+.sel-mode-sub {
+  font-size: 10px;
+  color: var(--ink-soft, #888);
+}

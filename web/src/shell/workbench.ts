@@ -234,6 +234,53 @@ function getPaletteTip(): HTMLDivElement {
   return tip;
 }
 
+function showSelModeMenu(anchor: HTMLElement): void {
+  // Remove any existing menu.
+  document.querySelector(".sel-mode-menu")?.remove();
+
+  const modes: Array<{ label: string; sub: string; toolId: string }> = [
+    { label: "Standard",       sub: "Default click-to-select",            toolId: "select"       },
+    { label: "Window Select",  sub: "Drag rectangle  [Crossing/Window]",  toolId: "sel-window"   },
+    { label: "Lasso Select",   sub: "Freehand region  [Crossing/Window]", toolId: "sel-lasso"    },
+    { label: "Boundary Select",sub: "Pick curve or draw polygon",         toolId: "sel-boundary" },
+  ];
+
+  const menu = el("div", "sel-mode-menu");
+  menu.setAttribute("role", "menu");
+  for (const mode of modes) {
+    const row = el("div", "sel-mode-row");
+    row.setAttribute("role", "menuitem");
+    row.setAttribute("tabindex", "0");
+    const labelEl = el("span", "sel-mode-label");
+    labelEl.textContent = mode.label;
+    const subEl = el("span", "sel-mode-sub");
+    subEl.textContent = mode.sub;
+    row.appendChild(labelEl);
+    row.appendChild(subEl);
+    row.addEventListener("click", () => {
+      menu.remove();
+      dispatchSync("setActiveTool", { toolId: mode.toolId });
+    });
+    row.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); row.click(); }
+    });
+    menu.appendChild(row);
+  }
+
+  document.body.appendChild(menu);
+
+  // Position below the anchor button.
+  const rect = anchor.getBoundingClientRect();
+  menu.style.left = rect.left + "px";
+  menu.style.top  = (rect.bottom + 4) + "px";
+
+  // Dismiss on outside click.
+  const dismiss = (ev: PointerEvent) => {
+    if (!menu.contains(ev.target as Node)) { menu.remove(); document.removeEventListener("pointerdown", dismiss, true); }
+  };
+  setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 0);
+}
+
 function buildPalette(host: HTMLElement) {
   host.innerHTML = "";
 
@@ -267,7 +314,15 @@ function buildPalette(host: HTMLElement) {
       const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
       const hasCorner = tool.id === "select" || tool.id === "scale";
       btn.innerHTML = iconSVG(tool.icon, 18) + (hasCorner ? `<span class="corner"></span>` : "");
-      btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
+      if (tool.id === "select") {
+        btn.addEventListener("click", (ev) => {
+          const corner = (ev.target as HTMLElement).closest<HTMLElement>(".corner");
+          if (corner) { ev.stopPropagation(); showSelModeMenu(btn); return; }
+          dispatchSync("setActiveTool", { toolId: "select" });
+        });
+      } else {
+        btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
+      }
       sec.appendChild(btn);
     }
     host.appendChild(sec);
