@@ -265,7 +265,8 @@ function buildPalette(host: HTMLElement) {
     if (i === COMP_SECTION_IDX) sec.classList.add("palette-section--hidden");
     for (const tool of section.tools) {
       const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
-      btn.innerHTML = iconSVG(tool.icon, 18) + `<span class="corner"></span>`;
+      const hasCorner = tool.id === "select" || tool.id === "scale";
+      btn.innerHTML = iconSVG(tool.icon, 18) + (hasCorner ? `<span class="corner"></span>` : "");
       btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
       sec.appendChild(btn);
     }
