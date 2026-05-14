@@ -2322,7 +2322,11 @@ function applySelResult(viewer: Viewer, matches: THREE.Object3D[]): void {
   }
   clearMultiSelHighlights();
   clearMultiSelected();
-  viewer.selectObject(matches[0]);
+  if (matches.length === 1) {
+    viewer.selectObject(matches[0]);
+  } else {
+    viewer.setMultiTargets(matches);
+  }
   _selHLOwned = true;
   window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: matches[0].uuid } }));
   _selHLOwned = false;
@@ -2665,9 +2669,18 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
     // Click on a chooser chip — let the chip's click handler manage it.
     const under = document.elementFromPoint(clientX, clientY);
     if (_chooserEl && _chooserEl.contains(under)) return true;
-    // Click anywhere else in the viewport → trigger the default mode immediately.
+    // Click elsewhere → trigger the default mode AND start drag from this very click.
     if (_rawChooserDefault) { _rawChooserDefault(); _rawChooserDefault = null; }
     if (_chooserEl) { _chooserEl.classList.remove("visible"); _chooserEl.innerHTML = ""; }
+    // Immediately begin the drag from this click position.
+    if (_opPhase?.kind === "sel_window") {
+      _selDragging = true;
+      _opPhase.startX = clientX;
+      _opPhase.startY = clientY;
+    } else if (_opPhase?.kind === "sel_lasso") {
+      _selDragging = true;
+      _opPhase.points = [{ x: clientX, y: clientY }];
+    }
     return true;
   }
 
@@ -2971,14 +2984,20 @@ export function initCreateMode(viewer: Viewer): void {
         ptHandlePoint(viewer, clickPt);
         return;
       }
-      // Shift+click standard select: add/toggle object in multi-select without moving gumball.
+      // Shift+click standard select: toggle object in multi-select; reposition unified gumball.
       if (ev.shiftKey && !_ptPhase && !_opPhase) {
         const hit = opRaycastObject(viewer, ev.clientX, ev.clientY);
         if (hit) {
           ev.stopImmediatePropagation();
           addToMultiSelected({ topology: "mesh", uuid: hit.obj.uuid, object: hit.obj, transformTarget: hit.obj });
           clearMultiSelHighlights();
-          for (const s of getMultiSelected()) applyMultiSelHL(s.object);
+          const multiSet = getMultiSelected();
+          for (const s of multiSet) applyMultiSelHL(s.object);
+          if (multiSet.length > 1) {
+            viewer.setMultiTargets(multiSet.map(s => s.object));
+          } else if (multiSet.length === 1) {
+            viewer.selectObject(multiSet[0].object);
+          }
         }
         return;
       }

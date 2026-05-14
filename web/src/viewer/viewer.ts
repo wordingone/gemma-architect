@@ -79,6 +79,10 @@ export class Viewer {
   private targetObject: THREE.Object3D | null = null;
   private pivotMatrixBeforeDrag: THREE.Matrix4 = new THREE.Matrix4();
   private targetMatrixBeforeDrag: THREE.Matrix4 = new THREE.Matrix4();
+  // Multi-select: all selected objects. When length > 1, the gumball pivot
+  // sits at their centroid and objectChange applies the delta to each.
+  private multiTargets: THREE.Object3D[] = [];
+  private multiTargetMatricesBeforeDrag: THREE.Matrix4[] = [];
   private relocateBadge: HTMLElement | null = null;
   private _themeObserver: MutationObserver | null = null;
   // Cursor-follow relocate: when active, normal gumball drag is disabled
@@ -326,6 +330,15 @@ export class Viewer {
           const dWorld = new THREE.Matrix4().copy(this.pivotProxy.matrix).multiply(this.pivotMatrixBeforeDrag.clone().invert());
           const newMatrix = new THREE.Matrix4().copy(dWorld).multiply(this.targetMatrixBeforeDrag);
           newMatrix.decompose(this.targetObject.position, this.targetObject.quaternion, this.targetObject.scale);
+          // Apply the same world-space delta to every additional multi-select target.
+          for (let _mi = 0; _mi < this.multiTargets.length; _mi++) {
+            const _mt = this.multiTargets[_mi];
+            if (_mt === this.targetObject) continue;
+            const _mtBefore = this.multiTargetMatricesBeforeDrag[_mi];
+            if (!_mtBefore) continue;
+            const _mtNew = new THREE.Matrix4().copy(dWorld).multiply(_mtBefore);
+            _mtNew.decompose(_mt.position, _mt.quaternion, _mt.scale);
+          }
           // Sync clip-plane math when user moves/rotates the visualization mesh.
           if (this.targetObject.userData.creator === "SdClippingPlane") {
             const label = this.targetObject.userData.clipLabel as string | undefined;
@@ -365,6 +378,7 @@ export class Viewer {
             // objectChange can compute the live world-space delta.
             this.pivotMatrixBeforeDrag.copy(this.pivotProxy.matrix);
             this.targetMatrixBeforeDrag.copy(this.targetObject.matrix);
+            this.multiTargetMatricesBeforeDrag = this.multiTargets.map(mt => mt.matrix.clone());
           } else if (!dragging && this.pivotProxy && this.targetObject) {
             // Drag complete — geometry already updated live by objectChange.
             // Emit a chain fragment from the final world-space delta.
@@ -815,6 +829,8 @@ export class Viewer {
    *  offset — otherwise every click after relocate would snap the gumball
    *  back to the centroid. */
   selectObject(obj: THREE.Object3D | null): void {
+    this.multiTargets = [];
+    this.multiTargetMatricesBeforeDrag = [];
     // Exit any active sub-selection before switching to a new parent target.
     this.subTargetObject = null;
     // Persist current target's pivotOffset before switching so a deselect →
@@ -859,6 +875,28 @@ export class Viewer {
   }
 
   /** Suppress or restore the gumball. Pass false while op-tools are running. */
+  /** Set multiple selected objects. Positions gumball at their centroid;
+   *  all objects move together when any gumball handle is dragged. */
+  setMultiTargets(targets: THREE.Object3D[]): void {
+    if (targets.length === 0) { this.selectObject(null); return; }
+    this.multiTargets = [...targets];
+    this.multiTargetMatricesBeforeDrag = [];
+    this.subTargetObject = null;
+    if (this.targetObject) {
+      this.pivotOffsetByUuid.set(this.targetObject.uuid, this.pivotOffset.clone());
+    }
+    this.targetObject = targets[0];
+    this.pivotOffset.identity();
+    this.relocate.active = false;
+    this.updateRelocateBadge();
+    clearHandles(this);
+    if (!this.pivotProxy) return;
+    this.syncPivot();
+    if (this._gumballEnabled) {
+      for (const g of this.gizmos) g.attach(this.pivotProxy);
+    }
+  }
+
   setGumballEnabled(enabled: boolean): void {
     this._gumballEnabled = enabled;
     if (!enabled) {
@@ -946,7 +984,20 @@ export class Viewer {
   // animation frame between drags so external transforms (e.g. agent
   // chain replays) don't strand the gumball at a stale pose.
   private syncPivot(): void {
-    if (!this.pivotProxy || !this.targetObject) return;
+    if (!this.pivotProxy) return;
+    if (this.multiTargets.length > 1) {
+      // Multi-select: place gumball at centroid of all selected objects.
+      const centroid = new THREE.Vector3();
+      for (const mt of this.multiTargets) centroid.add(new THREE.Vector3().setFromMatrixPosition(mt.matrix));
+      centroid.divideScalar(this.multiTargets.length);
+      this.pivotProxy.position.copy(centroid);
+      this.pivotProxy.quaternion.identity();
+      this.pivotProxy.scale.set(1, 1, 1);
+      this.pivotProxy.updateMatrix();
+      this.pivotProxy.matrixWorldNeedsUpdate = true;
+      return;
+    }
+    if (!this.targetObject) return;
     this.pivotProxy.matrix.copy(this.targetObject.matrix).multiply(this.pivotOffset);
     this.pivotProxy.matrix.decompose(
       this.pivotProxy.position,
