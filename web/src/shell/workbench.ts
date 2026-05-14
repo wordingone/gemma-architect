@@ -235,7 +235,6 @@ function getPaletteTip(): HTMLDivElement {
 }
 
 function showSelModeMenu(anchor: HTMLElement): void {
-  // Remove any existing menu.
   document.querySelector(".sel-mode-menu")?.remove();
 
   const modes: Array<{ label: string; sub: string; toolId: string }> = [
@@ -247,38 +246,77 @@ function showSelModeMenu(anchor: HTMLElement): void {
 
   const menu = el("div", "sel-mode-menu");
   menu.setAttribute("role", "menu");
+  const rows: HTMLElement[] = [];
   for (const mode of modes) {
     const row = el("div", "sel-mode-row");
     row.setAttribute("role", "menuitem");
     row.setAttribute("tabindex", "0");
+    row.dataset.toolId = mode.toolId;
     const labelEl = el("span", "sel-mode-label");
     labelEl.textContent = mode.label;
     const subEl = el("span", "sel-mode-sub");
     subEl.textContent = mode.sub;
     row.appendChild(labelEl);
     row.appendChild(subEl);
+    // Click support (after hold releases outside menu or for keyboard nav).
     row.addEventListener("click", () => {
       menu.remove();
+      cleanup();
       dispatchSync("setActiveTool", { toolId: mode.toolId });
     });
     row.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); row.click(); }
     });
+    rows.push(row);
     menu.appendChild(row);
   }
 
   document.body.appendChild(menu);
 
-  // Position below the anchor button.
   const rect = anchor.getBoundingClientRect();
   menu.style.left = rect.left + "px";
   menu.style.top  = (rect.bottom + 4) + "px";
 
-  // Dismiss on outside click.
-  const dismiss = (ev: PointerEvent) => {
-    if (!menu.contains(ev.target as Node)) { menu.remove(); document.removeEventListener("pointerdown", dismiss, true); }
+  // During hold-drag: highlight the row under the cursor.
+  const onMove = (ev: PointerEvent) => {
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const hovered = under?.closest<HTMLElement>(".sel-mode-row") ?? null;
+    for (const r of rows) r.classList.toggle("active", r === hovered);
   };
-  setTimeout(() => document.addEventListener("pointerdown", dismiss, true), 0);
+
+  // Pointerup: activate the hovered row (drag-select) or dismiss if outside menu.
+  const onUp = (ev: PointerEvent) => {
+    cleanup();
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const row = under?.closest<HTMLElement>(".sel-mode-row");
+    if (row?.dataset.toolId) {
+      menu.remove();
+      dispatchSync("setActiveTool", { toolId: row.dataset.toolId });
+      return;
+    }
+    // Released outside the menu — keep it open for click interaction;
+    // dismiss on next outside click.
+    if (!menu.contains(under as Node)) {
+      menu.remove();
+      return;
+    }
+    setTimeout(() => document.addEventListener("pointerdown", onOutside, true), 0);
+  };
+
+  const onOutside = (ev: PointerEvent) => {
+    if (!menu.contains(ev.target as Node)) {
+      menu.remove();
+      document.removeEventListener("pointerdown", onOutside, true);
+    }
+  };
+
+  const cleanup = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
 }
 
 function buildPalette(host: HTMLElement) {
@@ -315,10 +353,25 @@ function buildPalette(host: HTMLElement) {
       const hasCorner = tool.id === "select" || tool.id === "scale";
       btn.innerHTML = iconSVG(tool.icon, 18) + (hasCorner ? `<span class="corner"></span>` : "");
       if (tool.id === "select") {
-        btn.addEventListener("click", (ev) => {
-          const corner = (ev.target as HTMLElement).closest<HTMLElement>(".corner");
-          if (corner) { ev.stopPropagation(); showSelModeMenu(btn); return; }
-          dispatchSync("setActiveTool", { toolId: "select" });
+        // Hold anywhere on the button to open the mode dropdown;
+        // short click (< 280ms) dispatches normal select.
+        let holdTimer: ReturnType<typeof setTimeout> | null = null;
+        let menuOpened = false;
+        btn.addEventListener("pointerdown", (ev) => {
+          if (ev.button !== 0) return;
+          try { btn.releasePointerCapture(ev.pointerId); } catch { /* ok */ }
+          menuOpened = false;
+          holdTimer = setTimeout(() => {
+            menuOpened = true;
+            showSelModeMenu(btn);
+          }, 280);
+        });
+        btn.addEventListener("pointerup", () => {
+          if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+        });
+        btn.addEventListener("click", () => {
+          if (!menuOpened) dispatchSync("setActiveTool", { toolId: "select" });
+          menuOpened = false;
         });
       } else {
         btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));

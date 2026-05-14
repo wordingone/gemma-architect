@@ -2273,21 +2273,33 @@ function pointInPolygon2D(px: number, py: number, poly: Array<{ x: number; y: nu
 // ─── Multi-select highlight ───────────────────────────────────────────────────
 function clearMultiSelHighlights(): void {
   for (const obj of _multiSelHighlighted) {
-    const m = obj as THREE.Mesh;
-    if (m instanceof THREE.Mesh && m.userData._selHL !== undefined) {
-      (m.material as THREE.MeshStandardMaterial).emissive?.setHex(m.userData._selHL as number);
-      delete m.userData._selHL;
+    if (obj.userData._selHL === undefined) continue;
+    if (obj instanceof THREE.Mesh) {
+      (obj.material as THREE.MeshStandardMaterial).emissive?.setHex(obj.userData._selHL as number);
+    } else if (obj instanceof THREE.Line) {
+      (obj.material as THREE.LineBasicMaterial).color.setHex(obj.userData._selHL as number);
+    } else if (obj instanceof THREE.Points) {
+      (obj.material as THREE.PointsMaterial).color.setHex(obj.userData._selHL as number);
     }
+    delete obj.userData._selHL;
   }
   _multiSelHighlighted = [];
 }
 function applyMultiSelHL(obj: THREE.Object3D): void {
-  const m = obj as THREE.Mesh;
-  if (!(m instanceof THREE.Mesh) || !(m.material as THREE.MeshStandardMaterial).emissive) return;
-  if (m.userData._selHL !== undefined) return;
-  m.userData._selHL = (m.material as THREE.MeshStandardMaterial).emissive.getHex();
-  (m.material as THREE.MeshStandardMaterial).emissive.setHex(0x223355);
-  _multiSelHighlighted.push(obj);
+  if (obj.userData._selHL !== undefined) return;
+  if (obj instanceof THREE.Mesh && (obj.material as THREE.MeshStandardMaterial).emissive) {
+    obj.userData._selHL = (obj.material as THREE.MeshStandardMaterial).emissive.getHex();
+    (obj.material as THREE.MeshStandardMaterial).emissive.setHex(0x223355);
+    _multiSelHighlighted.push(obj);
+  } else if (obj instanceof THREE.Line) {
+    obj.userData._selHL = (obj.material as THREE.LineBasicMaterial).color.getHex();
+    (obj.material as THREE.LineBasicMaterial).color.setHex(0x44aaff);
+    _multiSelHighlighted.push(obj);
+  } else if (obj instanceof THREE.Points) {
+    obj.userData._selHL = (obj.material as THREE.PointsMaterial).color.getHex();
+    (obj.material as THREE.PointsMaterial).color.setHex(0x44aaff);
+    _multiSelHighlighted.push(obj);
+  }
 }
 
 // ─── Run selection ────────────────────────────────────────────────────────────
@@ -2295,7 +2307,9 @@ function collectSelectable(viewer: Viewer): THREE.Object3D[] {
   const out: THREE.Object3D[] = [];
   viewer.getScene().traverse((o) => {
     if (o.userData.noSnap || !o.visible) return;
-    if (!(o instanceof THREE.Mesh) && !(o instanceof THREE.Line)) return;
+    if (!(o instanceof THREE.Mesh) && !(o instanceof THREE.Line) && !(o instanceof THREE.Points)) return;
+    // Skip internal marker / overlay objects.
+    if (o === _markerMesh || o === _sketchShiftAxisLine) return;
     out.push(o);
   });
   return out;

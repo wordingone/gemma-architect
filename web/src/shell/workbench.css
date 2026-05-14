@@ -161,10 +161,10 @@
 .sel-mode-menu {
   position: fixed;
   z-index: 9999;
-  background: var(--paper-2, #2a2a2a);
-  border: 1px solid var(--border, #444);
+  background: var(--paper-2-solid);
+  border: 1px solid var(--border, rgba(128,128,128,0.3));
   border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.55);
   min-width: 200px;
   padding: 4px 0;
   outline: none;
@@ -177,16 +177,17 @@
   gap: 1px;
 }
 .sel-mode-row:hover,
-.sel-mode-row:focus {
-  background: var(--paper-3, #333);
+.sel-mode-row:focus,
+.sel-mode-row.active {
+  background: var(--paper-3, rgba(128,128,128,0.15));
   outline: none;
 }
 .sel-mode-label {
   font-size: 12px;
-  color: var(--ink, #ddd);
+  color: var(--ink);
   font-weight: 500;
 }
 .sel-mode-sub {
   font-size: 10px;
-  color: var(--ink-soft, #888);
+  color: var(--ink-soft);
 }
