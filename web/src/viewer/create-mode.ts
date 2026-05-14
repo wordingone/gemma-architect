@@ -1853,6 +1853,8 @@ function ptHandlePoint(viewer: Viewer, worldPt: THREE.Vector3): void {
     _ptPhase = { kind: "rotate_axis_b", axisA: worldPt.clone() };
     ptPrompt("Rotation axis — click end point of axis");
     ptSetPreviewLine(viewer, worldPt, worldPt.clone().add(new THREE.Vector3(0, 0, 0.01)));
+    // If axis lock was pre-set during rotate_axis_a, show the lock line now that we have a base.
+    if (_ptAxisLock) ptSetAxisLockLine(viewer, worldPt);
     return;
   }
 
@@ -3452,12 +3454,18 @@ export function initCreateMode(viewer: Viewer): void {
     }
     // PT axis lock: override cursor dot position to the constrained axis point.
     if (_ptAxisLock && _ptPhase && _ptPhase.kind !== "start") {
-      const axisBase = ptGetAxisBase();
+      const axisBase = _ptPhase.kind === "rotate_axis_b" ? _ptPhase.axisA : ptGetAxisBase();
       if (axisBase) {
-        const constrained = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, ptEffectiveAxisDir());
+        const axisDir = ptEffectiveAxisDir();
+        const constrained = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, axisDir);
         if (constrained) {
           _snapTarget = null;
           snapped = { x: constrained.x, y: constrained.y, z: constrained.z };
+        } else {
+          // Camera ray nearly parallel to locked axis — show unit-tip along the axis.
+          const tip = axisBase.clone().addScaledVector(axisDir, 2);
+          _snapTarget = null;
+          snapped = { x: tip.x, y: tip.y, z: tip.z };
         }
       }
     }
@@ -3501,7 +3509,13 @@ export function initCreateMode(viewer: Viewer): void {
       if (_ptAxisLock) {
         const axisDir = ptEffectiveAxisDir();
         const projected = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, _ptPhase.axisA, axisDir);
-        if (projected) cursorPt = projected;
+        if (projected) {
+          cursorPt = projected;
+        } else {
+          // Camera ray nearly parallel to the locked axis (e.g. Z-lock with top-down view).
+          // Show the axis unit-tip so the preview line still reflects the locked direction.
+          cursorPt = _ptPhase.axisA.clone().addScaledVector(axisDir, 2);
+        }
       }
       ptSetPreviewLine(viewer, _ptPhase.axisA, cursorPt);
       const dir = cursorPt.clone().sub(_ptPhase.axisA).normalize();
@@ -3594,13 +3608,15 @@ export function initCreateMode(viewer: Viewer): void {
   // Smart snap: if the last snap was an edge snap, Shift uses that edge direction.
   // Also constrains the rotation axis direction during rotate_axis_b.
   window.addEventListener("keydown", (ev) => {
-    if (_ptPhase && _ptPhase.kind !== "start" && _ptPhase.kind !== "rotate_axis_a"
+    if (_ptPhase && _ptPhase.kind !== "start"
         && ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey
         && document.activeElement !== _ptCoordInputEl) {
       const key = ev.key.toLowerCase();
       if (key === "x" || key === "y" || key === "z") {
         ev.preventDefault();
         _ptAxisLock = key as "x" | "y" | "z";
+        // For rotate_axis_a we don't have a base point yet — latch the lock so it's
+        // immediately applied when the user clicks and transitions to rotate_axis_b.
         const basePt = _ptPhase.kind === "rotate_axis_b" ? _ptPhase.axisA : ptGetAxisBase();
         if (basePt) ptSetAxisLockLine(viewer, basePt);
         return;
