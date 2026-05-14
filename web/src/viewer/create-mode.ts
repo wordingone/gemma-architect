@@ -1729,8 +1729,10 @@ function unprojectToAxisLine(
   const rd = raycaster.ray.direction.clone();
   const w = ro.sub(basePt); // w = rayOrigin - basePt
   const b = rd.dot(axisDir);
-  const denom = b * b - 1; // axisDir normalized → axisDir·axisDir=1
-  if (Math.abs(denom) < 1e-8) return null;
+  // Closest-point-on-axis formula: t = (b*(rd·w) - (axisDir·w)) / (1 - b²)
+  // denom = 1 - b² (NOT b²-1; wrong sign flips t, mirroring the result across basePt)
+  const denom = 1 - b * b;
+  if (Math.abs(denom) < 1e-8) return null; // ray nearly parallel to axis — degenerate
   const t = (b * w.dot(rd) - w.dot(axisDir)) / denom;
   return basePt.clone().addScaledVector(axisDir, t);
 }
@@ -3140,10 +3142,19 @@ export function initCreateMode(viewer: Viewer): void {
           return;
         }
         // Axis-constrained or XY-plane cursor position.
-        const axisBase = ptGetAxisBase();
+        const axisBase = _ptPhase.kind === "rotate_axis_b" ? _ptPhase.axisA : ptGetAxisBase();
         let clickPt: THREE.Vector3 | null = null;
         if (_ptAxisLock && axisBase) {
-          clickPt = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, ptEffectiveAxisDir());
+          const rawPt = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, ptEffectiveAxisDir());
+          if (rawPt) {
+            if (getSnap().snapOn && getSnap().gridOn) {
+              const step = getSnap().step;
+              if (_ptAxisLock === "x") rawPt.x = Math.round(rawPt.x / step) * step;
+              else if (_ptAxisLock === "y") rawPt.y = Math.round(rawPt.y / step) * step;
+              else rawPt.z = Math.round(rawPt.z / step) * step;
+            }
+            clickPt = rawPt;
+          }
         }
         if (!clickPt) {
           // Try geometry vertex/edge snap first.
@@ -3452,20 +3463,23 @@ export function initCreateMode(viewer: Viewer): void {
       _shiftAxisChoice = null;
       clearSketchShiftLine(viewer);
     }
-    // PT axis lock: override cursor dot position to the constrained axis point.
+    // PT axis lock: override cursor dot + snapped position to the constrained axis point.
     if (_ptAxisLock && _ptPhase && _ptPhase.kind !== "start") {
       const axisBase = _ptPhase.kind === "rotate_axis_b" ? _ptPhase.axisA : ptGetAxisBase();
       if (axisBase) {
         const axisDir = ptEffectiveAxisDir();
         const constrained = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, axisDir);
         if (constrained) {
+          // Grid-snap the locked coordinate only; perpendicular coords are already
+          // fixed to axisBase by the axis projection.
+          if (getSnap().snapOn && getSnap().gridOn) {
+            const step = getSnap().step;
+            if (_ptAxisLock === "x") constrained.x = Math.round(constrained.x / step) * step;
+            else if (_ptAxisLock === "y") constrained.y = Math.round(constrained.y / step) * step;
+            else constrained.z = Math.round(constrained.z / step) * step;
+          }
           _snapTarget = null;
           snapped = { x: constrained.x, y: constrained.y, z: constrained.z };
-        } else {
-          // Camera ray nearly parallel to locked axis — show unit-tip along the axis.
-          const tip = axisBase.clone().addScaledVector(axisDir, 2);
-          _snapTarget = null;
-          snapped = { x: tip.x, y: tip.y, z: tip.z };
         }
       }
     }
@@ -3485,8 +3499,18 @@ export function initCreateMode(viewer: Viewer): void {
       // Compute axis-constrained cursor world point.
       let cursorPt: THREE.Vector3;
       if (_ptAxisLock) {
-        cursorPt = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, _ptPhase.start, ptEffectiveAxisDir())
-          ?? new THREE.Vector3(snapped.x, snapped.y, 0);
+        const rawPt = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, _ptPhase.start, ptEffectiveAxisDir());
+        if (rawPt) {
+          if (getSnap().snapOn && getSnap().gridOn) {
+            const step = getSnap().step;
+            if (_ptAxisLock === "x") rawPt.x = Math.round(rawPt.x / step) * step;
+            else if (_ptAxisLock === "y") rawPt.y = Math.round(rawPt.y / step) * step;
+            else rawPt.z = Math.round(rawPt.z / step) * step;
+          }
+          cursorPt = rawPt;
+        } else {
+          cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
+        }
       } else {
         cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
       }
@@ -3509,13 +3533,7 @@ export function initCreateMode(viewer: Viewer): void {
       if (_ptAxisLock) {
         const axisDir = ptEffectiveAxisDir();
         const projected = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, _ptPhase.axisA, axisDir);
-        if (projected) {
-          cursorPt = projected;
-        } else {
-          // Camera ray nearly parallel to the locked axis (e.g. Z-lock with top-down view).
-          // Show the axis unit-tip so the preview line still reflects the locked direction.
-          cursorPt = _ptPhase.axisA.clone().addScaledVector(axisDir, 2);
-        }
+        if (projected) cursorPt = projected;
       }
       ptSetPreviewLine(viewer, _ptPhase.axisA, cursorPt);
       const dir = cursorPt.clone().sub(_ptPhase.axisA).normalize();
@@ -3615,6 +3633,9 @@ export function initCreateMode(viewer: Viewer): void {
       if (key === "x" || key === "y" || key === "z") {
         ev.preventDefault();
         _ptAxisLock = key as "x" | "y" | "z";
+        // Cardinal key lock — discard any stale edge direction so ptEffectiveAxisDir
+        // returns the cardinal axis, not a previous snap-edge direction.
+        _lastSnapEdgeDir = null;
         // For rotate_axis_a we don't have a base point yet — latch the lock so it's
         // immediately applied when the user clicks and transitions to rotate_axis_b.
         const basePt = _ptPhase.kind === "rotate_axis_b" ? _ptPhase.axisA : ptGetAxisBase();
