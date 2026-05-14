@@ -98,6 +98,8 @@ let _smartTrackPt: { x: number; y: number } | null = null;
 let _smartTrackTimer: ReturnType<typeof setTimeout> | null = null;
 let _smartTrackCandidate: { x: number; y: number; id: string } | null = null;
 let _smartTrackMarker: THREE.Mesh | null = null;
+// Sketch shift axis lock — latched on first dominant move, cleared on Shift release or tool change.
+let _shiftAxisChoice: "x" | "y" | "z" | null = null;
 // Viewer reference set once by initCreateMode — used by resetPending.
 let _viewer: Viewer | null = null;
 
@@ -1584,6 +1586,7 @@ export function resetPending(): void {
   if (_viewer) { clearTemporary(_viewer); clearSmartTrack(_viewer); }
   hideCursorDot();
   _pending = [];
+  _shiftAxisChoice = null;
 }
 
 // ── Precision Transform state machine ────────────────────────────────────────
@@ -3227,11 +3230,9 @@ export function initCreateMode(viewer: Viewer): void {
     const clickShiftBase: { x: number; y: number; z?: number } | null =
       _pending.length > 0 ? _pending[_pending.length - 1] : _smartTrackPt ?? null;
     if (ev.shiftKey && !ev.altKey && clickShiftBase) {
-      const dx = snapped.x - clickShiftBase.x;
-      const dy = snapped.y - clickShiftBase.y;
-      const dz = screenYtoDz(viewer, ev.clientY, clickShiftBase);
       const baseZ = clickShiftBase.z ?? 0;
-      if (Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)) {
+      if (_shiftAxisChoice === "z") {
+        const dz = screenYtoDz(viewer, ev.clientY, clickShiftBase);
         const step = getSnap().step;
         const rawZ = baseZ + dz;
         const lockedZ = getSnap().snapOn && getSnap().gridOn
@@ -3239,8 +3240,9 @@ export function initCreateMode(viewer: Viewer): void {
         snapped = { x: clickShiftBase.x, y: clickShiftBase.y, z: lockedZ };
       } else {
         const axisSnapped = shiftAxisSnap(clickShiftBase, snapped, getSnap().step);
-        snapped = { ...snapped, x: axisSnapped.x, y: axisSnapped.y };
+        snapped = { x: axisSnapped.x, y: axisSnapped.y, z: baseZ }; // lock Z to base
       }
+      _shiftAxisChoice = null; // clear after click so next segment can pick a new axis
     }
     // For host-placement tools (door/window/opening) raycast to find a valid host.
     // Reject the click and prompt if no host is found.
@@ -3343,7 +3345,19 @@ export function initCreateMode(viewer: Viewer): void {
 
     const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
     if (!world) {
-      // No ground-plane hit (near-horizontal camera) — show dot at raw mouse position.
+      // No ground-plane hit (near-horizontal camera).
+      // PT axis lock may still resolve a constrained position along the locked axis.
+      if (_ptAxisLock && _ptPhase && _ptPhase.kind !== "start") {
+        const axisBase = ptGetAxisBase();
+        if (axisBase) {
+          const constrained = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, ptEffectiveAxisDir());
+          if (constrained) {
+            const screen = projectToScreen(viewer, constrained.x, constrained.y, constrained.z);
+            moveCursorDot(viewer, constrained, screen?.x ?? ev.clientX, screen?.y ?? ev.clientY, false);
+            return;
+          }
+        }
+      }
       moveCursorDot(viewer, { x: 0, y: 0 }, ev.clientX, ev.clientY);
       return;
     }
@@ -3403,20 +3417,42 @@ export function initCreateMode(viewer: Viewer): void {
       // Z from cursor screen-Y relative to the base point's projected screen position.
       const dz = screenYtoDz(viewer, ev.clientY, shiftBase);
       const baseZ = shiftBase.z ?? 0;
-      if (Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)) {
+      // Latch axis choice on first dominant movement — prevents oscillation between X/Y/Z.
+      if (!_shiftAxisChoice) {
+        const moved = Math.abs(dx) > 1e-4 || Math.abs(dy) > 1e-4 || Math.abs(dz) > 1e-4;
+        if (moved) {
+          _shiftAxisChoice = (Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)) ? "z"
+            : Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+        }
+      }
+      if (_shiftAxisChoice === "z") {
         const step = getSnap().step;
         const rawZ = baseZ + dz;
         const lockedZ = getSnap().snapOn && getSnap().gridOn
           ? Math.round(rawZ / step) * step : Math.round(rawZ * 1000) / 1000;
         snapped = { x: shiftBase.x, y: shiftBase.y, z: lockedZ };
         updateSketchShiftLine(viewer, new THREE.Vector3(shiftBase.x, shiftBase.y, baseZ), "z");
+      } else if (_shiftAxisChoice) {
+        const axisSnapped = shiftAxisSnap(shiftBase, snapped, getSnap().step);
+        snapped = { x: axisSnapped.x, y: axisSnapped.y, z: baseZ }; // lock Z to base
+        updateSketchShiftLine(viewer, new THREE.Vector3(shiftBase.x, shiftBase.y, baseZ), _shiftAxisChoice);
       } else {
-        const lockAxis: "x" | "y" = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
-        snapped = shiftAxisSnap(shiftBase, snapped, getSnap().step);
-        updateSketchShiftLine(viewer, new THREE.Vector3(shiftBase.x, shiftBase.y, baseZ), lockAxis);
+        clearSketchShiftLine(viewer);
       }
     } else {
+      _shiftAxisChoice = null;
       clearSketchShiftLine(viewer);
+    }
+    // PT axis lock: override cursor dot position to the constrained axis point.
+    if (_ptAxisLock && _ptPhase && _ptPhase.kind !== "start") {
+      const axisBase = ptGetAxisBase();
+      if (axisBase) {
+        const constrained = unprojectToAxisLine(viewer, ev.clientX, ev.clientY, axisBase, ptEffectiveAxisDir());
+        if (constrained) {
+          _snapTarget = null;
+          snapped = { x: constrained.x, y: constrained.y, z: constrained.z };
+        }
+      }
     }
     // Project snapped world position back to screen so the dot visually snaps (#327).
     const screen = projectToScreen(viewer, snapped.x, snapped.y, snapped.z ?? 0);
@@ -3620,6 +3656,7 @@ export function initCreateMode(viewer: Viewer): void {
         ptClearAxisLockLine(_ptViewer);
       }
       if (_viewer) clearSketchShiftLine(_viewer);
+      _shiftAxisChoice = null;
     }
   });
 
