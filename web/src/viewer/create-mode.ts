@@ -29,7 +29,7 @@ import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../geometry/grids";
 import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
-import { getSelected } from "./selection-state";
+import { getSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "./selection-state";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -106,6 +106,7 @@ let _selOverlaySvg: SVGSVGElement | null = null;
 let _selDragging = false;
 let _rawChooserDefault: (() => void) | null = null;
 let _multiSelHighlighted: THREE.Object3D[] = [];
+let _selHLOwned = false; // suppress viewer:select clear while applySelResult is dispatching
 
 let _pickerPromptEl: HTMLElement | null = null;
 let _chooserEl: HTMLElement | null = null;
@@ -2021,7 +2022,6 @@ function opFinish(viewer: Viewer): void {
   removeSelOverlay();
   _rawChooserDefault = null;
   _selDragging = false;
-  clearMultiSelHighlights();
   viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
@@ -2321,9 +2321,15 @@ function applySelResult(viewer: Viewer, matches: THREE.Object3D[]): void {
     return;
   }
   clearMultiSelHighlights();
+  clearMultiSelected();
   viewer.selectObject(matches[0]);
+  _selHLOwned = true;
   window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: matches[0].uuid } }));
-  for (const o of matches) applyMultiSelHL(o);
+  _selHLOwned = false;
+  for (const o of matches) {
+    addToMultiSelected({ topology: "mesh", uuid: o.uuid, object: o, transformTarget: o });
+    applyMultiSelHL(o);
+  }
   ptPrompt(`Selected ${matches.length} object${matches.length > 1 ? "s" : ""}`);
   setTimeout(() => ptClearPrompt(), 1200);
 }
@@ -2656,7 +2662,13 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
 
   // ── Selection modes (window/lasso sub-phases handled via pointer drag; boundary handled here) ──
   if (phase.kind === "sel_window_sub" || phase.kind === "sel_lasso_sub" || phase.kind === "sel_boundary_sub") {
-    return true; // waiting for chooser input
+    // Click on a chooser chip — let the chip's click handler manage it.
+    const under = document.elementFromPoint(clientX, clientY);
+    if (_chooserEl && _chooserEl.contains(under)) return true;
+    // Click anywhere else in the viewport → trigger the default mode immediately.
+    if (_rawChooserDefault) { _rawChooserDefault(); _rawChooserDefault = null; }
+    if (_chooserEl) { _chooserEl.classList.remove("visible"); _chooserEl.innerHTML = ""; }
+    return true;
   }
 
   if (phase.kind === "sel_boundary_pick") {
@@ -2892,6 +2904,12 @@ export function initCreateMode(viewer: Viewer): void {
 
   const OP_TOOLS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "sel-window", "sel-lasso", "sel-boundary"]);
 
+  // Clear multi-select highlights when the viewer performs a normal single-object selection.
+  // Skips when applySelResult owns the dispatch (_selHLOwned prevents double-clear).
+  window.addEventListener("viewer:select", () => {
+    if (!_selHLOwned) { clearMultiSelHighlights(); clearMultiSelected(); }
+  });
+
   // When activeTool changes to a PT or op tool, start the state machine.
   subscribe("activeTool", (tool) => {
     if (tool === "move" || tool === "rotate" || tool === "scale") {
@@ -2953,6 +2971,18 @@ export function initCreateMode(viewer: Viewer): void {
         ptHandlePoint(viewer, clickPt);
         return;
       }
+      // Shift+click standard select: add/toggle object in multi-select without moving gumball.
+      if (ev.shiftKey && !_ptPhase && !_opPhase) {
+        const hit = opRaycastObject(viewer, ev.clientX, ev.clientY);
+        if (hit) {
+          ev.stopImmediatePropagation();
+          addToMultiSelected({ topology: "mesh", uuid: hit.obj.uuid, object: hit.obj, transformTarget: hit.obj });
+          clearMultiSelHighlights();
+          for (const s of getMultiSelected()) applyMultiSelHL(s.object);
+        }
+        return;
+      }
+
       // Op-tool click (extrude, boolean, fillet, annotations, selection modes).
       if (_opPhase) {
         ev.stopImmediatePropagation();
@@ -3088,9 +3118,13 @@ export function initCreateMode(viewer: Viewer): void {
       opSetHover(null);
     }
 
-    // Snap cursor suppressed during object-selection op phases — user is picking geometry, not placing points.
+    // Snap cursor suppressed during object-selection op phases and all selection modes.
     if (_opPhase?.kind === "extrude_select" || _opPhase?.kind === "bool_a" ||
-        _opPhase?.kind === "bool_b" || _opPhase?.kind === "bool_op" || _opPhase?.kind === "fillet_select") {
+        _opPhase?.kind === "bool_b" || _opPhase?.kind === "bool_op" || _opPhase?.kind === "fillet_select" ||
+        _opPhase?.kind === "sel_window" || _opPhase?.kind === "sel_lasso" ||
+        _opPhase?.kind === "sel_window_sub" || _opPhase?.kind === "sel_lasso_sub" ||
+        _opPhase?.kind === "sel_boundary_sub" || _opPhase?.kind === "sel_boundary_pick" ||
+        _opPhase?.kind === "sel_boundary_draw") {
       hideCursorDot();
       _snapTarget = null;
       return;
