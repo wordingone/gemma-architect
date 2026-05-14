@@ -29,7 +29,7 @@ import type { ChoiceOption } from "../commands/dictionary";
 import { gridStore } from "../geometry/grids";
 import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
-import { getSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "./selection-state";
+import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "./selection-state";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -1745,6 +1745,7 @@ function ptFinish(viewer: Viewer): void {
   ptHideCoordInput();
   hideCursorDot();
   ptClearPreviewLine(viewer);
+  viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
 
@@ -3085,6 +3086,7 @@ export function initCreateMode(viewer: Viewer): void {
   subscribe("activeTool", (tool) => {
     if (tool === "move" || tool === "rotate" || tool === "scale" || tool === "scale-1d" || tool === "scale-2d") {
       if (_opPhase) opCancel(viewer);
+      viewer.setGumballEnabled(false);
       ptStartTool(tool as "move" | "rotate" | "scale" | "scale-1d" | "scale-2d");
     } else if (OP_TOOLS.has(tool)) {
       if (_ptPhase) ptCancel(viewer);
@@ -3111,6 +3113,11 @@ export function initCreateMode(viewer: Viewer): void {
           if (hit) {
             ev.stopImmediatePropagation();
             viewer.selectObject(hit.obj);
+            // Mirror what viewer's own click handler does: update the selection-state
+            // singleton so ptGetTarget() → getSelected() returns the object on the
+            // very next click (viewer.selectObject alone only updates viewer.targetObject).
+            setSelected({ topology: "mesh", uuid: hit.obj.uuid, object: hit.obj, transformTarget: hit.obj });
+            window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: hit.obj.uuid } }));
             opSetHover(null);
             // Transition prompt now that target is set.
             const ptTool = (_ptPhase as { kind: "start"; tool: string }).tool;
