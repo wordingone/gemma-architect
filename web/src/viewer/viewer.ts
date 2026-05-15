@@ -182,6 +182,8 @@ export class Viewer {
   activeCPlane: CPlane = WORLD_XY;
   // CPlane gizmo (#361) — grid + axis lines rendered at the active construction plane.
   private _cplaneGizmo: CPlaneGizmo = new CPlaneGizmo();
+  // W-6 host-pick (#343): when set, the next canvas click picks a face and derives a CPlane from its normal.
+  private _hostPickCallback: ((cplane: CPlane) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, viewportAreaEl: HTMLElement) {
     this.canvas = canvas;
@@ -773,6 +775,51 @@ export class Viewer {
   }
 
   private onCanvasMouseDown(e: MouseEvent): void {
+    // W-6 host-pick: intercept before all other logic.
+    if (this._hostPickCallback) {
+      const cb = this._hostPickCallback;
+      this._hostPickCallback = null;
+      this.canvas.style.cursor = "";
+      const cx = e.clientX, cy = e.clientY;
+      const hitPane = this.panes.find(p => {
+        const r = p.el.getBoundingClientRect();
+        return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+      });
+      if (hitPane) {
+        const pr = hitPane.el.getBoundingClientRect();
+        const ndcX = ((cx - pr.left) / pr.width) * 2 - 1;
+        const ndcY = -((cy - pr.top) / pr.height) * 2 + 1;
+        this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), hitPane.camera);
+        const gizmoSet = new Set<THREE.Object3D>(this.gizmos);
+        const pickables = this.scene.children.filter(
+          c => c !== this.grid && c !== this.axes && !(c instanceof THREE.Sprite) &&
+               !(c instanceof THREE.DirectionalLight) && !(c instanceof THREE.AmbientLight) &&
+               !gizmoSet.has(c) && c !== this.pivotProxy
+        );
+        const hits = this.raycaster.intersectObjects(pickables, true);
+        const hit = hits[0];
+        if (hit?.face) {
+          const worldNormal = hit.face.normal.clone()
+            .transformDirection(hit.object.matrixWorld)
+            .normalize();
+          const up = new THREE.Vector3(0, 0, 1);
+          let xAxis = new THREE.Vector3().crossVectors(up, worldNormal);
+          if (xAxis.lengthSq() < 1e-6) xAxis.set(1, 0, 0);
+          xAxis.normalize();
+          const yAxis = new THREE.Vector3().crossVectors(worldNormal, xAxis).normalize();
+          const cplane: CPlane = {
+            origin: hit.point.clone(),
+            xAxis, yAxis,
+            normal: worldNormal,
+            name: "Host Face",
+            kind: "host-derived" as const,
+          };
+          cb(cplane);
+        }
+      }
+      return;
+    }
+
     const tool = getState("activeTool");
     // move/rotate/scale mousedown just ensures the gizmo mode is set (already
     // wired via subscribe). Picking a new object is "select"-only — other
@@ -911,6 +958,16 @@ export class Viewer {
 
   toggleCPlaneGizmo(): void {
     this._cplaneGizmo.toggle();
+  }
+
+  startHostPick(cb: (cplane: CPlane) => void): void {
+    this._hostPickCallback = cb;
+    this.canvas.style.cursor = "crosshair";
+  }
+
+  cancelHostPick(): void {
+    this._hostPickCallback = null;
+    this.canvas.style.cursor = "";
   }
 
   setGumballEnabled(enabled: boolean): void {

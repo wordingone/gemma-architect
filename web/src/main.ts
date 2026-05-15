@@ -1826,6 +1826,16 @@ registerHandler("SdSetCPlane", (args) => {
       const normal = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize();
       newCPlane = { origin, xAxis, yAxis, normal, kind: "explicit" as const }; break;
     }
+    case "host-pick": {
+      viewer.startHostPick((cplane) => {
+        viewer.activeCPlane = cplane;
+        window.dispatchEvent(new CustomEvent("viewer:cplane-changed", {
+          detail: { cplane, mode: "host-pick" },
+          bubbles: false,
+        }));
+      });
+      return { mode: "host-pick", pending: true };
+    }
     case "world":
     default:
       newCPlane = { ...WORLD_XY }; break;
