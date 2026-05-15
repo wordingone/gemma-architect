@@ -317,8 +317,10 @@ function summariseSkills(skills: Skill[] | undefined): string {
 
 function buildSceneContext(): string {
   // Try KG first (populated by dispatch-created objects).
-  const kg = snapshotAsText();
-  if (!kg.includes("empty")) return kg;
+  // snapshotAsText() prefixes its own "Current scene: " — strip it so the
+  // caller's `Current scene: ${buildSceneContext()}` doesn't double-prefix.
+  const kg = snapshotAsText().replace(/^Current scene:\s*/i, "");
+  if (!kg.startsWith("empty")) return kg;
 
   // Walk for IFC elements — web-ifc sets userData.expressID + userData.ifcClass on each mesh.
   type ViewerLike = { getScene?: () => { traverse?: (cb: (o: unknown) => void) => void; children?: unknown[] } };
@@ -348,10 +350,9 @@ function buildSceneContext(): string {
   type ViewerScene = { children?: Array<{ type: string; name?: string; position?: { x: number; y: number; z: number } }> };
   const fallbackViewer = (window as unknown as { __viewer?: { scene?: ViewerScene } }).__viewer;
   const children = fallbackViewer?.scene?.children;
-  if (!children) return kg;
 
-  const meshes = children.filter((c) => c.type === "Mesh" || c.type === "Group");
-  if (meshes.length === 0) return kg;
+  const meshes = children?.filter((c) => c.type === "Mesh" || c.type === "Group") ?? [];
+  if (meshes.length === 0) return "empty workspace — no objects placed yet.";
 
   const lines = meshes.slice(0, 15).map((m) => {
     const pos = m.position
@@ -360,7 +361,7 @@ function buildSceneContext(): string {
     return `${m.name || m.type}${pos ? " " + pos : ""}`;
   });
   const suffix = meshes.length > 15 ? ` … and ${meshes.length - 15} more` : "";
-  return `Scene contains ${meshes.length} object(s): ${lines.join("; ")}${suffix}.`;
+  return `${meshes.length} object(s): ${lines.join("; ")}${suffix}.`;
 }
 
 
@@ -764,7 +765,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     verbList,
     `Current scene: ${buildSceneContext()}`,
     summariseSkills(skills),
-    "For questions (no geometry): plain text only, ≤60 words.",
+    "SCENE QUERY — if the user asks what is in the scene or what you see: write PLAIN TEXT ONLY, NO tool_call blocks, NO SdListObjects. ONE paragraph: (1) describe the viewport image you received — geometry, colors, scale; if only a reference grid is visible say 'The workspace is empty'; (2) summarize 'Current scene:' above in plain English. Max 60 words.",
   ].join("\n\n");
 }
 
