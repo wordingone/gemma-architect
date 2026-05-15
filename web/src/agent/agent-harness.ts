@@ -77,7 +77,7 @@ const _modelParam =
   typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("gemma_model") ?? "").toLowerCase()
     : "";
-const MODEL_ID: string =
+export const MODEL_ID: string =
   _modelParam === "e2b" ? MODEL_ID_CANDIDATES.e2b : MODEL_ID_CANDIDATES.e4b;
 const MODEL_LABEL: string = _modelParam === "e2b" ? "E2B" : "E4B";
 

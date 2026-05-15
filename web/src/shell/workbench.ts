@@ -35,7 +35,7 @@ import { refLineStore } from "../geometry/ref-lines";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "../viewer/selection-state";
 import { getCreateSequence } from "../viewer/create-mode";
-import { prefetchModel } from "../agent/agent-harness";
+import { prefetchModel, MODEL_ID } from "../agent/agent-harness";
 import { checkConsentAndLoad } from "../agent/model-consent";
 import { listSavedSkills, deleteSkill, type SavedSkill, type SkillStep } from "../skills/skill-store";
 import type { Skill } from "../agent/skills-loader";
@@ -2250,7 +2250,7 @@ function buildDock(
       if (remoteUrl) {
         prefetchModel();
       } else {
-        checkConsentAndLoad(() => prefetchModel());
+        checkConsentAndLoad(MODEL_ID, () => prefetchModel());
       }
     }
   }
