@@ -26,7 +26,7 @@ const TAG = "__drafting_overlay__";
 const TAG_FLAT_BACKUP = "__drafting_material_backup__";
 
 const INK = 0x0e0e10;       // matches bundle --ink
-const PAPER = 0xfaf7ee;     // matches bundle --paper-base; warm cream
+const PAPER = 0xffffff;     // pure white for technical mode
 const ANGLE_OBJECT = 30;
 const ANGLE_SILHOUETTE = 70;
 const OPACITY_OBJECT = 0.55;
@@ -51,6 +51,7 @@ export function applyDrafting(root: THREE.Object3D, opts: DraftingOpts = {}): vo
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh) return;
+    if (mesh.userData?.noRenderMode) return;
     if (mesh.userData?.[TAG] === "overlay") return; // skip our own line overlays
 
     const geom = mesh.geometry as THREE.BufferGeometry | undefined;

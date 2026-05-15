@@ -62,6 +62,7 @@ function _refreshDraftingLines(): void {
     const ls = obj as THREE.LineSegments;
     if (!ls.isLineSegments) return;
     if (obj.userData[DRAFT_TAG] !== "overlay") return;
+    if (obj.parent?.userData?.noRenderMode) return;
     const newMat = lineMat(INK, _lt, _lw);
     (ls.material as THREE.Material).dispose();
     ls.material = newMat;

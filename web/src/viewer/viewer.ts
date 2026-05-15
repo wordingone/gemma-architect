@@ -166,7 +166,6 @@ export class Viewer {
   // Cached override materials for displayMode thumbnails — allocated once, reused every frame.
   private _thumbMatWireframe: THREE.MeshBasicMaterial | null = null;
   private _thumbMatGhosted: THREE.MeshBasicMaterial | null = null;
-  private _thumbMatTechnical: THREE.MeshBasicMaterial | null = null;
   // Sub-object handle selection: set when the gumball is attached to a CP handle.
   private subTargetObject: THREE.Object3D | null = null;
   // Isolation: stash visibility before hide-all-others, restore on off.
@@ -232,6 +231,7 @@ export class Viewer {
       lm.needsUpdate = true;
     }
     this.grid.userData.noSnap = true;
+    this.grid.userData.noRenderMode = true;
     this.scene.add(this.grid);
 
     // CPlane gizmo (#361) — subscribe to cplane-changed, update on each event.
@@ -243,6 +243,7 @@ export class Viewer {
 
     this.axes = new THREE.AxesHelper(2);
     this.axes.userData.noSnap = true;
+    this.axes.userData.noRenderMode = true;
     this.scene.add(this.axes);
     this.createAxisLabels();
 
@@ -312,6 +313,7 @@ export class Viewer {
       // Synced from targetObject + pivotOffset between drags.
       this.pivotProxy = new THREE.Object3D();
       this.pivotProxy.userData.noSnap = true;
+      this.pivotProxy.userData.noRenderMode = true;
       this.scene.add(this.pivotProxy);
 
       const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
@@ -425,7 +427,8 @@ export class Viewer {
           }
         });
         g.userData.noSnap = true;
-        g.traverse((child) => { child.userData.noSnap = true; });
+        g.userData.noRenderMode = true;
+        g.traverse((child) => { child.userData.noSnap = true; child.userData.noRenderMode = true; });
         this.scene.add(g);
         return g;
       };
@@ -734,6 +737,7 @@ export class Viewer {
       lm.needsUpdate = true;
     }
     this.grid.userData.noSnap = true;
+    this.grid.userData.noRenderMode = true;
     (this.grid as unknown as { __lastSize?: number }).__lastSize = sceneSize;
     this.scene.add(this.grid);
   }
@@ -1625,6 +1629,7 @@ export class Viewer {
       this.snapMarker = new THREE.Mesh(geom, mat);
       this.snapMarker.renderOrder = 999;
       this.snapMarker.userData.noSnap = true;
+      this.snapMarker.userData.noRenderMode = true;
       this.scene.add(this.snapMarker);
     }
     this.snapMarker.position.copy(p);
@@ -2570,12 +2575,16 @@ export class Viewer {
     } else if (displayMode === "ghosted") {
       if (!this._thumbMatGhosted) this._thumbMatGhosted = new THREE.MeshBasicMaterial({ color: 0x9ec5d8, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
       this.scene.overrideMaterial = this._thumbMatGhosted;
-    } else if (displayMode === "technical") {
-      if (!this._thumbMatTechnical) this._thumbMatTechnical = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      this.scene.overrideMaterial = this._thumbMatTechnical;
     }
+    // technical: no overrideMaterial — applyDrafting already set individual mesh materials.
+    // Use a white clear color so the thumbnail background matches the paper fill.
+    const prevClearColor = new THREE.Color();
+    this._thumbRenderer.getClearColor(prevClearColor);
+    const prevClearAlpha = this._thumbRenderer.getClearAlpha();
+    if (displayMode === "technical") this._thumbRenderer.setClearColor(0xffffff, 1);
     this._thumbRenderer.render(this.scene, cam);
     this.scene.overrideMaterial = prevOverride;
+    if (displayMode === "technical") this._thumbRenderer.setClearColor(prevClearColor, prevClearAlpha);
     const ctx = dest.getContext("2d");
     if (ctx) ctx.drawImage(this._thumbCanvas!, 0, 0, w, h);
   }
@@ -2585,6 +2594,5 @@ export class Viewer {
     this._themeObserver = null;
     this._thumbMatWireframe?.dispose();
     this._thumbMatGhosted?.dispose();
-    this._thumbMatTechnical?.dispose();
   }
 }
