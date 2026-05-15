@@ -2680,17 +2680,12 @@ export class Viewer {
       if (!this._thumbMatGhosted) this._thumbMatGhosted = new THREE.MeshBasicMaterial({ color: 0x9ec5d8, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
       this.scene.overrideMaterial = this._thumbMatGhosted;
     }
-    // technical: apply drafting overlays if the scene doesn't already have them
-    // (model viewport may be in a different render mode). Apply/remove is atomic per render.
-    const needDraftingForThumb = displayMode === "technical" && !isDrafting(this.scene);
-    if (needDraftingForThumb) applyDrafting(this.scene);
-    // non-technical: if the model viewport is in technical mode the scene has drafting overlays
-    // applied. Hide them and restore original materials so the thumbnail matches the requested mode.
+    // Drafting-apply-per-tick removed (#661): applyDrafting() walks every IFC mesh and
+    // creates EdgesGeometry + LineSegments (~500 alloc/dealloc per tick for FZK-Haus).
+    // Thumbnails now render whatever drafting state the scene already has.
+    // Model and layout viewports are mutually exclusive by design, so the model viewport's
+    // draft state is never active when this renders in the background.
     const needUndraftForThumb = displayMode !== "technical" && isDrafting(this.scene);
-    const prevClearColor = new THREE.Color();
-    this._thumbRenderer.getClearColor(prevClearColor);
-    const prevClearAlpha = this._thumbRenderer.getClearAlpha();
-    if (displayMode === "technical") this._thumbRenderer.setClearColor(0xffffff, 1);
     const thumbRenderer = this._thumbRenderer!;
     if (needUndraftForThumb) {
       withoutDrafting(this.scene, () => thumbRenderer.render(this.scene, cam));
@@ -2698,8 +2693,6 @@ export class Viewer {
       thumbRenderer.render(this.scene, cam);
     }
     this.scene.overrideMaterial = prevOverride;
-    if (needDraftingForThumb) removeDrafting(this.scene);
-    if (displayMode === "technical") this._thumbRenderer.setClearColor(prevClearColor, prevClearAlpha);
     const ctx = dest.getContext("2d");
     if (ctx) ctx.drawImage(this._thumbCanvas!, 0, 0, w, h);
   }
