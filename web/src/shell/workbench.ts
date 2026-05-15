@@ -36,6 +36,7 @@ import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "../viewer/selection-state";
 import { getCreateSequence } from "../viewer/create-mode";
 import { prefetchModel } from "../agent/agent-harness";
+import { checkConsentAndLoad } from "../agent/model-consent";
 import { listSavedSkills, deleteSkill, type SavedSkill, type SkillStep } from "../skills/skill-store";
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
@@ -1488,7 +1489,7 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
         ${mode === "console" ? "● CONSOLE" : "○ CREATE"}
       </button>
       <span class="ai-badge" id="ai-model-badge">
-        <span class="v">G</span>EMMA·4·E2B  ·  LIVE
+        <span class="v">G</span>EMMA·4·E4B  ·  LIVE
       </span>
     `;
     header.querySelector(".mode-pill")?.addEventListener("click", () => {
@@ -2244,7 +2245,14 @@ function buildDock(
     });
     bodyHost.innerHTML = "";
     if (panes[id]) bodyHost.appendChild(panes[id]);
-    if (id === "prompt") prefetchModel();
+    if (id === "prompt") {
+      const remoteUrl = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
+      if (remoteUrl) {
+        prefetchModel();
+      } else {
+        checkConsentAndLoad(() => prefetchModel());
+      }
+    }
   }
   activate("prompt");
   initLiveTabSubscriptions();
