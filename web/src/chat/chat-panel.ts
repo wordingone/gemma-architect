@@ -5,6 +5,7 @@
 // each model turn; their verb names are shown as inline pills.
 
 import { runAgentTurn } from "../agent/agent-harness";
+import { captureViewport } from "../agent/viewport-capture";
 import type { AgentDispatch, AgentRequest, AgentResponse } from "../agent/agent-harness";
 import { invokeCommand } from "../commands/command-session";
 import type { Skill } from "../agent/skills-loader";
@@ -256,14 +257,26 @@ export class ChatPanel {
       }
 
       const skillsToPass = matchedSkills.length > 0 ? matchedSkills : this._skills;
+
+      // Auto-capture viewport for visual queries (user hasn't already attached an image).
+      // Gemma E4B has native vision — let it actually see the scene.
+      const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
+      let effectiveImage = userImage;
+      const viewportArea = document.querySelector<HTMLElement>(".viewport-area");
+      if (!effectiveImage && VISUAL_RE.test(text)) {
+        effectiveImage = captureViewport(768) ?? undefined;
+        if (effectiveImage && viewportArea) viewportArea.classList.add("agent-looking");
+      }
+
       const resp = await runAgentTurn({
         prompt: text,
         history: this._history.slice(0, -1),
         skills: skillsToPass,
         skillsTotal: this._skills.length,
         maxNewTokens: estimateMaxTokens(text),
-        userImage,
+        userImage: effectiveImage,
       });
+      if (viewportArea) viewportArea.classList.remove("agent-looking");
 
       this._removeThinking(thinking);
       this._updatePerfStrip();

@@ -710,9 +710,9 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene: ${buildSceneContext()}`,
-    "Use scene info silently (avoid duplicates, reference object counts). Do NOT narrate scene contents unprompted. Act ONLY on explicit user requests. If a viewport image is attached, describe it only when explicitly asked.",
+    "VISUAL DESCRIPTION: When a viewport image is provided, describe what you SEE in natural language — shapes, materials, colors, spatial arrangement, scale. Do NOT mention SDK verb names (SdXxx, SdListObjects, etc.) in your prose response; verb calls are displayed separately in the UI. Use SdListObjects or similar verbs silently to get programmatic data; narrate results in your own words. For questions about the scene (no geometry change): plain text only, ≤80 words.",
     summariseSkills(skills),
-    "For questions (no geometry change): plain text only, ≤60 words, no JSON or tool_call blocks.",
+    
   ].join("\n\n");
 }
 

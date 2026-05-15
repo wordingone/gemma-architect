@@ -1,30 +1,60 @@
 import type { AgentDispatch } from "../agent/agent-harness";
 
+// Verbs that perform queries or view operations — never generate a "Built:" line.
+const QUERY_VERBS = new Set([
+  "SdListObjects", "SdZoomExtents", "SdZoomSelected", "SdSelect", "SdSelectAll",
+  "SdDeselect", "SdIsolate", "SdIsolateOff", "SdMeasure", "SdArea", "SdVolume",
+  "SdSetViewOrtho", "SdSetViewPerspective", "SdSetCPlane", "SdSetUnits",
+  "SdHide", "SdLock", "SdUngroup", "SdGroup",
+]);
+
 export const VERB_LABELS: Record<string, [string, string]> = {
-  IfcWall:        ["wall",         "walls"],
-  IfcSlab:        ["slab",         "slabs"],
-  IfcColumn:      ["column",       "columns"],
-  IfcBeam:        ["beam",         "beams"],
-  IfcDoor:        ["door",         "doors"],
-  IfcWindow:      ["window",       "windows"],
-  IfcRoof:        ["roof",         "roofs"],
-  IfcSpace:       ["space",        "spaces"],
-  IfcStair:       ["stair",        "stairs"],
-  IfcRamp:        ["ramp",         "ramps"],
-  IfcRailing:     ["railing",      "railings"],
-  IfcFoundation:  ["foundation",   "foundations"],
-  IfcCeiling:     ["ceiling",      "ceilings"],
-  IfcCurtainWall: ["curtain wall", "curtain walls"],
-  IfcGrid:        ["grid",         "grids"],
-  IfcGridLine:    ["grid line",    "grid lines"],
-  IfcReferenceLine: ["reference line", "reference lines"],
-  IfcLevel:       ["level",        "levels"],
-  SdBox:          ["box",          "boxes"],
-  SdSphere:       ["sphere",       "spheres"],
-  SdCylinder:     ["cylinder",     "cylinders"],
-  SdMove:         ["move",         "moves"],
-  SdRotate:       ["rotation",     "rotations"],
-  SdScale:        ["scale",        "scales"],
+  SdWall:          ["wall",           "walls"],
+  SdSlab:          ["slab",           "slabs"],
+  SdColumn:        ["column",         "columns"],
+  SdBeam:          ["beam",           "beams"],
+  SdMember:        ["member",         "members"],
+  SdDoor:          ["door",           "doors"],
+  SdWindow:        ["window",         "windows"],
+  SdRoof:          ["roof",           "roofs"],
+  SdSpace:         ["space",          "spaces"],
+  SdStair:         ["stair",          "stairs"],
+  SdRamp:          ["ramp",           "ramps"],
+  SdRailing:       ["railing",        "railings"],
+  SdFoundation:    ["foundation",     "foundations"],
+  SdCeiling:       ["ceiling",        "ceilings"],
+  SdCurtainWall:   ["curtain wall",   "curtain walls"],
+  SdLevel:         ["level",          "levels"],
+  SdRefGrid:       ["grid",           "grids"],
+  SdReferenceLine: ["reference line", "reference lines"],
+  SdDatum:         ["datum",          "datums"],
+  SdBox:           ["box",            "boxes"],
+  SdSphere:        ["sphere",         "spheres"],
+  SdCylinder:      ["cylinder",       "cylinders"],
+  SdCone:          ["cone",           "cones"],
+  SdPrism:         ["prism",          "prisms"],
+  SdLine:          ["line",           "lines"],
+  SdArc:           ["arc",            "arcs"],
+  SdCircle:        ["circle",         "circles"],
+  SdPolygon:       ["polygon",        "polygons"],
+  SdPolyline:      ["polyline",       "polylines"],
+  SdRectangle:     ["rectangle",      "rectangles"],
+  SdEllipse:       ["ellipse",        "ellipses"],
+  SdExtrude:       ["extrusion",      "extrusions"],
+  SdRevolve:       ["revolution",     "revolutions"],
+  SdSweep:         ["sweep",          "sweeps"],
+  SdLoft:          ["loft",           "lofts"],
+  SdBooleanUnion:  ["union",          "unions"],
+  SdBooleanDifference: ["difference", "differences"],
+  SdBooleanIntersection: ["intersection", "intersections"],
+  SdMove:          ["move",           "moves"],
+  SdRotate:        ["rotation",       "rotations"],
+  SdScale:         ["scale",          "scales"],
+  SdMirror:        ["mirror",         "mirrors"],
+  SdArray:         ["array",          "arrays"],
+  SdAnnotationDimension: ["dimension", "dimensions"],
+  SdLeader:        ["leader",         "leaders"],
+  SdText:          ["text label",     "text labels"],
 };
 
 export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[], errors: string[] = []): string {
@@ -32,16 +62,18 @@ export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[
   for (let i = 0; i < dispatches.length; i++) {
     if (!fired[i].endsWith("(err)")) {
       const v = dispatches[i].verb;
-      counts.set(v, (counts.get(v) ?? 0) + 1);
+      if (!QUERY_VERBS.has(v)) counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
   const parts: string[] = [...errors];
   if (counts.size > 0) {
     const built = [...counts.entries()].map(([v, n]) => {
-      const [sing, plur] = VERB_LABELS[v] ?? [v.toLowerCase(), v.toLowerCase() + "s"];
+      const [sing, plur] = VERB_LABELS[v] ?? [v.replace(/^Sd/, "").toLowerCase(), v.replace(/^Sd/, "").toLowerCase() + "s"];
       return `${n} ${n === 1 ? sing : plur}`;
     });
     parts.push(`Built: ${built.join(", ")}.`);
   }
-  return parts.length > 0 ? parts.join(" ") : "Nothing was built.";
+  // Return "Nothing was built." only when dispatches were attempted but all failed/errored.
+  const hadAttempts = dispatches.some((_, i) => !QUERY_VERBS.has(dispatches[i].verb));
+  return parts.length > 0 ? parts.join(" ") : (hadAttempts && counts.size === 0 ? "Nothing was built." : "");
 }

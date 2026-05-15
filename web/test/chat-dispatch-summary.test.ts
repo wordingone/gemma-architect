@@ -8,45 +8,50 @@ function d(verb: string): AgentDispatch {
 
 describe("buildDispatchSummary", () => {
   it("single verb singular", () => {
-    expect(buildDispatchSummary([d("IfcWall")], ["IfcWall"]))
+    expect(buildDispatchSummary([d("SdWall")], ["SdWall"]))
       .toBe("Built: 1 wall.");
   });
 
   it("single verb plural", () => {
-    expect(buildDispatchSummary([d("IfcWall"), d("IfcWall")], ["IfcWall", "IfcWall"]))
+    expect(buildDispatchSummary([d("SdWall"), d("SdWall")], ["SdWall", "SdWall"]))
       .toBe("Built: 2 walls.");
   });
 
   it("multi-verb aggregates in order", () => {
-    const dispatches = [d("IfcWall"), d("IfcSlab"), d("IfcDoor")];
-    const fired = ["IfcWall", "IfcSlab", "IfcDoor"];
+    const dispatches = [d("SdWall"), d("SdSlab"), d("SdDoor")];
+    const fired = ["SdWall", "SdSlab", "SdDoor"];
     expect(buildDispatchSummary(dispatches, fired))
       .toBe("Built: 1 wall, 1 slab, 1 door.");
   });
 
   // Test C — errored verb excluded from counts
   it("excludes errored dispatches from summary", () => {
-    const dispatches = [d("IfcWall"), d("IfcSlab"), d("IfcDoor")];
-    const fired = ["IfcWall", "IfcSlab(err)", "IfcDoor"];
+    const dispatches = [d("SdWall"), d("SdSlab"), d("SdDoor")];
+    const fired = ["SdWall", "SdSlab(err)", "SdDoor"];
     expect(buildDispatchSummary(dispatches, fired))
       .toBe("Built: 1 wall, 1 door.");
   });
 
   it("all errored returns nothing-built", () => {
-    const dispatches = [d("IfcWall"), d("IfcSlab")];
-    const fired = ["IfcWall(err)", "IfcSlab(err)"];
+    const dispatches = [d("SdWall"), d("SdSlab")];
+    const fired = ["SdWall(err)", "SdSlab(err)"];
     expect(buildDispatchSummary(dispatches, fired))
       .toBe("Nothing was built.");
   });
 
-  it("empty dispatch list returns nothing-built", () => {
-    expect(buildDispatchSummary([], []))
-      .toBe("Nothing was built.");
+  it("empty dispatch list returns empty string (Q&A turn)", () => {
+    expect(buildDispatchSummary([], [])).toBe("");
   });
 
-  it("unknown verb uses lowercase verb name", () => {
-    expect(buildDispatchSummary([d("CustomVerb")], ["CustomVerb"]))
-      .toBe("Built: 1 customverb.");
+  it("query verbs excluded from Built: summary", () => {
+    // SdListObjects is a query — should produce no Built: line
+    expect(buildDispatchSummary([d("SdListObjects")], ["SdListObjects"])).toBe("");
+    expect(buildDispatchSummary([d("SdZoomExtents")], ["SdZoomExtents"])).toBe("");
+  });
+
+  it("unknown verb uses readable fallback (strips Sd prefix)", () => {
+    expect(buildDispatchSummary([d("SdCustomThing")], ["SdCustomThing"]))
+      .toBe("Built: 1 customthing.");
   });
 
   it("SdBox maps correctly", () => {
