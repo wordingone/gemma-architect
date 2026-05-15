@@ -99,29 +99,6 @@ type ProgressInfo = {
   progress?: number;
 };
 
-// P10-4: VRAM ceiling pre-check. E2B q4f16 needs ~2GB GPU memory; E4B needs ~4GB.
-// If the adapter reports less usable headroom, skip in-browser load and force remote.
-const VRAM_FLOOR_BYTES = MODEL_LABEL === "E4B" ? 4 * 1024 * 1024 * 1024 : 2 * 1024 * 1024 * 1024;
-
-async function checkVramCeiling(): Promise<boolean> {
-  try {
-    if (!navigator.gpu) return false; // no WebGPU, will fall back to CPU
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return false;
-    // limits.maxBufferSize is not a free-VRAM probe but is a hard device ceiling.
-    // Adapters below the floor cannot fit model weights regardless of free memory.
-    const maxBuf: number = (adapter.limits as Record<string, number>).maxBufferSize ?? 0;
-    if (maxBuf < VRAM_FLOOR_BYTES) {
-      console.warn(`[agent-harness] P10-4 VRAM ceiling: maxBufferSize=${maxBuf} < ${VRAM_FLOOR_BYTES} — forcing remote.`);
-      window.dispatchEvent(new CustomEvent("agent:telemetry", { detail: { event: "vram_ceiling_exceeded", maxBufferSize: maxBuf } }));
-      return true; // ceiling exceeded — force remote
-    }
-    return false; // OK to run in-browser
-  } catch {
-    return false; // probe failed; let normal load attempt decide
-  }
-}
-
 // Try WebGPU first (q4f16 quantization); fall back through device:"auto"
 // (onnxruntime-web selects WebGL then WASM-SIMD automatically). Model files
 // are cached in browser storage after first download — subsequent visits skip
@@ -217,17 +194,9 @@ export function prefetchModel(): void {
     void prefillSystemPromptAsync();
     return;
   }
-  // P10-4: run VRAM ceiling check before starting the heavy model load.
-  checkVramCeiling().then((ceilingExceeded) => {
-    if (ceilingExceeded) {
-      updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  VRAM LIMIT — REMOTE REQUIRED`);
-      _webgpuFallbackEngaged = true; // re-use P10-2 flag to force remote routing
-      return;
-    }
-    getModel()
-      .then(() => prefillSystemPromptAsync())
-      .catch(() => { /* errors surface on first runAgentTurn */ });
-  });
+  getModel()
+    .then(() => prefillSystemPromptAsync())
+    .catch(() => { /* errors surface on first runAgentTurn */ });
 }
 
 /** System-prompt KV warmup (#492). Fires once per session.
