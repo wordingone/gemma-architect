@@ -3636,6 +3636,8 @@ export function initCreateMode(viewer: Viewer): void {
   // Smart snap: if the last snap was an edge snap, Shift uses that edge direction.
   // Also constrains the rotation axis direction during rotate_axis_b.
   window.addEventListener("keydown", (ev) => {
+    const _tgt = ev.target as HTMLElement | null;
+    if (_tgt && (_tgt.tagName === "INPUT" || _tgt.tagName === "TEXTAREA" || _tgt.isContentEditable)) return;
     if (_ptPhase && _ptPhase.kind !== "start"
         && ev.shiftKey && !ev.ctrlKey && !ev.metaKey && !ev.altKey
         && document.activeElement !== _ptCoordInputEl) {
