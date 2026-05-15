@@ -107,11 +107,11 @@ const DISPLAY_MODES: DisplayMode[] = ["shaded", "wireframe", "ghosted", "realist
 type SheetPresetId = "perspective" | "axonometric" | "plan" | "section" | "elevation" | "blank";
 interface SheetPresetDef { name: string; viewport: ViewportId; scale: ScaleId; displayMode: DisplayMode; }
 const SHEET_PRESET_DEFS: Record<Exclude<SheetPresetId, "blank">, SheetPresetDef> = {
-  perspective: { name: "Perspective", viewport: "perspective", scale: "NTS",   displayMode: "shaded" },
-  axonometric: { name: "Axonometric", viewport: "axonometric", scale: "1:50",  displayMode: "shaded" },
-  plan:        { name: "Plan",        viewport: "top",         scale: "1:100", displayMode: "shaded" },
-  section:     { name: "Section",     viewport: "front",       scale: "1:50",  displayMode: "shaded" },
-  elevation:   { name: "Elevation",   viewport: "front",       scale: "1:50",  displayMode: "shaded" },
+  perspective: { name: "Perspective", viewport: "perspective", scale: "NTS",       displayMode: "technical" },
+  axonometric: { name: "Axonometric", viewport: "axonometric", scale: "1:50",  displayMode: "technical" },
+  plan:        { name: "Plan",        viewport: "top",         scale: "1:100", displayMode: "technical" },
+  section:     { name: "Section",     viewport: "front",       scale: "1:50",  displayMode: "technical" },
+  elevation:   { name: "Elevation",   viewport: "front",       scale: "1:50",  displayMode: "technical" },
 };
 const SHEET_PRESET_ORDER: Exclude<SheetPresetId, "blank">[] = ["perspective", "axonometric", "plan", "section", "elevation"];
 
@@ -976,7 +976,7 @@ class LayoutController {
       scale:       init.scale ?? "1:100",
       title:       init.title ?? (isDetail ? `DETAIL ${init.detailOf!.label}` : VIEWPORT_LABELS[init.viewport]),
       border:      init.border ?? (isDetail ? "thick" : "thin"),
-      displayMode: init.displayMode ?? (isDetail ? "technical" : "shaded"),
+      displayMode: init.displayMode ?? "technical",
       ...(isDetail ? { detailOf: init.detailOf } : {}),
     };
     this.panels.push(p);
