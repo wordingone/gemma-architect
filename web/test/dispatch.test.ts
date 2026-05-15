@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("Verb resolution", () => {
   test("resolves canonical name to itself", () => {
-    expect(resolveVerb("IfcWall")).toBe("IfcWall");
+    expect(resolveVerb("SdWall")).toBe("SdWall");
   });
 
   test("resolves a synonym to canonical", () => {
@@ -46,20 +46,25 @@ describe("Verb resolution", () => {
     expect(getDictionary().some((e) => e.canonical_name === wallCanonical)).toBe(true);
   });
 
+  test("resolves old Ifc* synonym to new Sd* canonical", () => {
+    // IfcWall was renamed to SdWall; old name kept as synonym for backward compat.
+    expect(resolveVerb("IfcWall")).toBe("SdWall");
+  });
+
   test("returns null for unknown token", () => {
     expect(resolveVerb("__nonexistent_verb__")).toBeNull();
   });
 
   test("runtime alias overrides take precedence over compiled aliases for unknown synonyms", () => {
     expect(resolveVerb("zzzCustom")).toBeNull();
-    setRuntimeAliases({ zzzCustom: "IfcWall" });
-    expect(resolveVerb("zzzCustom")).toBe("IfcWall");
+    setRuntimeAliases({ zzzCustom: "SdWall" });
+    expect(resolveVerb("zzzCustom")).toBe("SdWall");
   });
 
   test("runtime alias is case-insensitive", () => {
-    setRuntimeAliases({ MyWall: "IfcWall" });
-    expect(resolveVerb("mywall")).toBe("IfcWall");
-    expect(resolveVerb("MYWALL")).toBe("IfcWall");
+    setRuntimeAliases({ MyWall: "SdWall" });
+    expect(resolveVerb("mywall")).toBe("SdWall");
+    expect(resolveVerb("MYWALL")).toBe("SdWall");
   });
 
   test("invalid runtime alias target gracefully falls through", () => {
@@ -81,11 +86,12 @@ describe("Dispatch + validation", () => {
   });
 
   test("NoHandler when verb resolves but nothing is registered", async () => {
-    const r = await dispatch("IfcWall", {});
+    // SdWall resolves to canonical "SdWall"; IfcWall is a synonym that also resolves to it.
+    const r = await dispatch("SdWall", {});
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error === "NoHandler" || r.error === "ArgValidationError").toBe(true);
-      expect(r.canonical).toBe("IfcWall");
+      expect(r.canonical).toBe("SdWall");
     }
   });
 
@@ -136,12 +142,12 @@ describe("Dispatch + validation", () => {
   });
 
   test("HandlerThrew is captured, not propagated", async () => {
-    registerHandler("IfcWall", () => {
+    registerHandler("SdWall", () => {
       throw new Error("boom");
     });
     // Provide all required args so we hit the handler.
     const dict = getDictionary();
-    const wall = dict.find((e) => e.canonical_name === "IfcWall");
+    const wall = dict.find((e) => e.canonical_name === "SdWall");
     expect(wall).toBeDefined();
     if (!wall) return;
     const args: Record<string, unknown> = {};
@@ -154,7 +160,7 @@ describe("Dispatch + validation", () => {
         else args[a.name] = "x";
       }
     }
-    const r = await dispatch("IfcWall", args);
+    const r = await dispatch("SdWall", args);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error).toBe("HandlerThrew");
@@ -163,9 +169,9 @@ describe("Dispatch + validation", () => {
   });
 
   test("dispatchSync flags Promise-returning handlers", () => {
-    registerHandler("IfcWall", () => Promise.resolve("nope"));
+    registerHandler("SdWall", () => Promise.resolve("nope"));
     const dict = getDictionary();
-    const wall = dict.find((e) => e.canonical_name === "IfcWall")!;
+    const wall = dict.find((e) => e.canonical_name === "SdWall")!;
     const args: Record<string, unknown> = {};
     for (const a of wall.args) {
       if (a.required) {
@@ -174,15 +180,15 @@ describe("Dispatch + validation", () => {
         else args[a.name] = "x";
       }
     }
-    const r = dispatchSync("IfcWall", args);
+    const r = dispatchSync("SdWall", args);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe("HandlerThrew");
   });
 
   test("happy path: registered handler returns ok with result", async () => {
-    registerHandler("IfcWall", () => ({ created: "wall-1" }));
+    registerHandler("SdWall", () => ({ created: "wall-1" }));
     const dict = getDictionary();
-    const wall = dict.find((e) => e.canonical_name === "IfcWall")!;
+    const wall = dict.find((e) => e.canonical_name === "SdWall")!;
     const args: Record<string, unknown> = {};
     for (const a of wall.args) {
       if (a.required) {
@@ -191,7 +197,7 @@ describe("Dispatch + validation", () => {
         else args[a.name] = "x";
       }
     }
-    const r = await dispatch("IfcWall", args);
+    const r = await dispatch("SdWall", args);
     expect(r.ok).toBe(true);
     if (r.ok) expect((r.result as { created: string }).created).toBe("wall-1");
   });
@@ -220,21 +226,22 @@ describe("Dispatch + validation", () => {
   });
 });
 
-describe("IfcWall profile requirement (#326)", () => {
+describe("SdWall profile requirement (#326)", () => {
   beforeEach(() => {
-    unregisterHandler("IfcWall");
+    unregisterHandler("SdWall");
   });
 
   test("dispatch succeeds when profile is provided", async () => {
-    registerHandler("IfcWall", (args) => ({ got: args }));
+    registerHandler("SdWall", (args) => ({ got: args }));
+    // IfcWall is a synonym for SdWall — both input paths must work.
     const r = await dispatch("IfcWall", { profile: [[0, 0], [5, 0]], thickness: 0.2, height: 2.8 });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.canonical).toBe("IfcWall");
+    if (r.ok) expect(r.canonical).toBe("SdWall");
   });
 
   test("dispatch returns ArgValidationError when profile is missing — use startCommandSession for picker flow", async () => {
-    registerHandler("IfcWall", () => "ok");
-    const r = await dispatch("IfcWall", {});
+    registerHandler("SdWall", () => "ok");
+    const r = await dispatch("SdWall", {});
     // profile is required: direct dispatch without it must fail validation.
     // The human-flow path (console/cmdk) routes through startCommandSession → needs_input.
     expect(r.ok).toBe(false);
@@ -254,7 +261,7 @@ describe("Bulk handler installation + coverage", () => {
 
   test("dispatchCoverage returns missing entries when handlers are sparse", () => {
     // Register 1 handler.
-    registerHandler("IfcWall", () => null);
+    registerHandler("SdWall", () => null);
     const cov = dispatchCoverage();
     expect(cov.covered).toBe(1);
     expect(cov.missing.length).toBe(cov.total - 1);
@@ -262,10 +269,10 @@ describe("Bulk handler installation + coverage", () => {
 
   test("registerHandlers bulk-registers a record", () => {
     registerHandlers({
-      IfcWall: () => 1,
-      IfcSlab: () => 2,
+      SdWall: () => 1,
+      SdSlab: () => 2,
     });
-    expect(hasHandler("IfcWall")).toBe(true);
-    expect(hasHandler("IfcSlab")).toBe(true);
+    expect(hasHandler("SdWall")).toBe(true);
+    expect(hasHandler("SdSlab")).toBe(true);
   });
 });
