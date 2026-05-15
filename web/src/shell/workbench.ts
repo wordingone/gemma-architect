@@ -698,10 +698,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   compBar.appendChild(compHint);
   wrap.appendChild(compBar);
 
-  if (scenePanel) {
-    scenePanel.classList.add("scene-panel-embed");
-    wrap.appendChild(scenePanel);
-  } else {
+  if (!scenePanel) {
     const hint = el("div");
     hint.style.cssText = "padding:8px 10px; font-size:11px; color:var(--ink-faint);";
     hint.textContent = "No scene — drop IFC/GLB or pick a sample.";
@@ -737,7 +734,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
     wrap.appendChild(body);
   }
 
-  addSubsection("BUILDING LAYERS", buildLayersTab());
+  addSubsection("BUILDING LAYERS", buildLayersTab(scenePanel));
   const refBody = el("div");
   refBody.appendChild(buildLevelsTab());
   refBody.appendChild(buildGridsTab());
@@ -1083,8 +1080,17 @@ function buildLevelsTab(): HTMLElement {
   return wrap;
 }
 
-function buildLayersTab(): HTMLElement {
+function buildLayersTab(ifcTree?: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body layers-tab");
+
+  // IFC scene outliner at top of BUILDING LAYERS when an IFC model is loaded.
+  if (ifcTree) {
+    ifcTree.classList.add("scene-panel-embed");
+    wrap.appendChild(ifcTree);
+    const sep = el("div");
+    sep.style.cssText = "border-top:1px solid var(--hairline-soft); margin:4px 0 2px;";
+    wrap.appendChild(sep);
+  }
 
   const header = el("div", "layers-header");
   header.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 6px;";

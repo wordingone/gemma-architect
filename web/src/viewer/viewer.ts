@@ -340,7 +340,18 @@ export class Viewer {
           if (!this.pivotProxy || !this.targetObject) return;
           this.pivotProxy.updateMatrix();             // refresh from p/q/s that TC just mutated
           const dWorld = new THREE.Matrix4().copy(this.pivotProxy.matrix).multiply(this.pivotMatrixBeforeDrag.clone().invert());
-          const newMatrix = new THREE.Matrix4().copy(dWorld).multiply(this.targetMatrixBeforeDrag);
+          // IFC element meshes live inside a rotated wrapper group (Rx+90 Z-up conversion).
+          // Apply the world-space delta in parent-local space so dragging Y moves along world Y,
+          // not local Z. For direct scene children (parent = scene), parent matrix = identity.
+          const applyDeltaToLocal = (target: THREE.Object3D, localBefore: THREE.Matrix4): THREE.Matrix4 => {
+            if (!target.parent || target.parent === this.scene) {
+              return new THREE.Matrix4().copy(dWorld).multiply(localBefore);
+            }
+            target.parent.updateMatrixWorld();
+            const pInv = target.parent.matrixWorld.clone().invert();
+            return pInv.clone().multiply(dWorld).multiply(target.parent.matrixWorld).multiply(localBefore);
+          };
+          const newMatrix = applyDeltaToLocal(this.targetObject, this.targetMatrixBeforeDrag);
           newMatrix.decompose(this.targetObject.position, this.targetObject.quaternion, this.targetObject.scale);
           // Apply the same world-space delta to every additional multi-select target.
           for (let _mi = 0; _mi < this.multiTargets.length; _mi++) {
@@ -348,7 +359,7 @@ export class Viewer {
             if (_mt === this.targetObject) continue;
             const _mtBefore = this.multiTargetMatricesBeforeDrag[_mi];
             if (!_mtBefore) continue;
-            const _mtNew = new THREE.Matrix4().copy(dWorld).multiply(_mtBefore);
+            const _mtNew = applyDeltaToLocal(_mt, _mtBefore);
             _mtNew.decompose(_mt.position, _mt.quaternion, _mt.scale);
           }
           // Sync clip-plane math when user moves/rotates the visualization mesh.
@@ -679,19 +690,9 @@ export class Viewer {
       if (e.key === "Delete" || e.key === "Backspace") {
         // Ignore Delete while in sub-object mode — ESC back to parent first.
         if (this.subTargetObject) return;
-        const removed = this.targetObject;
-        if (removed) {
-          this.scene.remove(removed);
-          this.pivotOffsetByUuid.delete(removed.uuid);
-          this.targetObject = null;
-          this.pivotOffset.identity();
-          this.relocate.active = false;
-          for (const g of this.gizmos) g.detach();
-          this.updateRelocateBadge();
-          emitChainFragment(`// removed: uuid=${removed.uuid}`);
-          clearSelected();
-          window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
-        }
+        // deleteSelected() handles both direct scene children and IFC sub-meshes
+        // (children of the IFC wrapper Group, not direct scene children).
+        this.deleteSelected();
       }
     });
 
@@ -1076,6 +1077,20 @@ export class Viewer {
       return;
     }
     if (!this.targetObject) return;
+    // IFC element meshes bake geometry in world-space vertices; mesh.position is (0,0,0)
+    // local, so the normal matrix path puts the gumball at the wrapper origin (shared by
+    // all elements). Use the world-space bbox centroid instead.
+    if (this.targetObject.userData?.expressID != null) {
+      const box = new THREE.Box3().setFromObject(this.targetObject);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      this.pivotProxy.position.copy(center);
+      this.pivotProxy.quaternion.identity();
+      this.pivotProxy.scale.set(1, 1, 1);
+      this.pivotProxy.updateMatrix();
+      this.pivotProxy.matrixWorldNeedsUpdate = true;
+      return;
+    }
     this.pivotProxy.matrix.copy(this.targetObject.matrix).multiply(this.pivotOffset);
     this.pivotProxy.matrix.decompose(
       this.pivotProxy.position,
