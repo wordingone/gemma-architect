@@ -9,19 +9,21 @@ import { describe, expect, test } from "bun:test";
 import { getDictionary } from "../src/commands/dictionary";
 
 describe("B11 — schema metadata for system prompt", () => {
-  test("IfcWall entry has synonyms including 'wall'", () => {
+  test("SdWall entry has synonyms including 'wall' and backward-compat 'IfcWall'", () => {
     const dict = getDictionary();
-    const entry = dict.find((e) => e.canonical_name === "IfcWall");
+    // IfcWall was renamed to SdWall in #609; old Ifc* names kept as synonyms.
+    const entry = dict.find((e) => e.canonical_name === "SdWall");
     expect(entry).toBeDefined();
     if (!entry) return;
     expect(entry.synonyms).toContain("wall");
     expect(entry.synonyms).toContain("makewall");
     expect(entry.synonyms).toContain("drawwall");
+    expect(entry.synonyms).toContain("IfcWall");
   });
 
-  test("IfcWall args have unit=m and default values", () => {
+  test("SdWall args have unit=m and default values", () => {
     const dict = getDictionary();
-    const entry = dict.find((e) => e.canonical_name === "IfcWall");
+    const entry = dict.find((e) => e.canonical_name === "SdWall");
     if (!entry) return;
     const thickness = entry.args.find((a) => a.name === "thickness");
     expect(thickness).toBeDefined();
@@ -36,7 +38,7 @@ describe("B11 — schema metadata for system prompt", () => {
   test("summariseDictionary format: unit= and default= markers appear in formatted string", () => {
     // Inline the format logic from agent-harness.ts summariseDictionary()
     const dict = getDictionary();
-    const entry = dict.find((e) => e.canonical_name === "IfcWall");
+    const entry = dict.find((e) => e.canonical_name === "SdWall");
     if (!entry) return;
     const argList = entry.args
       .map((a) => {
@@ -50,6 +52,7 @@ describe("B11 — schema metadata for system prompt", () => {
     const line = `  ${entry.canonical_name}(${argList})${syn}`;
     expect(line).toContain("unit=m");
     expect(line).toContain("default=0.2");
-    expect(line).toContain("synonyms=[wall");
+    expect(line).toContain("synonyms=[");
+    expect(line).toContain("IfcWall");
   });
 });
