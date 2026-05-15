@@ -877,7 +877,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
   const json = (await resp.json()) as {
     choices: Array<{ message: { role: string; content: string } }>;
-    usage?: { prompt_tokens?: number };
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
     _latency_ms?: number;
     _tps?: number;
     _mtp_enabled?: boolean;
@@ -907,6 +907,18 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     const compJson = (await compResp.json()) as { content: string; tokens_predicted?: number };
     const content = compJson.content ?? "";
     updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
+    recordTurn({
+      ts: Date.now(),
+      prefill_ms: 0,
+      decode_ms: 0,
+      tokens_in: 0,
+      tokens_out: compJson.tokens_predicted ?? 0,
+      system_prompt_chars: buildSystemPrompt(req.skills).length,
+      skills_total: req.skillsTotal ?? req.skills?.length ?? 0,
+      skills_matched: req.skills?.length ?? 0,
+      tg_tps: 0,
+      pp_tps: 0,
+    });
     const { dispatches, text } = parseDispatches(content);
     return { dispatches, text: text || content, raw: compJson };
   }
@@ -916,6 +928,18 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const mtpLabel = json._mtp_enabled ? " · MTP" : "";
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE${mtpLabel}${tpsLabel}`);
 
+  recordTurn({
+    ts: Date.now(),
+    prefill_ms: 0,
+    decode_ms: json._latency_ms ?? 0,
+    tokens_in: json.usage?.prompt_tokens ?? 0,
+    tokens_out: json.usage?.completion_tokens ?? 0,
+    system_prompt_chars: buildSystemPrompt(req.skills).length,
+    skills_total: req.skillsTotal ?? req.skills?.length ?? 0,
+    skills_matched: req.skills?.length ?? 0,
+    tg_tps: json._tps ?? 0,
+    pp_tps: 0,
+  });
   const { dispatches, text } = parseDispatches(content);
   return { dispatches, text: text || content, raw: json };
 }
