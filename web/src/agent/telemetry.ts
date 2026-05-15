@@ -13,6 +13,8 @@ export interface TurnTelemetry {
   skills_matched: number;
   tg_tps: number;    // tokens/s during generation
   pp_tps: number;    // tokens/s during prefill (approx)
+  mtp_on?: boolean;  // true when MTP / speculative decoding was active for this turn
+  path?: "webgpu" | "remote"; // inference path used
 }
 
 const RING_SIZE = 50;

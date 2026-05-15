@@ -289,8 +289,10 @@ export class ChatPanel {
     if (this._perfStripEl.style.display === "none") return;
     const t = lastTurn();
     if (!t) { this._perfStripEl.textContent = "no data"; return; }
+    const mtpTag = t.mtp_on ? " · MTP" : "";
+    const pathTag = t.path ? ` · ${t.path}` : "";
     this._perfStripEl.textContent =
-      `tg ${t.tg_tps.toFixed(1)} t/s · pp ${t.pp_tps.toFixed(0)} t/s · in ${t.tokens_in} · out ${t.tokens_out} · prefill ${Math.round(t.prefill_ms)}ms · decode ${Math.round(t.decode_ms)}ms`;
+      `tg ${t.tg_tps.toFixed(1)} t/s · pp ${t.pp_tps.toFixed(0)} t/s · in ${t.tokens_in} · out ${t.tokens_out} · prefill ${Math.round(t.prefill_ms)}ms · decode ${Math.round(t.decode_ms)}ms${mtpTag}${pathTag}`;
   }
 
   private _executeSkillDirect(skill: Skill): void {

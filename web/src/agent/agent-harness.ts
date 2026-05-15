@@ -57,6 +57,7 @@ const REMOTE_URL: string = (import.meta.env as Record<string, string>).VITE_GEMM
 // When true, all subsequent runAgentTurn() calls route to remote regardless of
 // whether the model loaded successfully in-browser.
 let _webgpuFallbackEngaged = false;
+let _deviceLabel = "GPU"; // updated after model load to reflect actual backend
 
 // On-device WebGPU context size limit (#424). Shared with prefill warmup (#492).
 const WEBGPU_CONTEXT_LIMIT = 2048;
@@ -187,6 +188,7 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
 
         _model = model;
         _processor = processor;
+        _deviceLabel = label;
         updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${label}`);
         window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device, label } }));
         return { model, processor };
@@ -918,6 +920,8 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
       skills_matched: req.skills?.length ?? 0,
       tg_tps: 0,
       pp_tps: 0,
+      mtp_on: false,
+      path: "remote",
     });
     const { dispatches, text } = parseDispatches(content);
     return { dispatches, text: text || content, raw: compJson };
@@ -939,6 +943,8 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     skills_matched: req.skills?.length ?? 0,
     tg_tps: json._tps ?? 0,
     pp_tps: 0,
+    mtp_on: json._mtp_enabled ?? false,
+    path: "remote",
   });
   const { dispatches, text } = parseDispatches(content);
   return { dispatches, text: text || content, raw: json };
@@ -1034,13 +1040,29 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // Generate — greedy decoding for deterministic function-call JSON.
   // P10-2: catch OrtRun failures that slip past the load-time probe (#128/#133).
   // On first failure: engage session-level fallback flag, retry via remote if available.
+  // MTP (#614): try assistant_model (self-speculative via MTP heads) if model supports it;
+  // fall through to standard generation on TypeError (transformers.js 4.2 doesn't expose it).
   let outputs: unknown;
+  let _mtpActive = false;
   try {
-    outputs = await model.generate({
-      ...inputs,
-      max_new_tokens: safeMaxNewTokens,
-      do_sample: false,
-    });
+    try {
+      outputs = await (model as any).generate({
+        ...inputs,
+        max_new_tokens: safeMaxNewTokens,
+        do_sample: false,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assistant_model: model as any,
+        num_assistant_tokens: 3,
+      });
+      _mtpActive = true;
+    } catch {
+      // assistant_model not supported in this transformers.js build — use standard generation.
+      outputs = await model.generate({
+        ...inputs,
+        max_new_tokens: safeMaxNewTokens,
+        do_sample: false,
+      });
+    }
   } catch (ortErr) {
     const msg = (ortErr as Error).message ?? "";
     console.warn("[agent-harness] OrtRun failure during generation — engaging remote fallback.", msg.slice(0, 120));
@@ -1060,7 +1082,9 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const decodeMs = tGen - tProc;
   const tgTps = decodeMs > 0 ? tokensOut / (decodeMs / 1000) : 0;
   const ppTps = prefillMs > 0 ? inputLength / (prefillMs / 1000) : 0;
-  console.debug(`[agent] prefill=${Math.round(prefillMs)}ms decode=${Math.round(decodeMs)}ms in=${inputLength} out=${tokensOut} tg=${tgTps.toFixed(1)}t/s`);
+  console.debug(`[agent] prefill=${Math.round(prefillMs)}ms decode=${Math.round(decodeMs)}ms in=${inputLength} out=${tokensOut} tg=${tgTps.toFixed(1)}t/s mtp=${_mtpActive}`);
+  const _mtpSuffix = _mtpActive ? " · MTP" : "";
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ${tgTps.toFixed(0)} t/s${_mtpSuffix}`);
   recordTurn({
     ts: Date.now(),
     prefill_ms: prefillMs,
@@ -1072,6 +1096,8 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     skills_matched: req.skills?.length ?? 0,
     tg_tps: tgTps,
     pp_tps: ppTps,
+    mtp_on: _mtpActive,
+    path: "webgpu",
   });
 
   const decoded: string[] = proc.batch_decode(generated, { skip_special_tokens: true });
