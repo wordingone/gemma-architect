@@ -1,6 +1,6 @@
 // agent-harness.ts — In-browser WebGPU inference via Transformers.js v4 (#47).
 //
-// Model: onnx-community/gemma-4-E2B-it-ONNX (Q4 quantized, CDN-hosted).
+// Model: onnx-community/gemma-4-E4B-it-ONNX (Q4 quantized, CDN-hosted). E2B available via ?gemma_model=e2b.
 // Uses Gemma4ForConditionalGeneration + AutoProcessor directly — the
 // "image-text-to-text" pipeline task is not supported in transformers.js 4.2.0.
 //
@@ -10,7 +10,7 @@
 //   When the env var is unset, the original in-browser WebGPU path is used.
 //
 // Load sequence (in-browser path):
-//   1. First call to runAgentTurn() triggers model download (~2GB, cached by browser).
+//   1. First call to runAgentTurn() triggers model download (~4GB, cached by browser).
 //   2. Badge element (#ai-model-badge) shows download progress then "LIVE".
 //   3. Subsequent calls skip loading and go straight to inference.
 //
@@ -66,7 +66,7 @@ let _prefillDone = false;
 
 // ---- Model loading (in-browser path) ---------------------------------------
 
-// Model candidates — switch via ?gemma_model=e4b URL param (E2B is default).
+// Model candidates — E4B is default; switch to E2B via ?gemma_model=e2b URL param.
 export const MODEL_ID_CANDIDATES = {
   e2b: "onnx-community/gemma-4-E2B-it-ONNX",
   e4b: "onnx-community/gemma-4-E4B-it-ONNX",
@@ -77,8 +77,8 @@ const _modelParam =
     ? (new URLSearchParams(window.location.search).get("gemma_model") ?? "").toLowerCase()
     : "";
 const MODEL_ID: string =
-  _modelParam === "e4b" ? MODEL_ID_CANDIDATES.e4b : MODEL_ID_CANDIDATES.e2b;
-const MODEL_LABEL: string = _modelParam === "e4b" ? "E4B" : "E2B";
+  _modelParam === "e2b" ? MODEL_ID_CANDIDATES.e2b : MODEL_ID_CANDIDATES.e4b;
+const MODEL_LABEL: string = _modelParam === "e2b" ? "E2B" : "E4B";
 
 const BADGE_ID = "ai-model-badge";
 
@@ -108,7 +108,7 @@ async function checkVramCeiling(): Promise<boolean> {
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) return false;
     // limits.maxBufferSize is not a free-VRAM probe but is a hard device ceiling.
-    // Adapters below 2GB maxBufferSize cannot fit E2B weights regardless of free memory.
+    // Adapters below the floor cannot fit model weights regardless of free memory.
     const maxBuf: number = (adapter.limits as Record<string, number>).maxBufferSize ?? 0;
     if (maxBuf < VRAM_FLOOR_BYTES) {
       console.warn(`[agent-harness] P10-4 VRAM ceiling: maxBufferSize=${maxBuf} < ${VRAM_FLOOR_BYTES} — forcing remote.`);
@@ -1014,7 +1014,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
   const tProc = performance.now();
 
-  // Guard: E2B WebGPU ONNX model compiled context limit ~2048 tokens (#424).
+  // Guard: WebGPU ONNX model compiled context limit ~2048 tokens (#424).
   // Long system prompts (summariseDictionary + BUILDING_DEFAULTS + FEW_SHOT) reach
   // 2000-3000 tokens, pushing input + max_new_tokens past the limit and triggering
   // SafeIntOnOverflow in OrtRun buffer shape computation.
