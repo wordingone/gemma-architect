@@ -4,9 +4,8 @@
 // through agent-harness.ts → dispatch.ts. Dispatches fire immediately after
 // each model turn; their verb names are shown as inline pills.
 
-import { runAgentTurn, MODEL_ID } from "../agent/agent-harness";
+import { runAgentTurn } from "../agent/agent-harness";
 import { captureViewport } from "../agent/viewport-capture";
-import { checkConsentAndLoad } from "../agent/model-consent";
 import type { AgentDispatch, AgentRequest, AgentResponse } from "../agent/agent-harness";
 import { invokeCommand } from "../commands/command-session";
 import type { Skill } from "../agent/skills-loader";
@@ -267,14 +266,6 @@ export class ChatPanel {
       if (!effectiveImage && VISUAL_RE.test(text)) {
         effectiveImage = captureViewport(768) ?? undefined;
         if (effectiveImage && viewportArea) viewportArea.classList.add("agent-looking");
-      }
-
-      // Lazy consent check — model loads on first query, not at startup.
-      const _remoteUrl = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
-      if (!_remoteUrl) {
-        await new Promise<void>((resolve) => {
-          checkConsentAndLoad(MODEL_ID, resolve);
-        });
       }
 
       const resp = await runAgentTurn({

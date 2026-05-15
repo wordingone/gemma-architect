@@ -35,7 +35,8 @@ import { refLineStore } from "../geometry/ref-lines";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "../viewer/selection-state";
 import { getCreateSequence } from "../viewer/create-mode";
-import { MODEL_ID } from "../agent/agent-harness";
+import { prefetchModel, MODEL_ID } from "../agent/agent-harness";
+import { checkConsentAndLoad } from "../agent/model-consent";
 import { listSavedSkills, deleteSkill, type SavedSkill, type SkillStep } from "../skills/skill-store";
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
@@ -2302,7 +2303,14 @@ function buildDock(
     });
     bodyHost.innerHTML = "";
     if (panes[id]) bodyHost.appendChild(panes[id]);
-    // Model loading is deferred to first query — see chat-panel.ts send handler.
+    if (id === "prompt") {
+      const remoteUrl = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
+      if (remoteUrl) {
+        prefetchModel();
+      } else {
+        checkConsentAndLoad(MODEL_ID, () => prefetchModel());
+      }
+    }
   }
   activate("prompt");
   initLiveTabSubscriptions();
