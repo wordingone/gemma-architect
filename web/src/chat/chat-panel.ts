@@ -29,10 +29,7 @@ type GemmaDispatchHooks = { pre: Array<(d: AgentDispatch) => void> };
 type _GemmaW = Window & typeof globalThis & { __gemmaSession: GemmaSession; __gemma_dispatch_hooks: GemmaDispatchHooks };
 
 const STARTER_PROMPTS = [
-  "Draw a 5m wall, 0.2m thick, 2.8m tall",
-  "Create a rectangular room 6×4m with 2.8m ceilings",
   "What's currently in the scene?",
-  "What arguments does makeBox accept?",
 ];
 
 function estimateMaxTokens(prompt: string): number {
