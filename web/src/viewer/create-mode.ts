@@ -563,6 +563,36 @@ function unprojectToXY(viewer: Viewer, clientX: number, clientY: number): THREE.
   return fallback;
 }
 
+// Unproject for the clip tool — intersects the view-appropriate plane instead of Z=0.
+// In ortho elevation views the active camera shoots rays parallel to Z=0, so the ground-plane
+// fallback in unprojectToXY produces wrong world coordinates. This function intersects the plane
+// that is perpendicular to the view direction and passes through the world origin.
+//   top/persp → Z=0 plane (same as unprojectToXY)
+//   front/back → Y=0 plane (rays travel ±Y; x,z from screen position)
+//   right/left → X=0 plane (rays travel ±X; y,z from screen position)
+function unprojectForClipTool(viewer: Viewer, clientX: number, clientY: number): THREE.Vector3 | null {
+  const av = viewer.activeView;
+  const canvas = viewer.getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1,
+  );
+  const camera = viewer.getActiveCamera();
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(ndc, camera as THREE.Camera);
+  let plane: THREE.Plane;
+  if (av === "front" || av === "back") {
+    plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  } else if (av === "right" || av === "left") {
+    plane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
+  } else {
+    plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  }
+  const point = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(plane, point);
+}
+
 // Raycast against scene geometry to inherit Z elevation (for level placement, AC B.1).
 // Falls back to 0 when no geometry is hit (e.g. empty scene or top-down view hitting ground).
 function getGeometryZ(viewer: Viewer, clientX: number, clientY: number): number {
@@ -1270,25 +1300,65 @@ function buildSectionBox(a: { x: number; y: number }, b: { x: number; y: number 
   };
 }
 
-function buildClipPlane(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const lineLen = Math.sqrt(dx * dx + dy * dy) || 1;
-  // Normal perpendicular to line direction, pointing to the "right" of a→b
-  const nx = -dy / lineLen, ny = dx / lineLen;
-  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-  const planeH = 4;
-  const geom = new THREE.PlaneGeometry(lineLen, planeH);
+function buildClipPlane(
+  a: { x: number; y: number; z?: number },
+  b: { x: number; y: number; z?: number },
+): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
+  const av = _viewer?.activeView ?? "top";
   const mat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(cx, cy, planeH / 2);
-  mesh.rotation.set(Math.PI / 2, 0, Math.atan2(dy, dx));
+  const label = `clip-${Date.now()}`;
+  let mesh: THREE.Mesh;
+  let origin: [number, number, number];
+  let normal: [number, number, number];
+
+  if (av === "front" || av === "back") {
+    // Elevation view: line drawn in XZ plane; clip normal is perpendicular in XZ.
+    // rotY(atan2(-dz, dx)) aligns normal → (-dz/len, 0, dx/len), width → line dir in XZ.
+    const az = a.z ?? 0, bz = b.z ?? 0;
+    const dx = b.x - a.x, dz = bz - az;
+    const len = Math.sqrt(dx * dx + dz * dz) || 1;
+    const nx = -dz / len, nz = dx / len;
+    const cx = (a.x + b.x) / 2, cz = (az + bz) / 2;
+    origin = [round(cx), 0, round(cz)];
+    normal = [round(nx), 0, round(nz)];
+    const geom = new THREE.PlaneGeometry(len, 8);
+    mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(cx, 0, cz);
+    mesh.rotation.set(0, Math.atan2(-dz, dx), 0);
+  } else if (av === "right" || av === "left") {
+    // Side view: line drawn in YZ plane; clip normal is perpendicular in YZ.
+    // rotX(atan2(dz, dy)) aligns normal → (0, -dz/len, dy/len), height → line dir in YZ.
+    const az = a.z ?? 0, bz = b.z ?? 0;
+    const dy = b.y - a.y, dz = bz - az;
+    const len = Math.sqrt(dy * dy + dz * dz) || 1;
+    const ny = -dz / len, nz = dy / len;
+    const cy = (a.y + b.y) / 2, cz = (az + bz) / 2;
+    origin = [0, round(cy), round(cz)];
+    normal = [0, round(ny), round(nz)];
+    const geom = new THREE.PlaneGeometry(8, len);
+    mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(0, cy, cz);
+    mesh.rotation.set(Math.atan2(dz, dy), 0, 0);
+  } else {
+    // Top / perspective: line drawn in XY; clip normal is perpendicular in XY; plane is vertical.
+    // rotX(PI/2) then rotZ(atan2(dy,dx)) aligns the mesh as a vertical plane.
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const lineLen = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx = -dy / lineLen, ny = dx / lineLen;
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    const planeH = 4;
+    const geom = new THREE.PlaneGeometry(lineLen, planeH);
+    mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(cx, cy, planeH / 2);
+    mesh.rotation.set(Math.PI / 2, 0, Math.atan2(dy, dx));
+    origin = [round(cx), round(cy), 0];
+    normal = [round(nx), round(ny), 0];
+  }
+
   mesh.userData.kind = "clip-plane";
   mesh.userData.creator = "SdClippingPlane";
   mesh.userData.excludeFromClip = true;
-  const label = `clip-${Date.now()}`;
   mesh.userData.clipLabel = label;
-  const origin: [number, number, number] = [round(cx), round(cy), 0];
-  const normal: [number, number, number] = [round(nx), round(ny), 0];
   return {
     mesh,
     chain: `SdClippingPlane({origin:[${origin}],normal:[${normal}],label:"${label}"})`,
@@ -1477,7 +1547,7 @@ function destroyCursorDot(): void {
   _cursorDot = null;
 }
 
-function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: number; y: number }): void {
+function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: number; y: number; z?: number }): void {
   clearPreview(viewer);
   const isUnlimited = handler.clicks === -1;
   // Fixed-click tools only preview on 1 pending click; unlimited on ≥1.
@@ -1486,12 +1556,13 @@ function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: 
 
   const previewPts = isUnlimited ? [..._pending, livePoint] : [_pending[0], livePoint];
 
-  // Skip degenerate preview.
+  // Skip degenerate preview (check all three axes so clip tool in ortho elevation views works).
   const last = previewPts[previewPts.length - 1];
   const prev = previewPts[previewPts.length - 2];
   const dx = last.x - prev.x;
   const dy = last.y - prev.y;
-  if (dx * dx + dy * dy < 1e-4) return;
+  const dz = (last.z ?? 0) - (prev.z ?? 0);
+  if (dx * dx + dy * dy + dz * dz < 1e-4) return;
 
   // Unlimited tools need ≥2 pts to build geometry.
   if (isUnlimited && previewPts.length < 2) return;
@@ -3256,7 +3327,7 @@ export function initCreateMode(viewer: Viewer): void {
       }
       return;
     }
-    const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
+    const world = (tool === "clip" ? unprojectForClipTool : unprojectToXY)(viewer, ev.clientX, ev.clientY);
     if (!world) return;
     ev.stopImmediatePropagation();
     _lastPointerClient = { x: ev.clientX, y: ev.clientY };
@@ -3269,6 +3340,8 @@ export function initCreateMode(viewer: Viewer): void {
     } else {
       snapped = snapPoint(world.x, world.y);
     }
+    // For clip tool: carry the view-plane z (elevation axis) through — grid snap only works in XY.
+    if (tool === "clip") snapped = { ...snapped, z: world.z };
     // Shift-hold: axis-lock from last pending point, or smart-track reference if no pending.
     const clickShiftBase: { x: number; y: number; z?: number } | null =
       _pending.length > 0 ? _pending[_pending.length - 1] : _smartTrackPt ?? null;
@@ -3386,7 +3459,7 @@ export function initCreateMode(viewer: Viewer): void {
       return;
     }
 
-    const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
+    const world = (tool === "clip" ? unprojectForClipTool : unprojectToXY)(viewer, ev.clientX, ev.clientY);
     if (!world) {
       // No ground-plane hit (near-horizontal camera).
       // PT axis lock may still resolve a constrained position along the locked axis.
@@ -3425,6 +3498,8 @@ export function initCreateMode(viewer: Viewer): void {
           : snapPoint(world.x, world.y);
       }
     }
+    // Carry view-plane z for clip tool — grid snap resolves XY only; z comes from the view plane.
+    if (tool === "clip") snapped = { ...snapped, z: world.z };
 
     // Smart-track: promote a hovered point (vertex snap OR grid intersection) to a reference
     // point after SMART_TRACK_MS dwell. Reference acts as Shift-constraint base before first click.
