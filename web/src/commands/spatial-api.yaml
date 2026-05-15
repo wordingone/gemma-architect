@@ -1347,3 +1347,12 @@
   synonyms: [setunits, "set units", "switch units", "use metric", "use imperial", "use feet", "use meters", "use metres", "metric", "imperial"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
+
+- canonical_name: SdListObjects
+  kernel_op: listObjects
+  args: []
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [listobjects, "list objects", "list", ls, "what is in the scene", "what's in the scene", "whats in scene", "scene contents", "show objects", "show scene"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary

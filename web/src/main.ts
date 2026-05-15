@@ -185,6 +185,24 @@ registerHandler("SdSetViewPerspective", () => {
   return { ok: true, view: "perspective" };
 });
 
+registerHandler("SdListObjects", () => {
+  const scene = viewer.getScene();
+  const objects: Array<{ name: string; uuid: string; kind: string; layer?: string; ifcClass?: string; verb?: string }> = [];
+  scene.traverse((obj) => {
+    const ud = obj.userData as Record<string, unknown>;
+    if (!ud.kind) return;
+    objects.push({
+      name: obj.name || obj.uuid.slice(0, 8),
+      uuid: obj.uuid,
+      kind: String(ud.kind ?? ""),
+      ...(ud.layer ? { layer: String(ud.layer) } : {}),
+      ...(ud.ifcClass ? { ifcClass: String(ud.ifcClass) } : {}),
+      ...(ud.dispatchVerb ? { verb: String(ud.dispatchVerb) } : {}),
+    });
+  });
+  return { count: objects.length, objects };
+});
+
 registerHandler("SdZoomExtents", () => {
   viewer.frameAllVisible();
   return { ok: true };
