@@ -2413,9 +2413,9 @@ export class Viewer {
       case "right": case "left":  this.grid.rotation.set(0, 0, Math.PI / 2); break;
       default:                    this.grid.rotation.set(Math.PI / 2, 0, 0); break;
     }
-    const ORTHO_VIEWS = new Set(["top", "bottom", "front", "back", "left", "right"]);
+    const ORTHO_VIEWS = new Set(["top", "bottom", "front", "back", "left", "right", "iso"]);
     if (ORTHO_VIEWS.has(name) && perspPane) {
-      // Switch persp pane to orthographic projection for axis-aligned views (#331).
+      // Switch persp pane to orthographic projection for axis-aligned and iso views (#331, #600).
       if (!this._orthoViewCamera) {
         this._orthoViewCamera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.01, 10000);
       }
@@ -2429,7 +2429,7 @@ export class Viewer {
       oc.bottom = -half;
       oc.near = 0.01;
       oc.far = diag * 200;
-      // Plan views: Y is north. Elevation views: Z is up.
+      // Plan views: Y is north. Elevation and iso views: Z is up.
       if (name === "top" || name === "bottom") oc.up.set(0, 1, 0);
       else oc.up.set(0, 0, 1);
       oc.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist);
@@ -2437,11 +2437,11 @@ export class Viewer {
       oc.updateProjectionMatrix();
       perspPane.camera = oc;
       perspPane.controls.object = oc;
-      perspPane.controls.enableRotate = false;
+      perspPane.controls.enableRotate = true;
       perspPane.controls.target.set(cx, cy, cz);
       perspPane.controls.update();
     } else {
-      // iso / extents — restore perspective camera if needed.
+      // extents — restore perspective camera if needed.
       if (perspPane && perspPane.camera !== this.camera) {
         perspPane.camera = this.camera;
         perspPane.controls.object = this.camera;
