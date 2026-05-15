@@ -735,7 +735,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
     wrap.appendChild(body);
   }
 
-  addSubsection("BUILDING LAYERS", buildLayersTab(scenePanel));
+  addSubsection("BUILDING LAYERS", buildLayersTab());
   const refBody = el("div");
   refBody.appendChild(buildLevelsTab());
   refBody.appendChild(buildGridsTab());
@@ -1081,17 +1081,8 @@ function buildLevelsTab(): HTMLElement {
   return wrap;
 }
 
-function buildLayersTab(ifcTree?: HTMLElement | null): HTMLElement {
+function buildLayersTab(): HTMLElement {
   const wrap = el("div", "tab-body layers-tab");
-
-  // IFC scene outliner at top of BUILDING LAYERS when an IFC model is loaded.
-  if (ifcTree) {
-    ifcTree.classList.add("scene-panel-embed");
-    wrap.appendChild(ifcTree);
-    const sep = el("div");
-    sep.style.cssText = "border-top:1px solid var(--hairline-soft); margin:4px 0 2px;";
-    wrap.appendChild(sep);
-  }
 
   const header = el("div", "layers-header");
   header.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 6px;";
