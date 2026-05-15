@@ -241,6 +241,21 @@ export class Viewer {
       if (cplane) this._cplaneGizmo.update(cplane);
     });
 
+    // Layer panel child-row click → programmatic selection by UUID.
+    window.addEventListener("viewer:select-uuid", (e) => {
+      const uuid = (e as CustomEvent).detail?.uuid as string | undefined;
+      if (!uuid) return;
+      const obj = this.scene.getObjectByProperty("uuid", uuid) ?? null;
+      this.selectObject(obj);
+      if (obj) {
+        setSelected({ topology: "mesh", uuid: obj.uuid, object: obj, transformTarget: obj });
+        window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: obj.uuid } }));
+      } else {
+        clearSelected();
+        window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
+      }
+    });
+
     this.axes = new THREE.AxesHelper(2);
     this.axes.userData.noSnap = true;
     this.axes.userData.noRenderMode = true;

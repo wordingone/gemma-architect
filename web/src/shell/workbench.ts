@@ -1134,11 +1134,68 @@ function buildLayersTab(): HTMLElement {
     });
   }
 
+  // Per-layer expand state — persists across re-renders.
+  const expandedLayers = new Set<string>();
+
+  function getLayerObjects(layerId: string): THREE.Object3D[] {
+    const v = getViewer();
+    if (!v) return [];
+    const hits: THREE.Object3D[] = [];
+    v.getScene().traverse((obj) => {
+      const ud = (obj as THREE.Object3D & { userData: Record<string, unknown> }).userData;
+      if (ud?.layerId === layerId && ud?.kind) hits.push(obj);
+    });
+    return hits;
+  }
+
+  function buildChildRows(layerId: string): HTMLElement {
+    const wrap = el("div");
+    wrap.style.cssText = "background:var(--surface-2,rgba(0,0,0,0.12));";
+    const objs = getLayerObjects(layerId);
+    if (objs.length === 0) {
+      const empty = el("div");
+      empty.style.cssText = "padding:4px 10px 4px 28px; font-size:10px; color:var(--ink-faint); font-style:italic;";
+      empty.textContent = "No objects";
+      wrap.appendChild(empty);
+    } else {
+      for (const obj of objs) {
+        const childRow = el("div");
+        childRow.style.cssText = "display:flex; align-items:center; gap:6px; padding:3px 4px 3px 28px; border-bottom:1px solid var(--hairline); cursor:pointer; min-height:22px;";
+        childRow.title = "Select object";
+        const nameSpan = el("span");
+        nameSpan.style.cssText = "flex:1; font-size:10px; color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+        const ud = (obj as THREE.Object3D & { userData: Record<string, unknown> }).userData;
+        nameSpan.textContent = obj.name || String(ud.kind || obj.uuid.slice(0, 8));
+        childRow.appendChild(nameSpan);
+        childRow.addEventListener("click", () => {
+          window.dispatchEvent(new CustomEvent("viewer:select-uuid", { detail: { uuid: obj.uuid } }));
+        });
+        childRow.addEventListener("mouseenter", () => { childRow.style.background = "var(--surface-hover,rgba(255,255,255,0.06))"; });
+        childRow.addEventListener("mouseleave", () => { childRow.style.background = ""; });
+        wrap.appendChild(childRow);
+      }
+    }
+    return wrap;
+  }
+
   function renderList(): void {
     list.innerHTML = "";
     for (const layer of layerStore.all()) {
+      const isExpanded = expandedLayers.has(layer.id);
+
       const row = el("div", "layer-row", { "data-layer-id": layer.id });
       row.style.cssText = "display:flex; align-items:center; gap:4px; padding:3px 2px; border-bottom:1px solid var(--hairline); min-height:26px;";
+
+      // Expand arrow
+      const arrowBtn = el("button");
+      arrowBtn.style.cssText = "background:none; border:none; cursor:pointer; color:var(--ink-faint); padding:0 2px; flex-shrink:0; font-size:9px; width:14px; text-align:center;";
+      arrowBtn.textContent = isExpanded ? "▾" : "▸";
+      arrowBtn.title = isExpanded ? "Collapse" : "Expand";
+      arrowBtn.addEventListener("click", () => {
+        if (expandedLayers.has(layer.id)) expandedLayers.delete(layer.id);
+        else expandedLayers.add(layer.id);
+        renderList();
+      });
 
       // Eye toggle
       const eyeBtn = el("button");
@@ -1175,10 +1232,15 @@ function buildLayersTab(): HTMLElement {
         applyColor(layer.id, colorInput.value);
       });
 
-      // Name
+      // Name — click toggles expand
       const nameEl = el("span");
-      nameEl.style.cssText = "flex:1; font-size:11px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:default;";
+      nameEl.style.cssText = "flex:1; font-size:11px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;";
       nameEl.textContent = layer.name;
+      nameEl.addEventListener("click", () => {
+        if (expandedLayers.has(layer.id)) expandedLayers.delete(layer.id);
+        else expandedLayers.add(layer.id);
+        renderList();
+      });
 
       // Delete button (disabled for built-in "0/Default")
       const delBtn = el("button") as HTMLButtonElement;
@@ -1191,12 +1253,17 @@ function buildLayersTab(): HTMLElement {
         layerStore.remove(layer.id);
       });
 
+      row.appendChild(arrowBtn);
       row.appendChild(eyeBtn);
       row.appendChild(lockBtn);
       row.appendChild(colorInput);
       row.appendChild(nameEl);
       row.appendChild(delBtn);
       list.appendChild(row);
+
+      if (isExpanded) {
+        list.appendChild(buildChildRows(layer.id));
+      }
     }
   }
 
