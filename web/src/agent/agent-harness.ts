@@ -320,10 +320,34 @@ function buildSceneContext(): string {
   const kg = snapshotAsText();
   if (!kg.includes("empty")) return kg;
 
-  // Fall back to walking the THREE.js scene graph for the default demo scene.
+  // Walk for IFC elements — web-ifc sets userData.expressID + userData.ifcClass on each mesh.
+  type ViewerLike = { getScene?: () => { traverse?: (cb: (o: unknown) => void) => void; children?: unknown[] } };
+  const viewer = (window as unknown as { __viewer?: ViewerLike }).__viewer;
+  const scene = viewer?.getScene?.();
+  if (scene?.traverse) {
+    const ifcCounts: Record<string, number> = {};
+    let ifcTotal = 0;
+    scene.traverse((obj: unknown) => {
+      const ud = (obj as { userData?: Record<string, unknown> })?.userData;
+      if (ud?.expressID != null && ud?.ifcClass) {
+        const cls = String(ud.ifcClass);
+        ifcCounts[cls] = (ifcCounts[cls] ?? 0) + 1;
+        ifcTotal++;
+      }
+    });
+    if (ifcTotal > 0) {
+      const parts = Object.entries(ifcCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([cls, n]) => `${n}× ${cls}`)
+        .join(", ");
+      return `IFC model loaded: ${ifcTotal} elements — ${parts}.`;
+    }
+  }
+
+  // Fall back to top-level scene children (generic / non-IFC scenes).
   type ViewerScene = { children?: Array<{ type: string; name?: string; position?: { x: number; y: number; z: number } }> };
-  const viewer = (window as unknown as { __viewer?: { scene?: ViewerScene } }).__viewer;
-  const children = viewer?.scene?.children;
+  const fallbackViewer = (window as unknown as { __viewer?: { scene?: ViewerScene } }).__viewer;
+  const children = fallbackViewer?.scene?.children;
   if (!children) return kg;
 
   const meshes = children.filter((c) => c.type === "Mesh" || c.type === "Group");
@@ -710,7 +734,7 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene: ${buildSceneContext()}`,
-    "VISUAL DESCRIPTION: When a viewport image is provided, describe what you SEE in natural language — shapes, materials, colors, spatial arrangement, scale. Do NOT mention SDK verb names (SdXxx, SdListObjects, etc.) in your prose response; verb calls are displayed separately in the UI. Use SdListObjects or similar verbs silently to get programmatic data; narrate results in your own words. For questions about the scene (no geometry change): plain text only, ≤80 words.",
+    "SCENE QUERY RESPONSE: when asked what is in the scene or what you see — (1) describe the viewport image visually: shapes, colors, materials, arrangement, scale (2-3 sentences); (2) narrate the object inventory from the \'Current scene:\' line above in plain English. Combine into ONE natural prose paragraph. No bullet lists. No Sd* names in prose — verb chips are shown separately in the UI.",
     summariseSkills(skills),
     
   ].join("\n\n");

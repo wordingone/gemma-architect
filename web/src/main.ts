@@ -188,9 +188,17 @@ registerHandler("SdSetViewPerspective", () => {
 registerHandler("SdListObjects", () => {
   const scene = viewer.getScene();
   const objects: Array<{ name: string; uuid: string; kind: string; layer?: string; ifcClass?: string; verb?: string }> = [];
+  const ifcClassCounts: Record<string, number> = {};
   scene.traverse((obj) => {
     const ud = obj.userData as Record<string, unknown>;
-    if (!ud.kind) return;
+    // SDK-created objects carry ud.kind; IFC-loaded elements carry ud.expressID + ud.ifcClass.
+    const isIfc = ud.expressID != null && ud.ifcClass;
+    if (!ud.kind && !isIfc) return;
+    if (isIfc) {
+      const cls = String(ud.ifcClass);
+      ifcClassCounts[cls] = (ifcClassCounts[cls] ?? 0) + 1;
+      return; // aggregate IFC elements; don't push individual meshes (can be 250+)
+    }
     objects.push({
       name: obj.name || obj.uuid.slice(0, 8),
       uuid: obj.uuid,
@@ -200,6 +208,10 @@ registerHandler("SdListObjects", () => {
       ...(ud.dispatchVerb ? { verb: String(ud.dispatchVerb) } : {}),
     });
   });
+  // Append IFC class summary as aggregate entries.
+  for (const [cls, count] of Object.entries(ifcClassCounts).sort((a, b) => b[1] - a[1])) {
+    objects.push({ name: `${count}× ${cls}`, uuid: cls, kind: "ifc", ifcClass: cls });
+  }
   return { count: objects.length, objects };
 });
 
