@@ -912,17 +912,21 @@ class LayoutController {
     window.dispatchEvent(new CustomEvent("layout:tool-deactivated", { detail: { tool: "detail" } }));
   }
 
+  private _thumbLastRender = 0;
   private _startThumbLoop(): void {
     if (this._thumbRAF) return;
-    const tick = () => {
+    const THUMB_INTERVAL_MS = 100; // ~10 fps — complex IFC scenes are expensive to double-render
+    const tick = (now: DOMHighResTimeStamp) => {
       if (this._thumbCanvases.size === 0) { this._thumbRAF = 0; return; }
+      this._thumbRAF = requestAnimationFrame(tick);
+      if (now - this._thumbLastRender < THUMB_INTERVAL_MS) return;
+      this._thumbLastRender = now;
       const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
       if (viewer) {
         for (const { canvas, viewName, anchorX, anchorY, snapW, snapH, displayMode } of this._thumbCanvases.values()) {
           viewer.renderThumbnailTo(viewName, canvas, anchorX, anchorY, snapW, snapH, displayMode);
         }
       }
-      this._thumbRAF = requestAnimationFrame(tick);
     };
     this._thumbRAF = requestAnimationFrame(tick);
   }
