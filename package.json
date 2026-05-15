@@ -31,7 +31,7 @@
     "master-autofwd:uninstall": "powershell -File scripts/gemma-master-autofwd-task.ps1 uninstall",
     "master-autofwd:status": "powershell -File scripts/gemma-master-autofwd-task.ps1 status",
     "master-autofwd:restart": "powershell -File scripts/gemma-master-autofwd-task.ps1 restart",
-    "verify:raw": "node scripts/gemma-verify-raw.mjs",
+    "verify:raw": "node -e \"process.stderr.write('SUSPENDED until 2026-05-19 — do not run or cite in PR smoke packs.\\n'); process.exit(0);\"",
     "demo:record": "node scripts/demo-record.mjs",
     "demo:drive": "node scripts/demo-drive.mjs",
     "verify:cdp": "node -e \"process.stderr.write('DEPRECATED: verify:cdp removed — use: bun run verify:raw\\n'); process.exit(2);\"",

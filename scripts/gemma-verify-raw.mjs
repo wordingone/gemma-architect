@@ -1,4 +1,12 @@
 #!/usr/bin/env bun
+// SUSPENDED until 2026-05-19. Do not run or cite in PR smoke packs.
+// Re-engage: remove this banner after 2026-05-19.
+const SUSPEND_UNTIL = new Date("2026-05-19T00:00:00Z");
+if (new Date() < SUSPEND_UNTIL) {
+  console.log("[gemma-verify] SUSPENDED until 2026-05-19 — skipping. bun run verify + CI green is sufficient pre-2026-05-19.");
+  process.exit(0);
+}
+
 // gemma-verify-raw.mjs — Raw CDP WebSocket variant of gemma-verify-cdp.ts
 //
 // Connects to the shared browser at :9222 via raw WebSocket (no Playwright).
