@@ -191,7 +191,6 @@ export class Viewer {
       canvas,
       antialias: true,
       alpha: true,
-      preserveDrawingBuffer: true, // needed for canvas.toDataURL() in viewport capture
     });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.shadowMap.enabled = false;
@@ -1983,6 +1982,46 @@ export class Viewer {
 
   getCanvas(): HTMLCanvasElement {
     return this.canvas;
+  }
+
+  // Render a frame synchronously then read the framebuffer into a JPEG data URL.
+  // Because we render and read in the same JS task, no preserveDrawingBuffer is needed.
+  captureFrame(maxDim = 512): string | null {
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const canvasH = this.canvas.clientHeight;
+    this.renderer.clear();
+    for (const pane of this.panes) {
+      const rect = pane.el.getBoundingClientRect();
+      const x = Math.floor(rect.left - canvasRect.left);
+      const gl_y = Math.floor(canvasH - (rect.top - canvasRect.top) - rect.height);
+      const w = Math.floor(rect.width);
+      const h = Math.floor(rect.height);
+      if (w <= 0 || h <= 0) continue;
+      this.renderer.setScissor(x, gl_y, w, h);
+      this.renderer.setScissorTest(true);
+      this.renderer.setViewport(x, gl_y, w, h);
+      this.renderer.clearDepth();
+      pane.controls.update();
+      this.renderer.render(this.scene, pane.camera);
+    }
+    this.renderer.setScissorTest(false);
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    if (cw === 0 || ch === 0) return null;
+    const scale = Math.min(1, maxDim / Math.max(cw, ch));
+    const sw = Math.max(1, Math.round(cw * scale));
+    const sh = Math.max(1, Math.round(ch * scale));
+    const off = document.createElement("canvas");
+    off.width = sw;
+    off.height = sh;
+    const ctx = off.getContext("2d");
+    if (!ctx) return null;
+    try {
+      ctx.drawImage(this.canvas, 0, 0, sw, sh);
+    } catch {
+      return null;
+    }
+    return off.toDataURL("image/jpeg", 0.82);
   }
 
   getCamera(): THREE.PerspectiveCamera {

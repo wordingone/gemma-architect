@@ -3,12 +3,21 @@
 // Returns a JPEG data-URL suitable for embedding in an image-text-to-text
 // model turn, or null if the canvas is unavailable / tainted.
 //
-// The main renderer must have preserveDrawingBuffer: true (set in viewer.ts).
+// Uses Viewer.captureFrame() which re-renders synchronously before reading, so
+// preserveDrawingBuffer is NOT required on the WebGLRenderer.
 
 export function captureViewport(maxDim = 512): string | null {
-  // __viewer.canvas is private in TypeScript but accessible at runtime.
-  type ViewerLike = { canvas?: HTMLCanvasElement; renderer?: { domElement?: HTMLCanvasElement } };
+  type ViewerLike = {
+    captureFrame?: (maxDim: number) => string | null;
+    canvas?: HTMLCanvasElement;
+    renderer?: { domElement?: HTMLCanvasElement };
+  };
   const viewer = (window as unknown as { __viewer?: ViewerLike }).__viewer;
+
+  // Preferred path: Viewer.captureFrame() renders synchronously then reads.
+  if (viewer?.captureFrame) return viewer.captureFrame(maxDim);
+
+  // Fallback: read from whatever is in the buffer (requires preserveDrawingBuffer).
   const canvas: HTMLCanvasElement | null =
     viewer?.canvas ?? viewer?.renderer?.domElement ?? document.querySelector("canvas");
   if (!canvas) return null;
