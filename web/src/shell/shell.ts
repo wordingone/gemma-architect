@@ -369,14 +369,15 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
     if (!_ribbonTabsEl || !_ribbonToolsEl) return;
   }
   if (mode === "layout") {
-    fillRibbonTabs(_ribbonTabsEl, LAYOUT_RIBBON_TABS, "");
+    _ribbonTabsEl.style.display = "none";  // no section tabs in layout mode
     fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
   } else if (mode === "research") {
-    fillRibbonTabs(_ribbonTabsEl, [], "");
+    _ribbonTabsEl.style.display = "none";  // no section tabs in research mode
     fillRibbonTools(_ribbonToolsEl, RESEARCH_TOOL_GROUPS);
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
   } else {
+    _ribbonTabsEl.style.display = "";      // restore tabs column for model mode
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, "");
     fillRibbonTools(_ribbonToolsEl, []);
     appendArchCompSlider(_ribbonToolsEl);
@@ -619,7 +620,7 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
 
   const toolsEl = document.createElement("div");
   toolsEl.className = "ribbon-tools";
-  tabsEl.appendChild(toolsEl);
+  ribbonHost.appendChild(toolsEl);  // sibling of ribbon-tabs, not child
   _ribbonToolsEl = toolsEl;
   _ribbonEl = ribbonHost;
 

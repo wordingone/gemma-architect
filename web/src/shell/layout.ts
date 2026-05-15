@@ -265,6 +265,8 @@ class LayoutController {
   } | null = null;
   // Active ribbon tool (e.g. "detail"). null = default pointer.
   private activeTool: string | null = null;
+  // Pan-tool drag state: screen origin + stage scroll origin.
+  private _panDrag: { sx: number; sy: number; scrollLeft: number; scrollTop: number } | null = null;
   // Counter for detail label letters (A, B, C…).
   private _detailLabelSeq = 0;
   // Selected panel (for toolbar interaction).
@@ -362,17 +364,26 @@ class LayoutController {
     // Ribbon tool activation.
     window.addEventListener("ribbon:tool-click", (e: Event) => {
       const ce = e as CustomEvent<{ tool: string | null }>;
-      if (ce.detail.tool === "detail") {
-        this.activeTool = "detail";
-        this.sheetEl.style.cursor = "crosshair";
-      } else if (ce.detail.tool === "viewport") {
-        this.activeTool = "viewport";
-        this.sheetEl.style.cursor = "crosshair";
-      } else {
+      const tool = ce.detail.tool;
+      // Always clean up active drag state on tool switch.
+      this._detailDrag?.ghost.remove();
+      this._detailDrag = null;
+      this.dragging?.el?.remove();
+      this.dragging = null;
+      this._panDrag = null;
+      if (!tool || tool === "select") {
         this.activeTool = null;
         this.sheetEl.style.cursor = "";
-        this._detailDrag?.ghost.remove();
-        this._detailDrag = null;
+      } else if (tool === "pan") {
+        this.activeTool = "pan";
+        this.sheetEl.style.cursor = "grab";
+      } else if (tool === "zoom") {
+        this.activeTool = "zoom";
+        this.sheetEl.style.cursor = "zoom-in";
+      } else {
+        // All other tools: crosshair cursor, activeTool set for future handlers.
+        this.activeTool = tool;
+        this.sheetEl.style.cursor = "crosshair";
       }
     });
 
@@ -659,6 +670,15 @@ class LayoutController {
 
   private onSheetMouseDown(e: MouseEvent): void {
     if (e.button !== 0) return;
+    if (this.activeTool === "pan") {
+      const stage = this.sheetEl.parentElement as HTMLElement | null;
+      if (stage) {
+        this.sheetEl.style.cursor = "grabbing";
+        this._panDrag = { sx: e.clientX, sy: e.clientY, scrollLeft: stage.scrollLeft, scrollTop: stage.scrollTop };
+        e.preventDefault();
+      }
+      return;
+    }
     if (this.activeTool === "detail") {
       this.startDetailDrag(e);
       return;
@@ -708,6 +728,14 @@ class LayoutController {
   }
 
   private onSheetMouseMove(e: MouseEvent): void {
+    if (this._panDrag) {
+      const stage = this.sheetEl.parentElement as HTMLElement | null;
+      if (stage) {
+        stage.scrollLeft = this._panDrag.scrollLeft - (e.clientX - this._panDrag.sx);
+        stage.scrollTop  = this._panDrag.scrollTop  - (e.clientY - this._panDrag.sy);
+      }
+      return;
+    }
     if (this._detailDrag) {
       this.updateDetailDrag(e);
       return;
@@ -751,6 +779,11 @@ class LayoutController {
   }
 
   private onSheetMouseUp(): void {
+    if (this._panDrag) {
+      this._panDrag = null;
+      this.sheetEl.style.cursor = "grab";
+      return;
+    }
     if (this._detailDrag) {
       this.finishDetailDrag();
       return;
@@ -771,8 +804,19 @@ class LayoutController {
     window.dispatchEvent(new CustomEvent("layout:tool-deactivated", { detail: { tool: "viewport" } }));
   }
 
+  private applyZoom(factor: number): void {
+    this.zoomFactor = Math.max(0.05, Math.min(5, this.zoomFactor * factor));
+    this.sheetEl.style.zoom = String(this.zoomFactor);
+    this.sheetEl.style.setProperty("--iz", String(1 / this.zoomFactor));
+  }
+
   private onSheetClick(e: MouseEvent): void {
     if (this._dragCompleted) { this._dragCompleted = false; return; }
+    if (this.activeTool === "zoom") {
+      this.applyZoom(e.shiftKey ? 1 / 1.3 : 1.3);
+      this.sheetEl.style.cursor = e.shiftKey ? "zoom-out" : "zoom-in";
+      return;
+    }
     if (this.activeTool !== "viewport") return;
     const tgt = e.target as HTMLElement | null;
     if (tgt && tgt.closest(".paper-cell, .paper-titleblock, .paper-toolbar")) return;
