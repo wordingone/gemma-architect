@@ -593,6 +593,39 @@ function unprojectForClipTool(viewer: Viewer, clientX: number, clientY: number):
   return raycaster.ray.intersectPlane(plane, point);
 }
 
+// View-aware grid snap for the active working plane (extends snapPoint to elevation views).
+// Top/persp → XY plane: delegates to snapPoint() (preserves grid-origin/rotation support).
+// Front/back → XZ plane (Y=0): snaps x and z to the active grid step.
+// Right/left → YZ plane (X=0): snaps y and z to the active grid step.
+// The fixed-step branch skips grid-origin/rotation because those are defined in XY world space
+// and don't apply to elevation cross-sections.
+function snapWorldForView(viewer: Viewer, world: THREE.Vector3): { x: number; y: number; z: number } {
+  const av = viewer.activeView;
+  if (av === "front" || av === "back") {
+    const snap = getSnap();
+    const doSnap = snap.snapOn && snap.gridOn;
+    const s = snap.step;
+    return {
+      x: doSnap ? Math.round(world.x / s) * s : world.x,
+      y: 0,
+      z: doSnap ? Math.round(world.z / s) * s : world.z,
+    };
+  }
+  if (av === "right" || av === "left") {
+    const snap = getSnap();
+    const doSnap = snap.snapOn && snap.gridOn;
+    const s = snap.step;
+    return {
+      x: 0,
+      y: doSnap ? Math.round(world.y / s) * s : world.y,
+      z: doSnap ? Math.round(world.z / s) * s : world.z,
+    };
+  }
+  // Top / perspective: full XY grid snap with origin+rotation support.
+  const snapped = snapPoint(world.x, world.y);
+  return { x: snapped.x, y: snapped.y, z: 0 };
+}
+
 // Raycast against scene geometry to inherit Z elevation (for level placement, AC B.1).
 // Falls back to 0 when no geometry is hit (e.g. empty scene or top-down view hitting ground).
 function getGeometryZ(viewer: Viewer, clientX: number, clientY: number): number {
@@ -2770,7 +2803,7 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
   const sv = nearestSnapVertex(viewer, clientX, clientY);
   const snapped3 = sv
     ? new THREE.Vector3(sv.x, sv.y, sv.z)
-    : world ? new THREE.Vector3(snapPoint(world.x, world.y).x, snapPoint(world.x, world.y).y, 0)
+    : world ? (() => { const s = snapWorldForView(viewer, world); return new THREE.Vector3(s.x, s.y, s.z); })()
              : null;
   if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "dim_a" && phase.kind !== "dim_volume") return false;
 
@@ -3260,8 +3293,8 @@ export function initCreateMode(viewer: Viewer): void {
           } else {
             const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
             if (!world) return;
-            const snapped = snapPoint(world.x, world.y);
-            clickPt = new THREE.Vector3(snapped.x, snapped.y, 0);
+            const snapped = snapWorldForView(viewer, world);
+            clickPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z);
           }
         }
         ev.stopImmediatePropagation();
@@ -3315,7 +3348,7 @@ export function initCreateMode(viewer: Viewer): void {
         const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
         if (!world) return;
         ev.stopImmediatePropagation();
-        const snapped = snapPoint(world.x, world.y);
+        const snapped = snapWorldForView(viewer, world);
         void provideSessionPick([snapped.x, snapped.y]).then((result) => {
           if (result.status === "needs_choice" && result.awaiting_text_choice) {
             setChooserHint(result.awaiting_text_choice);
@@ -3338,9 +3371,9 @@ export function initCreateMode(viewer: Viewer): void {
     } else if (!ev.altKey && _lastSurfaceHit) {
       snapped = { x: _lastSurfaceHit.x, y: _lastSurfaceHit.y, z: _lastSurfaceHit.z };
     } else {
-      snapped = snapPoint(world.x, world.y);
+      snapped = snapWorldForView(viewer, world);
     }
-    // For clip tool: carry the view-plane z (elevation axis) through — grid snap only works in XY.
+    // For clip tool: carry the un-snapped view-plane z — clip placement is free-form, not grid-locked.
     if (tool === "clip") snapped = { ...snapped, z: world.z };
     // Shift-hold: axis-lock from last pending point, or smart-track reference if no pending.
     const clickShiftBase: { x: number; y: number; z?: number } | null =
@@ -3495,7 +3528,7 @@ export function initCreateMode(viewer: Viewer): void {
         // Geometry between cursor and ground plane — use surface hit; skip grid snap.
         snapped = _lastSurfaceHit
           ? { x: _lastSurfaceHit.x, y: _lastSurfaceHit.y, z: _lastSurfaceHit.z }
-          : snapPoint(world.x, world.y);
+          : snapWorldForView(viewer, world);
       }
     }
     // Carry view-plane z for clip tool — grid snap resolves XY only; z comes from the view plane.
