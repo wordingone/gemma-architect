@@ -1,6 +1,7 @@
 import { iconSVG } from "../ui/icons.js";
 import { dispatchSync } from "../commands/dispatch.js";
 import { buildPhoneSlider } from "../ui/phone-slider.js";
+import { getState, subscribe } from "../app-state.js";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -27,6 +28,11 @@ const MENUS: MenuItem[] = [
     { label: "Save project",    shortcut: "⌘S", stub: true, onAction: () => saveProjectJson() },
     { separator: true },
     { label: "Export…",         shortcut: "⌘E", canonical: "SdExport" },
+    { separator: true },
+    { label: "Units: Metric ↔ Imperial", onAction: () => {
+      const cur = getState("unitSystem") ?? "metric";
+      dispatchSync("SdSetUnits", { system: cur === "metric" ? "imperial" : "metric" });
+    }},
   ]},
   { label: "Edit", entries: [
     { label: "Undo",       shortcut: "⌘Z",   canonical: "SdUndo" },
@@ -712,6 +718,15 @@ export function saveProjectJson(): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function wireUnitsCell(): void {
+  const cell = document.getElementById("sb-units");
+  const v = cell?.querySelector(".v") as HTMLElement | null;
+  if (!v) return;
+  subscribe("unitSystem", (sys) => {
+    v.textContent = sys === "imperial" ? "ft · IFC4" : "m · IFC4";
+  });
+}
+
 export function initShellChrome(opts?: { onModeChange?: (k: string) => void; onSplitMode?: (mode: "single" | "quad") => void }) {
   const menubar = document.querySelector(".menubar") as HTMLElement | null;
   const modebar = document.querySelector(".modebar") as HTMLElement | null;
@@ -721,4 +736,5 @@ export function initShellChrome(opts?: { onModeChange?: (k: string) => void; onS
   if (ribbon)  buildRibbon(ribbon, opts?.onSplitMode);
   wireThemeToggle();
   wireFpsCounter();
+  wireUnitsCell();
 }

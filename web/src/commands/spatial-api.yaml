@@ -1331,3 +1331,19 @@
   synonyms: [clippingplaneremove, "remove clipping plane", "delete clip plane"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
+
+- canonical_name: SdSetUnits
+  kernel_op: setUnits
+  args:
+    - name: system
+      type: enum_choice
+      required: true
+      description: "Unit system to display"
+      options:
+        - {value: metric,   label: "Metric (m)",   description: "Metric — all dimensions in metres"}
+        - {value: imperial, label: "Imperial (ft)", description: "Imperial — all dimensions in feet"}
+  topology_role: view
+  kg_predicates: []
+  synonyms: [setunits, "set units", "switch units", "use metric", "use imperial", "use feet", "use meters", "use metres", "metric", "imperial"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary

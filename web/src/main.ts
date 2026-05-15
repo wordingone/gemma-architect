@@ -44,7 +44,7 @@ import {
 } from "./io/exporters";
 import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
-import { syncToolActiveClass, getState, setState } from "./app-state";
+import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, getSnapTarget } from "./viewer/create-mode";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform } from "./history";
@@ -154,6 +154,7 @@ registerHandler("SdDelete", () => {
   return { deleted };
 });
 syncToolActiveClass();
+syncUnitsToStorage();
 initCreateMode(viewer);
 initSectionHandles(viewer, viewportAreaEl);
 
@@ -1863,6 +1864,13 @@ registerHandler("SdResetCPlane", () => {
   return { reset: true };
 });
 
+registerHandler("SdSetUnits", (args) => {
+  const sys = (args["system"] as "metric" | "imperial" | undefined) ?? "metric";
+  const valid = sys === "metric" || sys === "imperial" ? sys : "metric";
+  setState("unitSystem", valid);
+  return { ok: true, unitSystem: valid };
+});
+
 // Install shim handlers for every dictionary verb that doesn't have a native
 // handler yet. This makes all 66+ verbs reachable by the agent (#58 Tier 0).
 // Explicit registerHandler() calls above take priority — installDefaultHandlers
@@ -2555,6 +2563,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 // Boot.
+hydrateFromStorage();
 const workbenchEl = document.querySelector(".workbench") as HTMLElement | null;
 initShellChrome({
   onModeChange: (k) => {

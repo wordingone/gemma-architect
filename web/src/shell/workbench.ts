@@ -26,6 +26,7 @@ import { dispatchSync, type DispatchArgs } from "../commands/dispatch";
 import { startCommandSession } from "../commands/command-session";
 import { setPickerHint } from "../viewer/create-mode";
 import { getState, setState, subscribe as subscribeAppState, type ViewName } from "../app-state";
+import { formatLength } from "../units";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setMidpointSnapOn, setStep, setAngleStep, getSnap } from "../viewer/snap-state";
 import { buildSelectionFiltersPanel } from "../scene/scene-panel";
 import { levelStore, type Level } from "../geometry/levels";
@@ -2055,6 +2056,15 @@ function sliderBounds(name: string): [number, number, number] {
   return [0.05, 30, 0.05]; // width / length / depth / generic
 }
 
+function isDimensionKey(name: string): boolean {
+  const n = name.toLowerCase();
+  return !n.includes("angle") && !n.includes("rotation");
+}
+
+function fmtParam(key: string, v: number): string {
+  return isDimensionKey(key) ? formatLength(v) : v.toFixed(2);
+}
+
 function renderNodeParameters(verb: string, args: Record<string, unknown>): void {
   if (!_paramsWrap) return;
   _paramsWrap.innerHTML = "";
@@ -2086,10 +2096,10 @@ function renderNodeParameters(verb: string, args: Record<string, unknown>): void
 
       const valueSpan = document.createElement("span");
       valueSpan.className = "params-value";
-      valueSpan.textContent = (val as number).toFixed(2);
+      valueSpan.textContent = fmtParam(key, val as number);
 
       slider.addEventListener("input", () => {
-        valueSpan.textContent = Number(slider.value).toFixed(2);
+        valueSpan.textContent = fmtParam(key, Number(slider.value));
       });
 
       slider.addEventListener("change", () => {
@@ -2160,10 +2170,10 @@ function renderParameters(uuid: string | null): void {
 
       const valueSpan = document.createElement("span");
       valueSpan.className = "params-value";
-      valueSpan.textContent = val.toFixed(2);
+      valueSpan.textContent = fmtParam(key, val);
 
       slider.addEventListener("input", () => {
-        valueSpan.textContent = Number(slider.value).toFixed(2);
+        valueSpan.textContent = fmtParam(key, Number(slider.value));
       });
 
       slider.addEventListener("change", () => {

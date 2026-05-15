@@ -21,6 +21,7 @@ export interface AppState {
   selectedId: string | null;   // current selection uuid, or null
   currentView: ViewName;       // active single-pane view
   compScope: boolean;          // COMP toggle: filter scene tree to selected-component subtree
+  unitSystem: "metric" | "imperial"; // display unit system (#597)
 }
 
 const DEFAULT_STATE: AppState = {
@@ -32,6 +33,7 @@ const DEFAULT_STATE: AppState = {
   selectedId: null,
   currentView: "perspective",
   compScope: false,
+  unitSystem: "metric",
 };
 
 type Listener<K extends keyof AppState> = (value: AppState[K]) => void;
@@ -93,6 +95,16 @@ export function hydrateFromStorage(): void {
     if (v === "night") setState("night", true);
     else if (v === "day") setState("night", false);
   } catch { /* ignore */ }
+  try {
+    const u = localStorage.getItem("gemma-architect.units");
+    if (u === "imperial" || u === "metric") setState("unitSystem", u);
+  } catch { /* ignore */ }
+}
+
+export function syncUnitsToStorage(): void {
+  subscribe("unitSystem", (sys) => {
+    try { localStorage.setItem("gemma-architect.units", sys); } catch { /* private mode */ }
+  });
 }
 
 // Wire app-state verbs into the dispatch table. Imported lazily to avoid

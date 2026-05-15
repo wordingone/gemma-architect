@@ -30,6 +30,7 @@ import { gridStore } from "../geometry/grids";
 import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
 import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "./selection-state";
+import { formatLength, formatArea, formatVolume } from "../units";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -2762,7 +2763,7 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
     if (!hit) { ptPrompt("Fillet — click an edge, corner, or object"); return true; }
     _opPhase = { kind: "fillet_radius", target: hit.obj };
     ptPrompt("Fillet radius — type a value and press Enter");
-    ptShowCoordInput("radius in meters");
+    ptShowCoordInput("radius");
     return true;
   }
 
@@ -2777,7 +2778,7 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
       const size = new THREE.Vector3(); box.getSize(size);
       const vol = size.x * size.y * size.z;
       const ctr = new THREE.Vector3(); box.getCenter(ctr);
-      opAddLabel(`Vol: ${vol.toFixed(2)} m³`, ctr, viewer);
+      opAddLabel(`Vol: ${formatVolume(vol)}`, ctr, viewer);
       opFinish(viewer);
       return true;
     }
@@ -2804,7 +2805,7 @@ function opHandleClick(viewer: Viewer, clientX: number, clientY: number): boolea
     const mid = phase.ptA.clone().add(snapped3).multiplyScalar(0.5);
     const lineObj = opBuildAnnotLine([phase.ptA, snapped3]);
     viewer.getScene().add(lineObj);
-    opAddLabel(`${dist.toFixed(3)} m`, mid, viewer);
+    opAddLabel(formatLength(dist), mid, viewer);
     opFinish(viewer);
     return true;
   }
@@ -2937,7 +2938,7 @@ function opHandleEnter(viewer: Viewer): void {
     const ctr = pts.reduce((a, b) => a.clone().add(b), new THREE.Vector3()).multiplyScalar(1 / pts.length);
     const lineObj = opBuildAnnotLine([...pts, pts[0]]);
     viewer.getScene().add(lineObj);
-    opAddLabel(`Area: ${area.toFixed(2)} m²`, ctr, viewer);
+    opAddLabel(`Area: ${formatArea(area)}`, ctr, viewer);
     opFinish(viewer);
     return;
   }
@@ -2958,7 +2959,7 @@ function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
     const r = parseFloat(raw);
     if (!Number.isFinite(r) || r <= 0) { ptPrompt("Fillet radius — enter a positive number"); return; }
     // Fillet geometry not yet wired to kernel — display the radius and finish.
-    ptPrompt(`Fillet r=${r.toFixed(3)} m — select an edge to apply (kernel integration pending)`);
+    ptPrompt(`Fillet r=${formatLength(r)} — select an edge to apply (kernel integration pending)`);
     setTimeout(() => opFinish(viewer), 800);
   }
 }
@@ -3012,8 +3013,8 @@ function opUpdateExtrudePreview(viewer: Viewer, clientX: number, clientY: number
   mesh.traverse((c) => { c.renderOrder = 50; c.userData.noSnap = true; });
   _opPreview = mesh;
   viewer.getScene().add(mesh);
-  const snapTag = shiftKey ? `  [grid snap ${getSnap().step} m]` : "";
-  ptPrompt(`Extrude height — ${h.toFixed(2)} m — click to commit  [Escape = cancel]${snapTag}`);
+  const snapTag = shiftKey ? `  [grid snap ${formatLength(getSnap().step)}]` : "";
+  ptPrompt(`Extrude height — ${formatLength(h)} — click to commit  [Escape = cancel]${snapTag}`);
 }
 
 // Bind the create-mode pipeline to viewport mousedown. Coexists with the
@@ -3565,7 +3566,7 @@ export function initCreateMode(viewer: Viewer): void {
       const cursorPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z ?? 0);
       ptSetPreviewLine(viewer, _ptPhase.base, cursorPt);
       const dist = cursorPt.distanceTo(_ptPhase.base);
-      ptPrompt(`Scale — click reference start point  [dist from anchor: ${dist.toFixed(3)} m]`);
+      ptPrompt(`Scale — click reference start point  [dist from anchor: ${formatLength(dist)}]`);
     } else if (_ptPhase?.kind === "scale_end") {
       let cursorPt: THREE.Vector3;
       if (_ptAxisLock) {
