@@ -188,6 +188,13 @@ html[data-mode="night"] .paper-stage {
   padding: calc(5px * var(--iz, 1)) calc(8px * var(--iz, 1));
   background: oklch(0.18 0 0 / 0.82);
   z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.paper-cell:hover .paper-cell-header,
+.paper-cell-header.hdr-visible {
+  opacity: 1;
   pointer-events: auto;
 }
 .paper-cell-label {

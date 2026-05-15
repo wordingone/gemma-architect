@@ -279,6 +279,9 @@ class LayoutController {
   private _dragCompleted = false;
   // Fit-to-stage scale factor (zoom). All mouse coords divided by this.
   private zoomFactor = 1;
+  // Previous sheet pixel dimensions — used in applySheetDims to rescale panels proportionally.
+  private _prevSheetPxW = 0;
+  private _prevSheetPxH = 0;
   // Whether to render the title block.
   private _showTitleBlock: boolean;
   // Watches stage size changes (including mode-switch from display:none → flex).
@@ -554,6 +557,7 @@ class LayoutController {
   private switchSheet(idx: number): void {
     if (idx < 0 || idx >= this.sheets.length || idx === this.activeSheetIdx) return;
     this.activeSheetIdx = idx;
+    this._prevSheetPxW = 0; this._prevSheetPxH = 0;
     // Clear panels from DOM (keep sheet element, titleblock).
     this.sheetEl.querySelectorAll(".paper-cell").forEach((el) => el.remove());
     // Apply new sheet size/orientation.
@@ -584,7 +588,7 @@ class LayoutController {
 
   private _spawnPresetPanel(viewport: ViewportId, scale: ScaleId, displayMode: DisplayMode): void {
     const mm = sheetMm(this.size, this.orientation, this.customMm);
-    const r = 0.15;
+    const r = 0.07; // 7% margin → ~86% content area (AC1: default fills most of the sheet)
     this.addPanel({
       x: Math.round(mm.w * MM_TO_PX * r),
       y: Math.round(mm.h * MM_TO_PX * r),
@@ -640,6 +644,17 @@ class LayoutController {
   private applySheetDims(): void {
     const mm = sheetMm(this.size, this.orientation, this.customMm);
     const px = sheetPx(mm);
+    if (this._prevSheetPxW > 0 && this._prevSheetPxH > 0 && this.panels.length > 0) {
+      const sx = px.w / this._prevSheetPxW;
+      const sy = px.h / this._prevSheetPxH;
+      for (const p of this.panels) {
+        p.x = Math.round(p.x * sx); p.y = Math.round(p.y * sy);
+        p.w = Math.round(p.w * sx); p.h = Math.round(p.h * sy);
+      }
+      for (const p of this.panels) this.renderPanel(p);
+    }
+    this._prevSheetPxW = px.w;
+    this._prevSheetPxH = px.h;
     this.sheetEl.style.width = `${px.w}px`;
     this.sheetEl.style.height = `${px.h}px`;
     this.sheetEl.style.aspectRatio = `${mm.w} / ${mm.h}`;
@@ -1011,6 +1026,18 @@ class LayoutController {
       el.addEventListener("click", (e) => {
         e.stopPropagation();
         this.selectPanel(p.id);
+      });
+      let _hdrTimer: ReturnType<typeof setTimeout> | null = null;
+      el.addEventListener("mouseenter", () => {
+        if (_hdrTimer) { clearTimeout(_hdrTimer); _hdrTimer = null; }
+        el!.querySelector<HTMLElement>(".paper-cell-header")?.classList.add("hdr-visible");
+      });
+      el.addEventListener("mouseleave", () => {
+        if (_hdrTimer) clearTimeout(_hdrTimer);
+        _hdrTimer = setTimeout(() => {
+          el!.querySelector<HTMLElement>(".paper-cell-header")?.classList.remove("hdr-visible");
+          _hdrTimer = null;
+        }, 3500);
       });
     }
     if (p.detailOf) el.classList.add("detail-panel"); else el.classList.remove("detail-panel");
