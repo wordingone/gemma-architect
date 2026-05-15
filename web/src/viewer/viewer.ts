@@ -79,6 +79,7 @@ export class Viewer {
   // visit, not back to the geometry origin.
   private pivotOffsetByUuid: Map<string, THREE.Matrix4> = new Map();
   private targetObject: THREE.Object3D | null = null;
+  private _ifcCentroidCache: THREE.Vector3 | null = null;
   private pivotMatrixBeforeDrag: THREE.Matrix4 = new THREE.Matrix4();
   private targetMatrixBeforeDrag: THREE.Matrix4 = new THREE.Matrix4();
   // Multi-select: all selected objects. When length > 1, the gumball pivot
@@ -421,6 +422,12 @@ export class Viewer {
             this.multiTargetMatricesBeforeDrag = this.multiTargets.map(mt => mt.matrix.clone());
           } else if (!dragging && this.pivotProxy && this.targetObject) {
             // Drag complete — geometry already updated live by objectChange.
+            // Recompute IFC centroid cache since the element has moved.
+            if (this.targetObject.userData?.expressID != null) {
+              const box = new THREE.Box3().setFromObject(this.targetObject);
+              if (!this._ifcCentroidCache) this._ifcCentroidCache = new THREE.Vector3();
+              box.getCenter(this._ifcCentroidCache);
+            }
             // Emit a chain fragment from the final world-space delta.
             const before = this.pivotMatrixBeforeDrag;
             const dWorld = new THREE.Matrix4().copy(this.pivotProxy.matrix).multiply(before.clone().invert());
@@ -935,6 +942,13 @@ export class Viewer {
       );
     }
     this.targetObject = obj;
+    if (obj?.userData?.expressID != null) {
+      const box = new THREE.Box3().setFromObject(obj);
+      this._ifcCentroidCache = new THREE.Vector3();
+      box.getCenter(this._ifcCentroidCache);
+    } else {
+      this._ifcCentroidCache = null;
+    }
     if (obj) {
       const cached = this.pivotOffsetByUuid.get(obj.uuid);
       if (cached) this.pivotOffset.copy(cached);
@@ -978,6 +992,13 @@ export class Viewer {
       this.pivotOffsetByUuid.set(this.targetObject.uuid, this.pivotOffset.clone());
     }
     this.targetObject = targets[0];
+    if (targets[0]?.userData?.expressID != null) {
+      const box = new THREE.Box3().setFromObject(targets[0]);
+      this._ifcCentroidCache = new THREE.Vector3();
+      box.getCenter(this._ifcCentroidCache);
+    } else {
+      this._ifcCentroidCache = null;
+    }
     this.pivotOffset.identity();
     this.relocate.active = false;
     this.updateRelocateBadge();
@@ -1114,10 +1135,8 @@ export class Viewer {
     // local, so the normal matrix path puts the gumball at the wrapper origin (shared by
     // all elements). Use the world-space bbox centroid instead.
     if (this.targetObject.userData?.expressID != null) {
-      const box = new THREE.Box3().setFromObject(this.targetObject);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      this.pivotProxy.position.copy(center);
+      if (!this._ifcCentroidCache) return;
+      this.pivotProxy.position.copy(this._ifcCentroidCache);
       this.pivotProxy.quaternion.identity();
       this.pivotProxy.scale.set(1, 1, 1);
       this.pivotProxy.updateMatrix();
