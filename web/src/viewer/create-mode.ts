@@ -3373,8 +3373,9 @@ export function initCreateMode(viewer: Viewer): void {
     } else {
       snapped = snapWorldForView(viewer, world);
     }
-    // For clip tool: carry the un-snapped view-plane z — clip placement is free-form, not grid-locked.
-    if (tool === "clip") snapped = { ...snapped, z: world.z };
+    // For clip tool: carry the un-snapped view-plane z unless a vertex was snapped
+    // (vertex snap already has the correct z from the geometry).
+    if (tool === "clip" && !vertex) snapped = { ...snapped, z: world.z };
     // Shift-hold: axis-lock from last pending point, or smart-track reference if no pending.
     const clickShiftBase: { x: number; y: number; z?: number } | null =
       _pending.length > 0 ? _pending[_pending.length - 1] : _smartTrackPt ?? null;

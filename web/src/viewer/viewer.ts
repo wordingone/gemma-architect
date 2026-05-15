@@ -1033,6 +1033,10 @@ export class Viewer {
   deleteSelected(): boolean {
     const removed = this.targetObject;
     if (!removed) return false;
+    // If the deleted object is a clip plane, remove the mathematical plane so
+    // the clipping effect is lifted along with the visualization mesh.
+    const clipLabel = removed.userData.clipLabel as string | undefined;
+    if (clipLabel) this.removeClippingPlane(clipLabel);
     // IFC sub-meshes are children of currentObject (not direct scene children);
     // remove from their actual parent so scene.remove() doesn't silently no-op.
     if (removed.parent === this.scene) {
@@ -1983,6 +1987,8 @@ export class Viewer {
 
   removeObject(obj: THREE.Object3D): boolean {
     if (!this.scene.children.includes(obj)) return false;
+    const clipLabel = obj.userData.clipLabel as string | undefined;
+    if (clipLabel) this.removeClippingPlane(clipLabel);
     this.scene.remove(obj);
     if (this.currentMesh === obj) this.currentMesh = null;
     if (this.currentEdges === obj) this.currentEdges = null;
