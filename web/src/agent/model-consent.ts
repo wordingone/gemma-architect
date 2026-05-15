@@ -164,14 +164,37 @@ function buildConsentDialog(onApprove: () => void, onCancel: () => void): HTMLEl
   return overlay;
 }
 
+// ---- Cache hit check -----------------------------------------------------------
+
+/**
+ * Check whether model files are already cached in the browser's Cache Storage
+ * (transformers.js uses cache key "transformers-cache", URL pattern:
+ *  https://huggingface.co/{modelId}/resolve/main/config.json).
+ *
+ * Returns false on any error — we'd rather show an unnecessary dialog than skip
+ * it and surprise the user with an unexpected download.
+ */
+async function hasCachedModel(modelId: string): Promise<boolean> {
+  try {
+    if (!("caches" in window)) return false;
+    const sentinelUrl = `https://huggingface.co/${modelId}/resolve/main/config.json`;
+    const cache = await caches.open("transformers-cache");
+    const match = await cache.match(sentinelUrl);
+    return match !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 // ---- Public API ----------------------------------------------------------------
 
 /**
  * Call instead of prefetchModel() when running in-browser (no REMOTE_URL).
- * If the user has already consented, calls onProceed() immediately.
+ * If the user has already consented OR model files are already cached
+ * (e.g. localStorage cleared after a prior download), calls onProceed() immediately.
  * Otherwise shows the consent dialog first.
  */
-export function checkConsentAndLoad(onProceed: () => void): void {
+export function checkConsentAndLoad(modelId: string, onProceed: () => void): void {
   wireProgressEvents();
 
   if (hasConsent()) {
@@ -179,9 +202,17 @@ export function checkConsentAndLoad(onProceed: () => void): void {
     return;
   }
 
-  const overlay = buildConsentDialog(
-    () => { grantConsent(); onProceed(); },
-    () => { /* user cancelled — do nothing; model won't load until next attempt */ },
-  );
-  document.body.appendChild(overlay);
+  // If model files are already cached, skip the dialog — no download will happen.
+  hasCachedModel(modelId).then((cached) => {
+    if (cached) {
+      grantConsent();
+      onProceed();
+      return;
+    }
+    const overlay = buildConsentDialog(
+      () => { grantConsent(); onProceed(); },
+      () => { /* user cancelled — no load until next attempt */ },
+    );
+    document.body.appendChild(overlay);
+  });
 }
