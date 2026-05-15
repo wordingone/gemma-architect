@@ -60,7 +60,7 @@ function pixelDeltaToWorld(viewer: Viewer, face: Face, dxPx: number, dyPx: numbe
   if (!box) return 0;
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
-  const camera = viewer.getCamera() as THREE.Camera;
+  const camera = viewer.getActiveCamera();
   const center = getFaceCenter(box, face);
   const axis = FACE_AXIS[face];
 
@@ -86,7 +86,7 @@ function updatePositions(): void {
   const canvas = _viewer.getCanvas();
   const canvasRect = canvas.getBoundingClientRect();
   const vpRect = _vpEl.getBoundingClientRect();
-  const camera = _viewer.getCamera() as THREE.Camera;
+  const camera = _viewer.getActiveCamera();
   const offsetX = canvasRect.left - vpRect.left;
   const offsetY = canvasRect.top - vpRect.top;
 

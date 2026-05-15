@@ -252,7 +252,7 @@ function findHostMesh(
     -((clientY - rect.top) / rect.height) * 2 + 1,
   );
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
+  raycaster.setFromCamera(ndc, viewer.getActiveCamera());
   const hits = raycaster.intersectObjects(viewer.getScene().children, true);
   for (const hit of hits) {
     const obj = hit.object;
@@ -323,7 +323,7 @@ function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): Sn
       -((clientY - _occRect.top) / _occRect.height) * 2 + 1,
     );
     const _occRay = new THREE.Raycaster();
-    _occRay.setFromCamera(_occNdc, viewer.getCamera() as THREE.PerspectiveCamera);
+    _occRay.setFromCamera(_occNdc, viewer.getActiveCamera());
     const _occMeshes: THREE.Mesh[] = [];
     viewer.getScene().traverse((o) => {
       if (o.userData.noSnap) return;
@@ -449,7 +449,7 @@ function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): Sn
     -((clientY - rect.top) / rect.height) * 2 + 1,
   );
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
+  raycaster.setFromCamera(ndc, viewer.getActiveCamera());
 
   // Filter to real Mesh objects; skip helpers, noSnap-tagged objects, and the
   // object currently being transformed (prevents snapping to itself).
@@ -523,8 +523,8 @@ function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: number): Sn
 function projectToScreen(viewer: Viewer, x: number, y: number, z = 0): { x: number; y: number } | null {
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
-  const camera = viewer.getCamera();
-  const v = new THREE.Vector3(x, y, z).project(camera as THREE.PerspectiveCamera);
+  const camera = viewer.getActiveCamera();
+  const v = new THREE.Vector3(x, y, z).project(camera);
   if (v.z > 1) return null; // behind camera
   return {
     x: (v.x * 0.5 + 0.5) * rect.width + rect.left,
@@ -532,7 +532,9 @@ function projectToScreen(viewer: Viewer, x: number, y: number, z = 0): { x: numb
   };
 }
 
-// Unproject canvas-space (px) to world coords on the XY plane (z=0).
+// Unproject canvas-space (px) to world coords on the view-derived working plane.
+// For top/persp views this is Z=0 (XY plane). Front/back use Y=0 (XZ plane).
+// Left/right use X=0 (YZ plane). Uses the active camera so ortho views unproject correctly.
 function unprojectToXY(viewer: Viewer, clientX: number, clientY: number): THREE.Vector3 | null {
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
@@ -540,15 +542,24 @@ function unprojectToXY(viewer: Viewer, clientX: number, clientY: number): THREE.
     ((clientX - rect.left) / rect.width) * 2 - 1,
     -((clientY - rect.top) / rect.height) * 2 + 1,
   );
-  const camera = viewer.getCamera();
+  const camera = viewer.getActiveCamera();
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(ndc, camera as THREE.PerspectiveCamera);
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  raycaster.setFromCamera(ndc, camera);
+  // View-derived working plane: XY for top/default, XZ for front/back, YZ for right/left.
+  let planeNormal: THREE.Vector3;
+  switch (viewer.activeView) {
+    case "front": case "back":  planeNormal = new THREE.Vector3(0, 1, 0); break;
+    case "right": case "left":  planeNormal = new THREE.Vector3(1, 0, 0); break;
+    default:                    planeNormal = new THREE.Vector3(0, 0, 1); break;
+  }
+  const plane = new THREE.Plane(planeNormal, 0);
   const point = new THREE.Vector3();
   const hit = raycaster.ray.intersectPlane(plane, point);
   if (hit) return point;
-  // Ray nearly parallel to Z=0 (near-horizontal camera) — fall back to camera XY projected onto Z=0.
-  return new THREE.Vector3(camera.position.x, camera.position.y, 0);
+  // Ray parallel to working plane — project camera position onto it as fallback.
+  const fallback = new THREE.Vector3();
+  plane.projectPoint(camera.position, fallback);
+  return fallback;
 }
 
 // Raycast against scene geometry to inherit Z elevation (for level placement, AC B.1).
@@ -561,7 +572,7 @@ function getGeometryZ(viewer: Viewer, clientX: number, clientY: number): number 
     -((clientY - rect.top) / rect.height) * 2 + 1,
   );
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
+  raycaster.setFromCamera(ndc, viewer.getActiveCamera());
   const hits = raycaster.intersectObjects(viewer.getScene().children, true);
   return hits.length > 0 ? hits[0].point.z : 0;
 }
@@ -1724,7 +1735,7 @@ function unprojectToAxisLine(
     -((clientY - rect.top) / rect.height) * 2 + 1,
   );
   const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
+  raycaster.setFromCamera(ndc, viewer.getActiveCamera());
   const ro = raycaster.ray.origin.clone();
   const rd = raycaster.ray.direction.clone();
   const w = ro.sub(basePt); // w = rayOrigin - basePt
@@ -2304,7 +2315,7 @@ function opRaycastObject(
     -((clientY - rect.top) / rect.height) * 2 + 1,
   );
   const rc = new THREE.Raycaster();
-  rc.setFromCamera(ndc, viewer.getCamera() as THREE.PerspectiveCamera);
+  rc.setFromCamera(ndc, viewer.getActiveCamera());
 
   // Pass 1 — screen-proximity for thin geometry (Lines + Points).
   // Ray intersection misses zero-volume objects; proximity is robust for all view angles.
@@ -2970,11 +2981,18 @@ function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
 function screenYtoDz(viewer: Viewer, screenY: number, base: { x: number; y: number; z?: number }): number {
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
-  const cam = viewer.getCamera() as THREE.PerspectiveCamera;
-  const fovRad = THREE.MathUtils.degToRad(cam.fov);
+  const cam = viewer.getActiveCamera();
   const baseZ = base.z ?? 0;
-  const camDist = Math.max(0.5, cam.position.distanceTo(new THREE.Vector3(base.x, base.y, baseZ)));
-  const mPerPx = 2 * camDist * Math.tan(fovRad / 2) / rect.height;
+  // Ortho: world-units per pixel = frustum height / screen height.
+  // Persp: use FOV + distance formula.
+  let mPerPx: number;
+  if (cam instanceof THREE.OrthographicCamera) {
+    mPerPx = (cam.top - cam.bottom) / rect.height;
+  } else {
+    const fovRad = THREE.MathUtils.degToRad((cam as THREE.PerspectiveCamera).fov);
+    const camDist = Math.max(0.5, cam.position.distanceTo(new THREE.Vector3(base.x, base.y, baseZ)));
+    mPerPx = 2 * camDist * Math.tan(fovRad / 2) / rect.height;
+  }
   const baseScreen = projectToScreen(viewer, base.x, base.y, baseZ);
   const refScreenY = baseScreen?.y ?? (rect.top + rect.height / 2);
   return (refScreenY - screenY) * mPerPx;

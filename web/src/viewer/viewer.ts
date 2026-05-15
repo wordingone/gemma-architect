@@ -1932,6 +1932,13 @@ export class Viewer {
     return this.camera;
   }
 
+  // Returns the camera currently active for the main viewport pane.
+  // In ortho views this is the OrthographicCamera; in persp it's this.camera.
+  getActiveCamera(): THREE.Camera {
+    const perspPane = this.panes.find(p => p.view === "persp");
+    return perspPane?.camera ?? this.camera;
+  }
+
   addMesh(mesh: THREE.Object3D, _kind?: string): void {
     const ctx = getCurrentDispatchCtx();
     if (ctx && mesh.userData.dispatchArgs === undefined) {
@@ -2392,6 +2399,13 @@ export class Viewer {
       case "extents": dir = new THREE.Vector3(1, 1, 1.5).normalize(); break;
     }
 
+    // #594: orient floor grid to match the ortho view's working plane.
+    // Front/back → XZ plane (grid normal +Y); right/left → YZ (normal +X); else XY (normal +Z).
+    switch (name) {
+      case "front": case "back":  this.grid.rotation.set(0, 0, 0); break;
+      case "right": case "left":  this.grid.rotation.set(0, 0, Math.PI / 2); break;
+      default:                    this.grid.rotation.set(Math.PI / 2, 0, 0); break;
+    }
     const ORTHO_VIEWS = new Set(["top", "bottom", "front", "back", "left", "right"]);
     if (ORTHO_VIEWS.has(name) && perspPane) {
       // Switch persp pane to orthographic projection for axis-aligned views (#331).
