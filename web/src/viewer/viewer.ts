@@ -794,7 +794,7 @@ export class Viewer {
         const pickables = this.scene.children.filter(
           c => c !== this.grid && c !== this.axes && !(c instanceof THREE.Sprite) &&
                !(c instanceof THREE.DirectionalLight) && !(c instanceof THREE.AmbientLight) &&
-               !gizmoSet.has(c) && c !== this.pivotProxy
+               !gizmoSet.has(c) && c !== this.pivotProxy && c !== this._cplaneGizmo.group
         );
         const hits = this.raycaster.intersectObjects(pickables, true);
         const hit = hits[0];
@@ -852,7 +852,7 @@ export class Viewer {
     const pickables = this.scene.children.filter(
       c => c !== this.grid && c !== this.axes && !(c instanceof THREE.Sprite) &&
            !(c instanceof THREE.DirectionalLight) && !(c instanceof THREE.AmbientLight) &&
-           !gizmoSet.has(c) && c !== this.pivotProxy
+           !gizmoSet.has(c) && c !== this.pivotProxy && c !== this._cplaneGizmo.group
     );
     const hits = this.raycaster.intersectObjects(pickables, true);
     const hit = hits[0]?.object ?? null;
@@ -1819,6 +1819,7 @@ export class Viewer {
       ...(this.pivotProxy ? [this.pivotProxy] : []),
       ...(this.snapMarker ? [this.snapMarker] : []),
       ...this.gizmos,
+      this._cplaneGizmo.group,
     ]);
     const toRemove = this.scene.children.filter(
       (c) => !infraSet.has(c) && !(c instanceof THREE.Light),
