@@ -22,6 +22,35 @@ import type { IfcHierarchyElement } from "../ifc/ifc-types";
 import { subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch.js";
 
+// IFC class → native architectural layer name.
+// Keys are uppercase IFC class strings; values are user-visible layer labels.
+const IFC_TO_LAYER: Record<string, string> = {
+  IFCWALL: "Walls", IFCWALLSTANDARDCASE: "Walls",
+  IFCSLAB: "Slabs", IFCRAMP: "Slabs",
+  IFCCOLUMN: "Columns",
+  IFCBEAM: "Beams", IFCMEMBER: "Beams",
+  IFCDOOR: "Doors",
+  IFCWINDOW: "Windows",
+  IFCSTAIR: "Stairs", IFCSTAIRFLIGHT: "Stairs",
+  IFCRAILING: "Railings",
+  IFCROOF: "Roof",
+  IFCSPACE: "Spaces",
+  IFCCURTAINWALL: "Curtain Walls", IFCPLATE: "Curtain Walls",
+  IFCFURNISHINGELEMENT: "Furniture",
+  IFCANNOTATION: "Annotations", IFCVIRTUALELEMENT: "Annotations",
+  IFCFOOTING: "Structure", IFCPILE: "Structure",
+};
+const LAYER_ORDER = [
+  "Walls", "Slabs", "Columns", "Beams", "Doors", "Windows",
+  "Stairs", "Railings", "Roof", "Curtain Walls", "Spaces",
+  "Furniture", "Annotations", "Structure", "Other",
+];
+function ifcClassToLayer(ifcClass: string): string | null {
+  const key = ifcClass.toUpperCase();
+  if (key === "IFCSITE" || key === "IFCBUILDING" || key === "IFCBUILDINGSTOREY") return null;
+  return IFC_TO_LAYER[key] ?? "Other";
+}
+
 type IfcClass = "ARCHITECTURE" | "STRUCTURE" | "OPENINGS" | "CIRCULATION" | "MESHES";
 function classifyByName(name: string): IfcClass {
   const n = name.toLowerCase();
@@ -138,32 +167,36 @@ export class ScenePanel {
 
   private render(summary: SceneSummary): void {
     const totalTris = this.nodes.reduce((s, n) => s + n.triangles, 0);
-    const fmtStr = summary.format.toUpperCase();
-    const filenameStr = summary.filename ? ` &middot; ${escapeHtml(summary.filename)}` : "";
+    // For IFC scenes: show filename leading, no format prefix, "elements" not "entities".
+    const isIfc = summary.format.toLowerCase() === "ifc";
+    const fmtStr = isIfc ? "" : summary.format.toUpperCase();
+    const filenameStr = summary.filename
+      ? escapeHtml(summary.filename)
+      : (fmtStr || "scene");
     const entityStr = summary.entityCount != null
-      ? ` &middot; ${summary.entityCount.toLocaleString()} entit${summary.entityCount === 1 ? "y" : "ies"}`
+      ? ` &middot; ${summary.entityCount.toLocaleString()} element${summary.entityCount === 1 ? "" : "s"}`
       : "";
-    const schemaStr = summary.schema ? ` &middot; ${escapeHtml(summary.schema)}` : "";
 
     let outlinerHtml = `<div class="outliner">`;
 
     if (summary.hierarchy && summary.hierarchy.length > 0) {
-      // Group by IFC class — every element has one; eliminates "Unassigned" bucket
-      // caused by elements that reach storeys transitively (IfcSpace → IfcBuildingStorey)
-      // rather than via direct IfcRelContainedInSpatialStructure.
-      const classMap = new Map<string, IfcHierarchyElement[]>();
+      // Group by native architectural layer (Walls, Slabs, …) translated from IFC class.
+      // Structural containers (IfcSite/IfcBuilding/IfcBuildingStorey) are filtered out.
+      const layerMap = new Map<string, IfcHierarchyElement[]>();
       for (const el of summary.hierarchy) {
-        if (!classMap.has(el.ifcClass)) classMap.set(el.ifcClass, []);
-        classMap.get(el.ifcClass)!.push(el);
+        const layer = ifcClassToLayer(el.ifcClass);
+        if (layer === null) continue; // skip structural containers
+        if (!layerMap.has(layer)) layerMap.set(layer, []);
+        layerMap.get(layer)!.push(el);
       }
-      const classKeys = [...classMap.keys()].sort();
-      for (const cls of classKeys) {
-        const elems = classMap.get(cls)!;
+      for (const layer of LAYER_ORDER) {
+        const elems = layerMap.get(layer);
+        if (!elems || elems.length === 0) continue;
         outlinerHtml += `
-          <div class="outliner-section" data-section="${escapeAttr(`class-${cls}`)}">
+          <div class="outliner-section" data-section="${escapeAttr(`layer-${layer}`)}">
             <div class="outliner-section-header">
               ${iconSVG("chevron-down", 9)}
-              ${escapeHtml(cls)}
+              ${escapeHtml(layer)}
               <span class="count">${elems.length}</span>
             </div>`;
         for (const el of elems) {
@@ -213,7 +246,7 @@ export class ScenePanel {
     }
     outlinerHtml += `</div>`;
 
-    const metaRow = `<div class="sp-meta-row" style="padding:6px 10px; font-family:var(--mono); font-size:10px; color:var(--ink-faint); border-bottom:1px solid var(--hairline-soft); display:flex; align-items:center; justify-content:space-between;"><span>${fmtStr}${filenameStr}${entityStr}${schemaStr} &middot; ${this.nodes.length} mesh${this.nodes.length === 1 ? "" : "es"} &middot; ${totalTris.toLocaleString()} tri</span><button class="sp-unload-btn" data-action="clear-scene" title="Unload scene" type="button" style="background:none; border:none; cursor:pointer; color:var(--ink-faint); font-size:10px; padding:0 2px; line-height:1;">&#xD7; Unload</button></div>`;
+    const metaRow = `<div class="sp-meta-row" style="padding:6px 10px; font-family:var(--mono); font-size:10px; color:var(--ink-faint); border-bottom:1px solid var(--hairline-soft); display:flex; align-items:center; justify-content:space-between;"><span>${filenameStr}${entityStr} &middot; ${this.nodes.length} mesh${this.nodes.length === 1 ? "" : "es"} &middot; ${totalTris.toLocaleString()} tri</span><button class="sp-unload-btn" data-action="clear-scene" title="Unload scene" type="button" style="background:none; border:none; cursor:pointer; color:var(--ink-faint); font-size:10px; padding:0 2px; line-height:1;">&#xD7; Unload</button></div>`;
     this.root.innerHTML = metaRow + outlinerHtml;
     this.wireRowActions();
     if (summary.hierarchy && summary.hierarchy.length > 0) this.autoSelectFirstIfc();

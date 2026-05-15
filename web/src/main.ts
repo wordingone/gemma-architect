@@ -474,8 +474,8 @@ function getActiveLevelElevation(): number {
   return levelStore.get(getActiveLevelId())?.elevation ?? 0;
 }
 
-registerHandler("IfcWall", (args) => {
-  const cplane = resolveCPlane("IfcWall", args as Record<string, unknown>, viewer);
+registerHandler("SdWall", (args) => {
+  const cplane = resolveCPlane("SdWall", args as Record<string, unknown>, viewer);
   const rawProfile = args.profile as [number, number][] | undefined;
   const wallLen = (args.length as number | undefined) ?? 4;
   const profile: [number, number][] = rawProfile ?? [[0, 0], [wallLen, 0]];
@@ -503,18 +503,18 @@ registerHandler("IfcWall", (args) => {
     mesh.rotation.z = Math.atan2(dy, dx);
   }
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcWall";
+  mesh.userData.creator = "SdWall";
   mesh.userData.cplaneKind = cplane.kind;
-  mesh.userData.layerId = resolveLayerId("IfcWall", args);
+  mesh.userData.layerId = resolveLayerId("SdWall", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
-  pushAction(mesh, "IfcWall");
+  pushAction(mesh, "SdWall");
   return { created: "wall", length: len, thickness: t, height: wallH };
 });
 
-registerHandler("IfcSlab", (args) => {
-  const cplane = resolveCPlane("IfcSlab", args as Record<string, unknown>, viewer);
+registerHandler("SdSlab", (args) => {
+  const cplane = resolveCPlane("SdSlab", args as Record<string, unknown>, viewer);
   const w = (args.width as number | undefined) ?? (args.length as number | undefined) ?? 4;
   const d = (args.depth as number | undefined) ?? (args.width as number | undefined) ?? 4;
   const t = (args.thickness as number | undefined) ?? 0.2;
@@ -524,18 +524,18 @@ registerHandler("IfcSlab", (args) => {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcSlab";
+  mesh.userData.creator = "SdSlab";
   mesh.userData.cplaneKind = cplane.kind;
-  mesh.userData.layerId = resolveLayerId("IfcSlab", args);
+  mesh.userData.layerId = resolveLayerId("SdSlab", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
-  pushAction(mesh, "IfcSlab");
+  pushAction(mesh, "SdSlab");
   return { created: "slab", width: w, depth: d };
 });
 
-registerHandler("IfcColumn", (args) => {
-  const cplane = resolveCPlane("IfcColumn", args as Record<string, unknown>, viewer);
+registerHandler("SdColumn", (args) => {
+  const cplane = resolveCPlane("SdColumn", args as Record<string, unknown>, viewer);
   const s = (args.size as number | undefined) ?? 0.3;
   const h = (args.height as number | undefined) ?? 4;
   const geom = new THREE.BoxGeometry(s, s, h);
@@ -546,19 +546,19 @@ registerHandler("IfcColumn", (args) => {
   if (p) mesh.position.set(p[0], p[1], getActiveLevelElevation());
   else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcColumn";
+  mesh.userData.creator = "SdColumn";
   mesh.userData.cplaneKind = cplane.kind;
-  mesh.userData.layerId = resolveLayerId("IfcColumn", args);
+  mesh.userData.layerId = resolveLayerId("SdColumn", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
-  pushAction(mesh, "IfcColumn");
+  pushAction(mesh, "SdColumn");
   return { created: "column", height: h };
 });
 
 // ── IFC Tier 2: Beam / Stair / Door / Window / Roof / Space ─────────────────
 
-registerHandler("IfcBeam", (args) => {
+registerHandler("SdBeam", (args) => {
   const s  = (args.start as number[] | undefined) ?? [0, 0, 3];
   const e  = (args.end   as number[] | undefined) ?? [4, 0, 3];
   const dx = e[0] - s[0], dy = e[1] - s[1], dz = (e[2] ?? 0) - (s[2] ?? 0);
@@ -570,15 +570,15 @@ registerHandler("IfcBeam", (args) => {
   mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, (s[2] + e[2]) / 2 || 3);
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcBeam";
-  mesh.userData.layerId = resolveLayerId("IfcBeam", args);
+  mesh.userData.creator = "SdBeam";
+  mesh.userData.layerId = resolveLayerId("SdBeam", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "beam", length: len };
 });
 
-registerHandler("IfcMember", (args) => {
+registerHandler("SdMember", (args) => {
   const length   = (args.length as number | undefined) ?? 3;
   const axisRaw  = args.axis_curve as [number, number, number] | undefined;
   const axis     = axisRaw ?? [0, 0, 1];
@@ -597,15 +597,15 @@ registerHandler("IfcMember", (args) => {
   const dir = new THREE.Vector3(axis[0], axis[1], axis[2]).normalize();
   if (Math.abs(dir.dot(up)) < 0.9999) mesh.quaternion.setFromUnitVectors(up, dir);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcMember";
-  mesh.userData.layerId = resolveLayerId("IfcMember", args);
+  mesh.userData.creator = "SdMember";
+  mesh.userData.layerId = resolveLayerId("SdMember", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "member", length, profile_points: pts.length };
 });
 
-registerHandler("IfcStair", (args) => {
+registerHandler("SdStair", (args) => {
   const s    = (args.start as number[] | undefined) ?? [0, 0, 0];
   const e    = (args.end   as number[] | undefined) ?? [3, 0, 0];
   const w    = (args.width as number | undefined) ?? 1;
@@ -622,8 +622,8 @@ registerHandler("IfcStair", (args) => {
   mesh.position.set(s[0], s[1], (s[2] as number | undefined) ?? getActiveLevelElevation());
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcStair";
-  mesh.userData.layerId = resolveLayerId("IfcStair", args);
+  mesh.userData.creator = "SdStair";
+  mesh.userData.layerId = resolveLayerId("SdStair", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
@@ -763,12 +763,12 @@ function buildWindowGroup(w: number, h: number, wallT: number): THREE.Group {
   return group;
 }
 
-registerHandler("IfcDoor", (args) => {
+registerHandler("SdDoor", (args) => {
   const hostUuidDoor = args.hostUuid as string | undefined;
   const hostObjDoor = hostUuidDoor
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidDoor) ?? undefined
     : undefined;
-  const cplane = resolveCPlane("IfcDoor", args as Record<string, unknown>, viewer, hostObjDoor);
+  const cplane = resolveCPlane("SdDoor", args as Record<string, unknown>, viewer, hostObjDoor);
   const w     = (args.width  as number | undefined) ?? 0.9;
   const h     = (args.height as number | undefined) ?? 2.1;
   const wallT = (args.wallThickness as number | undefined) ?? 0.2;
@@ -785,13 +785,13 @@ registerHandler("IfcDoor", (args) => {
     group.quaternion.copy(q);
   }
   group.userData.kind = "brep";
-  group.userData.creator = "IfcDoor";
+  group.userData.creator = "SdDoor";
   group.userData.cplaneKind = cplane.kind;
-  group.userData.layerId = resolveLayerId("IfcDoor", args);
+  group.userData.layerId = resolveLayerId("SdDoor", args);
   group.userData.levelId = getActiveLevelId();
   group.userData.dispatchArgs = args;
   viewer.addMesh(group, "brep");
-  pushAction(group, "IfcDoor");
+  pushAction(group, "SdDoor");
   let voidCut = false;
   const hostUuid = args.hostUuid as string | undefined;
   if (hostUuid) {
@@ -806,12 +806,12 @@ registerHandler("IfcDoor", (args) => {
   return { created: "door", width: w, height: h, submeshes: group.children.length, voidCut };
 });
 
-registerHandler("IfcWindow", (args) => {
+registerHandler("SdWindow", (args) => {
   const hostUuidWin = args.hostUuid as string | undefined;
   const hostObjWin = hostUuidWin
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidWin) ?? undefined
     : undefined;
-  const cplane = resolveCPlane("IfcWindow", args as Record<string, unknown>, viewer, hostObjWin);
+  const cplane = resolveCPlane("SdWindow", args as Record<string, unknown>, viewer, hostObjWin);
   const w     = (args.width  as number | undefined) ?? 1.2;
   const h     = (args.height as number | undefined) ?? 1.5;
   const sill  = (args.sillH  as number | undefined) ?? 0.9;
@@ -829,13 +829,13 @@ registerHandler("IfcWindow", (args) => {
     group.quaternion.copy(q);
   }
   group.userData.kind = "brep";
-  group.userData.creator = "IfcWindow";
+  group.userData.creator = "SdWindow";
   group.userData.cplaneKind = cplane.kind;
-  group.userData.layerId = resolveLayerId("IfcWindow", args);
+  group.userData.layerId = resolveLayerId("SdWindow", args);
   group.userData.levelId = getActiveLevelId();
   group.userData.dispatchArgs = args;
   viewer.addMesh(group, "brep");
-  pushAction(group, "IfcWindow");
+  pushAction(group, "SdWindow");
   let voidCut = false;
   const hostUuid = args.hostUuid as string | undefined;
   if (hostUuid) {
@@ -993,7 +993,7 @@ function buildRoofGeometry(
   }
 }
 
-registerHandler("IfcRoof", (args) => {
+registerHandler("SdRoof", (args) => {
   const roofType = (args.roofType as string | undefined) ?? "flat";
   const pitch   = (args.pitchDeg    as number | undefined) ?? 30;
   const fp      = args.footprint as number[][] | undefined;
@@ -1011,7 +1011,7 @@ registerHandler("IfcRoof", (args) => {
   const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 3);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcRoof";
+  mesh.userData.creator = "SdRoof";
   mesh.userData.roofType = roofType;
   mesh.userData.ifcPredefinedType = ({
     flat: "FLAT_ROOF",
@@ -1021,14 +1021,14 @@ registerHandler("IfcRoof", (args) => {
     curved: "BARREL_ROOF",
     combination: "MANSARD_ROOF",
   } as Record<string, string>)[roofType] ?? "NOTDEFINED";
-  mesh.userData.layerId = resolveLayerId("IfcRoof", args);
+  mesh.userData.layerId = resolveLayerId("SdRoof", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "roof", roofType, width: w, depth: d, ridgeHeight: ridgeH, ifcPredefinedType: mesh.userData.ifcPredefinedType };
 });
 
-registerHandler("IfcSpace", (args) => {
+registerHandler("SdSpace", (args) => {
   const h  = (args.height as number | undefined) ?? 2.8;
   const fp = args.footprint as number[][] | undefined;
   let w = 5, d = 4;
@@ -1044,8 +1044,8 @@ registerHandler("IfcSpace", (args) => {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcSpace";
-  mesh.userData.layerId = resolveLayerId("IfcSpace", args);
+  mesh.userData.creator = "SdSpace";
+  mesh.userData.layerId = resolveLayerId("SdSpace", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   if (args.name) mesh.userData.spaceName = args.name as string;
@@ -1055,7 +1055,7 @@ registerHandler("IfcSpace", (args) => {
 
 // ── IFC Tier 3: Foundation / Ceiling / CurtainWall / Skylight / Opening / Ramp / Railing / Grid / Level / Datum ──
 
-registerHandler("IfcFoundation", (args) => {
+registerHandler("SdFoundation", (args) => {
   const w = (args.width     as number | undefined) ?? 6;
   const d = (args.depth     as number | undefined) ?? 6;
   const t = (args.thickness as number | undefined) ?? 0.5;
@@ -1067,15 +1067,15 @@ registerHandler("IfcFoundation", (args) => {
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
   else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcFoundation";
-  mesh.userData.layerId = resolveLayerId("IfcFoundation", args);
+  mesh.userData.creator = "SdFoundation";
+  mesh.userData.layerId = resolveLayerId("SdFoundation", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "foundation", width: w, depth: d };
 });
 
-registerHandler("IfcCeiling", (args) => {
+registerHandler("SdCeiling", (args) => {
   const w    = (args.width     as number | undefined) ?? 5;
   const d    = (args.depth     as number | undefined) ?? 4;
   const t    = (args.thickness as number | undefined) ?? 0.05;
@@ -1086,15 +1086,15 @@ registerHandler("IfcCeiling", (args) => {
   const pos  = args.position as number[] | undefined;
   mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, elev);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcCeiling";
-  mesh.userData.layerId = resolveLayerId("IfcCeiling", args);
+  mesh.userData.creator = "SdCeiling";
+  mesh.userData.layerId = resolveLayerId("SdCeiling", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "ceiling", width: w, depth: d, elevation: elev };
 });
 
-registerHandler("IfcCurtainWall", (args) => {
+registerHandler("SdCurtainWall", (args) => {
   const wallLen = (args.length as number | undefined) ?? 6;
   const h  = (args.height as number | undefined) ?? 3;
   const t  = 0.02;
@@ -1106,15 +1106,15 @@ registerHandler("IfcCurtainWall", (args) => {
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
   else mesh.position.z = getActiveLevelElevation();
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcCurtainWall";
-  mesh.userData.layerId = resolveLayerId("IfcCurtainWall", args);
+  mesh.userData.creator = "SdCurtainWall";
+  mesh.userData.layerId = resolveLayerId("SdCurtainWall", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "curtainwall", length: wallLen, height: h };
 });
 
-registerHandler("IfcPlate", (args) => {
+registerHandler("SdPlate", (args) => {
   const thickness = (args.thickness as number | undefined) ?? 0.05;
   const normRaw   = args.orientation as [number, number, number] | undefined;
   const norm      = normRaw ?? [0, 1, 0];
@@ -1133,15 +1133,15 @@ registerHandler("IfcPlate", (args) => {
   const dir = new THREE.Vector3(norm[0], norm[1], norm[2]).normalize();
   if (Math.abs(dir.dot(up)) < 0.9999) mesh.quaternion.setFromUnitVectors(up, dir);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcPlate";
-  mesh.userData.layerId = resolveLayerId("IfcPlate", args);
+  mesh.userData.creator = "SdPlate";
+  mesh.userData.layerId = resolveLayerId("SdPlate", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "plate", thickness, profile_points: pts.length };
 });
 
-registerHandler("IfcSkylight", (args) => {
+registerHandler("SdSkylight", (args) => {
   const w    = (args.width     as number | undefined) ?? 1.2;
   const d    = (args.depth     as number | undefined) ?? 1.2;
   const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 3);
@@ -1152,20 +1152,20 @@ registerHandler("IfcSkylight", (args) => {
   if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elev);
   else mesh.position.z = elev;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcSkylight";
-  mesh.userData.layerId = resolveLayerId("IfcSkylight", args);
+  mesh.userData.creator = "SdSkylight";
+  mesh.userData.layerId = resolveLayerId("SdSkylight", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "skylight", width: w, depth: d };
 });
 
-registerHandler("IfcOpening", (args) => {
+registerHandler("SdOpening", (args) => {
   const hostUuidOp = args.hostUuid as string | undefined;
   const hostObjOp = hostUuidOp
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidOp) ?? undefined
     : undefined;
-  const cplane = resolveCPlane("IfcOpening", args as Record<string, unknown>, viewer, hostObjOp);
+  const cplane = resolveCPlane("SdOpening", args as Record<string, unknown>, viewer, hostObjOp);
   const w = (args.width  as number | undefined) ?? 1;
   const h = (args.height as number | undefined) ?? 2;
   const t = 0.25;
@@ -1185,9 +1185,9 @@ registerHandler("IfcOpening", (args) => {
     mesh.quaternion.copy(q);
   }
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcOpening";
+  mesh.userData.creator = "SdOpening";
   mesh.userData.cplaneKind = cplane.kind;
-  mesh.userData.layerId = resolveLayerId("IfcOpening", args);
+  mesh.userData.layerId = resolveLayerId("SdOpening", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
@@ -1205,7 +1205,7 @@ registerHandler("IfcOpening", (args) => {
   return { created: "opening", width: w, height: h, voidCut };
 });
 
-registerHandler("IfcRamp", (args) => {
+registerHandler("SdRamp", (args) => {
   const s   = (args.start as number[] | undefined) ?? [0, 0, 0];
   const e   = (args.end   as number[] | undefined) ?? [4, 0, 0];
   const w   = (args.width as number | undefined) ?? 1.2;
@@ -1218,15 +1218,15 @@ registerHandler("IfcRamp", (args) => {
   mesh.position.set(s[0], s[1], (s[2] as number | undefined) ?? getActiveLevelElevation());
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcRamp";
-  mesh.userData.layerId = resolveLayerId("IfcRamp", args);
+  mesh.userData.creator = "SdRamp";
+  mesh.userData.layerId = resolveLayerId("SdRamp", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "ramp", run, width: w };
 });
 
-registerHandler("IfcRailing", (args) => {
+registerHandler("SdRailing", (args) => {
   const s   = (args.start  as number[] | undefined) ?? [0, 0, 0];
   const e   = (args.end    as number[] | undefined) ?? [3, 0, 0];
   const h   = (args.height as number | undefined) ?? 1;
@@ -1239,15 +1239,15 @@ registerHandler("IfcRailing", (args) => {
   mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, (s[2] as number | undefined) ?? getActiveLevelElevation());
   mesh.rotation.z = Math.atan2(dy, dx);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcRailing";
-  mesh.userData.layerId = resolveLayerId("IfcRailing", args);
+  mesh.userData.creator = "SdRailing";
+  mesh.userData.layerId = resolveLayerId("SdRailing", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
   return { created: "railing", length: len, height: h };
 });
 
-registerHandler("IfcGrid", (args) => {
+registerHandler("SdRefGrid", (args) => {
   const spacing  = (args.spacing  as number         | undefined) ?? 5;
   const count    = Math.max(2, Math.min(10, Math.trunc((args.count as number | undefined) ?? 4)));
   const name     = (args.name     as string         | undefined) ?? `Grid ${gridStore.all().length + 1}`;
@@ -1306,7 +1306,7 @@ registerHandler("setActiveGrid", (args) => {
   return { activeGridId: id };
 });
 
-registerHandler("IfcLevel", (args) => {
+registerHandler("SdLevel", (args) => {
   const elev   = (args.elevation as number | undefined) ?? 0;
   const name   = (args.name as string | undefined) ?? `Level ${levelStore.all().length}`;
   const height = (args.height as number | undefined) ?? 3.0;
@@ -1318,7 +1318,7 @@ registerHandler("IfcLevel", (args) => {
   const mesh   = new THREE.Mesh(geom, mat);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcLevel";
+  mesh.userData.creator = "SdLevel";
   mesh.userData.levelId = level.id;
   viewer.addMesh(mesh, "brep");
   return { created: "level", elevation: elev, levelId: level.id };
@@ -1347,7 +1347,7 @@ registerHandler("setLevelVisible", (args) => {
   return { ok: true, levelId: id, visible };
 });
 
-registerHandler("IfcDatum", (args) => {
+registerHandler("SdDatum", (args) => {
   const pos  = (args.position as number[] | undefined);
   const elev = (args.elevation as number | undefined) ?? pos?.[2] ?? 0;
   const geom = new THREE.SphereGeometry(0.15, 8, 8);
@@ -1355,13 +1355,13 @@ registerHandler("IfcDatum", (args) => {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, elev);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcDatum";
+  mesh.userData.creator = "SdDatum";
   if (args.label) mesh.userData.label = args.label as string;
   viewer.addMesh(mesh, "brep");
   return { created: "datum", elevation: elev };
 });
 
-registerHandler("IfcReferenceLine", (args) => {
+registerHandler("SdReferenceLine", (args) => {
   const origin = (args.origin as number[] | undefined) ?? [0, 0];
   const end    = (args.end    as number[] | undefined) ?? [5, 0];
   const ax = origin[0] ?? 0, ay = origin[1] ?? 0;
@@ -1377,13 +1377,13 @@ registerHandler("IfcReferenceLine", (args) => {
   line.position.set(cx, cy, 0.002);
   line.rotation.z = angRad;
   line.userData.kind = "reference-line";
-  line.userData.creator = "IfcReferenceLine";
+  line.userData.creator = "SdReferenceLine";
   line.userData.controlPoints = [[ax, ay, 0], [bx, by, 0]];
   viewer.addMesh(line, "brep");
   return { created: "reference-line", origin: [ax, ay], end: [bx, by] };
 });
 
-registerHandler("IfcFurnishingElement", (args) => {
+registerHandler("SdFurnishing", (args) => {
   const w    = (args.width       as number | undefined) ?? 0.8;
   const d    = (args.depth       as number | undefined) ?? 0.6;
   const h    = (args.height      as number | undefined) ?? 0.75;
@@ -1396,8 +1396,8 @@ registerHandler("IfcFurnishingElement", (args) => {
   mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, pos?.[2] ?? getActiveLevelElevation());
   if (rotDeg) mesh.rotation.z = (rotDeg * Math.PI) / 180;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "IfcFurnishingElement";
-  mesh.userData.layerId = resolveLayerId("IfcFurnishingElement", args);
+  mesh.userData.creator = "SdFurnishing";
+  mesh.userData.layerId = resolveLayerId("SdFurnishing", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
@@ -2433,7 +2433,7 @@ function sanitizeStem(filename: string): string {
 }
 
 // Creator tags that are spatial/structural only — skip in IFC element export.
-const IFC_SKIP_CREATORS = new Set(["IfcGrid", "IfcGridLine", "IfcLevel", "IfcDatum", "IfcReferenceLine"]);
+const IFC_SKIP_CREATORS = new Set(["SdRefGrid", "IfcGridLine", "SdLevel", "SdDatum", "SdReferenceLine"]);
 
 function sceneElementsForExport(): IfcSceneElement[] {
   const elements: IfcSceneElement[] = [];

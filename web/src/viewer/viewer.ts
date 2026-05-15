@@ -856,7 +856,12 @@ export class Viewer {
     );
     const hits = this.raycaster.intersectObjects(pickables, true);
     const hit = hits[0]?.object ?? null;
-    const transformTarget = hit?.parent instanceof THREE.Mesh || hit?.parent instanceof THREE.Group ? hit.parent : hit;
+    // IFC-imported meshes carry expressID and represent individual elements —
+    // use the hit mesh directly. Other objects: walk to parent group/mesh.
+    const isIfcElement = (hit?.userData?.expressID) != null;
+    const transformTarget = isIfcElement
+      ? hit
+      : (hit?.parent instanceof THREE.Mesh || hit?.parent instanceof THREE.Group ? hit.parent : hit);
     const uuid = transformTarget?.uuid ?? null;
     // Sub-object handle click: enter handle-level selection without clearing parent handles.
     if (transformTarget && isSubObjectHandle(transformTarget)) {
@@ -1896,22 +1901,24 @@ export class Viewer {
 
   setObject(object: THREE.Object3D, bounds: Bounds): void {
     this.clearScene();
-    // Wrap the loaded object in a Group whose position sits at the geometric
-    // centroid (= bounding-box center). The inner object is offset by
-    // -centroid so its visual world placement is unchanged. Gumball attaches
-    // to the wrapper, so its pin renders at the centroid and rotation/scale
-    // pivot around that point. Loader-built children retain their relative
-    // positions inside the wrapper.
+    // Center the loaded object at world origin: XY centroid at (0,0), building
+    // floor (bounds.min.z) at Z=0. IFC project base points land at a building
+    // corner after COORDINATE_TO_ORIGIN — this re-centers on the bounding-box
+    // footprint centroid and grounds the floor plane.
     const cx = (bounds.min[0] + bounds.max[0]) / 2;
     const cy = (bounds.min[1] + bounds.max[1]) / 2;
-    const cz = (bounds.min[2] + bounds.max[2]) / 2;
+    const cz = bounds.min[2]; // floor at Z=0
     const wrapper = new THREE.Group();
-    wrapper.position.set(cx, cy, cz);
+    wrapper.position.set(0, 0, 0);
     object.position.sub(new THREE.Vector3(cx, cy, cz));
     wrapper.add(object);
     this.scene.add(wrapper);
     this.currentObject = wrapper;
-    this.fitCamera(bounds);
+    // Recompute bounds relative to the centered position for fitCamera.
+    const hw = (bounds.max[0] - bounds.min[0]) / 2;
+    const hh = (bounds.max[1] - bounds.min[1]) / 2;
+    const hd = bounds.max[2] - bounds.min[2];
+    this.fitCamera({ min: [-hw, -hh, 0], max: [hw, hh, hd] });
   }
 
   getActiveObject(): THREE.Object3D | null {

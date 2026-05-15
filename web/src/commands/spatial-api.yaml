@@ -453,7 +453,7 @@
 # §7 Architectural (IFC4-canonical)
 # ============================================================
 
-- canonical_name: IfcWall
+- canonical_name: SdWall
   ifc4_class: IfcWall
   kernel_op: makeWall
   args:
@@ -465,12 +465,12 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [hosts, containedIn, bounds]
-  synonyms: [wall, makewall, drawwall, w]
+  synonyms: [wall, makewall, drawwall, w, IfcWall]
   hotkey: W
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcSlab
+- canonical_name: SdSlab
   ifc4_class: IfcSlab
   kernel_op: makeSlab
   args:
@@ -480,12 +480,12 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
-  synonyms: [slab, floor, plate, s]
+  synonyms: [slab, floor, plate, s, IfcSlab]
   hotkey: S
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcColumn
+- canonical_name: SdColumn
   ifc4_class: IfcColumn
   kernel_op: makeColumn
   args:
@@ -496,11 +496,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [supports, containedIn]
-  synonyms: [column, post, pillar]
+  synonyms: [column, post, pillar, IfcColumn]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcBeam
+- canonical_name: SdBeam
   ifc4_class: IfcBeam
   kernel_op: makeBeam
   args:
@@ -511,11 +511,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [supports, connectedTo]
-  synonyms: [beam, joist, girder]
+  synonyms: [beam, joist, girder, IfcBeam]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcMember
+- canonical_name: SdMember
   ifc4_class: IfcMember
   kernel_op: makeMember
   args:
@@ -526,11 +526,11 @@
     - {name: layer,      type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: solid
   kg_predicates: [supports, connectedTo]
-  synonyms: [member, mullion, purlin, secondary steel, facade member]
+  synonyms: [member, mullion, purlin, secondary steel, facade member, IfcMember]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcStair
+- canonical_name: SdStair
   ifc4_class: IfcStair
   kernel_op: makeStair
   args:
@@ -542,11 +542,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, connectedTo]
-  synonyms: [stair, stairs, steps, staircase]
+  synonyms: [stair, stairs, steps, staircase, IfcStair]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcDoor
+- canonical_name: SdDoor
   ifc4_class: IfcDoor
   kernel_op: makeDoor
   args:
@@ -557,11 +557,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
-  synonyms: [door, doorway, opening]
+  synonyms: [door, doorway, opening, IfcDoor]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcWindow
+- canonical_name: SdWindow
   ifc4_class: IfcWindow
   kernel_op: makeWindow
   args:
@@ -573,11 +573,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
-  synonyms: [window]
+  synonyms: [window, IfcWindow]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcRoof
+- canonical_name: SdRoof
   ifc4_class: IfcRoof
   kernel_op: makeRoof
   args:
@@ -598,11 +598,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
-  synonyms: [roof, gable, hip]
+  synonyms: [roof, gable, hip, IfcRoof]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcSpace
+- canonical_name: SdSpace
   ifc4_class: IfcSpace
   kernel_op: makeSpace
   args:
@@ -612,11 +612,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
-  synonyms: [space, room, zone]
+  synonyms: [space, room, zone, IfcSpace]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcFoundation
+- canonical_name: SdFoundation
   ifc4_class: IfcFooting
   kernel_op: makeFoundation
   args:
@@ -627,11 +627,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [supports, containedIn]
-  synonyms: [foundation, footing, pile cap, slab on grade, pad footing]
+  synonyms: [foundation, footing, pile cap, slab on grade, pad footing, IfcFoundation]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcCeiling
+- canonical_name: SdCeiling
   ifc4_class: IfcCovering
   kernel_op: makeCeiling
   args:
@@ -643,11 +643,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [containedIn, bounds]
-  synonyms: [ceiling, soffit, suspended ceiling, dropped ceiling]
+  synonyms: [ceiling, soffit, suspended ceiling, dropped ceiling, IfcCeiling]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcCurtainWall
+- canonical_name: SdCurtainWall
   ifc4_class: IfcCurtainWall
   kernel_op: makeCurtainWall
   args:
@@ -657,11 +657,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, bounds]
-  synonyms: [curtain wall, glass facade, glazed wall, glass wall, curtainwall]
+  synonyms: [curtain wall, glass facade, glazed wall, glass wall, curtainwall, IfcCurtainWall]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcPlate
+- canonical_name: SdPlate
   ifc4_class: IfcPlate
   kernel_op: makePlate
   args:
@@ -672,11 +672,11 @@
     - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: solid
   kg_predicates: [bounds, containedIn]
-  synonyms: [plate, cladding panel, facade panel, cassette, glazing infill, panel]
+  synonyms: [plate, cladding panel, facade panel, cassette, glazing infill, panel, IfcPlate]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcSkylight
+- canonical_name: SdSkylight
   ifc4_class: IfcOpeningElement
   kernel_op: makeSkylight
   args:
@@ -687,11 +687,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, bounds]
-  synonyms: [skylight, rooflight, roof window, velux, overhead glazing]
+  synonyms: [skylight, rooflight, roof window, velux, overhead glazing, IfcSkylight]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcOpening
+- canonical_name: SdOpening
   ifc4_class: IfcOpeningElement
   kernel_op: makeOpening
   args:
@@ -701,11 +701,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
-  synonyms: [opening, void, cutout, aperture, wall opening]
+  synonyms: [opening, void, cutout, aperture, wall opening, IfcOpening]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcRamp
+- canonical_name: SdRamp
   ifc4_class: IfcRamp
   kernel_op: makeRamp
   args:
@@ -716,11 +716,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, connectedTo]
-  synonyms: [ramp, slope, incline, accessibility ramp, ramped surface]
+  synonyms: [ramp, slope, incline, accessibility ramp, ramped surface, IfcRamp]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcRailing
+- canonical_name: SdRailing
   ifc4_class: IfcRailing
   kernel_op: makeRailing
   args:
@@ -730,11 +730,11 @@
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: hosted
   kg_predicates: [containedIn, connectedTo]
-  synonyms: [railing, handrail, balustrade, guardrail, banister]
+  synonyms: [railing, handrail, balustrade, guardrail, banister, IfcRailing]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcGrid
+- canonical_name: SdRefGrid
   ifc4_class: IfcGrid
   kernel_op: makeGrid
   args:
@@ -745,7 +745,7 @@
     - {name: origin,    type: point2,  required: false,                          description: "World XY origin of the grid."}
   topology_role: system
   kg_predicates: []
-  synonyms: [grid, structural grid, column grid, reference grid, building grid]
+  synonyms: [grid, structural grid, column grid, reference grid, building grid, IfcGrid]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
@@ -778,7 +778,7 @@
   synonyms: [activate grid, use grid, snap to grid]
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcLevel
+- canonical_name: SdLevel
   ifc4_class: IfcBuildingStorey
   kernel_op: makeLevel
   args:
@@ -788,11 +788,11 @@
     - {name: name,      type: string, required: false}
   topology_role: system
   kg_predicates: [containedIn]
-  synonyms: [level, floor level, storey, building level, datum level, floor plate]
+  synonyms: [level, floor level, storey, building level, datum level, floor plate, IfcLevel]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcDatum
+- canonical_name: SdDatum
   ifc4_class: IfcAnnotation
   kernel_op: makeDatum
   args:
@@ -801,11 +801,11 @@
     - {name: label,     type: string, required: false}
   topology_role: annotation
   kg_predicates: []
-  synonyms: [datum, elevation marker, benchmark, survey point, reference point]
+  synonyms: [datum, elevation marker, benchmark, survey point, reference point, IfcDatum]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: IfcReferenceLine
+- canonical_name: SdReferenceLine
   ifc4_class: IfcAnnotation
   kernel_op: makeReferenceLine
   args:
@@ -814,7 +814,7 @@
     - {name: label,  type: string, required: false}
   topology_role: annotation
   kg_predicates: []
-  synonyms: [reference line, ref line, datum line, control line, layout line, axis line]
+  synonyms: [reference line, ref line, datum line, control line, layout line, axis line, IfcReferenceLine]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
@@ -822,7 +822,7 @@
 # §8 Furniture & Fixtures
 # ============================================================
 
-- canonical_name: IfcFurnishingElement
+- canonical_name: SdFurnishing
   ifc4_class: IfcFurnishingElement
   kernel_op: makeFurnishingElement
   args:
@@ -835,7 +835,7 @@
     - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: solid
   kg_predicates: [containedIn]
-  synonyms: [furnishing, furniture, desk, chair, counter, cabinet, fixture, medical cabinet, reception]
+  synonyms: [furnishing, furniture, desk, chair, counter, cabinet, fixture, medical cabinet, reception, IfcFurnishingElement]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
@@ -843,7 +843,7 @@
 # §9 Annotation (IFC4 IfcAnnotation)
 # ============================================================
 
-- canonical_name: IfcAnnotationDimension
+- canonical_name: SdAnnotationDimension
   ifc4_class: IfcAnnotation
   kernel_op: makeDimension
   args:
@@ -852,7 +852,7 @@
     - {name: label, type: string,  required: false}
   topology_role: annotation
   kg_predicates: []
-  synonyms: [dimension, dim, measure]
+  synonyms: [dimension, dim, measure, IfcAnnotationDimension]
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
