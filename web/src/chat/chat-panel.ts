@@ -106,6 +106,8 @@ export class ChatPanel {
       if (!visible) this._updatePerfStrip();
     });
 
+    window.addEventListener("gemma:clear-history", () => this.clear());
+
     for (const s of STARTER_PROMPTS) {
       const chip = document.createElement("span");
       chip.className = "ai-chip chat-starter-chip";
