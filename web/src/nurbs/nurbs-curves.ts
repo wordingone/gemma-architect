@@ -377,12 +377,16 @@ export function tessellate(c: Curve, sampleCount: number): Point3[] {
 //   2. Averaging knot vector (§9.2)
 //   3. Assemble basis-function matrix via Cox-de Boor recursion
 //   4. Solve N×N linear system (Gaussian elimination, X/Y/Z separately)
-// For open curves only. Closed curves: use createClampedUniformNurbs with
-// wrapped CVs (periodic knot interpolation is follow-on work).
-export function createInterpolatingCubicBSpline(dataPoints: Point3[]): NurbsCurve {
-  const numPts = dataPoints.length;
-  if (numPts < 2) throw new Error("createInterpolatingCubicBSpline: need >= 2 points");
-
+// opts.closed: appends dataPoints[0] so the curve starts and ends at P0.
+export function createInterpolatingCubicBSpline(
+  dataPoints: Point3[],
+  opts?: { closed?: boolean },
+): NurbsCurve {
+  if (dataPoints.length < 2) throw new Error("createInterpolatingCubicBSpline: need >= 2 points");
+  // When closed, append P0 so the algorithm produces a curve that starts and
+  // ends at the same point without a self-intersecting chord.
+  const pts = opts?.closed ? [...dataPoints, dataPoints[0]] : dataPoints;
+  const numPts = pts.length;
   // Degree adapts to point count: cubic for N >= 4, quadratic for N=3, linear for N=2.
   const degree = Math.min(3, numPts - 1);
   const order = degree + 1;
@@ -390,9 +394,9 @@ export function createInterpolatingCubicBSpline(dataPoints: Point3[]): NurbsCurv
   // 1. Chord-length parameterization → parameter t[i] ∈ [0, 1]
   const chord: number[] = [0];
   for (let i = 1; i < numPts; i++) {
-    const dx = dataPoints[i].x - dataPoints[i - 1].x;
-    const dy = dataPoints[i].y - dataPoints[i - 1].y;
-    const dz = dataPoints[i].z - dataPoints[i - 1].z;
+    const dx = pts[i].x - pts[i - 1].x;
+    const dy = pts[i].y - pts[i - 1].y;
+    const dz = pts[i].z - pts[i - 1].z;
     chord.push(chord[i - 1] + Math.sqrt(dx * dx + dy * dy + dz * dz));
   }
   const totalLen = chord[numPts - 1];
@@ -461,9 +465,9 @@ export function createInterpolatingCubicBSpline(dataPoints: Point3[]): NurbsCurv
     return x;
   }
 
-  const qx = dataPoints.map((dp) => dp.x);
-  const qy = dataPoints.map((dp) => dp.y);
-  const qz = dataPoints.map((dp) => dp.z);
+  const qx = pts.map((dp) => dp.x);
+  const qy = pts.map((dp) => dp.y);
+  const qz = pts.map((dp) => dp.z);
   const cpX = gaussSolve(A.map((r) => [...r]), qx);
   const cpY = gaussSolve(A.map((r) => [...r]), qy);
   const cpZ = gaussSolve(A.map((r) => [...r]), qz);

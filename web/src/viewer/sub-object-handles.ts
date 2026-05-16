@@ -6,7 +6,7 @@
 
 import * as THREE from "three";
 import type { Viewer } from "./viewer.js";
-import { createClampedUniformNurbs, createInterpolatingCubicBSpline, tessellate } from "../nurbs/nurbs-curves.js";
+import { createClampedUniformNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 
 const HANDLE_RADIUS = 0.07;
 
@@ -76,25 +76,11 @@ export function refitParentGeometry(parent: THREE.Object3D): void {
   } else if (creator === "polyline") {
     newGeom = new THREE.BufferGeometry().setFromPoints(cps);
   } else if (creator === "curve") {
-    // Curve tool: interpolating — handle positions ARE the data points.
+    // Curve tool: Catmull-Rom — handle positions ARE the data points.
     const isClosed = !!(parent.userData.isClosed as boolean | undefined);
     const sampleCount = Math.max(cps.length * 16, 64);
-    if (isClosed) {
-      const degree = Math.min((parent.userData.nurbsDegree as number | undefined) ?? 3, cps.length - 1);
-      const order = degree + 1;
-      const wrapped = cps.length >= order ? [...cps, ...cps.slice(0, degree)] : cps;
-      const nurbsPts = wrapped.map((v) => ({ x: v.x, y: v.y, z: v.z }));
-      const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
-      const raw = tessellate(nurbs, sampleCount);
-      const sampled = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
-      if (sampled.length > 1) sampled[sampled.length - 1].copy(sampled[0]);
-      newGeom = new THREE.BufferGeometry().setFromPoints(sampled);
-    } else {
-      const dataPts = cps.map((v) => ({ x: v.x, y: v.y, z: v.z }));
-      const nurbs = createInterpolatingCubicBSpline(dataPts);
-      const raw = tessellate(nurbs, sampleCount);
-      newGeom = new THREE.BufferGeometry().setFromPoints(raw.map((p) => new THREE.Vector3(p.x, p.y, p.z)));
-    }
+    const crCurve = new THREE.CatmullRomCurve3(cps, isClosed, "catmullrom", 0.5);
+    newGeom = new THREE.BufferGeometry().setFromPoints(crCurve.getPoints(sampleCount));
   } else if (creator === "spline") {
     // Spline tool: approximating — handles are NURBS control points (curve pulled toward them).
     const isClosed = !!(parent.userData.isClosed as boolean | undefined);

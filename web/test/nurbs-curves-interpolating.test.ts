@@ -5,9 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   createInterpolatingCubicBSpline,
-  createClampedUniformNurbs,
   pointAt,
-  tessellate,
 } from "../src/nurbs/nurbs-curves";
 import type { Point3 } from "../src/nurbs/nurbs-primitives";
 
@@ -164,36 +162,48 @@ describe("createInterpolatingCubicBSpline — collinear points", () => {
   });
 });
 
-// ── Closed-curve path stays approximating (not interpolating) ─────────────────
+// ── Closed-curve interpolation ─────────────────────────────────────────────
 
-describe("closed-curve path uses approximating spline (createClampedUniformNurbs)", () => {
+describe("createInterpolatingCubicBSpline — closed: true", () => {
   const pts: Point3[] = [
     { x: 0, y: 0, z: 0 },
     { x: 1, y: 1, z: 0 },
     { x: 2, y: 0, z: 0 },
     { x: 1, y: -1, z: 0 },
   ];
-  const degree = 3;
-  const order = degree + 1;
-  const wrapped = [...pts, ...pts.slice(0, degree)];
-  const approxNurbs = createClampedUniformNurbs(3, order, wrapped);
 
-  test("approximating closed spline knot length satisfies OpenNURBS convention", () => {
-    expect(approxNurbs.knots.length).toBe(approxNurbs.order + approxNurbs.cvCount - 2);
+  test("closed curve passes through all data points within tolerance", () => {
+    const nc = createInterpolatingCubicBSpline(pts, { closed: true });
+    // The algorithm receives pts + [pts[0]], so we check the original 4 points.
+    // chordParams for the 5-point closed set; we only need the first 4 parameters.
+    const allPts = [...pts, pts[0]];
+    const chord: number[] = [0];
+    for (let i = 1; i < allPts.length; i++) {
+      const dx = allPts[i].x - allPts[i-1].x, dy = allPts[i].y - allPts[i-1].y, dz = allPts[i].z - allPts[i-1].z;
+      chord.push(chord[i-1] + Math.sqrt(dx*dx + dy*dy + dz*dz));
+    }
+    const total = chord[allPts.length-1];
+    const t = total > 0 ? chord.map(c => c/total) : allPts.map((_, i) => i/(allPts.length-1));
+    let maxErr = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pointAt(nc, t[i]);
+      const dx = p.x - pts[i].x, dy = p.y - pts[i].y, dz = p.z - pts[i].z;
+      maxErr = Math.max(maxErr, Math.sqrt(dx*dx + dy*dy + dz*dz));
+    }
+    expect(maxErr).toBeLessThan(TOL);
   });
 
-  test("approximating closed spline does NOT pass through interior control points", () => {
-    // Approximating NURBS only gets pulled toward interior control points, does not pass through.
-    // Verify interior point at index 1 is NOT on the tessellated curve (dist > 1e-6).
-    const tess = tessellate(approxNurbs, 512);
-    const interior = pts[1];
-    let best = Infinity;
-    for (const p of tess) {
-      const dx = p.x - interior.x, dy = p.y - interior.y, dz = p.z - interior.z;
-      const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      if (d < best) best = d;
-    }
-    expect(best).toBeGreaterThan(1e-6);
+  test("closed curve starts and ends at the same point (no self-intersecting chord)", () => {
+    const nc = createInterpolatingCubicBSpline(pts, { closed: true });
+    const p0 = pointAt(nc, 0);
+    const p1 = pointAt(nc, 1);
+    const dx = p1.x - p0.x, dy = p1.y - p0.y, dz = p1.z - p0.z;
+    expect(Math.sqrt(dx*dx + dy*dy + dz*dz)).toBeLessThan(TOL);
+  });
+
+  test("closed curve knot length satisfies OpenNURBS convention", () => {
+    const nc = createInterpolatingCubicBSpline(pts, { closed: true });
+    expect(nc.knots.length).toBe(nc.order + nc.cvCount - 2);
   });
 });
 
