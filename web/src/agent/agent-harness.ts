@@ -293,7 +293,8 @@ function summariseSkills(skills: Skill[] | undefined): string {
 
 function summariseClusters(): string {
   if (_clusterCatalog.length === 0) return "";
-  return `Saved skill clusters (run with SdRunCluster({name:"…"})):\n${_clusterCatalog.map(c => `  ${c.name} (${c.steps} steps)`).join("\n")}`;
+  const lines = _clusterCatalog.map(c => `  ${c.name} (${c.steps} steps)`).join("\n");
+  return `Saved skill clusters (run with SdRunCluster({name:"…"})):\n${lines}\nTo place copies at different positions, emit separate SdRunCluster calls with distinct anchor offsets — e.g. anchor:[5,0,0] shifts all positions +5 on X. Do NOT use repeat for multi-position placement.`;
 }
 
 function buildSceneContext(): string {
