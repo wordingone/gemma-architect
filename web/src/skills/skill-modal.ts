@@ -1,7 +1,7 @@
 // skill-modal.ts — Modal UI for naming and saving a skill from session dispatches.
 
 import type { SkillStep } from "./skill-store";
-import { saveSkill } from "./skill-store";
+import { saveSkill, saveCluster } from "./skill-store";
 
 function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -72,6 +72,8 @@ export function openSaveSkillModal(steps: SkillStep[]): void {
     saveBtn.textContent = "Saving…";
     try {
       const skill = await saveSkill({ name, description: descInput.value.trim(), steps });
+      // Also save as a SkillCluster so the agent can invoke it via SdRunCluster({name}).
+      await saveCluster({ name, steps: steps.map((s, i) => ({ verb: s.verb, params: s.args, relativeTs: i * 100 })) });
       window.dispatchEvent(new CustomEvent("skillstore:saved", { detail: { skill } }));
       close();
     } catch {
