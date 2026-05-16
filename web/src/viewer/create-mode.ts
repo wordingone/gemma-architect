@@ -700,7 +700,10 @@ function showLevelChip(
   hIn.step = _chipImperial ? "0.5" : "0.1";
   hIn.placeholder = `Ht (${_htUnit})`;
   hIn.value = _defaultHtDisplay;
-  hIn.style.cssText = "width:58px; font-size:11px; padding:2px 4px; background:var(--chrome,#1a1a1a); border:1px solid var(--hairline,#444); color:var(--ink-body,#ddd); border-radius:3px;";
+  hIn.style.cssText = "width:48px; font-size:11px; padding:2px 4px; background:var(--chrome,#1a1a1a); border:1px solid var(--hairline,#444); color:var(--ink-body,#ddd); border-radius:3px;";
+  const htUnitLbl = document.createElement("span");
+  htUnitLbl.textContent = _htUnit;
+  htUnitLbl.style.cssText = "font-size:10px; color:var(--ink-faint); flex-shrink:0;";
 
   const commit = () => {
     const name = nameIn.value.trim();
@@ -719,6 +722,7 @@ function showLevelChip(
 
   chip.appendChild(nameIn);
   chip.appendChild(hIn);
+  chip.appendChild(htUnitLbl);
   document.body.appendChild(chip);
   setTimeout(() => nameIn.focus(), 10);
 
