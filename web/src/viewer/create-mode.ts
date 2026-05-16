@@ -31,6 +31,7 @@ import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
 import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "./selection-state";
 import { formatLength, formatArea, formatVolume } from "../units";
+import { createCatmullRomAsNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -1010,10 +1011,11 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   const localVecs = curvePts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
 
-  // Catmull-Rom: passes through every clicked point, closure handled natively.
+  // Catmull-Rom via NURBS kernel — exact parity with CatmullRomCurve3(0.5).
   const sampleCount = Math.max(localVecs.length * 16, 64);
-  const crCurve = new THREE.CatmullRomCurve3(localVecs, isClosed, "catmullrom", 0.5);
-  const sampled3 = crCurve.getPoints(sampleCount);
+  const dataPts = localVecs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  const crNurbs = createCatmullRomAsNurbs(dataPts, { closed: isClosed });
+  const sampled3 = tessellate(crNurbs, sampleCount + 1).map((p) => new THREE.Vector3(p.x, p.y, p.z));
 
   const geom = new THREE.BufferGeometry().setFromPoints(sampled3);
   const mat = new THREE.LineBasicMaterial({ color: 0x1565c0 });
@@ -1025,6 +1027,7 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   mesh.userData.isClosed = isClosed;
   mesh.userData.nurbsKind = "catmull-rom";
   mesh.userData.controlPoints = localVecs;
+  mesh.userData.nurbsCVs = crNurbs.cvs;
   const worldPts = curvePts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const curv = drawCurve([${worldPts}]${isClosed ? ", { close: true }" : ""}).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
@@ -2359,8 +2362,9 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
       profile.updateMatrixWorld();
       const cpWorld = cpLocal.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
       const sampleCt = Math.max(cpLocal.length * 16, 64);
-      const crW = new THREE.CatmullRomCurve3(cpWorld, isClosed, "catmullrom", 0.5);
-      const samples = crW.getPoints(sampleCt);
+      const crWPts = cpWorld.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+      const crWNurbs = createCatmullRomAsNurbs(crWPts, { closed: isClosed });
+      const samples = tessellate(crWNurbs, sampleCt + 1).map((p) => new THREE.Vector3(p.x, p.y, p.z));
       const color = 0x88aacc;
       if (isClosed) {
         // Filled solid: Shape outline → ExtrudeGeometry (caps + side walls).

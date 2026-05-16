@@ -520,3 +520,58 @@ export function createClampedUniformNurbs(
     cvStride,
   };
 }
+
+// ── createCatmullRomAsNurbs ───────────────────────────────────────────────
+
+// Converts Catmull-Rom data points to an exact cubic B-spline representation.
+// Tessellation is mathematically identical to
+//   THREE.CatmullRomCurve3(pts, closed, "catmullrom", 0.5).getPoints(N)
+// via piecewise Bézier cubic segments joined at triple interior knots (C1).
+export function createCatmullRomAsNurbs(
+  dataPoints: Point3[],
+  opts?: { closed?: boolean },
+): NurbsCurve {
+  const closed = opts?.closed ?? false;
+  const m = dataPoints.length;
+  if (m < 2) throw new Error("createCatmullRomAsNurbs: need >= 2 points");
+
+  // Open: m-1 segments.  Closed: m segments (wraps P[m-1]→P[0]).
+  const n = closed ? m : m - 1;
+
+  // Tangents matching THREE.CatmullRomCurve3 tension=0.5:
+  //   T[i] = 0.5 * (P[next] - P[prev])
+  //   Open:   prev=clamp(i-1), next=clamp(i+1)
+  //   Closed: prev=(i-1+m)%m, next=(i+1)%m
+  const tangents: Point3[] = [];
+  for (let i = 0; i < m; i++) {
+    const prev = dataPoints[closed ? (i - 1 + m) % m : Math.max(0, i - 1)];
+    const next = dataPoints[closed ? (i + 1) % m : Math.min(m - 1, i + 1)];
+    tangents.push({ x: 0.5 * (next.x - prev.x), y: 0.5 * (next.y - prev.y), z: 0.5 * (next.z - prev.z) });
+  }
+
+  // Piecewise Bézier CV layout (3n+1 total):
+  //   [P[0], b1[0], b2[0], P[1], b1[1], b2[1], ..., P[n]]
+  // where for segment i (P[i]→P[(i+1)%m]):
+  //   b1 = P[i]   + T[i]   / 3
+  //   b2 = P[i+1] - T[i+1] / 3
+  const cvs: number[] = [];
+  const pFirst = dataPoints[0];
+  cvs.push(pFirst.x, pFirst.y, pFirst.z);
+  for (let i = 0; i < n; i++) {
+    const Pi  = dataPoints[i % m];
+    const Pi1 = dataPoints[(i + 1) % m];
+    const Ti  = tangents[i % m];
+    const Ti1 = tangents[(i + 1) % m];
+    cvs.push(Pi.x + Ti.x / 3,   Pi.y + Ti.y / 3,   Pi.z + Ti.z / 3);
+    cvs.push(Pi1.x - Ti1.x / 3, Pi1.y - Ti1.y / 3, Pi1.z - Ti1.z / 3);
+    cvs.push(Pi1.x, Pi1.y, Pi1.z);
+  }
+
+  // cvCount = 3n+1; OpenNURBS kLen = order+cvCount-2 = 3n+3
+  // Knot vector: [0,0,0, 1,1,1, 2,2,2, ..., n,n,n]
+  const cvCount = 3 * n + 1;
+  const knots: number[] = [];
+  for (let k = 0; k <= n; k++) knots.push(k, k, k);
+
+  return { kind: "nurbs", dim: 3, isRational: false, order: 4, cvCount, knots, cvs, cvStride: 3 };
+}
