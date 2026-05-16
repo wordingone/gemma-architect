@@ -1854,6 +1854,16 @@ export class Viewer {
       this.renderer.setViewport(x, gl_y, w, h);
       this.renderer.clearDepth();
       pane.controls.update();
+      // #714: per-pane grid orientation. The persp pane uses activeView (set by
+      // setView); the fixed-direction quad panes use their own view field.
+      const gridView = pane.view === "persp" ? this.activeView : pane.view;
+      if (gridView === "front" || gridView === "back") {
+        this.grid.rotation.set(0, 0, 0);
+      } else if (gridView === "right" || gridView === "left") {
+        this.grid.rotation.set(0, 0, Math.PI / 2);
+      } else {
+        this.grid.rotation.set(Math.PI / 2, 0, 0);
+      }
       this.renderer.render(this.scene, pane.camera);
     }
     this.renderer.setScissorTest(false);
