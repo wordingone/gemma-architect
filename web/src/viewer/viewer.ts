@@ -2470,6 +2470,10 @@ export class Viewer {
       perspPane.camera = this.camera;
       perspPane.controls.object = this.camera;
       perspPane.controls.enableRotate = true;
+      perspPane.controls.screenSpacePanning = false;
+      perspPane.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      perspPane.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+      perspPane.controls.zoomSpeed = 1;
     }
     this.camera.position.set(center.x + dir.x * dist, center.y + dir.y * dist, center.z + dir.z * dist);
     this.camera.updateProjectionMatrix();
@@ -2494,6 +2498,10 @@ export class Viewer {
         perspPane.camera = this.camera;
         perspPane.controls.object = this.camera;
         perspPane.controls.enableRotate = true;
+        perspPane.controls.screenSpacePanning = false;
+        perspPane.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+        perspPane.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+        perspPane.controls.zoomSpeed = 1;
         perspPane.controls.update();
       }
       return;
@@ -2550,7 +2558,14 @@ export class Viewer {
       oc.updateProjectionMatrix();
       perspPane.camera = oc;
       perspPane.controls.object = oc;
-      perspPane.controls.enableRotate = true;
+      const noRotate = name !== "iso";
+      perspPane.controls.enableRotate = !noRotate;
+      perspPane.controls.screenSpacePanning = noRotate;
+      if (noRotate) {
+        perspPane.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+        perspPane.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+        perspPane.controls.zoomSpeed = 2.5;
+      }
       perspPane.controls.target.set(cx, cy, cz);
       perspPane.controls.update();
     } else {
@@ -2559,6 +2574,10 @@ export class Viewer {
         perspPane.camera = this.camera;
         perspPane.controls.object = this.camera;
         perspPane.controls.enableRotate = true;
+        perspPane.controls.screenSpacePanning = false;
+        perspPane.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+        perspPane.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+        perspPane.controls.zoomSpeed = 1;
       }
       this.camera.position.set(cx + dir.x * dist, cy + dir.y * dist, cz + dir.z * dist);
       this.camera.updateProjectionMatrix();
