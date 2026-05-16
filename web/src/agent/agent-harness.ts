@@ -1083,10 +1083,12 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   }) as string;
 
   // Encode: processor tokenizes text and encodes images (null when text-only).
+  console.log("[vision] proc: images=", imageList.length, "userImage=", req.userImage ? req.userImage.length : 0);
   const t0 = performance.now();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
   const tProc = performance.now();
+  console.log("[vision] tokens=", inputs.input_ids?.dims?.[1]);
 
   // Guard: WebGPU ONNX model compiled context limit ~2048 tokens (#424).
   // Long system prompts (summariseDictionary + BUILDING_DEFAULTS + FEW_SHOT) reach

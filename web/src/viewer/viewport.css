@@ -497,9 +497,13 @@
 }
 
 /* Agent viewport-capture indicator — fixed on body so it composites above the WebGL GPU layer */
+@keyframes agent-ring-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 4px rgb(99, 179, 237), inset 0 0 20px rgba(99, 179, 237, 0.3); }
+  50%       { box-shadow: inset 0 0 0 6px rgb(56, 189, 248),  inset 0 0 40px rgba(56, 189, 248, 0.5); }
+}
 .agent-looking-ring {
   pointer-events: none;
   transform: translateZ(0);
-  box-shadow: inset 0 0 0 4px rgb(99, 179, 237);
   z-index: 99999;
+  animation: agent-ring-pulse 1.2s ease-in-out infinite;
 }
