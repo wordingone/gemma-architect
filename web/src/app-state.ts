@@ -33,7 +33,7 @@ const DEFAULT_STATE: AppState = {
   selectedId: null,
   currentView: "perspective",
   compScope: false,
-  unitSystem: "metric",
+  unitSystem: "imperial",
 };
 
 type Listener<K extends keyof AppState> = (value: AppState[K]) => void;

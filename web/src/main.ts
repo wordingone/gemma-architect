@@ -9,6 +9,7 @@
 // loaded-from-file) is queried via viewer.getActiveMeshData().
 
 import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell/shell";
+import { formatLength } from "./units";
 import { buildWorkbench } from "./shell/workbench";
 import { buildModes, activateMode } from "./shell/modes";
 import { initCmdK } from "./ui/cmdk";
@@ -2136,10 +2137,10 @@ function terminateAndRecycle(): void {
 spawnWorker();
 
 function formatBounds(b: { min: [number, number, number]; max: [number, number, number] }): string {
-  const dx = (b.max[0] - b.min[0]).toFixed(2);
-  const dy = (b.max[1] - b.min[1]).toFixed(2);
-  const dz = (b.max[2] - b.min[2]).toFixed(2);
-  return `${dx}×${dy}×${dz}m`;
+  const dx = b.max[0] - b.min[0];
+  const dy = b.max[1] - b.min[1];
+  const dz = b.max[2] - b.min[2];
+  return `${formatLength(dx)} × ${formatLength(dy)} × ${formatLength(dz)}`;
 }
 
 // "1. Wall (5.5m × 0.2m × 2.8m)" → "Wall"

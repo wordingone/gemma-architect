@@ -13,7 +13,7 @@ export type Level = {
 const GROUND_LEVEL_ID = "level/0";
 
 const BUILTIN_LEVELS: Level[] = [
-  { id: GROUND_LEVEL_ID, name: "Ground",   elevation: 0, height: 3.0, visible: true, active: true },
+  { id: GROUND_LEVEL_ID, name: "Level 1",  elevation: 0, height: 3.0, visible: true, active: true },
 ];
 
 type LevelListener = () => void;

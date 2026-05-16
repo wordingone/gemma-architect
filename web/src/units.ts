@@ -7,7 +7,9 @@ const M_TO_FT = 3.28084;
 
 export function formatLength(m: number): string {
   if (getState("unitSystem") === "imperial") {
-    return `${(m * M_TO_FT).toFixed(2)} ft`;
+    const ft = m * M_TO_FT;
+    if (Math.abs(ft) < 1) return `${(ft * 12).toFixed(1)} in`;
+    return `${ft.toFixed(2)} ft`;
   }
   return `${m.toFixed(3)} m`;
 }

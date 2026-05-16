@@ -510,7 +510,7 @@ function buildSnapDock(): HTMLElement {
     <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0 12px; padding:2px 0 4px;">
       ${rows}
     </div>
-    <div class="snap-row"><span class="k">step</span><input class="snap-input" id="snap-step-input" type="number" min="0.001" step="0.1" value="${snap.step.toFixed(2)}"><span class="u">m</span></div>
+    <div class="snap-row"><span class="k">step</span><input class="snap-input" id="snap-step-input" type="number" min="0.001" step="0.1" value="${getState("unitSystem") === "imperial" ? (snap.step * 3.28084).toFixed(2) : snap.step.toFixed(2)}"><span class="u">${getState("unitSystem") === "imperial" ? "ft" : "m"}</span></div>
     <div class="snap-row"><span class="k">angle</span><input class="snap-input" id="snap-angle-input" type="number" min="0.1" step="1" value="${snap.angleStep}"><span class="u">°</span></div>
     <div class="snap-row snap-row--cplane" title="Click to change construction plane" style="cursor:pointer"><span class="k">cplane</span><span class="v" id="snap-cplane-label">World XY</span></div>
   `;
@@ -539,11 +539,15 @@ function buildSnapDock(): HTMLElement {
   if (stepInput) {
     stepInput.addEventListener("change", () => {
       const v = parseFloat(stepInput.value);
+      const imperial = getState("unitSystem") === "imperial";
+      const FT = 3.28084;
       if (Number.isFinite(v) && v > 0) {
-        setStep(v);
-        stepInput.value = v.toFixed(v >= 1 ? 1 : 2);
+        const stepM = imperial ? v / FT : v;
+        setStep(stepM);
+        stepInput.value = (imperial ? stepM * FT : stepM).toFixed(2);
       } else {
-        stepInput.value = getSnap().step.toFixed(2);
+        const stepM = getSnap().step;
+        stepInput.value = (imperial ? stepM * FT : stepM).toFixed(2);
       }
     });
   }
@@ -1015,7 +1019,7 @@ function buildLevelsTab(): HTMLElement {
     nameEl.style.cssText = "flex:1; font-size:11px; color:var(--ink-body);";
 
     const elevEl = el("div");
-    elevEl.textContent = `+${lvl.elevation.toFixed(1)}m`;
+    elevEl.textContent = formatLength(Math.abs(lvl.elevation)).replace(/^/, lvl.elevation >= 0 ? "+" : "−");
     elevEl.style.cssText = "font-size:9px; color:var(--ink-dim); white-space:nowrap;";
 
     const chip = el("div", "level-active-chip");
@@ -1059,18 +1063,29 @@ function buildLevelsTab(): HTMLElement {
       if (existing) { existing.remove(); return; }
       const form = el("div", "level-form");
       form.style.cssText = "display:flex; flex-direction:column; gap:4px; padding:6px; background:var(--chrome-secondary); border-radius:4px; margin-top:6px;";
+      const imperial = getState("unitSystem") === "imperial";
+      const FT = 3.28084;
+      const maxElevM = Math.max(...levelStore.all().map(l => l.elevation));
+      const defaultDisplayVal = imperial ? ((maxElevM + 3) * FT).toFixed(1) : (maxElevM + 3).toFixed(1);
+      const unit = imperial ? "ft" : "m";
       form.innerHTML = `
-        <input class="level-name-input" placeholder="Level name (e.g. 2nd Floor)" style="font-size:11px; padding:3px 5px; background:var(--input-bg,var(--chrome)); border:1px solid var(--hairline); color:var(--ink-body); border-radius:3px;"/>
-        <input class="level-elev-input" placeholder="Elevation (m)" type="number" step="0.1" style="font-size:11px; padding:3px 5px; background:var(--input-bg,var(--chrome)); border:1px solid var(--hairline); color:var(--ink-body); border-radius:3px;"/>
-        <button class="level-create-btn" style="font-size:10px; padding:3px; background:var(--accent,#5080ff); color:#fff; border:none; border-radius:3px; cursor:pointer;">Create Level</button>
+        <input class="level-elev-input" placeholder="Elevation (${unit})" type="number" step="${imperial ? "0.5" : "0.1"}" value="${defaultDisplayVal}" style="font-size:11px; padding:3px 5px; background:var(--input-bg,var(--chrome)); border:1px solid var(--hairline); color:var(--ink-body); border-radius:3px;"/>
+        <div style="display:flex; gap:4px;">
+          <button class="level-create-btn" style="flex:1; font-size:10px; padding:3px; background:var(--accent,#5080ff); color:#fff; border:none; border-radius:3px; cursor:pointer;">Add Level</button>
+          <button class="level-cancel-btn" style="font-size:10px; padding:3px 8px; background:none; border:1px solid var(--hairline); color:var(--ink-body); border-radius:3px; cursor:pointer;">Cancel</button>
+        </div>
       `;
       wrap.appendChild(form);
-      const createBtn = form.querySelector<HTMLButtonElement>(".level-create-btn")!;
-      createBtn.addEventListener("click", () => {
-        const nameIn = (form.querySelector<HTMLInputElement>(".level-name-input")!).value.trim();
-        const elevIn = parseFloat((form.querySelector<HTMLInputElement>(".level-elev-input")!).value);
-        if (!nameIn || isNaN(elevIn)) return;
-        (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("IfcLevel", { name: nameIn, elevation: elevIn });
+      form.querySelector<HTMLButtonElement>(".level-cancel-btn")!.addEventListener("click", () => form.remove());
+      form.querySelector<HTMLButtonElement>(".level-create-btn")!.addEventListener("click", () => {
+        const elevDisplay = parseFloat((form.querySelector<HTMLInputElement>(".level-elev-input")!).value);
+        if (isNaN(elevDisplay)) return;
+        const elevM = imperial ? elevDisplay / FT : elevDisplay;
+        const all = levelStore.all();
+        const name = elevM >= 0
+          ? `Level ${all.filter(l => l.elevation >= 0).length + 1}`
+          : `Level B${all.filter(l => l.elevation < 0).length + 1}`;
+        (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("IfcLevel", { name, elevation: elevM });
         form.remove();
       });
     });
