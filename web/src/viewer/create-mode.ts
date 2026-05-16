@@ -90,7 +90,7 @@ let _lastCreateClickX = 0;
 let _lastCreateClickY = 0;
 // Temporary scene objects — removed when the tool completes or is cancelled.
 let _previewMesh: THREE.Mesh | null = null;
-let _markerMesh: THREE.Points | THREE.Sprite | null = null;
+let _markerMesh: THREE.Points | null = null;
 // Axis-constraint indicator line shown when Shift is held during sketch drawing.
 let _sketchShiftAxisLine: THREE.Line | null = null;
 // Cursor dot — CSS overlay div that tracks the pointer when a sketch tool is active.
@@ -1558,24 +1558,22 @@ function setMarker(viewer: Viewer, pt: { x: number; y: number; z?: number }): vo
   ctx.fillStyle = "#ffffff"; ctx.fill();
   ctx.strokeStyle = "#000000"; ctx.lineWidth = 2.5; ctx.stroke();
   const tex = new THREE.CanvasTexture(c);
-  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true });
-  const sprite = new THREE.Sprite(mat);
-  sprite.position.set(pt.x, pt.y, z + 0.05);
-  sprite.scale.set(0.35, 0.35, 1);
-  sprite.renderOrder = 999;
-  _markerMesh = sprite;
-  viewer.getScene().add(sprite);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute([pt.x, pt.y, z + 0.05], 3));
+  const mat = new THREE.PointsMaterial({ size: 14, sizeAttenuation: false, map: tex, transparent: true, alphaTest: 0.01, depthTest: false, depthWrite: false });
+  const pts = new THREE.Points(geom, mat);
+  pts.renderOrder = 999;
+  _markerMesh = pts;
+  viewer.getScene().add(pts);
 }
 
 function clearMarker(viewer: Viewer): void {
   if (!_markerMesh) return;
   viewer.getScene().remove(_markerMesh);
-  if ("geometry" in _markerMesh) _markerMesh.geometry.dispose();
-  const mat = (_markerMesh as THREE.Sprite).material ?? (_markerMesh as THREE.Points).material;
-  if (mat) {
-    (mat as THREE.SpriteMaterial).map?.dispose();
-    (mat as THREE.Material).dispose();
-  }
+  _markerMesh.geometry.dispose();
+  const mat = _markerMesh.material as THREE.PointsMaterial;
+  mat.map?.dispose();
+  mat.dispose();
   _markerMesh = null;
 }
 
