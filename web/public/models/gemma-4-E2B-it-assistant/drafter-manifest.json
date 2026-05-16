@@ -1,0 +1,84 @@
+{
+  "model_id": "google/gemma-4-E2B-it-assistant",
+  "export_dtype": "float32",
+  "inputs": {
+    "inputs_embeds": {
+      "shape": [
+        "batch",
+        "seq",
+        3072
+      ],
+      "dtype": "float32",
+      "note": "cat([target_token_embedding, target_last_hidden_state], dim=-1)"
+    },
+    "position_ids": {
+      "shape": [
+        "batch",
+        "seq"
+      ],
+      "dtype": "int64",
+      "note": "constant at last-seen-token position for all draft steps"
+    },
+    "sliding_k": {
+      "shape": [
+        "batch",
+        1,
+        "kv_seq",
+        256
+      ],
+      "dtype": "float32",
+      "note": "target's last sliding_attention layer K, shape matches target head_dim=256"
+    },
+    "sliding_v": {
+      "shape": [
+        "batch",
+        1,
+        "kv_seq",
+        256
+      ],
+      "dtype": "float32"
+    },
+    "full_k": {
+      "shape": [
+        "batch",
+        1,
+        "kv_seq",
+        512
+      ],
+      "dtype": "float32",
+      "note": "target's last full_attention layer K, shape matches target global_head_dim=512"
+    },
+    "full_v": {
+      "shape": [
+        "batch",
+        1,
+        "kv_seq",
+        512
+      ],
+      "dtype": "float32"
+    }
+  },
+  "outputs": {
+    "logits": {
+      "shape": [
+        "batch",
+        "seq",
+        262144
+      ],
+      "dtype": "float32",
+      "note": "vocabulary logits; use argmax for greedy draft token"
+    },
+    "projected_state": {
+      "shape": [
+        "batch",
+        "seq",
+        1536
+      ],
+      "dtype": "float32",
+      "note": "post_projection output; concat with next token embed as next draft step's inputs_embeds"
+    }
+  },
+  "target_model": "google/gemma-4-E2B-it",
+  "target_hidden_size": 1536,
+  "note": "MTP spec-decode requires the TARGET ONNX to expose last_hidden_state and shared_kv_states. transformers.js 4.2.0 does not export these. File upstream issue: github.com/huggingface/transformers.js/issues"
+}

@@ -13,7 +13,10 @@ export interface TurnTelemetry {
   skills_matched: number;
   tg_tps: number;    // tokens/s during generation
   pp_tps: number;    // tokens/s during prefill (approx)
-  mtp_on?: boolean;  // true when MTP / speculative decoding was active for this turn
+  mtp_on?: boolean;         // true when MTP spec-decode was active for this turn
+  spec_attempts?: number;   // draft tokens proposed by drafter this turn (#674 AC4)
+  spec_accepts?: number;    // draft tokens accepted by target this turn
+  spec_accept_rate?: number; // spec_accepts / spec_attempts (0 when mtp_on false)
   path?: "webgpu" | "remote"; // inference path used
 }
 

@@ -49,3 +49,6 @@ scripts/_ac-*.ts
 
 # Bench download scratch dir
 .tmp-bench-downloads/
+
+# Drafter ONNX binary (299MB+ — download separately; see scripts/export-drafter-onnx.py)
+web/public/models/**/*.onnx
