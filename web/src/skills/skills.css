@@ -83,10 +83,17 @@
   stroke-dasharray: 4 3;
   pointer-events: none;
 }
+/* Pan/zoom transform wrapper — width/height 0 so it doesn't block drops */
+.skill-canvas-transform {
+  position: absolute;
+  width: 0; height: 0;
+  top: 0; left: 0;
+  transform-origin: 0 0;
+}
 .skill-canvas-nodes { position: absolute; inset: 0; }
 .sc-node {
   position: absolute;
-  width: 140px;
+  width: 160px;
   background: var(--panel-bg, var(--paper));
   border: 1px solid var(--hairline);
   border-radius: 6px;
@@ -130,6 +137,51 @@
   border-radius: 2px;
 }
 .sc-node-del:hover { background: var(--paper); color: var(--err, #c0392b); }
+
+/* Skill node body — step count badge */
+.sc-node-body { padding: 4px 8px 2px; }
+.sc-node-skill-body { display: flex; align-items: center; }
+.sc-step-badge {
+  font-size: 9px;
+  color: var(--ink-faint);
+  background: var(--paper-3);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* Script node body — textarea */
+.sc-node-script { width: 200px; }
+.sc-script-src {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  resize: vertical;
+  border: none;
+  background: var(--paper-2);
+  color: var(--ink);
+  padding: 4px 6px;
+  outline: none;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Palette item with name + step badge */
+.skill-canvas-palette-item { display: flex; align-items: center; gap: 4px; }
+.sc-pal-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-pal-badge {
+  font-size: 9px;
+  color: var(--ink-faint);
+  background: var(--paper-3);
+  border-radius: 8px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.sc-palette-script { color: var(--gemma, #7c4dff); font-weight: 600; }
+
 .sc-node-ports {
   display: flex;
   justify-content: space-between;

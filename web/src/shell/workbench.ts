@@ -1937,117 +1937,26 @@ async function renderSkillNodes(): Promise<void> {
 }
 
 let _canvasInstance: SkillCanvas | null = null;
+// Kept for external call sites that may reference it (e.g. workbench:activate-canvas event).
 let _activateNodesCanvas: (() => void) | null = null;
 
 function buildSkillsTabBody(): HTMLElement {
-  // Split layout: left = skill nodes (list + canvas); right = parameter sidecar.
+  // #722: SKILL NODES tab opens directly to the Grasshopper-style canvas (no sub-tab switcher).
   const outer = el("div", "tab-body skills-tab");
   outer.style.cssText = "display:flex; flex-direction:row; height:100%; overflow:hidden;";
 
-  // ── Left: nodes column ────────────────────────────────────────────────────
+  // ── Left: canvas column ───────────────────────────────────────────────────
   const nodesCol = document.createElement("div");
   nodesCol.className = "skills-nodes-col";
   nodesCol.style.cssText = "flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; border-right:var(--lw-construction) solid var(--border);";
 
-  // Record toolbar
-  const recordBar = document.createElement("div");
-  recordBar.className = "skill-nodes-record-bar";
-  recordBar.style.cssText = "display:flex; align-items:center; padding:4px 8px; gap:8px; border-bottom:1px solid var(--hairline);";
-  const recordBtn = document.createElement("button");
-  recordBtn.className = "btn btn-sm skill-nodes-record-btn";
-  recordBtn.textContent = "⏺ Record";
-  _recordBtn = recordBtn;
-  const recordStatus = document.createElement("span");
-  recordStatus.style.cssText = "font-size:11px; color:var(--ink-faint); flex:1;";
-  _recordStatus = recordStatus;
-  recordBar.appendChild(recordBtn);
-  recordBar.appendChild(recordStatus);
-  nodesCol.appendChild(recordBar);
-
-  recordBtn.addEventListener("click", async () => {
-    if (!_recording) {
-      _recording = true;
-      _recordSteps = [];
-      _recordStart = Date.now();
-      recordBtn.textContent = "⏹ Stop";
-      recordBtn.style.color = "var(--accent-red, #e53e3e)";
-      if (_recordStatus) _recordStatus.textContent = "Recording…";
-    } else {
-      _recording = false;
-      recordBtn.textContent = "⏺ Record";
-      recordBtn.style.color = "";
-      const steps = _recordSteps.slice();
-      _recordSteps = [];
-      if (steps.length === 0) {
-        if (_recordStatus) _recordStatus.textContent = "No steps captured.";
-        return;
-      }
-      const name = window.prompt(`Name this cluster (${steps.length} step${steps.length === 1 ? "" : "s"}):`);
-      if (!name?.trim()) {
-        if (_recordStatus) _recordStatus.textContent = "Cancelled.";
-        return;
-      }
-      await saveCluster({ name: name.trim(), steps });
-      if (_recordStatus) _recordStatus.textContent = `Saved "${name.trim()}"`;
-      await refreshClusterCatalog();
-      void renderSkillNodes();
-    }
-  });
-
-  // View switcher: LIST | CANVAS
-  const switcher = document.createElement("div");
-  switcher.className = "skill-nodes-view-switcher";
-  const listBtn   = document.createElement("button");
-  const canvasBtn = document.createElement("button");
-  listBtn.className   = "skill-nodes-view-btn active";
-  canvasBtn.className = "skill-nodes-view-btn";
-  listBtn.textContent   = "List";
-  canvasBtn.textContent = "Canvas";
-  switcher.appendChild(listBtn);
-  switcher.appendChild(canvasBtn);
-
-  const listPane = document.createElement("div");
-  listPane.style.cssText = "flex:1; overflow-y:auto; padding:8px 10px; display:flex; flex-direction:column; gap:4px;";
-  _skillsWrap = listPane;
-
-  listPane.addEventListener("click", (e) => {
-    const box = (e.target as HTMLElement).closest<HTMLElement>(".node-box");
-    if (!box) return;
-    const idx = Number(box.dataset.idx ?? "-1");
-    if (idx < 0 || idx >= _nodes.length) return;
-    _selectedNodeIdx = idx;
-    void renderSkillNodes();
-    const n = _nodes[idx];
-    if (n.verb && n.args) renderNodeParameters(n.verb, n.args);
-    else renderParameters(null);
-  });
-
+  // Canvas area fills the column.
   const canvasPane = document.createElement("div");
-  canvasPane.style.cssText = "flex:1; overflow:hidden; display:none;";
+  canvasPane.style.cssText = "flex:1; overflow:hidden;";
+  _skillsWrap = null;   // list view removed; renderSkillNodes() is now a no-op
+  _canvasInstance = new SkillCanvas(canvasPane);
+  _activateNodesCanvas = null;
 
-  const activateView = (view: "list" | "canvas") => {
-    if (view === "list") {
-      listBtn.classList.add("active");
-      canvasBtn.classList.remove("active");
-      listPane.style.display = "flex";
-      canvasPane.style.display = "none";
-    } else {
-      canvasBtn.classList.add("active");
-      listBtn.classList.remove("active");
-      listPane.style.display = "none";
-      canvasPane.style.display = "block";
-      if (!_canvasInstance) {
-        _canvasInstance = new SkillCanvas(canvasPane);
-      }
-    }
-  };
-
-  listBtn.addEventListener("click",   () => activateView("list"));
-  canvasBtn.addEventListener("click", () => activateView("canvas"));
-  _activateNodesCanvas = () => activateView("canvas");
-
-  nodesCol.appendChild(switcher);
-  nodesCol.appendChild(listPane);
   nodesCol.appendChild(canvasPane);
 
   // ── Right: parameter sidecar ──────────────────────────────────────────────
@@ -2059,20 +1968,11 @@ function buildSkillsTabBody(): HTMLElement {
   renderParameters(null);
   window.addEventListener("viewer:select", (rawEv) => {
     const uuid: string | null = (rawEv as CustomEvent<{ uuid: string | null }>).detail?.uuid ?? null;
-    if (_selectedNodeIdx !== null) {
-      // Node-box click takes priority; clear node selection but don't overwrite params with 3D-object params.
-      _selectedNodeIdx = null;
-      void renderSkillNodes();
-      return;
-    }
-    void renderSkillNodes();
     renderParameters(uuid);
   });
 
   outer.appendChild(nodesCol);
   outer.appendChild(paramsCol);
-
-  void renderSkillNodes();
   return outer;
 }
 
