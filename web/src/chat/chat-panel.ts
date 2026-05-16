@@ -1,4 +1,4 @@
-// chat-panel.ts — Multi-turn conversation panel for the CREATE dock tab (#41).
+﻿// chat-panel.ts — Multi-turn conversation panel for the CREATE dock tab (#41).
 //
 // Maintains a conversation history across turns and routes each user message
 // through agent-harness.ts → dispatch.ts. Dispatches fire immediately after
@@ -262,9 +262,11 @@ export class ChatPanel {
       // Gemma E4B has native vision — let it actually see the scene.
       const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       let effectiveImage = userImage;
+      console.log("[vision] text=", JSON.stringify(text.substring(0,60)), "hasImg=", !!effectiveImage, "re=", VISUAL_RE.test(text));
       let agentRing: HTMLDivElement | null = null;
       if (!effectiveImage && VISUAL_RE.test(text)) {
         effectiveImage = captureViewport(768) ?? undefined;
+        console.log("[vision] captureViewport=", effectiveImage ? "OK len="+effectiveImage.length : "NULL");
         if (effectiveImage) {
           const canvas = document.querySelector<HTMLElement>(".viewport-area canvas");
           const rect = canvas?.getBoundingClientRect();
