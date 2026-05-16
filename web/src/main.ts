@@ -112,17 +112,6 @@ paramCollapseBtn.addEventListener("click", () => {
 });
 
 const viewer = new Viewer(canvas, viewportAreaEl);
-// Boot-time floor plane for the built-in Level 1 so its visibility toggle has geometry to act on.
-{
-  const geom = new THREE.BoxGeometry(20, 20, 0.02);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
-  const plane = new THREE.Mesh(geom, mat);
-  plane.position.set(0, 0, 0);
-  plane.userData.kind = "brep";
-  plane.userData.creator = "IfcLevel";
-  plane.userData.levelId = "level/0";
-  viewer.addMesh(plane, "brep", { noHistory: true });
-}
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
 // Expose dispatchSync + async dispatch for CDP-driven verification scripts.
