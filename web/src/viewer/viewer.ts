@@ -2480,6 +2480,14 @@ export class Viewer {
     const dir = new THREE.Vector3(1, 1, 1.5).normalize();
     // Restore perspective camera if an ortho view swap is active (#331).
     const perspPane = this.panes.find(p => p.view === "persp");
+    // #709: flush accumulated OrbitControls sphericalDelta so stale damping
+    // momentum doesn't drift the camera off the desired position.
+    if (perspPane) {
+      const prev = perspPane.controls.enableDamping;
+      perspPane.controls.enableDamping = false;
+      perspPane.controls.update();
+      perspPane.controls.enableDamping = prev;
+    }
     if (perspPane && perspPane.camera !== this.camera) {
       perspPane.camera = this.camera;
       perspPane.controls.object = this.camera;
@@ -2506,6 +2514,14 @@ export class Viewer {
       detail: { cplane: resolveCPlane("SdBox", {}, this), view: name },
     }));
     const perspPane = this.panes.find(p => p.view === "persp");
+    // #709: flush accumulated OrbitControls sphericalDelta before applying new view,
+    // so stale damping momentum doesn't push camera off the exact desired position.
+    if (perspPane) {
+      const prev = perspPane.controls.enableDamping;
+      perspPane.controls.enableDamping = false;
+      perspPane.controls.update();
+      perspPane.controls.enableDamping = prev;
+    }
     if (name === "persp") {
       // Reset grid to XY (floor) plane — ortho views rotate it; perspective always uses XY.
       this.grid.rotation.set(Math.PI / 2, 0, 0);
