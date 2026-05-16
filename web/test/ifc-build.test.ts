@@ -129,13 +129,14 @@ describe("buildIfcScene — property sets (#244)", () => {
     expect(text).not.toContain("'profile'"); // array skipped
   });
 
-  it("Pset_GemmaArchitectParams is the property set name", () => {
+  it("Pset_GemmaCadParams is the property set name", () => {
     const elements: IfcSceneElement[] = [
       { mesh: minimalMesh(), creator: "IfcSlab", dispatchArgs: { thickness: 0.3 } },
     ];
     const bytes = buildIfcScene(elements);
     const text = new TextDecoder().decode(bytes);
-    expect(text).toContain("'Pset_GemmaArchitectParams'");
+    // Pset name follows GEMMA-CAD branding (#672 rename); not an external IFC schema name
+    expect(text).toContain("'Pset_GemmaCadParams'");
   });
 
   it("skips property set when all args are non-primitive", () => {
