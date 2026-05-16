@@ -119,6 +119,7 @@ export function setRenderMode(mode: RenderMode): void {
       const mesh = obj as THREE.Mesh;
       if (mesh.userData[DRAFT_TAG] === "overlay") return;
       if (mesh.userData[RM_OVERLAY]) return;
+      if (mesh.userData.creator === "IfcLevel") return;
       mesh.userData[RM_BACKUP] = mesh.material;
       mesh.material = new THREE.MeshBasicMaterial({ color: 0x2a2a3a, wireframe: true });
     });
@@ -128,6 +129,7 @@ export function setRenderMode(mode: RenderMode): void {
       const mesh = obj as THREE.Mesh;
       if (mesh.userData[DRAFT_TAG] === "overlay") return;
       if (mesh.userData[RM_OVERLAY]) return;
+      if (mesh.userData.creator === "IfcLevel") return;
       const orig = mesh.material;
       const srcMat = Array.isArray(orig) ? orig[0] : orig;
       const srcCol = (srcMat as THREE.MeshStandardMaterial).color;

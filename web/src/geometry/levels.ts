@@ -100,6 +100,18 @@ class LevelStore {
     this._notify();
     return true;
   }
+
+  remove(id: string): boolean {
+    if (id === GROUND_LEVEL_ID) return false; // Level 1 is permanent
+    if (!this._levels.has(id)) return false;
+    this._levels.delete(id);
+    if (this._activeId === id) {
+      this._activeId = GROUND_LEVEL_ID;
+      for (const l of this._levels.values()) l.active = l.id === GROUND_LEVEL_ID;
+    }
+    this._notify();
+    return true;
+  }
 }
 
 export const levelStore = new LevelStore();

@@ -112,6 +112,17 @@ paramCollapseBtn.addEventListener("click", () => {
 });
 
 const viewer = new Viewer(canvas, viewportAreaEl);
+// Boot-time floor plane for the built-in Level 1 so its visibility toggle has geometry to act on.
+{
+  const geom = new THREE.BoxGeometry(20, 20, 0.02);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+  const plane = new THREE.Mesh(geom, mat);
+  plane.position.set(0, 0, 0);
+  plane.userData.kind = "brep";
+  plane.userData.creator = "IfcLevel";
+  plane.userData.levelId = "level/0";
+  viewer.addMesh(plane, "brep", { noHistory: true });
+}
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
 // Expose dispatchSync + async dispatch for CDP-driven verification scripts.
@@ -1338,7 +1349,7 @@ registerHandler("SdLevel", (args) => {
   const elev   = (args.elevation as number | undefined) ?? 0;
   const name   = (args.name as string | undefined) ?? `Level ${levelStore.all().length}`;
   const height = (args.height as number | undefined) ?? 3.0;
-  const extent = (args.extent  as number | undefined) ?? 10;
+  const extent = (args.extent  as number | undefined) ?? 20;
   // Register in levelStore so UI panel + active-level routing knows about it.
   const level = levelStore.findOrCreate(name, elev, height);
   const geom   = new THREE.BoxGeometry(extent, extent, 0.02);
@@ -1368,11 +1379,23 @@ registerHandler("setLevelVisible", (args) => {
   if (!id || visible === undefined) return { error: "id and visible required" };
   const ok = levelStore.setVisible(id, visible);
   if (!ok) return { error: `level not found: ${id}` };
-  // Toggle THREE.js meshes tagged with this levelId.
   viewer.forEachSceneChild((child) => {
     if (child.userData?.levelId === id) child.visible = visible;
   });
   return { ok: true, levelId: id, visible };
+});
+
+registerHandler("removeLevel", (args) => {
+  const id = args.id as string | undefined;
+  if (!id) return { error: "id required" };
+  const ok = levelStore.remove(id);
+  if (!ok) return { error: `cannot remove level: ${id}` };
+  const toRemove: THREE.Object3D[] = [];
+  viewer.forEachSceneChild((child) => {
+    if (child.userData?.levelId === id) toRemove.push(child);
+  });
+  for (const obj of toRemove) viewer.removeObject(obj);
+  return { ok: true, levelId: id };
 });
 
 registerHandler("SdDatum", (args) => {

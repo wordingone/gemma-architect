@@ -1031,6 +1031,18 @@ function buildLevelsTab(): HTMLElement {
     row.appendChild(elevEl);
     row.appendChild(chip);
 
+    if (lvl.id !== "level/0") {
+      const delBtn = el("button", "level-del-btn");
+      delBtn.textContent = "−";
+      delBtn.title = "Delete level";
+      delBtn.style.cssText = "border:none; background:transparent; cursor:pointer; padding:0 2px; color:var(--ink-faint); font-size:14px; line-height:1; flex-shrink:0;";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("removeLevel", { id: lvl.id });
+      });
+      row.appendChild(delBtn);
+    }
+
     row.addEventListener("click", () => {
       (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("setActiveLevel", { id: lvl.id });
     });

@@ -1284,9 +1284,9 @@ function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Obje
   const elevation = p.z ?? 0;
   const name = `Level ${levelStore.all().length}`;
   const level = levelStore.findOrCreate(name, elevation, 3.0);
-  const extent = 10;
+  const extent = 20;
   const geom = new THREE.BoxGeometry(extent, extent, 0.02);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(p.x, p.y, elevation);
   mesh.userData.kind = "brep";

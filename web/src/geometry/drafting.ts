@@ -52,6 +52,7 @@ export function applyDrafting(root: THREE.Object3D, opts: DraftingOpts = {}): vo
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh) return;
     if (mesh.userData?.noRenderMode) return;
+    if (mesh.userData?.creator === "IfcLevel") return;
     if (mesh.userData?.[TAG] === "overlay") return; // skip our own line overlays
 
     const geom = mesh.geometry as THREE.BufferGeometry | undefined;

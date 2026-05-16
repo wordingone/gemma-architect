@@ -1279,6 +1279,16 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: removeLevel
+  kernel_op: removeLevel
+  args:
+    - {name: id, type: string, required: true, description: "Level ID to delete (level/0 cannot be removed)"}
+  topology_role: system
+  kg_predicates: []
+  synonyms: [deleteLevel, removeBuildingLevel]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 - canonical_name: SdSectionBox
   kernel_op: setSectionBox
   args:
