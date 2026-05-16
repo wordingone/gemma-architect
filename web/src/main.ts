@@ -46,7 +46,7 @@ import {
 import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
-import { initCreateMode, emitClickWorld, getSnapTarget } from "./viewer/create-mode";
+import { initCreateMode, emitClickWorld, getSnapTarget, makeLevelSprite, updateLevelSprite } from "./viewer/create-mode";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory } from "./history";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
@@ -112,6 +112,17 @@ paramCollapseBtn.addEventListener("click", () => {
 });
 
 const viewer = new Viewer(canvas, viewportAreaEl);
+// Keep level plane labels in sync when level names are edited via the sidebar.
+levelStore.subscribe(() => {
+  viewer.forEachSceneChild((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.userData.creator !== "IfcLevel") return;
+    const level = levelStore.get(mesh.userData.levelId as string);
+    if (!level) return;
+    const sprite = mesh.children.find((c) => c.userData.isLevelLabel) as THREE.Sprite | undefined;
+    if (sprite) updateLevelSprite(sprite, level.name);
+  });
+});
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
 // Expose dispatchSync + async dispatch for CDP-driven verification scripts.

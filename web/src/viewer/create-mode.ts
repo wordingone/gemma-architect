@@ -624,9 +624,9 @@ function snapWorldForView(viewer: Viewer, world: THREE.Vector3): { x: number; y:
       z: doSnap ? Math.round(world.z / s) * s : world.z,
     };
   }
-  // Top / perspective: full XY grid snap with origin+rotation support.
+  // Top / perspective / iso / bottom: XY grid snap, Z = active level elevation.
   const snapped = snapPoint(world.x, world.y);
-  return { x: snapped.x, y: snapped.y, z: 0 };
+  return { x: snapped.x, y: snapped.y, z: levelStore.getActive().elevation };
 }
 
 // Raycast against scene geometry to inherit Z elevation (for level placement, AC B.1).
@@ -1280,6 +1280,40 @@ function buildGridLine(a: { x: number; y: number }, b: { x: number; y: number })
   return { mesh: line, chain };
 }
 
+function _drawLevelCanvas(name: string): HTMLCanvasElement {
+  const W = 192, H = 48;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "rgba(16,44,32,0.80)";
+  ctx.fillRect(2, 2, W - 4, H - 4);
+  ctx.fillStyle = "#9fefcc";
+  ctx.font = "bold 22px system-ui,sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(name, W / 2, H / 2);
+  return canvas;
+}
+
+/** Creates a billboard Sprite label for a level plane (camera-facing, no depth write). */
+export function makeLevelSprite(name: string): THREE.Sprite {
+  const tex = new THREE.CanvasTexture(_drawLevelCanvas(name));
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.88 });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(4, 1, 1);
+  sprite.userData.isLevelLabel = true;
+  return sprite;
+}
+
+/** Refreshes the canvas texture on an existing level label sprite when the name changes. */
+export function updateLevelSprite(sprite: THREE.Sprite, name: string): void {
+  const mat = sprite.material as THREE.SpriteMaterial;
+  if (mat.map) mat.map.dispose();
+  mat.map = new THREE.CanvasTexture(_drawLevelCanvas(name));
+  mat.needsUpdate = true;
+}
+
 function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Object3D; chain: string; levelId: string } {
   const elevation = p.z ?? 0;
   const name = `Level ${levelStore.all().length}`;
@@ -1292,6 +1326,9 @@ function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Obje
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcLevel";
   mesh.userData.levelId = level.id;
+  const label = makeLevelSprite(level.name);
+  label.position.set(-extent / 2 + 2.5, -extent / 2 + 2.5, 0.3);
+  mesh.add(label);
   const chain = `IfcLevel({elevation:${elevation},name:"${name}",height:3.0})`;
   return { mesh, chain, levelId: level.id };
 }
