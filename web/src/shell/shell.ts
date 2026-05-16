@@ -604,7 +604,22 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
     singleBtn.addEventListener("click", () => {
       const vp = vpControls.closest<HTMLElement>(".viewport");
       const area = document.querySelector<HTMLElement>(".viewport-area");
-      if (area && vp) area.dataset.focusVp = vp.id;
+      if (area && vp) {
+        if (vp.id !== "viewport-2") {
+          // Non-persp pane: snap the persp pane (viewport-2) to this view so
+          // the view-dropdown stays functional after the split→single transition.
+          delete area.dataset.focusVp;
+          const viewBtn = vp.querySelector<HTMLElement>(".vp-view-btn");
+          const view = viewBtn?.dataset.vpView ?? "top";
+          if (view === "perspective") {
+            dispatchSync("SdSetViewPerspective", {});
+          } else {
+            dispatchSync("SdSetViewOrtho", { view });
+          }
+        } else {
+          delete area.dataset.focusVp;
+        }
+      }
       onSplitMode?.("single");
     });
     vpControls.appendChild(singleBtn);
