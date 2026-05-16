@@ -17,6 +17,7 @@ import { getCurrentDispatchCtx } from "../commands/dispatch.js";
 import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
+import { pushAction, pushDeleteAction } from "../history.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -1085,6 +1086,7 @@ export class Viewer {
     if (clipLabel) this.removeClippingPlane(clipLabel);
     // IFC sub-meshes are children of currentObject (not direct scene children);
     // remove from their actual parent so scene.remove() doesn't silently no-op.
+    const removedParent = removed.parent;
     if (removed.parent === this.scene) {
       this.scene.remove(removed);
     } else if (removed.parent) {
@@ -1092,15 +1094,9 @@ export class Viewer {
     } else {
       return false;
     }
-    removed.traverse((child) => {
-      const c = child as THREE.Mesh;
-      if (!c.geometry) return;
-      c.geometry.dispose();
-      const mat = c.material;
-      if (!mat) return;
-      if (Array.isArray(mat)) mat.forEach((m: THREE.Material) => m.dispose());
-      else (mat as THREE.Material).dispose();
-    });
+    // Geometry is NOT disposed here — pushDeleteAction keeps it alive so undo
+    // can re-add the object. Disposal happens in clearHistory() on scene wipe.
+    pushDeleteAction(removed, removedParent);
     this.pivotOffsetByUuid.delete(removed.uuid);
     this.targetObject = null;
     this.pivotOffset.identity();
@@ -2054,7 +2050,9 @@ export class Viewer {
     return perspPane?.camera ?? this.camera;
   }
 
-  addMesh(mesh: THREE.Object3D, _kind?: string): void {
+  // noHistory: true opts out of the automatic undo push. Use for callers that
+  // manage their own history entry (SdArray → pushBatchAction).
+  addMesh(mesh: THREE.Object3D, _kind?: string, opts?: { noHistory?: boolean }): void {
     const ctx = getCurrentDispatchCtx();
     if (ctx && mesh.userData.dispatchArgs === undefined) {
       mesh.userData.dispatchVerb = ctx.canonical;
@@ -2062,6 +2060,9 @@ export class Viewer {
     }
     this.scene.add(mesh);
     this._applyActiveClipPlanesToSubtree(mesh);
+    if (!opts?.noHistory) {
+      pushAction(mesh, (mesh.userData.creator as string | undefined) ?? "object");
+    }
   }
 
   /** Walk scene children; callback may mutate visible/material but not add/remove. */

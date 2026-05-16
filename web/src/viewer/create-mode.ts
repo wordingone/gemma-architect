@@ -3393,9 +3393,13 @@ export function initCreateMode(viewer: Viewer): void {
     } else {
       snapped = snapWorldForView(viewer, world);
     }
-    // For clip tool: carry the un-snapped view-plane z unless a vertex was snapped
-    // (vertex snap already has the correct z from the geometry).
-    if (tool === "clip" && !vertex) snapped = { ...snapped, z: world.z };
+    // For clip tool in top/perspective: carry the un-snapped view-plane z (snap resolves XY only).
+    // In elevation views snapWorldForView already snaps z; overriding degrades snap to 1D (grid lines).
+    if (tool === "clip" && !vertex) {
+      const av = viewer.activeView;
+      const isElevation = av === "front" || av === "back" || av === "left" || av === "right";
+      if (!isElevation) snapped = { ...snapped, z: world.z };
+    }
     // Shift-hold: axis-lock from last pending point, or smart-track reference if no pending.
     const clickShiftBase: { x: number; y: number; z?: number } | null =
       _pending.length > 0 ? _pending[_pending.length - 1] : _smartTrackPt ?? null;
@@ -3567,8 +3571,14 @@ export function initCreateMode(viewer: Viewer): void {
           : snapWorldForView(viewer, world);
       }
     }
-    // Carry view-plane z for clip tool — grid snap resolves XY only; z comes from the view plane.
-    if (tool === "clip") snapped = { ...snapped, z: world.z };
+    // Carry view-plane z for clip tool in top/perspective only.
+    // In elevation views (front/back/left/right) snapWorldForView already snaps z to the grid;
+    // overriding with world.z would reduce snap to 1D (grid lines instead of intersections).
+    if (tool === "clip") {
+      const av = viewer.activeView;
+      const isElevation = av === "front" || av === "back" || av === "left" || av === "right";
+      if (!isElevation) snapped = { ...snapped, z: world.z };
+    }
 
     // Smart-track: promote a hovered point (vertex snap OR grid intersection) to a reference
     // point after SMART_TRACK_MS dwell. Reference acts as Shift-constraint base before first click.

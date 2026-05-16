@@ -47,7 +47,7 @@ import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, getSnapTarget } from "./viewer/create-mode";
 import { initSectionHandles } from "./viewer/section-handles";
-import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform } from "./history";
+import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory } from "./history";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
@@ -542,7 +542,6 @@ registerHandler("SdWall", (args) => {
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
-  pushAction(mesh, "SdWall");
   return { created: "wall", length: len, thickness: t, height: wallH };
 });
 
@@ -563,7 +562,6 @@ registerHandler("SdSlab", (args) => {
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
-  pushAction(mesh, "SdSlab");
   return { created: "slab", width: w, depth: d };
 });
 
@@ -585,7 +583,6 @@ registerHandler("SdColumn", (args) => {
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
-  pushAction(mesh, "SdColumn");
   return { created: "column", height: h };
 });
 
@@ -824,7 +821,6 @@ registerHandler("SdDoor", (args) => {
   group.userData.levelId = getActiveLevelId();
   group.userData.dispatchArgs = args;
   viewer.addMesh(group, "brep");
-  pushAction(group, "SdDoor");
   let voidCut = false;
   const hostUuid = args.hostUuid as string | undefined;
   if (hostUuid) {
@@ -868,11 +864,9 @@ registerHandler("SdWindow", (args) => {
   group.userData.levelId = getActiveLevelId();
   group.userData.dispatchArgs = args;
   viewer.addMesh(group, "brep");
-  pushAction(group, "SdWindow");
   let voidCut = false;
-  const hostUuid = args.hostUuid as string | undefined;
-  if (hostUuid) {
-    const host = viewer.getScene().getObjectByProperty("uuid", hostUuid);
+  if (hostUuidWin) {
+    const host = viewer.getScene().getObjectByProperty("uuid", hostUuidWin);
     if (host instanceof THREE.Mesh) {
       const voidCenter = group.position.clone();
       cutRectVoidFromBoxMesh(host, voidCenter, w, h);
@@ -1800,7 +1794,7 @@ registerHandler("SdArray", (args) => {
       const dz = i * sz + j * syz;
       if (isPointTarget || !baseObj) {
         const p = makePoint([basePoint[0] + dx, basePoint[1] + dy, basePoint[2] + dz]);
-        viewer.addMesh(p, "mesh");
+        viewer.addMesh(p, "mesh", { noHistory: true });
         batchObjs.push(p);
       } else {
         const clone = baseObj.clone(true);
@@ -1810,7 +1804,7 @@ registerHandler("SdArray", (args) => {
           baseObj.position.z + dz,
         );
         clone.userData.creator = "SdArray";
-        viewer.addMesh(clone, (clone.userData.kind as string | undefined) ?? "mesh");
+        viewer.addMesh(clone, (clone.userData.kind as string | undefined) ?? "mesh", { noHistory: true });
         batchObjs.push(clone);
       }
       created++;
@@ -1972,6 +1966,7 @@ const scenePanel = new ScenePanel(scenePanelEl, viewer);
 
 registerHandler("SdClearScene", () => {
   viewer.clearScene();
+  clearHistory();
   scenePanel.clear();
   resetRibbonElementTypes();
   clearSelected();
@@ -2102,6 +2097,7 @@ function spawnWorker(): void {
     }
     if (msg.type === "run-ok") {
       viewer.setMesh(msg.mesh, msg.bounds);
+      clearHistory();
       pendingStl = msg.stl.byteLength > 0 ? msg.stl : null;
       currentSource = { kind: "prompt", demoId: currentDemo.id };
       setStatus(
@@ -2344,6 +2340,7 @@ async function handleFile(file: File): Promise<void> {
 
 function finalizeFileLoad(scene: LoadedScene, filename: string) {
   viewer.setObject(scene.object, scene.bounds);
+  clearHistory(); // file load replaces the full scene; stale undo refs would crash
   pendingStl = null; // STL is replicad-only; loaded-file path doesn't ship one.
   currentSource = { kind: "file", format: scene.format, filename };
   setStatus(scene.summary, "ok");
