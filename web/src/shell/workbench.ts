@@ -1543,7 +1543,7 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
     header.innerHTML = `
       <div class="ai-title">
         ${mode === "console" ? iconSVG("terminal", 13) : iconSVG("sparkle", 13)}
-        ${mode === "console" ? "CONSOLE  ·  DSL COMMAND INPUT" : "CREATE  ·  CONVERSATION WITH GEMMA·ARCHITECT"}
+        ${mode === "console" ? "CONSOLE  ·  DSL COMMAND INPUT" : "CREATE  ·  CONVERSATION WITH GEMMA"}
       </div>
       <button class="mode-pill" title="Shift+Tab to toggle mode" data-mode="${mode}">
         ${mode === "console" ? "● CONSOLE" : "○ CREATE"}
