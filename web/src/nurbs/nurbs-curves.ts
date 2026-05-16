@@ -381,12 +381,11 @@ export function tessellate(c: Curve, sampleCount: number): Point3[] {
 // wrapped CVs (periodic knot interpolation is follow-on work).
 export function createInterpolatingCubicBSpline(dataPoints: Point3[]): NurbsCurve {
   const numPts = dataPoints.length;
-  const degree = 3;
-  const order = degree + 1;
-
   if (numPts < 2) throw new Error("createInterpolatingCubicBSpline: need >= 2 points");
-  // Not enough points for cubic — fall back to approximating lower-degree spline
-  if (numPts < order) return createClampedUniformNurbs(3, numPts, dataPoints);
+
+  // Degree adapts to point count: cubic for N >= 4, quadratic for N=3, linear for N=2.
+  const degree = Math.min(3, numPts - 1);
+  const order = degree + 1;
 
   // 1. Chord-length parameterization → parameter t[i] ∈ [0, 1]
   const chord: number[] = [0];
