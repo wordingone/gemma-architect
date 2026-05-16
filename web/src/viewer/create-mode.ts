@@ -764,6 +764,74 @@ function buildWall(a: { x: number; y: number }, b: { x: number; y: number }): { 
   return { mesh, chain };
 }
 
+// Rebuild a wall mesh's geometry in-place given new endpoints (after join trimming).
+function rebuildWallInPlace(mesh: THREE.Mesh, a: { x: number; y: number }, b: { x: number; y: number }): void {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const length = Math.sqrt(dx * dx + dy * dy);
+  if (length < 0.01) return;
+  const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+  const angDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+  const t = DEFAULT_WALL_THICKNESS, h = DEFAULT_WALL_HEIGHT;
+  mesh.geometry.dispose();
+  const geom = new THREE.BoxGeometry(length, t, h);
+  geom.translate(0, 0, h / 2);
+  mesh.geometry = geom;
+  mesh.position.set(midX, midY, 0);
+  mesh.rotation.z = angDeg * Math.PI / 180;
+  mesh.userData.endpoints = [
+    { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
+    { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
+    { x: midX, y: midY, z: 0, id: makeSnapId(midX, midY, 0) },
+  ] as SnapVertex[];
+}
+
+// After placing a new wall, detect endpoint-to-endpoint joins with existing walls and
+// apply a butt-joint trim (retract new wall by t/2) so corners don't double up.
+function attemptWallJoins(newMesh: THREE.Mesh, viewer: Viewer): void {
+  const t = DEFAULT_WALL_THICKNESS;
+  const eps = newMesh.userData.endpoints as SnapVertex[];
+  if (!eps || eps.length < 2) return;
+  let aX = eps[0].x, aY = eps[0].y;
+  let bX = eps[1].x, bY = eps[1].y;
+  const dx = bX - aX, dy = bY - aY;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 0.01) return;
+  const dirX = dx / len, dirY = dy / len;
+
+  // Join if new wall's endpoint is within one wall-thickness of an existing wall endpoint.
+  const JOIN_TOL = t;
+  let aJoined = false, bJoined = false;
+
+  for (const obj of viewer.getScene().children) {
+    if (!(obj instanceof THREE.Mesh) || obj === newMesh || obj.userData?.creator !== "wall") continue;
+    const existEps = obj.userData.endpoints as SnapVertex[] | undefined;
+    if (!existEps) continue;
+    for (let ei = 0; ei < 2; ei++) {
+      const ex = existEps[ei].x, ey = existEps[ei].y;
+      if (!bJoined && Math.hypot(bX - ex, bY - ey) < JOIN_TOL) {
+        bX = ex - dirX * t / 2;
+        bY = ey - dirY * t / 2;
+        bJoined = true;
+        if (!newMesh.userData.joins) newMesh.userData.joins = [];
+        if (!obj.userData.joins) obj.userData.joins = [];
+        newMesh.userData.joins.push({ partnerUuid: obj.uuid, myEndIdx: 1, partnerEndIdx: ei });
+        obj.userData.joins.push({ partnerUuid: newMesh.uuid, myEndIdx: ei, partnerEndIdx: 1 });
+      } else if (!aJoined && Math.hypot(aX - ex, aY - ey) < JOIN_TOL) {
+        aX = ex + dirX * t / 2;
+        aY = ey + dirY * t / 2;
+        aJoined = true;
+        if (!newMesh.userData.joins) newMesh.userData.joins = [];
+        if (!obj.userData.joins) obj.userData.joins = [];
+        newMesh.userData.joins.push({ partnerUuid: obj.uuid, myEndIdx: 0, partnerEndIdx: ei });
+        obj.userData.joins.push({ partnerUuid: newMesh.uuid, myEndIdx: ei, partnerEndIdx: 0 });
+      }
+    }
+    if (aJoined && bJoined) break;
+  }
+
+  if (aJoined || bJoined) rebuildWallInPlace(newMesh, { x: aX, y: aY }, { x: bX, y: bY });
+}
+
 function buildRect(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
   const w = Math.max(0.01, Math.abs(b.x - a.x));
   const d = Math.max(0.01, Math.abs(b.y - a.y));
@@ -1794,6 +1862,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   const out = handler.handler(_pending);
   _pending = [];
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep");
+  if (out.mesh.userData.creator === "wall") attemptWallJoins(out.mesh as THREE.Mesh, viewer);
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
   if (out.dispatchOnCommit) {
