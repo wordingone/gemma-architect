@@ -3132,6 +3132,142 @@ await resetScene('before-box-inject');
   });
 }
 
+// ── Surface: demo-cluster-flow (#670 / hackathon demo polish) ─────────────────
+// Full demo flow: console dispatch with valid args → programmatic record →
+// SdRunCluster → geometry change → SdListClusters → cluster visible in SKILLS tab.
+// Uses __skillStore + __dispatchAsync; no browser prompt interaction needed.
+{
+  // Step 1: SKILLS tab + Record button present.
+  await evaluate(`(() => {
+    const tab = document.querySelector('.dock-tab[data-tab="skills"]');
+    if (tab) tab.click();
+  })()`);
+  await new Promise(r => setTimeout(r, 350));
+
+  const rBtn = await evaluate(`(() => {
+    const btn = document.querySelector('.skill-nodes-record-btn');
+    return { passed: !!btn, text: btn ? btn.textContent.trim() : null };
+  })()`);
+
+  // Step 2: Console mode — dispatch SdSphere with valid args, verify no "unknown verb".
+  await evaluate(`(() => {
+    const tab = document.querySelector('.dock-tab[data-tab="prompt"]');
+    if (tab) tab.click();
+  })()`);
+  await new Promise(r => setTimeout(r, 300));
+  await evaluate(`(async () => {
+    const pill = document.querySelector('.mode-pill');
+    if (pill && pill.getAttribute('data-mode') !== 'console') {
+      pill.click(); await new Promise(r => setTimeout(r, 300));
+    }
+  })()`);
+  await new Promise(r => setTimeout(r, 300));
+
+  const rConsole = await evaluate(`(async () => {
+    const input = document.querySelector('#console-input');
+    if (!input) return { passed: false, reason: 'no #console-input' };
+    const before = document.querySelectorAll('#console-history .console-line').length;
+    input.value = 'SdSphere radius=1';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+    await new Promise(r => setTimeout(r, 700));
+    const lines = Array.from(document.querySelectorAll('#console-history .console-line')).slice(before);
+    const newText = lines.map(l => l.textContent).join(' | ');
+    const unknownVerb = /unknown verb/i.test(newText);
+    return { passed: lines.length > 0 && !unknownVerb, newText: newText.slice(0, 300), unknownVerb };
+  })()`);
+
+  // Step 3: Programmatic cluster save → SdRunCluster → geometry → SdListClusters.
+  const rRoundtrip = await evaluate(`(async () => {
+    try {
+      const ss = window.__skillStore;
+      const da = window.__dispatchAsync;
+      const viewer = window.__viewer;
+      if (!ss) return { passed: false, reason: '__skillStore not exposed' };
+      if (!da) return { passed: false, reason: '__dispatchAsync not exposed' };
+      if (!viewer) return { passed: false, reason: '__viewer not exposed' };
+
+      const before = viewer.getScene().children.length;
+
+      // Save a 2-step cluster (SdSphere × 2 different radii).
+      const cluster = await ss.saveCluster({
+        name: '__demo_flow_test__',
+        steps: [
+          { verb: 'SdSphere', params: { radius: 1 }, relativeTs: 0 },
+          { verb: 'SdSphere', params: { radius: 1.5 }, relativeTs: 500 },
+        ],
+      });
+
+      // Invoke via SdRunCluster.
+      const runResult = await da('SdRunCluster', { name: '__demo_flow_test__' });
+      await new Promise(r => setTimeout(r, 800));
+
+      const after = viewer.getScene().children.length;
+      const geometryAdded = after > before;
+
+      // SdListClusters — verify the cluster appears in the returned list.
+      const listResult = await da('SdListClusters', {});
+      const clusters = listResult?.result?.clusters ?? [];
+      const clusterInList = clusters.some(c => c.name === '__demo_flow_test__');
+
+      // Cleanup.
+      await ss.deleteCluster(cluster.id);
+
+      return {
+        passed: runResult?.ok === true && geometryAdded && clusterInList,
+        runOk: runResult?.ok,
+        geometryAdded,
+        clusterInList,
+        clusterCount: clusters.length,
+        runDetail: runResult?.error ?? null,
+        before,
+        after,
+      };
+    } catch(e) { return { passed: false, error: e.message }; }
+  })()`);
+
+  // Step 4: SKILLS tab renders a cluster card after save (UI wiring check).
+  const rCard = await evaluate(`(async () => {
+    try {
+      const ss = window.__skillStore;
+      const cluster = await ss.saveCluster({
+        name: '__demo_ui_test__',
+        steps: [{ verb: 'SdSphere', params: { radius: 1 }, relativeTs: 0 }],
+      });
+      await new Promise(r => setTimeout(r, 200));
+      const tab = document.querySelector('.dock-tab[data-tab="skills"]');
+      if (tab) tab.click();
+      await new Promise(r => setTimeout(r, 500));
+      const pane = document.querySelector('.skill-nodes-pane, #skill-nodes-pane, [data-pane="skills"], .dock-pane[data-tab="skills"]');
+      const text = pane?.textContent ?? document.body.textContent ?? '';
+      const found = text.includes('__demo_ui_test__');
+      await ss.deleteCluster(cluster.id);
+      return { passed: found, textSnippet: text.slice(0, 400) };
+    } catch(e) { return { passed: false, error: e.message }; }
+  })()`);
+
+  const passed =
+    (rBtn?.passed ?? false) &&
+    (rConsole?.passed ?? false) &&
+    (rRoundtrip?.passed ?? false);
+
+  record('demo-cluster-flow', passed, {
+    recordBtnFound:   rBtn?.passed ?? false,
+    recordBtnText:    rBtn?.text ?? null,
+    consoleOk:        rConsole?.passed ?? false,
+    consoleUnknown:   rConsole?.unknownVerb ?? null,
+    consoleOutput:    rConsole?.newText ?? null,
+    runOk:            rRoundtrip?.runOk ?? null,
+    geometryAdded:    rRoundtrip?.geometryAdded ?? null,
+    clusterInList:    rRoundtrip?.clusterInList ?? null,
+    clusterCount:     rRoundtrip?.clusterCount ?? null,
+    runDetail:        rRoundtrip?.runDetail ?? null,
+    uiCardFound:      rCard?.passed ?? null,
+    error:            rRoundtrip?.error ?? rCard?.error ?? null,
+  });
+}
+
 } finally {
   await cleanup();
 }
