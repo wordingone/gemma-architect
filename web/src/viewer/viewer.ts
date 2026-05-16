@@ -2695,6 +2695,7 @@ export class Viewer {
       tmp.updateProjectionMatrix();
       cam = tmp;
     }
+    thumbRenderer.setClearColor(displayMode === "technical" ? 0xffffff : 0x808080, 1);
     const prevOverride = this.scene.overrideMaterial;
     if (displayMode === "wireframe") {
       if (!this._thumbMatWireframe) this._thumbMatWireframe = new THREE.MeshBasicMaterial({ color: 0x2a2a3a, wireframe: true });
