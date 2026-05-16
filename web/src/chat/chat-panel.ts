@@ -262,14 +262,18 @@ export class ChatPanel {
       // Gemma E4B has native vision — let it actually see the scene.
       const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       let effectiveImage = userImage;
-      const viewportArea = document.querySelector<HTMLElement>(".viewport-area");
       let agentRing: HTMLDivElement | null = null;
       if (!effectiveImage && VISUAL_RE.test(text)) {
         effectiveImage = captureViewport(768) ?? undefined;
-        if (effectiveImage && viewportArea) {
-          agentRing = document.createElement("div");
-          agentRing.className = "agent-looking-ring";
-          viewportArea.appendChild(agentRing);
+        if (effectiveImage) {
+          const canvas = document.querySelector<HTMLElement>(".viewport-area canvas");
+          const rect = canvas?.getBoundingClientRect();
+          if (rect && rect.width > 0) {
+            agentRing = document.createElement("div");
+            agentRing.className = "agent-looking-ring";
+            agentRing.style.cssText = `position:fixed;top:${rect.top}px;left:${rect.left}px;width:${rect.width}px;height:${rect.height}px;`;
+            document.body.appendChild(agentRing);
+          }
         }
       }
 
