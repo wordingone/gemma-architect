@@ -113,6 +113,7 @@ paramCollapseBtn.addEventListener("click", () => {
 
 const viewer = new Viewer(canvas, viewportAreaEl);
 // Keep level plane labels in sync when level names are edited via the sidebar.
+// Also update the working plane Z so the grid tracks the active level's elevation.
 levelStore.subscribe(() => {
   viewer.forEachSceneChild((obj) => {
     const mesh = obj as THREE.Mesh;
@@ -122,6 +123,8 @@ levelStore.subscribe(() => {
     const sprite = mesh.children.find((c) => c.userData.isLevelLabel) as THREE.Sprite | undefined;
     if (sprite) updateLevelSprite(sprite, level.name);
   });
+  const active = levelStore.getActive();
+  if (active) viewer.setWorkingPlaneZ(active.elevation);
 });
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
@@ -1357,8 +1360,12 @@ registerHandler("SdLevel", (args) => {
   const mesh   = new THREE.Mesh(geom, mat);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdLevel";
+  mesh.userData.creator = "IfcLevel";
   mesh.userData.levelId = level.id;
+  const label = makeLevelSprite(level.name);
+  label.position.set(extent / 2 - 2.5, extent / 2 - 2.5, 0.3);
+  mesh.add(label);
+  levelStore.setActive(level.id);
   viewer.addMesh(mesh, "brep");
   return { created: "level", elevation: elev, levelId: level.id };
 });

@@ -54,6 +54,7 @@ export class Viewer {
   private currentEdges: THREE.LineSegments | null = null;
   private currentObject: THREE.Object3D | null = null;
   private grid: THREE.GridHelper;
+  private _workingPlaneZ = 0;
   private axes: THREE.AxesHelper;
   private axisLabels: THREE.Sprite[] = [];
   private currentBounds: Bounds | null = null;
@@ -2525,6 +2526,7 @@ export class Viewer {
     if (name === "persp") {
       // Reset grid to XY (floor) plane — ortho views rotate it; perspective always uses XY.
       this.grid.rotation.set(Math.PI / 2, 0, 0);
+      this.grid.position.set(0, 0, this._workingPlaneZ);
       // Restore perspective camera if we were in an ortho view.
       if (perspPane && perspPane.camera !== this.camera) {
         perspPane.camera = this.camera;
@@ -2564,9 +2566,18 @@ export class Viewer {
     // #594: orient floor grid to match the ortho view's working plane.
     // Front/back → XZ plane (grid normal +Y); right/left → YZ (normal +X); else XY (normal +Z).
     switch (name) {
-      case "front": case "back":  this.grid.rotation.set(0, 0, 0); break;
-      case "right": case "left":  this.grid.rotation.set(0, 0, Math.PI / 2); break;
-      default:                    this.grid.rotation.set(Math.PI / 2, 0, 0); break;
+      case "front": case "back":
+        this.grid.rotation.set(0, 0, 0);
+        this.grid.position.set(0, 0, 0);
+        break;
+      case "right": case "left":
+        this.grid.rotation.set(0, 0, Math.PI / 2);
+        this.grid.position.set(0, 0, 0);
+        break;
+      default:
+        this.grid.rotation.set(Math.PI / 2, 0, 0);
+        this.grid.position.set(0, 0, this._workingPlaneZ);
+        break;
     }
     const ORTHO_VIEWS = new Set(["top", "bottom", "front", "back", "left", "right", "iso"]);
     if (ORTHO_VIEWS.has(name) && perspPane) {
@@ -2620,6 +2631,16 @@ export class Viewer {
         perspPane.controls.target.set(cx, cy, cz);
         perspPane.controls.update();
       }
+    }
+  }
+
+  setWorkingPlaneZ(z: number): void {
+    this._workingPlaneZ = z;
+    // Only displace the XY grid (top/bottom/iso/persp). Front/back/left/right grids stay fixed.
+    const activeView = this.activeView ?? "persp";
+    const xyViews = new Set(["top", "bottom", "iso", "extents", "persp"]);
+    if (xyViews.has(activeView)) {
+      this.grid.position.z = z;
     }
   }
 

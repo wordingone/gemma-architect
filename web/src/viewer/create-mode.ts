@@ -674,16 +674,23 @@ function showLevelChip(
   nameIn.type = "text";
   nameIn.placeholder = "Name";
   nameIn.style.cssText = "width:90px; font-size:11px; padding:2px 4px; background:var(--chrome,#1a1a1a); border:1px solid var(--hairline,#444); color:var(--ink-body,#ddd); border-radius:3px;";
+  const _chipImperial = (window as unknown as { __appState?: { unitSystem?: string } }).__appState?.unitSystem === "imperial"
+    || document.documentElement.dataset.unitSystem === "imperial";
+  const _FT = 3.28084;
+  const _defaultHtM = 3.0;
+  const _defaultHtDisplay = _chipImperial ? (_defaultHtM * _FT).toFixed(1) : _defaultHtM.toFixed(1);
+  const _htUnit = _chipImperial ? "ft" : "m";
   const hIn = document.createElement("input");
   hIn.type = "number";
-  hIn.step = "0.1";
-  hIn.placeholder = "Ht (m)";
-  hIn.value = "3.0";
+  hIn.step = _chipImperial ? "0.5" : "0.1";
+  hIn.placeholder = `Ht (${_htUnit})`;
+  hIn.value = _defaultHtDisplay;
   hIn.style.cssText = "width:58px; font-size:11px; padding:2px 4px; background:var(--chrome,#1a1a1a); border:1px solid var(--hairline,#444); color:var(--ink-body,#ddd); border-radius:3px;";
 
   const commit = () => {
     const name = nameIn.value.trim();
-    const height = parseFloat(hIn.value);
+    const rawHt = parseFloat(hIn.value);
+    const height = _chipImperial && !isNaN(rawHt) ? rawHt / _FT : rawHt;
     levelStore.update(levelId, {
       ...(name ? { name } : {}),
       ...(!isNaN(height) ? { height } : {}),
@@ -1286,9 +1293,9 @@ function _drawLevelCanvas(name: string): HTMLCanvasElement {
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = "rgba(16,44,32,0.80)";
-  ctx.fillRect(2, 2, W - 4, H - 4);
-  ctx.fillStyle = "#9fefcc";
+  ctx.shadowColor = "rgba(0,0,0,1)";
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = "#ffffff";
   ctx.font = "bold 22px system-ui,sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -1299,7 +1306,7 @@ function _drawLevelCanvas(name: string): HTMLCanvasElement {
 /** Creates a billboard Sprite label for a level plane (camera-facing, no depth write). */
 export function makeLevelSprite(name: string): THREE.Sprite {
   const tex = new THREE.CanvasTexture(_drawLevelCanvas(name));
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.88 });
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: false, depthWrite: false });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(4, 1, 1);
   sprite.userData.isLevelLabel = true;
@@ -1327,7 +1334,7 @@ function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Obje
   mesh.userData.creator = "IfcLevel";
   mesh.userData.levelId = level.id;
   const label = makeLevelSprite(level.name);
-  label.position.set(-extent / 2 + 2.5, -extent / 2 + 2.5, 0.3);
+  label.position.set(extent / 2 - 2.5, extent / 2 - 2.5, 0.3);
   mesh.add(label);
   const chain = `IfcLevel({elevation:${elevation},name:"${name}",height:3.0})`;
   return { mesh, chain, levelId: level.id };
