@@ -1018,6 +1018,7 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   mesh.renderOrder = 1;
   mesh.userData.kind = "curve";
   mesh.userData.creator = "curve";
+  mesh.userData.isClosed = isClosed;
   mesh.userData.controlPoints = vecs;
   const worldPts = curvePts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const curv = drawSpline([${worldPts}]${isClosed ? ", { close: true }" : ""}).sketchOnPlane("XY").extrude(0.002);`;
@@ -2342,8 +2343,50 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     return mesh;
   }
 
-  // Line / polyline / curve → vertical ruled surface from stored control points
-  if (creator === "line" || creator === "polyline" || creator === "curve") {
+  // Curve → dense CatmullRom extrusion. Closed curves get a filled solid;
+  // open curves get a ruled surface. Both use the densely sampled path, not
+  // the sparse control points (which produce flat facets on smooth shapes).
+  if (creator === "curve") {
+    const cpLocal: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
+    const isClosed = !!(profile.userData.isClosed as boolean | undefined);
+    if (cpLocal.length >= 2) {
+      profile.updateMatrixWorld();
+      const cpWorld = cpLocal.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
+      const catmull = new THREE.CatmullRomCurve3(cpWorld, isClosed, "catmullrom", 0.5);
+      const samples = catmull.getPoints(Math.max(cpLocal.length * 16, 64));
+      const color = 0x88aacc;
+      if (isClosed) {
+        // Filled solid: Shape outline → ExtrudeGeometry (caps + side walls).
+        const shape = new THREE.Shape();
+        shape.moveTo(samples[0].x, samples[0].y);
+        for (let i = 1; i < samples.length; i++) shape.lineTo(samples[i].x, samples[i].y);
+        shape.closePath();
+        const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
+        return new THREE.Mesh(geom, mat);
+      } else {
+        // Open curve → ruled surface swept along Z, using dense samples.
+        const verts: number[] = [];
+        const idxs: number[] = [];
+        samples.forEach((p, i) => {
+          verts.push(p.x, p.y, 0, p.x, p.y, h);
+          if (i < samples.length - 1) {
+            const b = i * 2;
+            idxs.push(b, b+2, b+1, b+1, b+2, b+3);
+          }
+        });
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+        geom.setIndex(idxs);
+        geom.computeVertexNormals();
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
+        return new THREE.Mesh(geom, mat);
+      }
+    }
+  }
+
+  // Line / polyline → vertical ruled surface from stored control points
+  if (creator === "line" || creator === "polyline") {
     const pts: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
     const worldPts = pts.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
     if (worldPts.length >= 2) {
@@ -2361,8 +2404,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
       geom.setIndex(idxs);
       geom.computeVertexNormals();
       const mat = new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
-      const mesh = new THREE.Mesh(geom, mat);
-      return mesh;
+      return new THREE.Mesh(geom, mat);
     }
   }
 
