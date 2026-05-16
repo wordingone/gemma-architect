@@ -101,14 +101,16 @@ let _loadPromise: Promise<{ model: PreTrainedModel; processor: unknown }> | null
 // the TARGET model's hidden states and KV cache, not on token embeddings alone.
 // The drafter is exported to ONNX and loaded as a second InferenceSession.
 //
-// spec-decode loop prerequisites (BOTH must be true for _mtpActive = true):
+// spec-decode loop prerequisites (ALL THREE must be true for _mtpActive = true):
 //   1. Drafter ONNX loaded successfully (_drafterSession !== null)
 //   2. Target ONNX exposes "last_hidden_state" output node
+//   3. MTP_VERIFICATION_WIRED === true (real per-token target verification implemented)
 //
-// transformers.js 4.2.0 does NOT expose target hidden states — so the
-// spec-decode branch is structurally dormant today. It will fire automatically
-// when the target ONNX is updated (upstream issue filed). Fallback (AC5): the
-// standard model.generate() path is always used when either prerequisite fails.
+// transformers.js 4.2.0 does NOT expose target hidden states (condition 2 false),
+// AND verification is not yet wired (condition 3 false) — the spec-decode branch is
+// structurally dormant today. Fallback (AC5): standard model.generate() is always used
+// when any prerequisite fails. (#679 added condition 3 to prevent drafter-only unverified
+// output from silently activating when conditions 1+2 become true upstream.)
 //
 // Drafter ONNX input interface (see scripts/export-drafter-onnx.py):
 //   inputs_embeds [B, seq, 3072] = cat([target_token_embed, target_hidden_state], dim=-1)
@@ -127,6 +129,10 @@ let _drafterLoadAttempted = false;
 
 const DRAFTER_ONNX_URL = "/models/gemma-4-E2B-it-assistant/drafter.onnx";
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
+// Flip to true only when real per-token verification against the target is wired (#679 AC2).
+// Until then the loop stays dormant even if drafter + target hidden states become available,
+// preventing drafter-only (unverified) output from silently replacing verified target output.
+const MTP_VERIFICATION_WIRED = false;
 
 async function loadDrafter(): Promise<void> {
   if (_drafterLoadAttempted) return;
@@ -1116,7 +1122,10 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const targetOutputNames: string[] = (model as any)?.session?.outputNames ?? [];
   const targetHasHiddenStates = targetOutputNames.includes("last_hidden_state");
-  const drafterReady = _drafterSession !== null && targetHasHiddenStates;
+  // Three-way gate (#679 AC1): drafter loaded + target exposes hidden states + verification wired.
+  // MTP_VERIFICATION_WIRED stays false until AC2 (real per-token target verification) lands,
+  // preventing accept-all placeholder from activating as drafter-only unverified output.
+  const drafterReady = _drafterSession !== null && targetHasHiddenStates && MTP_VERIFICATION_WIRED;
 
   let specAttempts = 0;
   let specAccepts = 0;
