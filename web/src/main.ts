@@ -1391,7 +1391,6 @@ registerHandler("setActiveLevel", (args) => {
   const ok = levelStore.setActive(id);
   if (!ok) return { error: `level not found: ${id}` };
   const level = levelStore.get(id);
-  if (level) viewer.setTargetElevation(level.elevation);
   autoHideNonActiveLevels();
   return { ok: true, activeLevel: id, elevation: level?.elevation };
 });
