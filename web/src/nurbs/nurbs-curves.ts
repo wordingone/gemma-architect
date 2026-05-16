@@ -369,6 +369,112 @@ export function tessellate(c: Curve, sampleCount: number): Point3[] {
   return pts;
 }
 
+// ── createInterpolatingCubicBSpline ───────────────────────────────────────
+
+// Constructs a clamped cubic B-spline that passes exactly through every data
+// point (interpolating, not approximating). Algorithm: Piegl & Tiller §9.1.
+//   1. Chord-length parameterization
+//   2. Averaging knot vector (§9.2)
+//   3. Assemble basis-function matrix via Cox-de Boor recursion
+//   4. Solve N×N linear system (Gaussian elimination, X/Y/Z separately)
+// For open curves only. Closed curves: use createClampedUniformNurbs with
+// wrapped CVs (periodic knot interpolation is follow-on work).
+export function createInterpolatingCubicBSpline(dataPoints: Point3[]): NurbsCurve {
+  const numPts = dataPoints.length;
+  const degree = 3;
+  const order = degree + 1;
+
+  if (numPts < 2) throw new Error("createInterpolatingCubicBSpline: need >= 2 points");
+  // Not enough points for cubic — fall back to approximating lower-degree spline
+  if (numPts < order) return createClampedUniformNurbs(3, numPts, dataPoints);
+
+  // 1. Chord-length parameterization → parameter t[i] ∈ [0, 1]
+  const chord: number[] = [0];
+  for (let i = 1; i < numPts; i++) {
+    const dx = dataPoints[i].x - dataPoints[i - 1].x;
+    const dy = dataPoints[i].y - dataPoints[i - 1].y;
+    const dz = dataPoints[i].z - dataPoints[i - 1].z;
+    chord.push(chord[i - 1] + Math.sqrt(dx * dx + dy * dy + dz * dz));
+  }
+  const totalLen = chord[numPts - 1];
+  const t = totalLen > 0
+    ? chord.map((c) => c / totalLen)
+    : Array.from({ length: numPts }, (_, i) => i / (numPts - 1));
+
+  // 2. Averaging knot vector (OpenNURBS convention: length = order + numPts - 2)
+  const kLen = order + numPts - 2;
+  const knots: number[] = new Array(kLen).fill(0);
+  for (let i = numPts - 1; i < kLen; i++) knots[i] = 1; // end clamp
+  for (let j = 1; j <= numPts - degree - 1; j++) {
+    let s = 0;
+    for (let k = j; k < j + degree; k++) s += t[k];
+    knots[degree - 1 + j] = s / degree;
+  }
+
+  // 3. Cox-de Boor basis evaluation (uses full/standard knot vector internally)
+  const fullKnots = [0, ...knots, 1]; // length = numPts + degree + 1
+  function Nip(i: number, p: number, u: number): number {
+    if (p === 0) return (fullKnots[i] <= u && u < fullKnots[i + 1]) ? 1 : 0;
+    let left = 0, right = 0;
+    const d1 = fullKnots[i + p] - fullKnots[i];
+    const d2 = fullKnots[i + p + 1] - fullKnots[i + 1];
+    if (d1 > 1e-14) left  = ((u - fullKnots[i])             / d1) * Nip(i,     p - 1, u);
+    if (d2 > 1e-14) right = ((fullKnots[i + p + 1] - u)     / d2) * Nip(i + 1, p - 1, u);
+    return left + right;
+  }
+
+  // Coefficient matrix A: A[i][j] = N_{j,degree}(t[i])
+  // Boundary rows enforced directly (clamped NURBS: N_0(0)=1, N_{n-1}(1)=1)
+  const A: number[][] = [];
+  const row0 = new Array(numPts).fill(0); row0[0] = 1;
+  const rowN = new Array(numPts).fill(0); rowN[numPts - 1] = 1;
+  A.push(row0);
+  for (let i = 1; i < numPts - 1; i++) {
+    const row = new Array(numPts).fill(0);
+    for (let j = 0; j < numPts; j++) row[j] = Nip(j, degree, t[i]);
+    A.push(row);
+  }
+  A.push(rowN);
+
+  // 4. Gaussian elimination with partial pivoting; solve X, Y, Z independently
+  function gaussSolve(mat: number[][], rhs: number[]): number[] {
+    const n = rhs.length;
+    const M: number[][] = mat.map((row, i) => [...row, rhs[i]]);
+    for (let col = 0; col < n; col++) {
+      let maxRow = col;
+      for (let row = col + 1; row < n; row++) {
+        if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row;
+      }
+      if (maxRow !== col) { const tmp = M[col]; M[col] = M[maxRow]; M[maxRow] = tmp; }
+      const pivot = M[col][col];
+      if (Math.abs(pivot) < 1e-14) continue;
+      for (let row = col + 1; row < n; row++) {
+        const f = M[row][col] / pivot;
+        for (let k = col; k <= n; k++) M[row][k] -= f * M[col][k];
+      }
+    }
+    const x = new Array(n).fill(0);
+    for (let i = n - 1; i >= 0; i--) {
+      x[i] = M[i][n];
+      for (let j = i + 1; j < n; j++) x[i] -= M[i][j] * x[j];
+      if (Math.abs(M[i][i]) > 1e-14) x[i] /= M[i][i];
+    }
+    return x;
+  }
+
+  const qx = dataPoints.map((dp) => dp.x);
+  const qy = dataPoints.map((dp) => dp.y);
+  const qz = dataPoints.map((dp) => dp.z);
+  const cpX = gaussSolve(A.map((r) => [...r]), qx);
+  const cpY = gaussSolve(A.map((r) => [...r]), qy);
+  const cpZ = gaussSolve(A.map((r) => [...r]), qz);
+
+  const cvs: number[] = [];
+  for (let i = 0; i < numPts; i++) cvs.push(cpX[i], cpY[i], cpZ[i]);
+
+  return { kind: "nurbs", dim: 3, isRational: false, order, cvCount: numPts, knots, cvs, cvStride: 3 };
+}
+
 // ── createClampedUniformNurbs ─────────────────────────────────────────────
 
 // Constructs a clamped B-spline with the given control vertices and a

@@ -31,7 +31,7 @@ import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
 import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "./selection-state";
 import { formatLength, formatArea, formatVolume } from "../units";
-import { createClampedUniformNurbs, tessellate } from "../nurbs/nurbs-curves";
+import { createClampedUniformNurbs, createInterpolatingCubicBSpline, tessellate } from "../nurbs/nurbs-curves";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -1011,22 +1011,28 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   const localVecs = curvePts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
 
-  // Build a clamped uniform B-spline (cubic where enough CVs, lower-degree for fewer).
-  // For closed curves, wrap the first (degree) CVs at the end so the B-spline loops
-  // smoothly, then snap the last sample onto the first for a gapless closure.
+  // Open curves: interpolating cubic B-spline — passes exactly through every clicked point.
+  // Closed curves: wrapped approximating cubic B-spline (periodic interpolation is
+  // follow-on work; approximating is visually acceptable for closed loops).
   const degree = Math.min(3, localVecs.length - 1);
-  const order = degree + 1;
-  let cpForNurbs = localVecs;
-  if (isClosed && localVecs.length >= order) {
-    cpForNurbs = [...localVecs, ...localVecs.slice(0, degree)];
-  }
-  const nurbsPts = cpForNurbs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
-  const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
   const sampleCount = Math.max(localVecs.length * 16, 64);
-  const raw = tessellate(nurbs, sampleCount);
-  // For closed curves, force the last sample to match the first for a gapless seam.
-  const sampled3 = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
-  if (isClosed && sampled3.length > 1) sampled3[sampled3.length - 1].copy(sampled3[0]);
+  const dataPts = localVecs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  let sampled3: THREE.Vector3[];
+  if (isClosed) {
+    const order = degree + 1;
+    const wrapped = localVecs.length >= order
+      ? [...localVecs, ...localVecs.slice(0, degree)]
+      : localVecs;
+    const nurbsPts = wrapped.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+    const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
+    const raw = tessellate(nurbs, sampleCount);
+    sampled3 = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+    if (sampled3.length > 1) sampled3[sampled3.length - 1].copy(sampled3[0]);
+  } else {
+    const nurbs = createInterpolatingCubicBSpline(dataPts);
+    const raw = tessellate(nurbs, sampleCount);
+    sampled3 = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+  }
 
   const geom = new THREE.BufferGeometry().setFromPoints(sampled3);
   const mat = new THREE.LineBasicMaterial({ color: 0x1565c0 });
@@ -2369,15 +2375,25 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     if (cpLocal.length >= 2) {
       profile.updateMatrixWorld();
       const cpWorld = cpLocal.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
-      const degree = Math.min((profile.userData.nurbsDegree as number | undefined) ?? 3, cpWorld.length - 1);
-      const order = degree + 1;
-      let cpForNurbs = cpWorld;
-      if (isClosed && cpWorld.length >= order) cpForNurbs = [...cpWorld, ...cpWorld.slice(0, degree)];
-      const nurbsPts = cpForNurbs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
-      const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
-      const raw = tessellate(nurbs, Math.max(cpLocal.length * 16, 64));
-      const samples = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
-      if (isClosed && samples.length > 1) samples[samples.length - 1].copy(samples[0]);
+      // Open: interpolating NURBS (passes through clicked points).
+      // Closed: wrapped approximating NURBS (smooth seam, follow-on work for periodic interp).
+      const sampleCt = Math.max(cpLocal.length * 16, 64);
+      let samples: THREE.Vector3[];
+      if (isClosed) {
+        const degree = Math.min((profile.userData.nurbsDegree as number | undefined) ?? 3, cpWorld.length - 1);
+        const order = degree + 1;
+        const wrapped = cpWorld.length >= order ? [...cpWorld, ...cpWorld.slice(0, degree)] : cpWorld;
+        const nurbsPts = wrapped.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+        const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
+        const raw = tessellate(nurbs, sampleCt);
+        samples = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+        if (samples.length > 1) samples[samples.length - 1].copy(samples[0]);
+      } else {
+        const dataPts = cpWorld.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+        const nurbs = createInterpolatingCubicBSpline(dataPts);
+        const raw = tessellate(nurbs, sampleCt);
+        samples = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+      }
       const color = 0x88aacc;
       if (isClosed) {
         // Filled solid: Shape outline → ExtrudeGeometry (caps + side walls).
