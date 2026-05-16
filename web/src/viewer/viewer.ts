@@ -2487,6 +2487,8 @@ export class Viewer {
     }));
     const perspPane = this.panes.find(p => p.view === "persp");
     if (name === "persp") {
+      // Reset grid to XY (floor) plane — ortho views rotate it; perspective always uses XY.
+      this.grid.rotation.set(Math.PI / 2, 0, 0);
       // Restore perspective camera if we were in an ortho view.
       if (perspPane && perspPane.camera !== this.camera) {
         perspPane.camera = this.camera;
