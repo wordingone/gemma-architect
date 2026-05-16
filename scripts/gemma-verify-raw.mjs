@@ -3058,11 +3058,11 @@ await resetScene('before-box-inject');
   record('responsive-layout', overallPassed, { breakpoints: bpResults });
 }
 
-// ── Surface: record-and-invoke-roundtrip (#655) ────────────────────────────
-// Verifies: (1) Record button rendered in SKILLS tab, (2) SdRunCluster
-// recognized by console DSL (not "unknown verb").
+// ── Surface: record-and-invoke-roundtrip (#655 / AC6) ────────────────────────
+// Full roundtrip: saveCluster → SdRunCluster → geometry created in scene → cleanup.
+// Requires window.__skillStore (skill-store.ts) + window.__dispatchAsync (main.ts).
 {
-  // Navigate to SKILLS tab to check Record button.
+  // Check Record button is present in SKILLS tab.
   const rSkills = await evaluate(`(() => {
     try {
       const tab = document.querySelector('.dock-tab[data-tab="skills"]');
@@ -3079,46 +3079,56 @@ await resetScene('before-box-inject');
     } catch(e) { return { passed: false, error: e.message }; }
   })()`);
 
-  // Switch to prompt tab + console mode to test SdRunCluster recognition.
-  await evaluate(`(() => {
-    const tab = document.querySelector('[data-tab=prompt]');
-    if (tab) tab.click();
-  })()`);
-  await new Promise(r => setTimeout(r, 200));
-
-  await evaluate(`(async () => {
-    const pill = document.querySelector('.mode-pill');
-    if (pill && pill.getAttribute('data-mode') !== 'console') {
-      pill.click();
-      await new Promise(r => setTimeout(r, 300));
-    }
-  })()`);
-  await new Promise(r => setTimeout(r, 400));
-
-  const rVerb = await evaluate(`(async () => {
+  // Full AC6 roundtrip: save test cluster → invoke via SdRunCluster → verify geometry → cleanup.
+  const rRoundtrip = await evaluate(`(async () => {
     try {
-      const input = document.querySelector('#console-input');
-      if (!input) return { passed: false, reason: 'no #console-input' };
-      const before = document.querySelector('#console-history')?.children.length || 0;
-      input.value = 'SdRunCluster';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-      input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-      await new Promise(r => setTimeout(r, 500));
-      const lines = Array.from(document.querySelectorAll('#console-history .console-line'));
-      const newLines = lines.slice(before).map(l => l.textContent).join(' | ');
-      const isUnknownVerb = /unknown verb/i.test(newLines);
-      return { passed: !isUnknownVerb, newLines: newLines.slice(0, 200), isUnknownVerb };
+      const ss = window.__skillStore;
+      const da = window.__dispatchAsync;
+      if (!ss) return { passed: false, reason: 'window.__skillStore not exposed' };
+      if (!da) return { passed: false, reason: 'window.__dispatchAsync not exposed' };
+      const viewer = window.__viewer;
+      if (!viewer) return { passed: false, reason: 'window.__viewer not available' };
+
+      const before = viewer.getScene().children.length;
+
+      // Save a minimal test cluster (SdBox 1×1×1).
+      const cluster = await ss.saveCluster({
+        name: '__verify_test__',
+        steps: [{ verb: 'SdBox', params: { width: 1, height: 1, depth: 1 }, relativeTs: 0 }],
+      });
+
+      // Invoke via dispatch — SdRunCluster fetches from IndexedDB and dispatches steps.
+      const result = await da('SdRunCluster', { name: '__verify_test__' });
+      await new Promise(r => setTimeout(r, 600));
+
+      const after = viewer.getScene().children.length;
+      const geometryAdded = after > before;
+
+      // Cleanup.
+      await ss.deleteCluster(cluster.id);
+
+      return {
+        passed: result?.ok === true && geometryAdded,
+        dispatchOk: result?.ok,
+        before,
+        after,
+        geometryAdded,
+        dispatchDetail: result?.error ?? null,
+      };
     } catch(e) { return { passed: false, error: e.message }; }
   })()`);
 
-  const passed = (rBtn?.passed ?? false) && (rVerb?.passed ?? false);
+  const passed = (rBtn?.passed ?? false) && (rRoundtrip?.passed ?? false);
   record('record-and-invoke-roundtrip', passed, {
     tabFound: rSkills?.tabFound ?? false,
     recordBtnFound: rBtn?.passed ?? false,
     recordBtnText: rBtn?.btnText ?? null,
-    sdRunClusterKnown: rVerb?.passed ?? false,
-    consoleOutput: rVerb?.newLines ?? null,
+    dispatchOk: rRoundtrip?.dispatchOk ?? null,
+    geometryAdded: rRoundtrip?.geometryAdded ?? null,
+    sceneBefore: rRoundtrip?.before ?? null,
+    sceneAfter: rRoundtrip?.after ?? null,
+    dispatchDetail: rRoundtrip?.dispatchDetail ?? null,
+    error: rRoundtrip?.error ?? null,
   });
 }
 
