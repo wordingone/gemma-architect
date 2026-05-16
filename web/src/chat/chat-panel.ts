@@ -263,9 +263,14 @@ export class ChatPanel {
       const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       let effectiveImage = userImage;
       const viewportArea = document.querySelector<HTMLElement>(".viewport-area");
+      let agentRing: HTMLDivElement | null = null;
       if (!effectiveImage && VISUAL_RE.test(text)) {
         effectiveImage = captureViewport(768) ?? undefined;
-        if (effectiveImage && viewportArea) viewportArea.classList.add("agent-looking");
+        if (effectiveImage && viewportArea) {
+          agentRing = document.createElement("div");
+          agentRing.className = "agent-looking-ring";
+          viewportArea.appendChild(agentRing);
+        }
       }
 
       const resp = await runAgentTurn({
@@ -276,7 +281,7 @@ export class ChatPanel {
         maxNewTokens: estimateMaxTokens(text),
         userImage: effectiveImage,
       });
-      if (viewportArea) viewportArea.classList.remove("agent-looking");
+      agentRing?.remove();
 
       this._removeThinking(thinking);
       this._updatePerfStrip();
@@ -351,7 +356,9 @@ export class ChatPanel {
     const { summary } = await this._runDispatches(resp);
     this._pushMsg({ role: "assistant", content: summary, dispatches: resp.dispatches });
     this._history.push({ role: "assistant", content: summary });
-    (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
+    if (resp.dispatches.length > 0) {
+      (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
+    }
     // QW-2 (#409): emit turn-complete event — mirrors avir-cli Stop hook turn visibility.
     window.dispatchEvent(new CustomEvent("agent:turn-complete", {
       detail: {
