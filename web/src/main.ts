@@ -125,6 +125,7 @@ levelStore.subscribe(() => {
   });
   const active = levelStore.getActive();
   if (active) viewer.setWorkingPlaneZ(active.elevation);
+  syncLevelOpacities();
 });
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
@@ -1356,7 +1357,7 @@ registerHandler("SdLevel", (args) => {
   // Register in levelStore so UI panel + active-level routing knows about it.
   const level = levelStore.findOrCreate(name, elev, height);
   const geom   = new THREE.BoxGeometry(extent, extent, 0.02);
-  const mat    = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.10, side: THREE.DoubleSide });
+  const mat    = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.05, side: THREE.DoubleSide });
   const mesh   = new THREE.Mesh(geom, mat);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
@@ -1368,21 +1369,28 @@ registerHandler("SdLevel", (args) => {
   mesh.add(label);
   levelStore.setActive(level.id);
   viewer.addMesh(mesh, "brep");
-  autoHideNonActiveLevels();
+  syncLevelOpacities();
   return { created: "level", elevation: elev, levelId: level.id };
 });
 
-// Hide all non-active levels' geometry. Called whenever the active level changes.
-// Users can re-enable any hidden level manually via the visibility toggle.
-function autoHideNonActiveLevels(): void {
+// Dim non-active level planes; brighten the active one. Called whenever the active level changes.
+function syncLevelOpacities(): void {
   const activeId = levelStore.getActive().id;
-  for (const lvl of levelStore.all()) {
-    if (lvl.id === activeId) continue;
-    levelStore.setVisible(lvl.id, false);
-    viewer.forEachSceneChild((child) => {
-      if (child.userData?.levelId === lvl.id) child.visible = false;
-    });
-  }
+  viewer.forEachSceneChild((child) => {
+    if (child.userData?.creator !== "IfcLevel") return;
+    const isActive = child.userData.levelId === activeId;
+    const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+    if (mat?.opacity !== undefined) {
+      mat.opacity = isActive ? 0.05 : 0.02;
+      mat.needsUpdate = true;
+    }
+    for (const ch of child.children) {
+      if (ch.userData?.isLevelLabel) {
+        (ch as THREE.Sprite).material.opacity = isActive ? 1.0 : 0.4;
+        (ch as THREE.Sprite).material.needsUpdate = true;
+      }
+    }
+  });
 }
 
 registerHandler("setActiveLevel", (args) => {
@@ -1391,7 +1399,7 @@ registerHandler("setActiveLevel", (args) => {
   const ok = levelStore.setActive(id);
   if (!ok) return { error: `level not found: ${id}` };
   const level = levelStore.get(id);
-  autoHideNonActiveLevels();
+  syncLevelOpacities();
   return { ok: true, activeLevel: id, elevation: level?.elevation };
 });
 

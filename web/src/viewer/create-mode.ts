@@ -1312,15 +1312,13 @@ function _drawLevelCanvas(name: string): HTMLCanvasElement {
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, W, H);
-  ctx.font = "bold 22px system-ui,sans-serif";
+  ctx.font = "500 20px system-ui,sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  // White halo pass for readability on dark backgrounds
-  ctx.shadowColor = "rgba(255,255,255,0.95)";
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = "#0f2d1a";
+  ctx.shadowColor = "rgba(255,255,255,0.7)";
+  ctx.shadowBlur = 5;
+  ctx.fillStyle = "#6b9a80";
   ctx.fillText(name, W / 2, H / 2);
-  // Sharp pass to avoid shadow blur softening the text
   ctx.shadowBlur = 0;
   ctx.fillText(name, W / 2, H / 2);
   return canvas;
@@ -1350,7 +1348,7 @@ function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Obje
   const level = levelStore.findOrCreate(name, elevation, 3.0);
   const extent = 20;
   const geom = new THREE.BoxGeometry(extent, extent, 0.02);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.075, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.04, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(p.x, p.y, elevation);
   mesh.userData.kind = "brep";
