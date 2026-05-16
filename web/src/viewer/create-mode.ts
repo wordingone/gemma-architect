@@ -1293,12 +1293,16 @@ function _drawLevelCanvas(name: string): HTMLCanvasElement {
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, W, H);
-  ctx.shadowColor = "rgba(0,0,0,1)";
-  ctx.shadowBlur = 6;
-  ctx.fillStyle = "#ffffff";
   ctx.font = "bold 22px system-ui,sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  // White halo pass for readability on dark backgrounds
+  ctx.shadowColor = "rgba(255,255,255,0.95)";
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = "#0f2d1a";
+  ctx.fillText(name, W / 2, H / 2);
+  // Sharp pass to avoid shadow blur softening the text
+  ctx.shadowBlur = 0;
   ctx.fillText(name, W / 2, H / 2);
   return canvas;
 }
@@ -1306,7 +1310,7 @@ function _drawLevelCanvas(name: string): HTMLCanvasElement {
 /** Creates a billboard Sprite label for a level plane (camera-facing, no depth write). */
 export function makeLevelSprite(name: string): THREE.Sprite {
   const tex = new THREE.CanvasTexture(_drawLevelCanvas(name));
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: false, depthWrite: false });
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.01, depthTest: false, depthWrite: false });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(4, 1, 1);
   sprite.userData.isLevelLabel = true;
@@ -1333,6 +1337,7 @@ function buildLevel(p: { x: number; y: number; z?: number }): { mesh: THREE.Obje
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcLevel";
   mesh.userData.levelId = level.id;
+  mesh.userData.noSnap = true;
   const label = makeLevelSprite(level.name);
   label.position.set(extent / 2 - 2.5, extent / 2 - 2.5, 0.3);
   mesh.add(label);

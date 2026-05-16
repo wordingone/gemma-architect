@@ -1362,6 +1362,7 @@ registerHandler("SdLevel", (args) => {
   mesh.userData.kind = "brep";
   mesh.userData.creator = "IfcLevel";
   mesh.userData.levelId = level.id;
+  mesh.userData.noSnap = true;
   const label = makeLevelSprite(level.name);
   label.position.set(extent / 2 - 2.5, extent / 2 - 2.5, 0.3);
   mesh.add(label);
