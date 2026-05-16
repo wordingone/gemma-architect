@@ -2574,14 +2574,11 @@ export class Viewer {
       oc.updateProjectionMatrix();
       perspPane.camera = oc;
       perspPane.controls.object = oc;
-      const noRotate = name !== "iso";
-      perspPane.controls.enableRotate = !noRotate;
-      perspPane.controls.screenSpacePanning = noRotate;
-      if (noRotate) {
-        perspPane.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-        perspPane.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
-        perspPane.controls.zoomSpeed = 2.5;
-      }
+      perspPane.controls.enableRotate = true;
+      perspPane.controls.screenSpacePanning = false;
+      perspPane.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+      perspPane.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+      perspPane.controls.zoomSpeed = 1;
       perspPane.controls.target.set(cx, cy, cz);
       perspPane.controls.update();
     } else {
