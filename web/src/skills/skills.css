@@ -200,15 +200,63 @@
 .sc-port:hover { background: var(--gemma, #7c4dff); }
 
 .skill-canvas-toolbar {
-  grid-row: 2;
-  grid-column: 1 / -1;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--hairline);
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--hairline);
   background: var(--glass-bg);
+  flex-shrink: 0;
 }
+.sc-toolbar-top {
+  border-top: none;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* ── Recording ── */
+.sc-record-btn { display: flex; align-items: center; gap: 4px; font-size: 10px; letter-spacing: .06em; }
+.sc-record-dot { font-size: 11px; line-height: 1; color: var(--err, #c0392b); }
+.sc-record-active { animation: sc-blink .8s ease-in-out infinite; }
+.sc-recording { background: rgba(192,57,43,.12); border-color: var(--err, #c0392b) !important; }
+@keyframes sc-blink { 0%,100%{ opacity:1 } 50%{ opacity:.3 } }
+.sc-record-status { font-size: 9px; color: var(--err, #c0392b); letter-spacing: .06em; text-transform: uppercase; margin-right: auto; }
+
+/* ── Multi-port stubs ── */
+.sc-ports { display: flex; flex-direction: column; gap: 3px; padding: 4px 0; }
+.sc-ports-in  { align-items: flex-start; }
+.sc-ports-out { align-items: flex-end; }
+.sc-port-add {
+  font-size: 9px; line-height: 1;
+  width: 12px; height: 12px;
+  border: 1px dashed var(--hairline);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink-faint);
+}
+.sc-port-add:hover { border-color: var(--gemma, #7c4dff); color: var(--gemma, #7c4dff); }
+
+/* ── Marquee ── */
+.sc-marquee {
+  position: absolute; pointer-events: none; z-index: 10;
+  border: 1px dashed var(--accent, #4af); background: rgba(68,170,255,.07);
+}
+
+/* ── Group backdrop ── */
+.sc-group { position: absolute; border-radius: 4px; pointer-events: none; }
+.sc-group-label {
+  position: absolute; top: 4px; left: 8px;
+  font-size: 10px; font-weight: 600; letter-spacing: .05em;
+  pointer-events: auto; cursor: text;
+}
+
+/* ── Selection ── */
+.sc-node-selected {
+  border-color: var(--gemma, #7c4dff) !important;
+  box-shadow: 0 0 0 2px rgba(124,77,255,.35), 0 2px 8px rgba(0,0,0,.1) !important;
+}
+
+/* ── Inspector resize handle ── */
+.sc-inspector-resize:hover { background: var(--gemma, #7c4dff); opacity: .3; }
 
 /* Nodes / Canvas sub-tab switcher inside SKILL NODES pane */
 .skill-nodes-view-switcher {

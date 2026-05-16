@@ -1,35 +1,24 @@
-// skill-canvas.ts — #722: Grasshopper-style skill-node canvas.
+// skill-canvas.ts — #727: finished SKILL NODES feature.
 //
-// Each canvas node = ONE OF:
-//  "skill"  — built-in or user-saved skill (entire dispatch chain runs on Run)
-//  "script" — inline DSL code, evaluated via compileDsl() on Run
-//
-// Palette left-sidebar lists all 13 built-in skills + user-saved + "+ Script".
-// Pan on middle-mouse drag; zoom on wheel. Wire nodes with output→input ports.
-// Topo-sorted run dispatches all steps in dependency order.
+// Section A: top toolbar (⏺ RECORD · Clear · Run · Save-as-skill)
+// Section B: multi-IO ports, marquee select, Cmd-D/G, dblclick disconnect
+// Section C: setNodeSelectHandler → workbench wires the right inspector
+// Section D: recording (pointer | key | tool | dispatch | scene events + optional VP9)
+// Section E: simple recording auto-saves; complex fires "record:complex-stop"
 
-import { dispatchSync, type DispatchArgs } from "../commands/dispatch";
+import { dispatchSync, registerPostDispatch, type DispatchArgs } from "../commands/dispatch";
 import { compileDsl } from "../commands/dsl-eval";
 import { saveSkill, listSavedSkills, type SkillStep, type SavedSkill } from "./skill-store";
 import { openSaveSkillModal } from "./skill-modal";
+import { subscribe as subscribeAppState, getState } from "../app-state";
 
-// ── Built-in skill names (web/skills/*/) ──────────────────────────────────────
+// ── Built-in skill names ──────────────────────────────────────────────────────
 
 const BUILT_IN_SKILL_NAMES: string[] = [
-  "align-to-grid",
-  "dimension-chain",
-  "extrude-walls",
-  "fire-station",
-  "hospitality-cabin",
-  "mirror-across-axis",
-  "office-25desk",
-  "place-doors",
-  "replicate-from-video",
-  "research-from-prompt",
-  "research-pavilion",
-  "room-from-prompt",
-  "sf-residence-2br",
-  "stair-from-points",
+  "align-to-grid", "dimension-chain", "extrude-walls", "fire-station",
+  "hospitality-cabin", "mirror-across-axis", "office-25desk", "place-doors",
+  "replicate-from-video", "research-from-prompt", "research-pavilion",
+  "room-from-prompt", "sf-residence-2br", "stair-from-points",
 ];
 
 let _builtInCache: Array<{ name: string; steps: SkillStep[] }> | null = null;
@@ -54,44 +43,102 @@ async function loadBuiltInSkills(): Promise<Array<{ name: string; steps: SkillSt
 
 export type CanvasNode = {
   id: string;
-  kind?: "skill" | "script";  // undefined = legacy verb-based (runWithAnimation)
-  // Skill node:
+  kind?: "skill" | "script";
   skillId?: string;
   skillName?: string;
   skillSteps?: SkillStep[];
-  // Script node:
   scriptSource?: string;
-  // Legacy single-verb (runWithAnimation backward-compat):
   verb?: string;
   args?: Record<string, unknown>;
-  // Canvas position (canvas coordinate space, pre-transform):
   x: number;
   y: number;
+  inPorts: number;
+  outPorts: number;
 };
 
 export type CanvasEdge = {
   id: string;
   from: string;
+  fromPort: number;
   to: string;
+  toPort: number;
+};
+
+export type CanvasGroup = {
+  id: string;
+  name: string;
+  nodeIds: string[];
+  color: string;
 };
 
 export type CanvasGraph = {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
+  groups: CanvasGroup[];
+};
+
+export type RecordEvent =
+  | { ts: number; kind: "pointer"; clientX: number; clientY: number; target: string; button: number }
+  | { ts: number; kind: "key"; key: string; targetTag: string }
+  | { ts: number; kind: "tool"; toolId: string; source: "click" | "hotkey" }
+  | { ts: number; kind: "dispatch"; verb: string; args: Record<string, unknown>; resultUuid?: string }
+  | { ts: number; kind: "scene"; action: "add" | "remove" | "move" | "select"; uuid: string };
+
+export type RecordingArtifact = {
+  duration_ms: number;
+  events: RecordEvent[];
+  videoBlob?: Blob;
+  estimatedBytes: number;
+};
+
+export type RecordingAnalysis = {
+  skills: Array<{ name: string; description: string; steps: SkillStep[] }>;
+  wiring: Array<{ from: string; to: string }>;
 };
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-const LS_KEY = "gemma-cad:skill-canvas-v2";
+const LS_KEY = "gemma-cad:skill-canvas-v3";
+const LS_KEY_V2 = "gemma-cad:skill-canvas-v2";
 const LS_KEY_V1_A = "gemma-cad:skill-canvas-v1";
 const LS_KEY_V1_B = "gemma-architect:skill-canvas-v1";
 
+function migrateNode(n: Partial<CanvasNode>): CanvasNode {
+  return {
+    id: n.id ?? crypto.randomUUID(),
+    kind: n.kind,
+    skillId: n.skillId, skillName: n.skillName, skillSteps: n.skillSteps,
+    scriptSource: n.scriptSource, verb: n.verb, args: n.args,
+    x: n.x ?? 0, y: n.y ?? 0,
+    inPorts: n.inPorts ?? 1,
+    outPorts: n.outPorts ?? 1,
+  };
+}
+
+function migrateEdge(e: Partial<CanvasEdge>): CanvasEdge {
+  return {
+    id: e.id ?? crypto.randomUUID(),
+    from: e.from ?? "", fromPort: e.fromPort ?? 0,
+    to: e.to ?? "", toPort: e.toPort ?? 0,
+  };
+}
+
 function loadGraph(): CanvasGraph {
   try {
-    const raw = localStorage.getItem(LS_KEY) ?? localStorage.getItem(LS_KEY_V1_A) ?? localStorage.getItem(LS_KEY_V1_B);
-    if (raw) return JSON.parse(raw) as CanvasGraph;
+    const raw = localStorage.getItem(LS_KEY)
+      ?? localStorage.getItem(LS_KEY_V2)
+      ?? localStorage.getItem(LS_KEY_V1_A)
+      ?? localStorage.getItem(LS_KEY_V1_B);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<CanvasGraph>;
+      return {
+        nodes: (parsed.nodes ?? []).map(migrateNode),
+        edges: (parsed.edges ?? []).map(migrateEdge),
+        groups: parsed.groups ?? [],
+      };
+    }
   } catch { /* ignore */ }
-  return { nodes: [], edges: [] };
+  return { nodes: [], edges: [], groups: [] };
 }
 
 function saveGraph(g: CanvasGraph): void {
@@ -100,6 +147,15 @@ function saveGraph(g: CanvasGraph): void {
 
 function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Port geometry
+const PORT_START_Y = 44;
+const PORT_SPACING = 18;
+const NODE_WIDTH = 160;
+
+function portY(portIdx: number): number {
+  return PORT_START_Y + portIdx * PORT_SPACING;
 }
 
 // ── SkillCanvas class ─────────────────────────────────────────────────────────
@@ -112,21 +168,167 @@ export class SkillCanvas {
   private _viewport!: HTMLElement;
   private _paletteEl!: HTMLElement;
 
-  // Pan/zoom state
+  // Selection
+  private _selected = new Set<string>();
+
+  // Pan/zoom
   private _tx = 0;
   private _ty = 0;
   private _tz = 1;
   private _panStart: { mx: number; my: number; tx: number; ty: number } | null = null;
 
-  // Drag state
+  // Node drag
   private _dragNode: { id: string; ox: number; oy: number; sx: number; sy: number } | null = null;
-  // Port-connect state
-  private _connectFrom: { id: string; side: "out" } | null = null;
+  private _multiDragStart: Map<string, { ox: number; oy: number }> | null = null;
+
+  // Marquee
+  private _marqueeStart: { cx: number; cy: number } | null = null;
+  private _marqueeEl: HTMLElement | null = null;
+
+  // Port-connect
+  private _connectFrom: { id: string; port: number } | null = null;
   private _connectLine: SVGPathElement | null = null;
+
+  // Recording
+  private _recording = false;
+  private _recordEvents: RecordEvent[] = [];
+  private _recordStart = 0;
+  private _recordMediaRecorder: MediaRecorder | null = null;
+  private _recordChunks: Blob[] = [];
+  private _recordToolUnsubscribe: (() => void) | null = null;
+  private _recordDispatchUnsubscribe: (() => void) | null = null;
+  private _recordBtn: HTMLElement | null = null;
+  private _recordStatus: HTMLElement | null = null;
+
+  // Inspector callback (set by workbench)
+  private _onNodeSelect: ((nodeId: string | null) => void) | null = null;
 
   constructor(private _root: HTMLElement) {
     this._graph = loadGraph();
     this._build();
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  setNodeSelectHandler(fn: ((nodeId: string | null) => void) | null): void {
+    this._onNodeSelect = fn;
+  }
+
+  getNode(id: string): CanvasNode | undefined {
+    return this._graph.nodes.find(n => n.id === id);
+  }
+
+  updateNodeScript(id: string, src: string): void {
+    const node = this._graph.nodes.find(n => n.id === id);
+    if (node) { node.scriptSource = src; saveGraph(this._graph); }
+  }
+
+  async refreshPalette(): Promise<void> {
+    await this._buildPalette();
+  }
+
+  loadAnalysis(skills: RecordingAnalysis["skills"], wiring: RecordingAnalysis["wiring"]): void {
+    const nodes: CanvasNode[] = skills.map((sk, i) => ({
+      id: crypto.randomUUID(), kind: "skill" as const,
+      skillId: sk.name, skillName: sk.name,
+      skillSteps: sk.steps,
+      x: 20 + i * 190, y: 80,
+      inPorts: i > 0 ? 1 : 0,
+      outPorts: i < skills.length - 1 ? 1 : 0,
+    }));
+    const idxById = new Map(nodes.map((n, i) => [n.skillName ?? n.skillId ?? "", i]));
+    const edges: CanvasEdge[] = wiring.map(w => ({
+      id: crypto.randomUUID(),
+      from: nodes[idxById.get(w.from) ?? 0]?.id ?? "",
+      fromPort: 0,
+      to: nodes[idxById.get(w.to) ?? 0]?.id ?? "",
+      toPort: 0,
+    })).filter(e => e.from && e.to);
+    this._graph = { nodes, edges, groups: [] };
+    saveGraph(this._graph);
+    this._renderGraph();
+  }
+
+  startRecording(): void {
+    if (this._recording) return;
+    this._recording = true;
+    this._recordEvents = [];
+    this._recordStart = Date.now();
+    this._recordChunks = [];
+
+    // Tool subscription
+    const prevTool = getState("activeTool") as string;
+    let lastTool = prevTool;
+    this._recordToolUnsubscribe = subscribeAppState("activeTool", (tool) => {
+      if (tool !== lastTool) {
+        this._recordEvents.push({ ts: Date.now() - this._recordStart, kind: "tool", toolId: String(tool), source: "click" });
+        lastTool = String(tool);
+      }
+    });
+
+    // Dispatch subscription
+    this._recordDispatchUnsubscribe = registerPostDispatch((verb, args) => {
+      if (!this._recording) return;
+      this._recordEvents.push({
+        ts: Date.now() - this._recordStart, kind: "dispatch",
+        verb, args: args as Record<string, unknown>,
+      });
+    });
+
+    // Pointer events
+    window.addEventListener("pointerdown", this._onRecordPointer, { capture: true, passive: true });
+    // Key events
+    window.addEventListener("keydown", this._onRecordKey, { capture: true, passive: true });
+    // Scene select
+    window.addEventListener("viewer:select", this._onRecordSelect as EventListener);
+
+    // Optional VP9 capture — find the Three.js canvas
+    try {
+      const canvas = document.querySelector<HTMLCanvasElement>("#viewport-2 canvas");
+      if (canvas && typeof (canvas as HTMLCanvasElement & { captureStream?: (fps: number) => MediaStream }).captureStream === "function") {
+        const stream = (canvas as HTMLCanvasElement & { captureStream: (fps: number) => MediaStream }).captureStream(10);
+        const mr = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
+        mr.ondataavailable = (ev) => { if (ev.data.size > 0) this._recordChunks.push(ev.data); };
+        mr.start(500);
+        this._recordMediaRecorder = mr;
+      }
+    } catch { /* VP9 capture optional */ }
+
+    this._updateRecordUI();
+  }
+
+  stopRecording(): RecordingArtifact | null {
+    if (!this._recording) return null;
+    this._recording = false;
+    const duration_ms = Date.now() - this._recordStart;
+
+    // Teardown
+    window.removeEventListener("pointerdown", this._onRecordPointer, { capture: true });
+    window.removeEventListener("keydown", this._onRecordKey, { capture: true });
+    window.removeEventListener("viewer:select", this._onRecordSelect as EventListener);
+    this._recordToolUnsubscribe?.();
+    this._recordToolUnsubscribe = null;
+    this._recordDispatchUnsubscribe?.();
+    this._recordDispatchUnsubscribe = null;
+
+    let videoBlob: Blob | undefined;
+    if (this._recordMediaRecorder) {
+      this._recordMediaRecorder.stop();
+      if (this._recordChunks.length > 0) {
+        videoBlob = new Blob(this._recordChunks, { type: "video/webm" });
+      }
+      this._recordMediaRecorder = null;
+    }
+
+    const events = [...this._recordEvents];
+    const estimatedBytes = JSON.stringify(events).length + (videoBlob?.size ?? 0);
+    this._recordEvents = [];
+
+    this._updateRecordUI();
+
+    const artifact: RecordingArtifact = { duration_ms, events, videoBlob, estimatedBytes };
+    this._classifyAndSave(artifact);
+    return artifact;
   }
 
   // ── Build DOM ──────────────────────────────────────────────────────────────
@@ -134,26 +336,71 @@ export class SkillCanvas {
   private _build(): void {
     this._root.innerHTML = "";
     this._root.className = "skill-canvas-root";
+    this._root.style.cssText = "display:flex; flex-direction:column; height:100%; overflow:hidden;";
 
-    // Palette sidebar (populated asynchronously)
+    // ── Top toolbar ──────────────────────────────────────────────────────────
+    const toolbar = document.createElement("div");
+    toolbar.className = "skill-canvas-toolbar sc-toolbar-top";
+
+    const recordBtn = document.createElement("button");
+    recordBtn.type = "button";
+    recordBtn.className = "btn btn-sm sc-record-btn";
+    recordBtn.innerHTML = `<span class="sc-record-dot">⏺</span> RECORD`;
+    this._recordBtn = recordBtn;
+
+    const recordStatus = document.createElement("span");
+    recordStatus.className = "sc-record-status";
+    this._recordStatus = recordStatus;
+
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "btn btn-sm sc-clear-btn";
+    clearBtn.textContent = "Clear";
+
+    const runBtn = document.createElement("button");
+    runBtn.type = "button";
+    runBtn.className = "btn btn-sm sc-run-btn";
+    runBtn.textContent = "▶ Run";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-accent btn-sm sc-compile-btn";
+    saveBtn.textContent = "Save as skill";
+
+    recordBtn.addEventListener("click", () => {
+      if (this._recording) this.stopRecording();
+      else this.startRecording();
+    });
+    clearBtn.addEventListener("click", () => this._clear());
+    runBtn.addEventListener("click", () => void this._run());
+    saveBtn.addEventListener("click", () => this._compile());
+
+    toolbar.append(recordBtn, recordStatus, clearBtn, runBtn, saveBtn);
+    this._root.appendChild(toolbar);
+
+    // ── Main row (palette + viewport) ────────────────────────────────────────
+    const mainRow = document.createElement("div");
+    mainRow.style.cssText = "display:flex; flex:1; min-height:0; overflow:hidden;";
+
+    // Palette sidebar
     const palette = document.createElement("div");
     palette.className = "skill-canvas-palette";
     palette.innerHTML = `<div class="skill-canvas-palette-title">Loading…</div>`;
     this._paletteEl = palette;
-    this._root.appendChild(palette);
+    mainRow.appendChild(palette);
 
     // Viewport
     const viewport = document.createElement("div");
     viewport.className = "skill-canvas-viewport";
     this._viewport = viewport;
 
-    // Pan/zoom transform layer — wraps SVG + nodes so both move together.
+    // Pan/zoom transform layer
     const transformEl = document.createElement("div");
     transformEl.className = "skill-canvas-transform";
     this._transformEl = transformEl;
     this._applyTransform();
 
-    // SVG edge layer (inside transform so edges scale/pan with nodes)
+    // SVG edge layer
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("class", "skill-canvas-svg");
     this._svg = svg;
@@ -165,17 +412,24 @@ export class SkillCanvas {
     this._nodesEl = nodesEl;
     transformEl.appendChild(nodesEl);
 
+    // Marquee overlay
+    const marqueeEl = document.createElement("div");
+    marqueeEl.className = "sc-marquee";
+    marqueeEl.style.display = "none";
+    viewport.appendChild(marqueeEl);
+    this._marqueeEl = marqueeEl;
+
     viewport.appendChild(transformEl);
 
-    // Drop target for palette drags
+    // Viewport interactions
     viewport.addEventListener("dragover", (e) => { e.preventDefault(); e.dataTransfer!.dropEffect = "copy"; });
     viewport.addEventListener("drop", (e) => {
       e.preventDefault();
       const raw = e.dataTransfer!.getData("text/plain");
       if (!raw) return;
       const rect = viewport.getBoundingClientRect();
-      const cx = (e.clientX - rect.left  - this._tx) / this._tz - 80;
-      const cy = (e.clientY - rect.top   - this._ty) / this._tz - 20;
+      const cx = (e.clientX - rect.left - this._tx) / this._tz - 80;
+      const cy = (e.clientY - rect.top  - this._ty) / this._tz - 20;
       try {
         const d = JSON.parse(raw) as { kind: string; skillId?: string; skillName?: string; skillSteps?: SkillStep[] };
         if (d.kind === "skill") {
@@ -183,7 +437,7 @@ export class SkillCanvas {
         } else {
           this._addScriptNode(cx, cy);
         }
-      } catch { /* ignore malformed */ }
+      } catch { /* ignore */ }
     });
 
     // Pan: middle-mouse drag
@@ -191,10 +445,22 @@ export class SkillCanvas {
       if (e.button === 1) {
         e.preventDefault();
         this._panStart = { mx: e.clientX, my: e.clientY, tx: this._tx, ty: this._ty };
+      } else if (e.button === 0 && e.target === viewport || e.target === transformEl || e.target === nodesEl || e.target === svg) {
+        // Marquee start (click on empty canvas)
+        const rect = viewport.getBoundingClientRect();
+        const cx = (e.clientX - rect.left - this._tx) / this._tz;
+        const cy = (e.clientY - rect.top  - this._ty) / this._tz;
+        this._marqueeStart = { cx, cy };
+        // Deselect on blank click without shift
+        if (!e.shiftKey) {
+          this._selected.clear();
+          this._updateSelection();
+          this._onNodeSelect?.(null);
+        }
       }
     });
 
-    // Zoom: wheel toward cursor
+    // Zoom: wheel
     viewport.addEventListener("wheel", (e) => {
       e.preventDefault();
       const rect = viewport.getBoundingClientRect();
@@ -211,20 +477,11 @@ export class SkillCanvas {
     window.addEventListener("mousemove", this._onMouseMove);
     window.addEventListener("mouseup",   this._onMouseUp);
 
-    this._root.appendChild(viewport);
+    // Keyboard shortcuts
+    window.addEventListener("keydown", this._onKeyDown);
 
-    // Toolbar
-    const toolbar = document.createElement("div");
-    toolbar.className = "skill-canvas-toolbar";
-    toolbar.innerHTML = `
-      <button class="btn btn-sm sc-clear-btn" type="button">Clear</button>
-      <button class="btn btn-sm sc-run-btn" type="button">▶ Run</button>
-      <button class="btn btn-accent btn-sm sc-compile-btn" type="button">Compile to skill</button>
-    `;
-    toolbar.querySelector(".sc-clear-btn")!.addEventListener("click", () => this._clear());
-    toolbar.querySelector(".sc-run-btn")!.addEventListener("click", () => void this._run());
-    toolbar.querySelector(".sc-compile-btn")!.addEventListener("click", () => this._compile());
-    this._root.appendChild(toolbar);
+    mainRow.appendChild(viewport);
+    this._root.appendChild(mainRow);
 
     this._renderGraph();
     void this._buildPalette();
@@ -234,6 +491,21 @@ export class SkillCanvas {
     this._transformEl.style.transform = `translate(${this._tx}px,${this._ty}px) scale(${this._tz})`;
   }
 
+  private _updateRecordUI(): void {
+    if (!this._recordBtn || !this._recordStatus) return;
+    if (this._recording) {
+      this._recordBtn.classList.add("sc-recording");
+      this._recordBtn.innerHTML = `<span class="sc-record-dot sc-record-active">⏹</span> STOP`;
+      this._recordStatus.textContent = "Recording…";
+    } else {
+      this._recordBtn.classList.remove("sc-recording");
+      this._recordBtn.innerHTML = `<span class="sc-record-dot">⏺</span> RECORD`;
+      this._recordStatus.textContent = "";
+    }
+  }
+
+  // ── Palette ────────────────────────────────────────────────────────────────
+
   private async _buildPalette(): Promise<void> {
     const [builtIn, saved] = await Promise.all([
       loadBuiltInSkills(),
@@ -241,7 +513,6 @@ export class SkillCanvas {
     ]);
 
     this._paletteEl.innerHTML = "";
-
     const makeTitle = (text: string, mt = false): HTMLElement => {
       const t = document.createElement("div");
       t.className = "skill-canvas-palette-title";
@@ -250,7 +521,7 @@ export class SkillCanvas {
       return t;
     };
 
-    // Built-in skills
+    // Built-in
     this._paletteEl.appendChild(makeTitle("Built-in"));
     for (const skill of builtIn) {
       this._paletteEl.appendChild(this._makePaletteItem(skill.name, skill.steps.length, {
@@ -258,17 +529,29 @@ export class SkillCanvas {
       }));
     }
 
-    // User-saved skills
-    if (saved.length > 0) {
-      this._paletteEl.appendChild(makeTitle("Saved", true));
-      for (const skill of saved) {
+    // Recorded skills (description === "Recorded skill")
+    const recorded = saved.filter(s => s.description === "Recorded skill");
+    if (recorded.length > 0) {
+      this._paletteEl.appendChild(makeTitle("Recorded", true));
+      for (const skill of recorded) {
         this._paletteEl.appendChild(this._makePaletteItem(skill.name, skill.steps.length, {
           kind: "skill", skillId: skill.id, skillName: skill.name, skillSteps: skill.steps,
         }));
       }
     }
 
-    // Script template
+    // Other saved
+    const other = saved.filter(s => s.description !== "Recorded skill");
+    if (other.length > 0) {
+      this._paletteEl.appendChild(makeTitle("Saved", true));
+      for (const skill of other) {
+        this._paletteEl.appendChild(this._makePaletteItem(skill.name, skill.steps.length, {
+          kind: "skill", skillId: skill.id, skillName: skill.name, skillSteps: skill.steps,
+        }));
+      }
+    }
+
+    // Custom script
     this._paletteEl.appendChild(makeTitle("Custom", true));
     const scriptItem = document.createElement("div");
     scriptItem.className = "skill-canvas-palette-item sc-palette-script";
@@ -291,7 +574,7 @@ export class SkillCanvas {
     const item = document.createElement("div");
     item.className = "skill-canvas-palette-item";
     item.innerHTML = `<span class="sc-pal-name">${escHtml(name)}</span><span class="sc-pal-badge">${stepCount}</span>`;
-    item.title = `${name} · ${stepCount} step${stepCount === 1 ? "" : "s"} — drag to canvas or double-click`;
+    item.title = `${name} · ${stepCount} step${stepCount === 1 ? "" : "s"} — drag or double-click`;
     item.draggable = true;
     item.addEventListener("dragstart", (e) => {
       e.dataTransfer!.setData("text/plain", JSON.stringify(dragData));
@@ -305,7 +588,7 @@ export class SkillCanvas {
         dragData.skillId ?? dragData.skillName ?? "skill",
         dragData.skillName ?? name,
         dragData.skillSteps ?? [],
-        cx, cy
+        cx, cy,
       );
     });
     return item;
@@ -318,6 +601,7 @@ export class SkillCanvas {
       id: crypto.randomUUID(), kind: "skill",
       skillId, skillName, skillSteps,
       x: Math.max(0, x), y: Math.max(0, y),
+      inPorts: 1, outPorts: 1,
     });
     saveGraph(this._graph);
     this._renderGraph();
@@ -328,6 +612,7 @@ export class SkillCanvas {
       id: crypto.randomUUID(), kind: "script",
       scriptSource: "",
       x: Math.max(0, x), y: Math.max(0, y),
+      inPorts: 1, outPorts: 1,
     });
     saveGraph(this._graph);
     this._renderGraph();
@@ -344,12 +629,46 @@ export class SkillCanvas {
   private _removeNode(id: string): void {
     this._graph.nodes = this._graph.nodes.filter(n => n.id !== id);
     this._graph.edges = this._graph.edges.filter(e => e.from !== id && e.to !== id);
+    this._graph.groups = this._graph.groups.map(g => ({
+      ...g, nodeIds: g.nodeIds.filter(nid => nid !== id)
+    })).filter(g => g.nodeIds.length > 0);
+    this._selected.delete(id);
     saveGraph(this._graph);
     this._renderGraph();
   }
 
   private _clear(): void {
-    this._graph = { nodes: [], edges: [] };
+    this._graph = { nodes: [], edges: [], groups: [] };
+    this._selected.clear();
+    saveGraph(this._graph);
+    this._renderGraph();
+  }
+
+  private _duplicateSelected(): void {
+    if (this._selected.size === 0) return;
+    const newIds: string[] = [];
+    for (const id of this._selected) {
+      const n = this._graph.nodes.find(x => x.id === id);
+      if (!n) continue;
+      const newId = crypto.randomUUID();
+      this._graph.nodes.push({ ...n, id: newId, x: n.x + 20, y: n.y + 20 });
+      newIds.push(newId);
+    }
+    this._selected.clear();
+    newIds.forEach(id => this._selected.add(id));
+    saveGraph(this._graph);
+    this._renderGraph();
+  }
+
+  private _groupSelected(): void {
+    if (this._selected.size < 2) return;
+    const group: CanvasGroup = {
+      id: crypto.randomUUID(),
+      name: "Group",
+      nodeIds: [...this._selected],
+      color: "#2a4060",
+    };
+    this._graph.groups.push(group);
     saveGraph(this._graph);
     this._renderGraph();
   }
@@ -358,10 +677,39 @@ export class SkillCanvas {
 
   private _renderGraph(): void {
     this._nodesEl.innerHTML = "";
+    // Group backdrops (behind nodes)
+    for (const group of this._graph.groups) {
+      this._nodesEl.appendChild(this._buildGroupEl(group));
+    }
     for (const node of this._graph.nodes) {
       this._nodesEl.appendChild(this._buildNodeEl(node));
     }
     this._renderEdges();
+    this._updateSelection();
+  }
+
+  private _buildGroupEl(group: CanvasGroup): HTMLElement {
+    const nodeRects = group.nodeIds.map(id => this._graph.nodes.find(n => n.id === id)).filter(Boolean) as CanvasNode[];
+    if (nodeRects.length === 0) return document.createElement("div");
+    const xs = nodeRects.map(n => n.x);
+    const ys = nodeRects.map(n => n.y);
+    const minX = Math.min(...xs) - 12;
+    const minY = Math.min(...ys) - 28;
+    const maxX = Math.max(...xs) + NODE_WIDTH + 12;
+    const maxY = Math.max(...ys) + 80 + 12;
+
+    const el = document.createElement("div");
+    el.className = "sc-group";
+    el.style.cssText = `left:${minX}px; top:${minY}px; width:${maxX - minX}px; height:${maxY - minY}px; background:${group.color}22; border:1px solid ${group.color}55; border-radius:4px; position:absolute;`;
+    const label = document.createElement("div");
+    label.className = "sc-group-label";
+    label.style.cssText = `position:absolute; top:4px; left:8px; font-size:10px; color:${group.color}; font-weight:600; letter-spacing:.05em;`;
+    label.textContent = group.name;
+    label.contentEditable = "true";
+    label.spellcheck = false;
+    label.addEventListener("input", () => { group.name = label.textContent ?? "Group"; saveGraph(this._graph); });
+    el.appendChild(label);
+    return el;
   }
 
   private _buildNodeEl(node: CanvasNode): HTMLElement {
@@ -369,6 +717,36 @@ export class SkillCanvas {
     el.className = "sc-node";
     el.dataset.id = node.id;
     el.style.cssText = `left:${node.x}px; top:${node.y}px;`;
+
+    const inPorts = node.inPorts ?? 1;
+    const outPorts = node.outPorts ?? 1;
+
+    const buildPorts = (count: number, side: "in" | "out"): HTMLElement => {
+      const wrap = document.createElement("div");
+      wrap.className = `sc-ports sc-ports-${side}`;
+      for (let i = 0; i < count; i++) {
+        const port = document.createElement("div");
+        port.className = `sc-port sc-port-${side}`;
+        port.dataset.node = node.id;
+        port.dataset.side = side;
+        port.dataset.port = String(i);
+        port.title = `${side === "in" ? "Input" : "Output"} ${i}`;
+        wrap.appendChild(port);
+      }
+      const addPort = document.createElement("div");
+      addPort.className = "sc-port-add";
+      addPort.title = `Add ${side} port`;
+      addPort.textContent = "+";
+      addPort.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (side === "in") node.inPorts = (node.inPorts ?? 1) + 1;
+        else node.outPorts = (node.outPorts ?? 1) + 1;
+        saveGraph(this._graph);
+        this._renderGraph();
+      });
+      wrap.appendChild(addPort);
+      return wrap;
+    };
 
     if (node.kind === "script") {
       el.classList.add("sc-node-script");
@@ -380,17 +758,12 @@ export class SkillCanvas {
         <div class="sc-node-body">
           <textarea class="sc-script-src" rows="3" spellcheck="false" placeholder="wall (0 0) (5 0) height=3">${escHtml(node.scriptSource ?? "")}</textarea>
         </div>
-        <div class="sc-node-ports">
-          <div class="sc-port sc-port-in"  data-node="${node.id}" data-side="in"  title="Input"></div>
-          <div class="sc-port sc-port-out" data-node="${node.id}" data-side="out" title="Output"></div>
-        </div>
       `;
       el.querySelector<HTMLTextAreaElement>(".sc-script-src")!.addEventListener("input", (ev) => {
         node.scriptSource = (ev.target as HTMLTextAreaElement).value;
         saveGraph(this._graph);
       });
     } else {
-      // Skill node (includes legacy verb-based nodes from runWithAnimation)
       const displayName = node.skillName ?? node.verb ?? "?";
       const stepCount = node.skillSteps?.length ?? (node.verb ? 1 : 0);
       el.innerHTML = `
@@ -401,49 +774,98 @@ export class SkillCanvas {
         <div class="sc-node-body sc-node-skill-body">
           <span class="sc-step-badge">${stepCount} step${stepCount === 1 ? "" : "s"}</span>
         </div>
-        <div class="sc-node-ports">
-          <div class="sc-port sc-port-in"  data-node="${node.id}" data-side="in"  title="Input"></div>
-          <div class="sc-port sc-port-out" data-node="${node.id}" data-side="out" title="Output"></div>
-        </div>
       `;
     }
 
-    el.querySelector(".sc-node-del")!.addEventListener("click", (e) => {
-      e.stopPropagation();
+    // Ports
+    if (inPorts > 0) {
+      const inEl = buildPorts(inPorts, "in");
+      inEl.style.cssText = "position:absolute; left:-8px; top:0; display:flex; flex-direction:column; gap:4px;";
+      el.appendChild(inEl);
+    }
+    if (outPorts > 0) {
+      const outEl = buildPorts(outPorts, "out");
+      outEl.style.cssText = "position:absolute; right:-8px; top:0; display:flex; flex-direction:column; gap:4px;";
+      el.appendChild(outEl);
+    }
+
+    // Delete
+    el.querySelector(".sc-node-del")!.addEventListener("click", (ev) => {
+      ev.stopPropagation();
       this._removeNode(node.id);
     });
 
-    // Node drag — skip on ports, delete button, textarea
-    el.addEventListener("mousedown", (e) => {
-      const t = e.target as HTMLElement;
-      if (t.classList.contains("sc-port") || t.classList.contains("sc-node-del") || t.tagName === "TEXTAREA") return;
-      e.preventDefault();
-      this._dragNode = { id: node.id, ox: node.x, oy: node.y, sx: e.clientX, sy: e.clientY };
+    // Select on click
+    el.addEventListener("mousedown", (ev) => {
+      const t = ev.target as HTMLElement;
+      if (t.classList.contains("sc-port") || t.classList.contains("sc-port-add") ||
+          t.classList.contains("sc-node-del") || t.tagName === "TEXTAREA") return;
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      if (ev.shiftKey) {
+        if (this._selected.has(node.id)) this._selected.delete(node.id);
+        else this._selected.add(node.id);
+      } else {
+        if (!this._selected.has(node.id)) {
+          this._selected.clear();
+          this._selected.add(node.id);
+        }
+      }
+      this._updateSelection();
+      this._onNodeSelect?.(node.id);
+
+      // Start drag
+      this._dragNode = { id: node.id, ox: node.x, oy: node.y, sx: ev.clientX, sy: ev.clientY };
+      if (this._selected.size > 1) {
+        // Capture starting positions of all selected for multi-drag
+        this._multiDragStart = new Map(
+          [...this._selected].map(id => {
+            const n = this._graph.nodes.find(x => x.id === id);
+            return [id, { ox: n?.x ?? 0, oy: n?.y ?? 0 }];
+          })
+        );
+      } else {
+        this._multiDragStart = null;
+      }
     });
 
     // Wire from output port
-    el.querySelector(".sc-port-out")!.addEventListener("mousedown", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      this._connectFrom = { id: node.id, side: "out" };
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      line.setAttribute("class", "sc-edge-draft");
-      this._svg.appendChild(line);
-      this._connectLine = line;
+    el.querySelectorAll<HTMLElement>(".sc-port-out").forEach((portEl) => {
+      portEl.addEventListener("mousedown", (ev) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        const portIdx = parseInt(portEl.dataset.port ?? "0", 10);
+        this._connectFrom = { id: node.id, port: portIdx };
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        line.setAttribute("class", "sc-edge-draft");
+        this._svg.appendChild(line);
+        this._connectLine = line;
+      });
     });
 
-    // Accept wire on input port
-    el.querySelector(".sc-port-in")!.addEventListener("mouseup", (e) => {
-      e.stopPropagation();
-      if (!this._connectFrom) return;
-      const fromId = this._connectFrom.id;
-      const toId = node.id;
-      if (fromId !== toId && !this._graph.edges.find(ex => ex.from === fromId && ex.to === toId)) {
-        this._graph.edges.push({ id: crypto.randomUUID(), from: fromId, to: toId });
+    // Accept wire on input port; dblclick = disconnect all edges to this port
+    el.querySelectorAll<HTMLElement>(".sc-port-in").forEach((portEl) => {
+      portEl.addEventListener("mouseup", (ev) => {
+        ev.stopPropagation();
+        if (!this._connectFrom) return;
+        const fromId = this._connectFrom.id;
+        const fromPort = this._connectFrom.port;
+        const toPort = parseInt(portEl.dataset.port ?? "0", 10);
+        if (fromId !== node.id && !this._graph.edges.find(e => e.from === fromId && e.to === node.id && e.fromPort === fromPort && e.toPort === toPort)) {
+          this._graph.edges.push({ id: crypto.randomUUID(), from: fromId, fromPort, to: node.id, toPort });
+          saveGraph(this._graph);
+        }
+        this._endConnect();
+        this._renderGraph();
+      });
+      portEl.addEventListener("dblclick", (ev) => {
+        ev.stopPropagation();
+        const toPort = parseInt(portEl.dataset.port ?? "0", 10);
+        this._graph.edges = this._graph.edges.filter(e => !(e.to === node.id && e.toPort === toPort));
         saveGraph(this._graph);
-      }
-      this._endConnect();
-      this._renderGraph();
+        this._renderGraph();
+      });
     });
 
     return el;
@@ -451,12 +873,25 @@ export class SkillCanvas {
 
   private _renderEdges(): void {
     this._svg.innerHTML = "";
+    // SVG must cover the full canvas content area
+    const allX = this._graph.nodes.map(n => n.x + NODE_WIDTH);
+    const allY = this._graph.nodes.map(n => n.y + 120);
+    const w = Math.max(2000, ...allX);
+    const h = Math.max(2000, ...allY);
+    this._svg.setAttribute("width", String(w));
+    this._svg.setAttribute("height", String(h));
+
     for (const edge of this._graph.edges) {
       const from = this._graph.nodes.find(n => n.id === edge.from);
       const to   = this._graph.nodes.find(n => n.id === edge.to);
       if (!from || !to) continue;
-      // Output port is on the right side of the node (node width = 160px)
-      const path = this._edgePath(from.x + 160, from.y + 48, to.x, to.y + 48);
+
+      const x1 = from.x + NODE_WIDTH;
+      const y1 = portY(edge.fromPort);
+      const x2 = to.x;
+      const y2 = portY(edge.toPort);
+
+      const path = this._edgePath(x1, y1, x2, y2);
       const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
       el.setAttribute("class", "sc-edge");
       el.setAttribute("d", path);
@@ -474,45 +909,133 @@ export class SkillCanvas {
     return `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
   }
 
+  private _updateSelection(): void {
+    this._nodesEl.querySelectorAll<HTMLElement>(".sc-node").forEach(el => {
+      const id = el.dataset.id ?? "";
+      el.classList.toggle("sc-node-selected", this._selected.has(id));
+    });
+  }
+
   // ── Mouse handlers ─────────────────────────────────────────────────────────
 
   private _onMouseMove = (e: MouseEvent): void => {
-    // Pan (middle button held)
     if (this._panStart) {
       this._tx = this._panStart.tx + e.clientX - this._panStart.mx;
       this._ty = this._panStart.ty + e.clientY - this._panStart.my;
       this._applyTransform();
     }
 
-    // Drag node
     if (this._dragNode) {
       const d = this._dragNode;
-      const node = this._graph.nodes.find(n => n.id === d.id);
-      if (node) {
-        node.x = Math.max(0, d.ox + (e.clientX - d.sx) / this._tz);
-        node.y = Math.max(0, d.oy + (e.clientY - d.sy) / this._tz);
-        const el = this._nodesEl.querySelector<HTMLElement>(`[data-id="${d.id}"]`);
-        if (el) { el.style.left = `${node.x}px`; el.style.top = `${node.y}px`; }
-        this._renderEdges();
+      const dx = (e.clientX - d.sx) / this._tz;
+      const dy = (e.clientY - d.sy) / this._tz;
+      if (this._multiDragStart && this._selected.size > 1) {
+        for (const [id, { ox, oy }] of this._multiDragStart) {
+          const n = this._graph.nodes.find(x => x.id === id);
+          if (n) {
+            n.x = Math.max(0, ox + dx);
+            n.y = Math.max(0, oy + dy);
+            const el = this._nodesEl.querySelector<HTMLElement>(`[data-id="${id}"]`);
+            if (el) { el.style.left = `${n.x}px`; el.style.top = `${n.y}px`; }
+          }
+        }
+      } else {
+        const n = this._graph.nodes.find(x => x.id === d.id);
+        if (n) {
+          n.x = Math.max(0, d.ox + dx);
+          n.y = Math.max(0, d.oy + dy);
+          const el = this._nodesEl.querySelector<HTMLElement>(`[data-id="${d.id}"]`);
+          if (el) { el.style.left = `${n.x}px`; el.style.top = `${n.y}px`; }
+        }
       }
+      this._renderEdges();
     }
 
-    // Rubber-band edge draft (coordinates in canvas space)
+    // Marquee
+    if (this._marqueeStart && this._marqueeEl) {
+      const vpRect = this._viewport.getBoundingClientRect();
+      const cx = (e.clientX - vpRect.left - this._tx) / this._tz;
+      const cy = (e.clientY - vpRect.top  - this._ty) / this._tz;
+      const x0 = Math.min(this._marqueeStart.cx, cx);
+      const y0 = Math.min(this._marqueeStart.cy, cy);
+      const x1 = Math.max(this._marqueeStart.cx, cx);
+      const y1 = Math.max(this._marqueeStart.cy, cy);
+      // Display in screen space (viewport-relative)
+      const sx0 = x0 * this._tz + this._tx;
+      const sy0 = y0 * this._tz + this._ty;
+      this._marqueeEl.style.cssText = `display:block; position:absolute; left:${sx0}px; top:${sy0}px; width:${(x1-x0)*this._tz}px; height:${(y1-y0)*this._tz}px; border:1px dashed var(--accent,#4af); background:rgba(68,170,255,.08); pointer-events:none; z-index:10;`;
+    }
+
+    // Edge draft
     if (this._connectFrom && this._connectLine) {
       const from = this._graph.nodes.find(n => n.id === this._connectFrom!.id);
       if (from) {
         const vpRect = this._viewport.getBoundingClientRect();
-        const x2 = (e.clientX - vpRect.left  - this._tx) / this._tz;
-        const y2 = (e.clientY - vpRect.top   - this._ty) / this._tz;
-        this._connectLine.setAttribute("d", this._edgePath(from.x + 160, from.y + 48, x2, y2));
+        const x2 = (e.clientX - vpRect.left - this._tx) / this._tz;
+        const y2 = (e.clientY - vpRect.top  - this._ty) / this._tz;
+        this._connectLine.setAttribute("d", this._edgePath(from.x + NODE_WIDTH, portY(this._connectFrom.port), x2, y2));
       }
     }
   };
 
-  private _onMouseUp = (_e: MouseEvent): void => {
-    if (this._dragNode) { saveGraph(this._graph); this._dragNode = null; }
+  private _onMouseUp = (e: MouseEvent): void => {
+    if (this._dragNode) { saveGraph(this._graph); this._dragNode = null; this._multiDragStart = null; }
     if (this._panStart) this._panStart = null;
     if (this._connectFrom) this._endConnect();
+
+    // Finish marquee
+    if (this._marqueeStart) {
+      const vpRect = this._viewport.getBoundingClientRect();
+      const cx = (e.clientX - vpRect.left - this._tx) / this._tz;
+      const cy = (e.clientY - vpRect.top  - this._ty) / this._tz;
+      const x0 = Math.min(this._marqueeStart.cx, cx);
+      const y0 = Math.min(this._marqueeStart.cy, cy);
+      const x1 = Math.max(this._marqueeStart.cx, cx);
+      const y1 = Math.max(this._marqueeStart.cy, cy);
+      if (x1 - x0 > 4 || y1 - y0 > 4) {
+        // Select intersecting nodes
+        if (!e.shiftKey) this._selected.clear();
+        for (const n of this._graph.nodes) {
+          if (n.x < x1 && n.x + NODE_WIDTH > x0 && n.y < y1 && n.y + 80 > y0) {
+            this._selected.add(n.id);
+          }
+        }
+        this._updateSelection();
+        if (this._selected.size === 1) this._onNodeSelect?.([...this._selected][0]);
+        else if (this._selected.size === 0) this._onNodeSelect?.(null);
+      }
+      this._marqueeStart = null;
+      if (this._marqueeEl) this._marqueeEl.style.display = "none";
+    }
+  };
+
+  private _onKeyDown = (e: KeyboardEvent): void => {
+    const active = document.activeElement;
+    if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT")) return;
+
+    if (e.key === "Delete" || e.key === "Backspace") {
+      for (const id of this._selected) this._removeNode(id);
+      this._selected.clear();
+      this._onNodeSelect?.(null);
+    } else if ((e.metaKey || e.ctrlKey) && e.key === "d") {
+      e.preventDefault();
+      this._duplicateSelected();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === "g") {
+      e.preventDefault();
+      this._groupSelected();
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+      if (this._selected.size === 0) return;
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+      const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+      for (const id of this._selected) {
+        const n = this._graph.nodes.find(x => x.id === id);
+        if (n) { n.x = Math.max(0, n.x + dx); n.y = Math.max(0, n.y + dy); }
+      }
+      saveGraph(this._graph);
+      this._renderGraph();
+    }
   };
 
   private _endConnect(): void {
@@ -521,12 +1044,68 @@ export class SkillCanvas {
     this._connectFrom = null;
   }
 
+  // ── Recording event listeners ──────────────────────────────────────────────
+
+  private _onRecordPointer = (e: PointerEvent): void => {
+    if (!this._recording) return;
+    const target = e.target instanceof Element ? e.target.className?.toString().slice(0, 40) : "?";
+    this._recordEvents.push({
+      ts: Date.now() - this._recordStart,
+      kind: "pointer", clientX: e.clientX, clientY: e.clientY,
+      target, button: e.button,
+    });
+  };
+
+  private _onRecordKey = (e: KeyboardEvent): void => {
+    if (!this._recording) return;
+    // Skip modifier-only keys
+    if (["Shift", "Control", "Meta", "Alt"].includes(e.key)) return;
+    this._recordEvents.push({
+      ts: Date.now() - this._recordStart,
+      kind: "key", key: e.key,
+      targetTag: (e.target instanceof Element ? e.target.tagName : "?"),
+    });
+  };
+
+  private _onRecordSelect = (rawEv: Event): void => {
+    if (!this._recording) return;
+    const ev = rawEv as CustomEvent<{ uuid: string | null }>;
+    const uuid = ev.detail?.uuid;
+    if (uuid) {
+      this._recordEvents.push({ ts: Date.now() - this._recordStart, kind: "scene", action: "select", uuid });
+    }
+  };
+
+  // ── Recording classification & save ───────────────────────────────────────
+
+  private _classifyAndSave(artifact: RecordingArtifact): void {
+    const dispatches = artifact.events.filter(e => e.kind === "dispatch").length;
+    const toolChanges = artifact.events.filter(e => e.kind === "tool").length;
+    const isSimple = artifact.duration_ms <= 30_000 && dispatches <= 8 && toolChanges <= 1;
+
+    if (isSimple && dispatches > 0) {
+      const steps: SkillStep[] = (artifact.events.filter(e => e.kind === "dispatch") as Array<{ ts: number; kind: "dispatch"; verb: string; args: Record<string, unknown>; resultUuid?: string }>)
+        .map(e => ({ verb: e.verb, args: e.args }));
+      openSaveSkillModal(steps);
+      void this.refreshPalette();
+    } else {
+      window.dispatchEvent(new CustomEvent("record:complex-stop", {
+        bubbles: true,
+        detail: { artifact },
+      }));
+    }
+  }
+
   // ── Run & Compile ──────────────────────────────────────────────────────────
 
   private async _run(): Promise<void> {
     for (const node of this._topoSort()) {
+      const el = this._nodesEl.querySelector<HTMLElement>(`[data-id="${node.id}"]`);
+      el?.classList.add("node-running");
       await this._runNode(node);
+      el?.classList.remove("node-running");
     }
+    (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
   }
 
   private async _runNode(node: CanvasNode): Promise<void> {
@@ -545,7 +1124,6 @@ export class SkillCanvas {
         await new Promise(r => setTimeout(r, 80));
       }
     } else if (node.verb) {
-      // Legacy single-verb node (runWithAnimation compat)
       dispatchSync(node.verb, (node.args ?? {}) as DispatchArgs);
       await new Promise(r => setTimeout(r, 80));
     }
@@ -561,11 +1139,13 @@ export class SkillCanvas {
     openSaveSkillModal(steps);
   }
 
+  // ── Topo-sort (Kahn's algorithm) ───────────────────────────────────────────
+
   private _topoSort(): CanvasNode[] {
     const inDeg = new Map<string, number>(this._graph.nodes.map(n => [n.id, 0]));
     const adj   = new Map<string, string[]>(this._graph.nodes.map(n => [n.id, []]));
     for (const e of this._graph.edges) {
-      adj.get(e.from)!.push(e.to);
+      adj.get(e.from)?.push(e.to);
       inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1);
     }
     const queue = this._graph.nodes.filter(n => (inDeg.get(n.id) ?? 0) === 0);
@@ -587,36 +1167,23 @@ export class SkillCanvas {
     return order;
   }
 
-  // ── P5b: agent-triggered animation ────────────────────────────────────────
+  // ── Backward-compat: agent-triggered animation ─────────────────────────────
 
   async runWithAnimation(steps: SkillStep[]): Promise<void> {
     const nodes: CanvasNode[] = steps.map((step, i) => ({
-      id: crypto.randomUUID(),
-      kind: "skill" as const,
-      skillName: step.verb,
-      skillSteps: [step],
-      // Legacy fields kept for fallback:
-      verb: step.verb,
-      args: step.args,
-      x: 20 + i * 180,
-      y: 80,
+      id: crypto.randomUUID(), kind: "skill" as const,
+      skillName: step.verb, skillSteps: [step],
+      verb: step.verb, args: step.args,
+      x: 20 + i * 180, y: 80,
+      inPorts: i > 0 ? 1 : 0, outPorts: i < steps.length - 1 ? 1 : 0,
     }));
     const edges: CanvasEdge[] = nodes.slice(0, -1).map((n, i) => ({
-      id: crypto.randomUUID(),
-      from: n.id,
-      to: nodes[i + 1].id,
+      id: crypto.randomUUID(), from: n.id, fromPort: 0, to: nodes[i + 1].id, toPort: 0,
     }));
-    this._graph = { nodes, edges };
+    this._graph = { nodes, edges, groups: [] };
     saveGraph(this._graph);
     this._renderGraph();
-
-    for (const node of this._topoSort()) {
-      const el = this._nodesEl.querySelector<HTMLElement>(`[data-id="${node.id}"]`);
-      el?.classList.add("node-running");
-      await this._runNode(node);
-      el?.classList.remove("node-running");
-    }
-    (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
+    await this._run();
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -624,8 +1191,10 @@ export class SkillCanvas {
   destroy(): void {
     window.removeEventListener("mousemove", this._onMouseMove);
     window.removeEventListener("mouseup",   this._onMouseUp);
+    window.removeEventListener("keydown",   this._onKeyDown);
+    if (this._recording) this.stopRecording();
   }
 }
 
-// Exported for backward-compat (verb palette was public API in #408 siblings)
-export const CANVAS_VERBS: string[] = BUILT_IN_SKILL_NAMES;
+// Backward-compat export (verb palette was public in prior siblings)
+export type { SkillStep };

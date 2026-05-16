@@ -1941,29 +1941,53 @@ let _canvasInstance: SkillCanvas | null = null;
 let _activateNodesCanvas: (() => void) | null = null;
 
 function buildSkillsTabBody(): HTMLElement {
-  // #722: SKILL NODES tab opens directly to the Grasshopper-style canvas (no sub-tab switcher).
+  // #727: SKILL NODES tab — Grasshopper canvas (left) + resizable inspector (right).
   const outer = el("div", "tab-body skills-tab");
   outer.style.cssText = "display:flex; flex-direction:row; height:100%; overflow:hidden;";
 
   // ── Left: canvas column ───────────────────────────────────────────────────
   const nodesCol = document.createElement("div");
   nodesCol.className = "skills-nodes-col";
-  nodesCol.style.cssText = "flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; border-right:var(--lw-construction) solid var(--border);";
+  nodesCol.style.cssText = "flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden;";
 
-  // Canvas area fills the column.
   const canvasPane = document.createElement("div");
   canvasPane.style.cssText = "flex:1; overflow:hidden;";
-  _skillsWrap = null;   // list view removed; renderSkillNodes() is now a no-op
+  _skillsWrap = null;
   _canvasInstance = new SkillCanvas(canvasPane);
   _activateNodesCanvas = null;
 
+  _canvasInstance.setNodeSelectHandler((nodeId) => { _renderNodeInspector(nodeId); });
+
+  window.addEventListener("record:complex-stop", () => {
+    const promptTab = document.querySelector<HTMLElement>('[data-tab="prompt"]');
+    promptTab?.click();
+  });
+
   nodesCol.appendChild(canvasPane);
 
-  // ── Right: parameter sidecar ──────────────────────────────────────────────
+  // ── Right: inspector sidecar (resizable 120-400px) ────────────────────────
   const paramsCol = document.createElement("div");
   paramsCol.className = "skills-params-col";
-  paramsCol.style.cssText = "width:180px; flex-shrink:0; overflow-y:auto; padding:8px 10px;";
+  paramsCol.style.cssText = "width:220px; flex-shrink:0; overflow-y:auto; padding:8px 10px; position:relative;";
   _paramsWrap = paramsCol;
+
+  const resizeHandle = document.createElement("div");
+  resizeHandle.className = "sc-inspector-resize";
+  resizeHandle.style.cssText = "position:absolute; left:0; top:0; width:5px; height:100%; cursor:col-resize; z-index:2;";
+  let _rDragX = 0;
+  let _rDragW = 0;
+  resizeHandle.addEventListener("mousedown", (ev) => {
+    ev.preventDefault();
+    _rDragX = ev.clientX;
+    _rDragW = paramsCol.offsetWidth;
+    const onMove = (mv: MouseEvent): void => {
+      paramsCol.style.width = `${Math.max(120, Math.min(400, _rDragW - (mv.clientX - _rDragX)))}px`;
+    };
+    const onUp = (): void => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+  paramsCol.appendChild(resizeHandle);
 
   renderParameters(null);
   window.addEventListener("viewer:select", (rawEv) => {
@@ -1974,6 +1998,55 @@ function buildSkillsTabBody(): HTMLElement {
   outer.appendChild(nodesCol);
   outer.appendChild(paramsCol);
   return outer;
+}
+
+function _renderNodeInspector(nodeId: string | null): void {
+  if (!_paramsWrap) return;
+  if (!nodeId) { renderParameters(null); return; }
+  const node = _canvasInstance?.getNode(nodeId);
+  if (!node) { renderParameters(null); return; }
+
+  _paramsWrap.innerHTML = "";
+
+  // Re-add resize handle after innerHTML clear
+  const rh = document.createElement("div");
+  rh.className = "sc-inspector-resize";
+  rh.style.cssText = "position:absolute; left:0; top:0; width:5px; height:100%; cursor:col-resize; z-index:2;";
+  _paramsWrap.appendChild(rh);
+
+  const header = document.createElement("div");
+  header.className = "params-header";
+  header.textContent = node.skillName ?? node.verb ?? (node.kind === "script" ? "Script" : "Node");
+  _paramsWrap.appendChild(header);
+
+  if (node.kind === "script") {
+    const ta = document.createElement("textarea");
+    ta.style.cssText = "width:100%; min-height:120px; font-family:monospace; font-size:11px; resize:vertical; margin-top:6px; box-sizing:border-box;";
+    ta.value = node.scriptSource ?? "";
+    ta.spellcheck = false;
+    ta.addEventListener("input", () => { _canvasInstance?.updateNodeScript(nodeId, ta.value); });
+    _paramsWrap.appendChild(ta);
+  } else {
+    const steps = node.skillSteps ?? [];
+    const countEl = document.createElement("div");
+    countEl.style.cssText = "font-size:11px; color:var(--muted); margin:4px 0 8px;";
+    countEl.textContent = `${steps.length} step${steps.length === 1 ? "" : "s"}`;
+    _paramsWrap.appendChild(countEl);
+
+    for (const step of steps.slice(0, 12)) {
+      const row = document.createElement("div");
+      row.className = "params-row";
+      row.style.fontSize = "11px";
+      row.innerHTML = `<span class="params-label" style="font-weight:600">${escHtml(step.verb)}</span>`;
+      _paramsWrap.appendChild(row);
+    }
+    if (steps.length > 12) {
+      const more = document.createElement("div");
+      more.style.cssText = "font-size:10px; color:var(--muted); margin-top:4px;";
+      more.textContent = `…and ${steps.length - 12} more`;
+      _paramsWrap.appendChild(more);
+    }
+  }
 }
 
 // ── Live event history (HISTORY tab) ───────────────────────────────────────
@@ -2234,15 +2307,41 @@ function renderParameters(uuid: string | null): void {
   const dispatchArgs = obj?.userData.dispatchArgs as Record<string, unknown> | undefined;
   const dispatchVerb = (obj?.userData.dispatchVerb ?? obj?.userData.creator) as string | undefined;
 
-  if (!obj || !dispatchArgs || !dispatchVerb) {
+  if (!obj) {
     _paramsWrap.innerHTML = `<div class="empty-hint">Select an object to inspect its parameters.</div>`;
     return;
   }
 
   const header = document.createElement("div");
   header.className = "params-header";
-  header.textContent = dispatchVerb;
+  header.textContent = dispatchVerb ?? obj.name ?? obj.type ?? "Object";
   _paramsWrap.appendChild(header);
+
+  // IFC / boot-mesh fallback: no dispatchArgs — introspect geometry
+  if (!dispatchArgs || !dispatchVerb) {
+    const geom = (obj as unknown as { geometry?: { type?: string; attributes?: { position?: { count?: number }; index?: { count?: number } } } }).geometry;
+    const mat  = (obj as unknown as { material?: { type?: string; color?: { getHexString?(): string } } }).material;
+    const pos  = obj.position;
+    const bbox = new THREE.Box3().setFromObject(obj);
+    const size = bbox.getSize(new THREE.Vector3());
+
+    const addRow = (label: string, value: string): void => {
+      const row = document.createElement("div");
+      row.className = "params-row";
+      row.innerHTML = `<span class="params-label">${escHtml(label)}</span><span class="params-value params-value-static">${escHtml(value)}</span>`;
+      _paramsWrap!.appendChild(row);
+    };
+
+    addRow("type", geom?.type ?? obj.type ?? "—");
+    if (geom?.attributes?.position?.count !== undefined) addRow("vertices", String(geom.attributes.position.count));
+    if (geom?.attributes?.index?.count !== undefined) addRow("triangles", String(Math.floor(geom.attributes.index.count / 3)));
+    addRow("bbox", `${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}`);
+    addRow("position", `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}`);
+    if (mat?.type) addRow("material", mat.type);
+    if (mat?.color?.getHexString) addRow("color", `#${mat.color.getHexString()}`);
+    if (obj.userData.creator) addRow("creator", String(obj.userData.creator));
+    return;
+  }
 
   for (const [key, val] of Object.entries(dispatchArgs)) {
     if (key.startsWith("_") || key === "uuid") continue;
