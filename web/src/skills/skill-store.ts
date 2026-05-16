@@ -139,3 +139,14 @@ export async function deleteCluster(id: string): Promise<void> {
     req.onerror   = () => reject(req.error);
   });
 }
+
+// Test instrumentation — exposes cluster CRUD for gemma-verify surface AC6 (#664).
+if (typeof window !== "undefined") {
+  (window as unknown as {
+    __skillStore?: {
+      saveCluster: typeof saveCluster;
+      getClusterByName: typeof getClusterByName;
+      deleteCluster: typeof deleteCluster;
+    };
+  }).__skillStore = { saveCluster, getClusterByName, deleteCluster };
+}

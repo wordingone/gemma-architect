@@ -113,8 +113,9 @@ paramCollapseBtn.addEventListener("click", () => {
 const viewer = new Viewer(canvas, viewportAreaEl);
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
-// Expose dispatchSync for CDP-driven verification scripts.
+// Expose dispatchSync + async dispatch for CDP-driven verification scripts.
 (window as unknown as { __dispatch: typeof dispatchSync }).__dispatch = dispatchSync;
+(window as unknown as { __dispatchAsync: typeof dispatch }).__dispatchAsync = dispatch;
 // Expose command-session control for test teardown (prevents picker-bridge session leak).
 (window as unknown as { __clearCommandSession: typeof clearCommandSession }).__clearCommandSession = clearCommandSession;
 (window as unknown as { __getActiveCommandSession: typeof getActiveCommandSession }).__getActiveCommandSession = getActiveCommandSession;
