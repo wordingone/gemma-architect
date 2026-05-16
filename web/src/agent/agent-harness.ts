@@ -1048,29 +1048,17 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // Generate — greedy decoding for deterministic function-call JSON.
   // P10-2: catch OrtRun failures that slip past the load-time probe (#128/#133).
   // On first failure: engage session-level fallback flag, retry via remote if available.
-  // MTP (#614): try assistant_model (self-speculative via MTP heads) if model supports it;
-  // fall through to standard generation on TypeError (transformers.js 4.2 doesn't expose it).
+  // TODO(#674 AC2-AC3): hand-roll speculative-decode loop with gemma-4-E2B-it-assistant drafter.
+  // transformers.js 4.2.0 has zero support for `assistant_model` / speculative decoding —
+  // the prior try/catch (8132d3a) always fell through to standard generation. Removed scaffold.
+  const _mtpActive = false; // will be true once #674 spec-decode loop lands
   let outputs: unknown;
-  let _mtpActive = false;
   try {
-    try {
-      outputs = await (model as any).generate({
-        ...inputs,
-        max_new_tokens: safeMaxNewTokens,
-        do_sample: false,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assistant_model: model as any,
-        num_assistant_tokens: 3,
-      });
-      _mtpActive = true;
-    } catch {
-      // assistant_model not supported in this transformers.js build — use standard generation.
-      outputs = await model.generate({
-        ...inputs,
-        max_new_tokens: safeMaxNewTokens,
-        do_sample: false,
-      });
-    }
+    outputs = await model.generate({
+      ...inputs,
+      max_new_tokens: safeMaxNewTokens,
+      do_sample: false,
+    });
   } catch (ortErr) {
     const msg = (ortErr as Error).message ?? "";
     console.warn("[agent-harness] OrtRun failure during generation — engaging remote fallback.", msg.slice(0, 120));
