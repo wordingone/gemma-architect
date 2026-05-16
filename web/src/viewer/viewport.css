@@ -20,10 +20,26 @@
   min-height: 0;
   border: var(--lw-cut) solid var(--ink-cut);
   margin: 0;
+  --vp-border: oklch(0.45 0.008 250);
+}
+html[data-mode="night"] .viewport-area {
+  --vp-border: oklch(0.55 0.010 220);
 }
 .viewport-area.split-quad {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
+  gap: 0;
+  background: transparent;
+  border: 1px solid var(--vp-border);
+}
+/* Right + bottom borders only: each shared edge has exactly 1 border (not 2). */
+.viewport-area.split-quad .viewport {
+  box-shadow: none;
+  border-top: none;
+  border-left: none;
+  border-right: 1px solid var(--vp-border);
+  border-bottom: 1px solid var(--vp-border);
+  box-sizing: border-box;
 }
 .viewport-area.split-h {
   grid-template-columns: 1fr 1fr;
@@ -51,22 +67,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
-  border-bottom: var(--lw-construction) solid var(--ink-construction);
+  height: 26px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--vp-border);
   background: var(--paper);
   backdrop-filter: blur(12px) saturate(180%);
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-soft);
+  flex-shrink: 0;
 }
 .vp-title {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 4px;
   font-weight: 600;
 }
 .vp-title .vp-tag {
   display: inline-block;
-  width: 7px; height: 7px;
+  width: 5px; height: 5px;
   border: 1px solid var(--ink-soft);
 }
 .vp-title .vp-tag.persp { transform: rotate(45deg); border-color: var(--sanguine); background: var(--sanguine-tint); }
@@ -79,22 +97,23 @@
 .vp-title .vp-tag.iso   { transform: rotate(45deg); border-color: var(--ink-soft); }
 
 .vp-view-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  background: none; border: none; padding: 0; margin: 0;
-  font: inherit; font-size: inherit; color: inherit; letter-spacing: inherit;
+  display: inline-flex; align-items: center; gap: 3px;
+  background: var(--paper-2); border: 1px solid var(--hairline-strong);
+  border-radius: 3px; padding: 3px 7px; margin: 0;
+  font: inherit; font-size: 10px; color: inherit; letter-spacing: 0.10em;
   cursor: pointer; user-select: none;
 }
-.vp-view-btn:hover { color: var(--ink); }
-.vp-view-btn .vp-caret { font-size: 8px; color: var(--ink-faint); line-height: 1; }
+.vp-view-btn:hover { background: var(--paper-3); color: var(--ink); }
+.vp-view-btn .vp-caret { font-size: 7px; color: var(--ink-faint); line-height: 1; }
 
 .vp-render-btn {
   display: inline-flex; align-items: center;
-  background: none; border: none; padding: 0 6px 0 0; margin: 0;
-  font: inherit; font-size: inherit; color: inherit; letter-spacing: inherit;
+  background: var(--paper-2); border: 1px solid var(--hairline-strong);
+  border-radius: 3px; padding: 3px 7px; margin: 0;
+  font: inherit; font-size: 10px; color: inherit; letter-spacing: 0.10em;
   font-weight: 600; cursor: pointer; user-select: none;
-  border-right: var(--lw-construction) solid var(--ink-construction);
 }
-.vp-render-btn:hover { color: var(--ink); }
+.vp-render-btn:hover { background: var(--paper-3); color: var(--ink); }
 
 /* View-switcher popover */
 .vs-backdrop { position: fixed; inset: 0; z-index: 199; }
@@ -123,7 +142,7 @@
   display: flex; align-items: center; gap: 2px;
 }
 .vp-icon-btn {
-  width: 18px; height: 18px;
+  width: 16px; height: 16px;
   display: flex; align-items: center; justify-content: center;
   background: transparent;
   border: none;
@@ -132,7 +151,21 @@
   border-radius: var(--r-sm);
 }
 .vp-icon-btn:hover { background: var(--paper-3); color: var(--ink); }
-.vp-icon-btn svg { width: 12px; height: 12px; stroke-width: 1.5; }
+.vp-icon-btn svg { width: 10px; height: 10px; stroke-width: 1.5; }
+
+/* Split viewport toggle buttons */
+.vp-split-single-btn,
+.vp-split-quad-btn {
+  width: 24px; height: 24px;
+  color: var(--ink);
+}
+.vp-split-single-btn svg,
+.vp-split-quad-btn svg { width: 14px; height: 14px; }
+
+/* Mutual exclusivity: single mode shows only quad button; quad mode shows only single */
+.vp-split-single-btn { display: none; }
+.viewport-area.split-quad .vp-split-single-btn { display: flex; }
+.viewport-area.split-quad .vp-split-quad-btn { display: none; }
 
 .vp-body {
   flex: 1;
@@ -384,9 +417,16 @@
   pointer-events: none;
 }
 
-/* Single-pane mode: show only #viewport-2 (PERSPECTIVE) filling the grid cell. */
+/* Single-pane mode: default to PERSPECTIVE (#viewport-2). */
 .viewport-area.split-single .viewport { display: none; }
 .viewport-area.split-single #viewport-2 { display: flex; }
+/* data-focus-vp: clicking single in any vp-header shows that viewport instead */
+.viewport-area.split-single[data-focus-vp="viewport-1"] #viewport-1 { display: flex; }
+.viewport-area.split-single[data-focus-vp="viewport-1"] #viewport-2 { display: none; }
+.viewport-area.split-single[data-focus-vp="viewport-3"] #viewport-3 { display: flex; }
+.viewport-area.split-single[data-focus-vp="viewport-3"] #viewport-2 { display: none; }
+.viewport-area.split-single[data-focus-vp="viewport-4"] #viewport-4 { display: flex; }
+.viewport-area.split-single[data-focus-vp="viewport-4"] #viewport-2 { display: none; }
 
 /* drafting grid background per viewport.
    Pre-quad-split: a heavy CSS grid in the single visible pane drowns the
@@ -410,7 +450,8 @@
 /* When the viewport is in single-pane mode (only one .viewport visible),
    hide the CSS grid entirely so the THREE.js scene gets a clean canvas.
    Quad-split mode keeps the per-pane grid (visual frame for each scissor). */
-.viewport-area.split-single .vp-grid { display: none; }
+.viewport-area.split-single .vp-grid,
+.viewport-area.split-quad .vp-grid { display: none; }
 .vp-grid.persp {
   background-image: none;
   background:

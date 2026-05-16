@@ -9,7 +9,7 @@ function escapeHtml(s: string): string {
 
 // Shell chrome — design-handoff #171.
 //
-// Builds the menubar (9 menus) / modebar (4 modes) / ribbon (RENDER tab + right actions)
+// Builds the menubar (3 menus) / modebar (4 modes) / ribbon (RENDER tab + right actions)
 // statusbar wiring on top of the existing prompt-pane + viewer-pane layout.
 //
 // DOM target classes match the design bundle's structure (project/styles.css):
@@ -40,62 +40,6 @@ const MENUS: MenuItem[] = [
     { separator: true },
     { label: "Select all", shortcut: "⌘A",   canonical: "SdSelectAll" },
     { label: "Deselect",   shortcut: "esc",  canonical: "SdDeselect" },
-  ]},
-  { label: "View", entries: [
-    { label: "Mode · Model",    shortcut: "⌥1", onAction: () => (document.querySelector('.mode-tab[data-mode="model"]') as HTMLElement | null)?.click() },
-    { label: "Mode · Layout",   shortcut: "⌥2", onAction: () => (document.querySelector('.mode-tab[data-mode="layout"]') as HTMLElement | null)?.click() },
-    { label: "Mode · Research", shortcut: "⌥3", onAction: () => (document.querySelector('.mode-tab[data-mode="research"]') as HTMLElement | null)?.click() },
-    { separator: true },
-    { label: "Toggle theme",    shortcut: "⌃\\", onAction: () => document.getElementById("blueprint-toggle")?.click() },
-    { label: "Command palette…",shortcut: "⌘K",  onAction: () => document.getElementById("ribbon-palette-btn")?.click() },
-    { separator: true },
-    { label: "Construction Plane…", onAction: () => (window as unknown as { __dispatch?: (v: string, a?: unknown) => unknown }).__dispatch?.("SdToggleCPlaneGizmo") },
-  ]},
-  { label: "Sketch", entries: [
-    { label: "Line",      shortcut: "L", toolId: "line" },
-    { label: "Rectangle", shortcut: "R", toolId: "rect" },
-    { label: "Circle",    shortcut: "C", toolId: "circle" },
-    { label: "Polyline",               toolId: "polyline" },
-    { label: "Polygon",                toolId: "polygon" },
-    { label: "Arc",                    toolId: "arc" },
-    { label: "Spline",                 toolId: "spline" },
-  ]},
-  { label: "Solid", entries: [
-    { label: "Extrude",      shortcut: "E", toolId: "extrude" },
-    { label: "Revolve",                     toolId: "revolve" },
-    { separator: true },
-    { label: "Boolean union",              canonical: "SdBooleanUnion" },
-    { label: "Boolean cut",               canonical: "SdBooleanDifference" },
-    { separator: true },
-    { label: "Fillet edges",               toolId: "fillet" },
-    { label: "Chamfer edges",              toolId: "chamfer" },
-  ]},
-  { label: "Arch", entries: [
-    { label: "Wall",   shortcut: "W", toolId: "wall" },
-    { label: "Slab",   shortcut: "S", toolId: "slab" },
-    { label: "Column",               toolId: "column" },
-    { label: "Stair",                toolId: "stair" },
-    { label: "Door",                 toolId: "door" },
-    { label: "Window",               toolId: "window" },
-  ]},
-  { label: "Render", entries: [
-    { label: "Shaded",    onAction: () => dispatchSync("SdRenderMode", { mode: "shaded" }) },
-    { label: "Wireframe", onAction: () => dispatchSync("SdRenderMode", { mode: "wireframe" }) },
-    { label: "Ghosted",   onAction: () => dispatchSync("SdRenderMode", { mode: "ghosted" }) },
-    { label: "Technical", onAction: () => dispatchSync("SdRenderMode", { mode: "technical" }) },
-    { label: "Realistic", onAction: () => dispatchSync("SdRenderMode", { mode: "realistic" }) },
-    { separator: true },
-    { label: "Render settings…", onAction: () => {
-      const btn = document.querySelector('.vp-render-btn') as HTMLElement | null;
-      if (btn) window.dispatchEvent(new CustomEvent("render-mode-toggle", { detail: { rect: btn.getBoundingClientRect() } }));
-    }},
-  ]},
-  { label: "Window", entries: [
-    { label: "Prompt",     onAction: () => (document.querySelector('.dock-tab[data-tab="prompt"]') as HTMLElement | null)?.click() },
-    { label: "Skills",     onAction: () => (document.querySelector('.dock-tab[data-tab="skills"]') as HTMLElement | null)?.click() },
-    { label: "History",    onAction: () => (document.querySelector('.dock-tab[data-tab="history"]') as HTMLElement | null)?.click() },
-    { separator: true },
-    { label: "Reset layout", stub: true, onAction: () => window.location.reload() },
   ]},
   { label: "Help", entries: [
     { label: "Keyboard shortcuts",    shortcut: "⌘K", onAction: () => document.getElementById("ribbon-palette-btn")?.click() },
@@ -211,10 +155,7 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
 // SAMPLES displayed as ribbon asset cards in MODEL mode (far right of ribbon-tools).
 // Projects = full building scenes; Elements = individual components (naming subject to Leo review).
 const RIBBON_SCENE_SAMPLES = [
-  { name: "Schultz",   v: "schultz-residence", thumb: "/thumbnails/schultz-residence.png" },
   { name: "FZK-Haus",  v: "kit-fzk-haus",      thumb: "/thumbnails/kit-fzk-haus.png" },
-  { name: "Institute", v: "kit-office",          thumb: "/thumbnails/kit-office.png" },
-  { name: "Bonsai",    v: "bonsai-openings",     thumb: "/thumbnails/bonsai-openings.png" },
 ];
 const RIBBON_ELEMENT_SAMPLES = [
   { name: "Wall",  v: "wall-with-opening", thumb: "/thumbnails/wall-with-opening.png" },
@@ -348,6 +289,7 @@ export function resetRibbonElementTypes(): void {
 
 // Append the ARCH|COMP toggle into the ribbon tabs strip (MODEL mode only).
 function appendArchCompSlider(tabsEl: HTMLElement) {
+  tabsEl.querySelector(".yin-toggle")?.remove();
   const { root } = buildPhoneSlider({
     initial: "ARCH",
     onChange: (tab) => {
@@ -379,8 +321,8 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   } else {
     _ribbonTabsEl.style.display = "";      // restore tabs column for model mode
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, "");
+    appendArchCompSlider(_ribbonTabsEl);
     fillRibbonTools(_ribbonToolsEl, []);
-    appendArchCompSlider(_ribbonToolsEl);
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
     if (_ribbonEl) appendRibbonAssets(_ribbonEl);
   }
@@ -626,31 +568,48 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
 
   // Fill with model ribbon content initially.
   fillRibbonTabs(tabsEl, RIBBON_TABS, "");
+  appendArchCompSlider(tabsEl);
   fillRibbonTools(toolsEl, []);
-  appendArchCompSlider(toolsEl);
   appendRibbonAssets(ribbonHost);
 
-  // .ribbon-right — quick actions (palette + export + viewport split).
+  // .ribbon-right — EXPORT only; split buttons live in vp-header now.
   const rightEl = document.createElement("div");
   rightEl.className = "ribbon-right";
   rightEl.innerHTML = `
-    <button class="btn btn-ghost btn-icon" type="button" id="ribbon-split-single-btn" title="Single viewport (1)">${iconSVG("split-single", 14)}</button>
-    <button class="btn btn-ghost btn-icon" type="button" id="ribbon-split-quad-btn" title="Quad split (4)">${iconSVG("split-quad", 14)}</button>
-    <button class="btn btn-ghost" type="button" id="ribbon-palette-btn" title="Open command palette (Ctrl+K)">⌘K</button>
     <button class="btn" type="button" id="ribbon-export-btn" title="Export (Ctrl+E)">EXPORT</button>
   `;
   ribbonHost.appendChild(rightEl);
 
-  rightEl.querySelector("#ribbon-split-single-btn")?.addEventListener("click", () => {
-    onSplitMode?.("single");
-  });
-  rightEl.querySelector("#ribbon-split-quad-btn")?.addEventListener("click", () => {
-    onSplitMode?.("quad");
+  // Align ribbon-right width to the actual sidebar column width (--sidebar-w may be unset).
+  requestAnimationFrame(() => {
+    const sidebar = document.querySelector<HTMLElement>(".sidebar");
+    if (sidebar) rightEl.style.width = sidebar.getBoundingClientRect().width + "px";
   });
 
-  // ribbon-palette-btn click is owned by cmdk.ts (document.getElementById binding).
-  // Do NOT add a second handler here — two handlers conflict: cmdk.ts opens the
-  // overlay, then a simulated ctrlKey+k from shell.ts immediately closes it (#197).
+  // Inject split-viewport controls into every vp-header's controls section.
+  // All 4 viewports get the buttons — in single mode only the visible one shows them;
+  // in quad mode all 4 headers carry them (consistent UX, same action).
+  document.querySelectorAll<HTMLElement>(".vp-controls").forEach((vpControls) => {
+    vpControls.querySelector(".vp-split-single-btn")?.remove();
+    vpControls.querySelector(".vp-split-quad-btn")?.remove();
+    const quadBtn = document.createElement("button");
+    quadBtn.className = "vp-icon-btn vp-split-quad-btn";
+    quadBtn.title = "Quad split (4)";
+    quadBtn.innerHTML = iconSVG("split-quad", 14);
+    quadBtn.addEventListener("click", () => onSplitMode?.("quad"));
+    const singleBtn = document.createElement("button");
+    singleBtn.className = "vp-icon-btn vp-split-single-btn";
+    singleBtn.title = "Single viewport (1)";
+    singleBtn.innerHTML = iconSVG("split-single", 14);
+    singleBtn.addEventListener("click", () => {
+      const vp = vpControls.closest<HTMLElement>(".viewport");
+      const area = document.querySelector<HTMLElement>(".viewport-area");
+      if (area && vp) area.dataset.focusVp = vp.id;
+      onSplitMode?.("single");
+    });
+    vpControls.appendChild(singleBtn);
+    vpControls.appendChild(quadBtn);
+  });
 
   // When layout signals tool deactivation, clear active state on ribbon buttons.
   window.addEventListener("layout:tool-deactivated", () => {

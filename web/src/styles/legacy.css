@@ -106,7 +106,7 @@
 /* Legacy button styling — scoped to NOT clobber bundle's .btn / .btn-accent /
    .btn-sm / .vp-icon-btn / .palette-btn / .menu-item / .ribbon-tool /
    .sb-tab / .dock-tab / .snap-btn / .ai-chip / .mode-tab / .exp-btn / etc. */
-button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell) {
+button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell):not(.vp-render-btn):not(.vp-view-btn) {
   background: var(--panel-2);
   color: var(--fg);
   border: 1px solid var(--border);
@@ -119,14 +119,14 @@ button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon
   transition: background 100ms ease, border-color 100ms ease, transform 60ms ease;
 }
 
-button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell):hover:not(:disabled) {
+button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell):not(.vp-render-btn):not(.vp-view-btn):hover:not(:disabled) {
   background: var(--panel-3);
   border-color: var(--fg-dim);
 }
 
-button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell):active:not(:disabled) { transform: translateY(1px); }
+button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell):not(.vp-render-btn):not(.vp-view-btn):active:not(:disabled) { transform: translateY(1px); }
 
-button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell):disabled {
+button:not(.btn):not(.vp-icon-btn):not(.palette-btn):not(.menu-item):not(.ribbon-tool):not(.sb-tab):not(.dock-tab):not(.snap-btn):not(.ai-chip):not(.mode-tab):not(.exp-btn):not(.mode-btn):not(.sb-theme-btn):not(.sb-cell):not(.vp-render-btn):not(.vp-view-btn):disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }

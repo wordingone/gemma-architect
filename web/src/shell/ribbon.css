@@ -239,12 +239,18 @@
 .tool-btn svg { width: 14px; height: 14px; min-width: 14px; flex-shrink: 0; stroke-width: 1.5; fill: none; stroke: currentColor; }
 
 .ribbon-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--sidebar-w, 320px);
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 0 10px;
   border-left: var(--lw-edge) solid var(--chrome-seam);
-  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .btn {

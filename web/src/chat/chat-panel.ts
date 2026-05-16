@@ -106,6 +106,8 @@ export class ChatPanel {
       if (!visible) this._updatePerfStrip();
     });
 
+    window.addEventListener("gemma:clear-history", () => this.clear());
+
     for (const s of STARTER_PROMPTS) {
       const chip = document.createElement("span");
       chip.className = "ai-chip chat-starter-chip";
@@ -250,9 +252,14 @@ export class ChatPanel {
         return;
       }
 
+      // Evaluate VISUAL_RE first — visual queries must not trigger SdClearScene below.
+      const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
+      const isVisualQuery = VISUAL_RE.test(text);
+
       // Auto-clear scene for fresh design prompts — file-loaded IFC or prior geometry
       // pollutes the agent context and produces geometry on top of existing structure (#476).
-      if (DESIGN_RE.test(text)) {
+      // Skip clear when user is asking about the current scene (visual query).
+      if (!isVisualQuery && DESIGN_RE.test(text)) {
         await invokeCommand({ command: "SdClearScene", parameters: {} });
       }
 
@@ -260,11 +267,10 @@ export class ChatPanel {
 
       // Auto-capture viewport for visual queries (user hasn't already attached an image).
       // Gemma E4B has native vision — let it actually see the scene.
-      const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       let effectiveImage = userImage;
-      console.log("[vision] text=", JSON.stringify(text.substring(0,60)), "hasImg=", !!effectiveImage, "re=", VISUAL_RE.test(text));
+      console.log("[vision] text=", JSON.stringify(text.substring(0,60)), "hasImg=", !!effectiveImage, "re=", isVisualQuery);
       let agentRing: HTMLDivElement | null = null;
-      if (!effectiveImage && VISUAL_RE.test(text)) {
+      if (!effectiveImage && isVisualQuery) {
         effectiveImage = captureViewport(768) ?? undefined;
         console.log("[vision] captureViewport=", effectiveImage ? "OK len="+effectiveImage.length : "NULL");
         if (effectiveImage) {
