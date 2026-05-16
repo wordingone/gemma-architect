@@ -744,7 +744,6 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   const refBody = el("div");
   refBody.appendChild(buildLevelsTab());
   refBody.appendChild(buildGridsTab());
-  refBody.appendChild(buildDatumsTab());
   addSubsection("REFERENCE GEOMETRY", refBody);
   addSubsection("PARITY", buildParitySubsection());
   addSubsection("VIEW STATE", buildViewStateSection());
@@ -1036,8 +1035,15 @@ function buildLevelsTab(): HTMLElement {
       inp.step = "0.5";
       inp.value = imperial ? (lvl.height * FT).toFixed(2) : lvl.height.toFixed(2);
       inp.title = imperial ? "Floor-to-floor height (ft)" : "Floor-to-floor height (m)";
-      inp.style.cssText = "width:54px; font-size:9px; padding:1px 3px; background:var(--chrome,#1a1a1a); border:1px solid var(--accent,#5080ff); color:var(--ink-body,#ddd); border-radius:2px;";
-      heightEl.replaceWith(inp);
+      inp.style.cssText = "width:46px; font-size:9px; padding:1px 3px; background:var(--chrome,#1a1a1a); border:1px solid var(--accent,#5080ff); color:var(--ink-body,#ddd); border-radius:2px;";
+      const unitLabel = document.createElement("span");
+      unitLabel.textContent = imperial ? "ft" : "m";
+      unitLabel.style.cssText = "font-size:9px; color:var(--ink-faint); margin-left:2px; flex-shrink:0;";
+      const inpWrap = el("div", "level-height-input-wrap");
+      inpWrap.style.cssText = "display:flex; align-items:center;";
+      inpWrap.appendChild(inp);
+      inpWrap.appendChild(unitLabel);
+      heightEl.replaceWith(inpWrap);
       inp.focus(); inp.select();
       let committed = false;
       const commit = () => {
@@ -1048,14 +1054,14 @@ function buildLevelsTab(): HTMLElement {
           const hM = imperial ? raw / FT : raw;
           levelStore.update(lvl.id, { height: hM });
           // levelStore.update notifies subscribers → render() rebuilds the tab
-        } else if (inp.parentNode) {
-          inp.replaceWith(heightEl);
+        } else if (inpWrap.parentNode) {
+          inpWrap.replaceWith(heightEl);
         }
       };
       inp.addEventListener("blur", commit);
       inp.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter") { ev.preventDefault(); inp.blur(); }
-        if (ev.key === "Escape") { committed = true; if (inp.parentNode) inp.replaceWith(heightEl); ev.stopPropagation(); }
+        if (ev.key === "Escape") { committed = true; if (inpWrap.parentNode) inpWrap.replaceWith(heightEl); ev.stopPropagation(); }
       });
     });
 
