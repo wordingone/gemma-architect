@@ -1356,7 +1356,7 @@ registerHandler("SdLevel", (args) => {
   // Register in levelStore so UI panel + active-level routing knows about it.
   const level = levelStore.findOrCreate(name, elev, height);
   const geom   = new THREE.BoxGeometry(extent, extent, 0.02);
-  const mat    = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+  const mat    = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.10, side: THREE.DoubleSide });
   const mesh   = new THREE.Mesh(geom, mat);
   mesh.position.z = elev;
   mesh.userData.kind = "brep";
