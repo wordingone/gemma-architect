@@ -808,7 +808,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     `Current scene: ${buildSceneContext()}`,
     summariseSkills(skills),
     summariseClusters(),
-    "SCENE QUERY — if the user asks what is in the scene or what you see: write PLAIN TEXT ONLY, NO tool_call blocks, NO SdListObjects. ONE paragraph: (1) describe the viewport image you received — geometry, colors, scale; if only a reference grid is visible say 'The workspace is empty'; (2) summarize 'Current scene:' above in plain English. Max 60 words.",
+    "SCENE QUERY — if the user asks what is in the scene, what you see, or about colors/shapes/appearance: write PLAIN TEXT ONLY, NO tool_call blocks. Describe the viewport image in detail: building form and silhouette, roof shape and exact color, wall color and material, visible windows (count, position, color), site/ground pad color, background grid. State colors precisely (e.g. 'brown', 'gray', 'green'). Then in one sentence summarize the 'Current scene:' object list. If the viewport is literally empty (no geometry, only grid lines and axis arrows) say so.",
   ].filter(Boolean).join("\n\n");
 }
 
