@@ -1481,38 +1481,51 @@ function buildClipPlane(
   };
 }
 
+// Inject the clicked Z into the mesh after the builder returns.
+// All XY-plane builders hardcode position.z=0; this wrapper lifts them to the
+// active level elevation using the first clicked point's z.
+function atZ<T extends { mesh: THREE.Object3D; chain: string }>(
+  fn: (pts: Array<{ x: number; y: number; z?: number }>) => T,
+): (pts: Array<{ x: number; y: number; z?: number }>) => T {
+  return (pts) => {
+    const r = fn(pts);
+    r.mesh.position.z = pts[0]?.z ?? 0;
+    return r;
+  };
+}
+
 const TOOL_HANDLERS: Record<string, ToolHandler> = {
-  wall:     { clicks: 2, handler: ([a, b]) => buildWall(a, b) },
-  rect:     { clicks: 2, handler: ([a, b]) => buildRect(a, b) },
-  circle:   { clicks: 2, handler: ([a, b]) => buildCircle(a, b) },
-  line:     { clicks: 2, handler: ([a, b]) => buildLine(a, b) },
-  slab:     { clicks: 2, handler: ([a, b]) => buildSlab(a, b) },
-  door:     { clicks: 1, handler: ([p]) => buildDoor(p) },
-  window:   { clicks: 1, handler: ([p]) => buildWindow(p) },
-  column:   { clicks: 1, handler: ([p]) => buildColumn(p) },
+  wall:     { clicks: 2, handler: atZ(([a, b]) => buildWall(a, b)) },
+  rect:     { clicks: 2, handler: atZ(([a, b]) => buildRect(a, b)) },
+  circle:   { clicks: 2, handler: atZ(([a, b]) => buildCircle(a, b)) },
+  line:     { clicks: 2, handler: atZ(([a, b]) => buildLine(a, b)) },
+  slab:     { clicks: 2, handler: atZ(([a, b]) => buildSlab(a, b)) },
+  door:     { clicks: 1, handler: atZ(([p]) => buildDoor(p)) },
+  window:   { clicks: 1, handler: atZ(([p]) => buildWindow(p)) },
+  column:   { clicks: 1, handler: atZ(([p]) => buildColumn(p)) },
   // T4 tool implementations — see buildStair / buildPolygon / buildPolyline /
   // buildExtrude for design notes. polyline/curve: unlimited clicks (-1),
   // committed by Enter or double-click; closed automatically when last click
   // snaps back to the first point.
-  stair:    { clicks: 2, handler: ([a, b]) => buildStair(a, b) },
-  polygon:  { clicks: 2, handler: ([a, b]) => buildPolygon(a, b) },
-  polyline: { clicks: -1, handler: (pts) => buildPolyline(pts) },
-  curve:    { clicks: -1, handler: (pts) => buildCurve(pts) },
-  point:    { clicks: 1, handler: ([p]) => buildPoint(p) },
-  extrude:      { clicks: 3, handler: ([c1, c2, c3]) => buildBox(c1, c2, c3) },
-  beam:         { clicks: 2, handler: ([a, b]) => buildBeam(a, b) },
-  roof:         { clicks: 2, handler: ([a, b]) => buildRoof(a, b) },
-  space:        { clicks: 2, handler: ([a, b]) => buildSpace(a, b) },
-  foundation:   { clicks: 2, handler: ([a, b]) => buildFoundation(a, b) },
-  ceiling:      { clicks: 2, handler: ([a, b]) => buildCeiling(a, b) },
-  curtainwall:  { clicks: 2, handler: ([a, b]) => buildCurtainWall(a, b) },
-  skylight:     { clicks: 2, handler: ([a, b]) => buildSkylight(a, b) },
-  opening:      { clicks: 1, handler: ([p]) => buildOpening(p) },
-  ramp:         { clicks: 2, handler: ([a, b]) => buildRamp(a, b) },
-  railing:      { clicks: 2, handler: ([a, b]) => buildRailing(a, b) },
-  grid:         { clicks: 2, handler: ([a, b]) => buildGridLine(a, b) },
-  level:        { clicks: 1, handler: ([p]) => buildLevel(p) },
-  datum:        { clicks: 2, handler: ([a, b]) => buildReferenceLine(a, b) },
+  stair:    { clicks: 2, handler: atZ(([a, b]) => buildStair(a, b)) },
+  polygon:  { clicks: 2, handler: atZ(([a, b]) => buildPolygon(a, b)) },
+  polyline: { clicks: -1, handler: atZ((pts) => buildPolyline(pts)) },
+  curve:    { clicks: -1, handler: atZ((pts) => buildCurve(pts)) },
+  point:    { clicks: 1, handler: atZ(([p]) => buildPoint(p)) },
+  extrude:      { clicks: 3, handler: atZ(([c1, c2, c3]) => buildBox(c1, c2, c3)) },
+  beam:         { clicks: 2, handler: atZ(([a, b]) => buildBeam(a, b)) },
+  roof:         { clicks: 2, handler: atZ(([a, b]) => buildRoof(a, b)) },
+  space:        { clicks: 2, handler: atZ(([a, b]) => buildSpace(a, b)) },
+  foundation:   { clicks: 2, handler: atZ(([a, b]) => buildFoundation(a, b)) },
+  ceiling:      { clicks: 2, handler: atZ(([a, b]) => buildCeiling(a, b)) },
+  curtainwall:  { clicks: 2, handler: atZ(([a, b]) => buildCurtainWall(a, b)) },
+  skylight:     { clicks: 2, handler: atZ(([a, b]) => buildSkylight(a, b)) },
+  opening:      { clicks: 1, handler: atZ(([p]) => buildOpening(p)) },
+  ramp:         { clicks: 2, handler: atZ(([a, b]) => buildRamp(a, b)) },
+  railing:      { clicks: 2, handler: atZ(([a, b]) => buildRailing(a, b)) },
+  grid:         { clicks: 2, handler: ([a, b]) => buildGridLine(a, b) },   // grid always at Z=0
+  level:        { clicks: 1, handler: ([p]) => buildLevel(p) },            // level uses getGeometryZ
+  datum:        { clicks: 2, handler: ([a, b]) => buildReferenceLine(a, b) }, // datum always at Z=0
   section:      { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b) },
   clip:         { clicks: 2, handler: ([a, b]) => buildClipPlane(a, b) },
 };
