@@ -260,7 +260,7 @@ export class ChatPanel {
 
       // Auto-capture viewport for visual queries (user hasn't already attached an image).
       // Gemma E4B has native vision — let it actually see the scene.
-      const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
+      const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       let effectiveImage = userImage;
       console.log("[vision] text=", JSON.stringify(text.substring(0,60)), "hasImg=", !!effectiveImage, "re=", VISUAL_RE.test(text));
       let agentRing: HTMLDivElement | null = null;
