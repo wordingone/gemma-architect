@@ -1361,6 +1361,7 @@
   kernel_op: runCluster
   args:
     - {name: name, type: string, required: true, description: "Name of the saved skill cluster to run"}
+    - {name: anchor, type: vector3, required: false, description: "XYZ offset applied to all position/point args before dispatching each step"}
     - {name: repeat, type: integer, required: false, default: 1, description: "Number of times to repeat the cluster"}
   topology_role: system
   kg_predicates: []
