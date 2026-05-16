@@ -31,6 +31,7 @@ import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
 import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "./selection-state";
 import { formatLength, formatArea, formatVolume } from "../units";
+import { createClampedUniformNurbs, tessellate } from "../nurbs/nurbs-curves";
 
 // Default heights / sizes from tier1-conventions.
 const DEFAULT_WALL_HEIGHT = 3;
@@ -1008,10 +1009,26 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   const ys = curvePts.map((p) => p.y);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-  const vecs = curvePts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
-  const curve = new THREE.CatmullRomCurve3(vecs, isClosed, "catmullrom", 0.5);
-  const sampled = curve.getPoints(Math.max(curvePts.length * 16, 64));
-  const geom = new THREE.BufferGeometry().setFromPoints(sampled);
+  const localVecs = curvePts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
+
+  // Build a clamped uniform B-spline (cubic where enough CVs, lower-degree for fewer).
+  // For closed curves, wrap the first (degree) CVs at the end so the B-spline loops
+  // smoothly, then snap the last sample onto the first for a gapless closure.
+  const degree = Math.min(3, localVecs.length - 1);
+  const order = degree + 1;
+  let cpForNurbs = localVecs;
+  if (isClosed && localVecs.length >= order) {
+    cpForNurbs = [...localVecs, ...localVecs.slice(0, degree)];
+  }
+  const nurbsPts = cpForNurbs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
+  const sampleCount = Math.max(localVecs.length * 16, 64);
+  const raw = tessellate(nurbs, sampleCount);
+  // For closed curves, force the last sample to match the first for a gapless seam.
+  const sampled3 = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+  if (isClosed && sampled3.length > 1) sampled3[sampled3.length - 1].copy(sampled3[0]);
+
+  const geom = new THREE.BufferGeometry().setFromPoints(sampled3);
   const mat = new THREE.LineBasicMaterial({ color: 0x1565c0 });
   const mesh = new THREE.Line(geom, mat);
   mesh.position.set(cx, cy, 0);
@@ -1019,7 +1036,8 @@ function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3
   mesh.userData.kind = "curve";
   mesh.userData.creator = "curve";
   mesh.userData.isClosed = isClosed;
-  mesh.userData.controlPoints = vecs;
+  mesh.userData.nurbsDegree = degree;
+  mesh.userData.controlPoints = localVecs;
   const worldPts = curvePts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const curv = drawSpline([${worldPts}]${isClosed ? ", { close: true }" : ""}).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
@@ -2343,17 +2361,23 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     return mesh;
   }
 
-  // Curve → dense CatmullRom extrusion. Closed curves get a filled solid;
-  // open curves get a ruled surface. Both use the densely sampled path, not
-  // the sparse control points (which produce flat facets on smooth shapes).
+  // Curve → dense B-spline extrusion. Closed curves get a filled solid;
+  // open curves get a ruled surface. Both use the densely sampled B-spline path.
   if (creator === "curve") {
     const cpLocal: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
     const isClosed = !!(profile.userData.isClosed as boolean | undefined);
     if (cpLocal.length >= 2) {
       profile.updateMatrixWorld();
       const cpWorld = cpLocal.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
-      const catmull = new THREE.CatmullRomCurve3(cpWorld, isClosed, "catmullrom", 0.5);
-      const samples = catmull.getPoints(Math.max(cpLocal.length * 16, 64));
+      const degree = Math.min((profile.userData.nurbsDegree as number | undefined) ?? 3, cpWorld.length - 1);
+      const order = degree + 1;
+      let cpForNurbs = cpWorld;
+      if (isClosed && cpWorld.length >= order) cpForNurbs = [...cpWorld, ...cpWorld.slice(0, degree)];
+      const nurbsPts = cpForNurbs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+      const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
+      const raw = tessellate(nurbs, Math.max(cpLocal.length * 16, 64));
+      const samples = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+      if (isClosed && samples.length > 1) samples[samples.length - 1].copy(samples[0]);
       const color = 0x88aacc;
       if (isClosed) {
         // Filled solid: Shape outline → ExtrudeGeometry (caps + side walls).

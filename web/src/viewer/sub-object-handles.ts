@@ -6,6 +6,7 @@
 
 import * as THREE from "three";
 import type { Viewer } from "./viewer.js";
+import { createClampedUniformNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 
 const HANDLE_RADIUS = 0.07;
 
@@ -61,7 +62,7 @@ export function isSubObjectHandle(obj: THREE.Object3D): boolean {
 }
 
 // Rebuild the parent mesh's geometry in-place after a control point has moved.
-// Works for line (2 CPs), polyline (N CPs), curve (N CPs via CatmullRom).
+// Works for line (2 CPs), polyline (N CPs), curve/spline (N CPs via B-spline).
 export function refitParentGeometry(parent: THREE.Object3D): void {
   const cps = parent.userData.controlPoints as THREE.Vector3[] | undefined;
   if (!cps || cps.length < 2) return;
@@ -74,9 +75,21 @@ export function refitParentGeometry(parent: THREE.Object3D): void {
     newGeom = new THREE.BufferGeometry().setFromPoints([cps[0], cps[1]]);
   } else if (creator === "polyline") {
     newGeom = new THREE.BufferGeometry().setFromPoints(cps);
-  } else if (creator === "curve") {
-    const curve = new THREE.CatmullRomCurve3(cps, false, "catmullrom", 0.5);
-    newGeom = new THREE.BufferGeometry().setFromPoints(curve.getPoints(Math.max(cps.length * 16, 64)));
+  } else if (creator === "curve" || creator === "spline") {
+    const isClosed = !!(parent.userData.isClosed as boolean | undefined);
+    const degree = Math.min((parent.userData.nurbsDegree as number | undefined) ?? 3, cps.length - 1);
+    const order = degree + 1;
+    let cpForNurbs = cps;
+    if (isClosed && cps.length >= order) {
+      cpForNurbs = [...cps, ...cps.slice(0, degree)];
+    }
+    const nurbsPts = cpForNurbs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+    const nurbs = createClampedUniformNurbs(3, order, nurbsPts);
+    const sampleCount = Math.max(cps.length * 16, 64);
+    const raw = tessellate(nurbs, sampleCount);
+    const sampled = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+    if (isClosed && sampled.length > 1) sampled[sampled.length - 1].copy(sampled[0]);
+    newGeom = new THREE.BufferGeometry().setFromPoints(sampled);
   }
   if (!newGeom) return;
   obj.geometry.dispose();
