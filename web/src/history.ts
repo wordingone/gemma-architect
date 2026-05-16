@@ -86,7 +86,9 @@ export function clearHistory(): void {
 export function undo(viewer: Viewer): boolean {
   const a = _undo.pop();
   if (!a) return false;
+  const tgt = viewer.getTargetObject();
   if (a.kind === "create") {
+    if (tgt === a.obj) viewer.deselectCurrent();
     viewer.getScene().remove(a.obj);
     _redo.push(a);
   } else if (a.kind === "transform") {
@@ -97,6 +99,7 @@ export function undo(viewer: Viewer): boolean {
     a.obj.updateMatrixWorld(true);
     _redo.push(a);
   } else if (a.kind === "replace") {
+    if (tgt === a.added) viewer.deselectCurrent();
     viewer.getScene().remove(a.added);
     for (const obj of a.removed) viewer.getScene().add(obj);
     _redo.push(a);
@@ -105,6 +108,7 @@ export function undo(viewer: Viewer): boolean {
     else viewer.getScene().add(a.obj);
     _redo.push(a);
   } else {
+    if (tgt && a.objs.includes(tgt)) viewer.deselectCurrent();
     for (const obj of a.objs) viewer.getScene().remove(obj);
     _redo.push(a);
   }
@@ -114,6 +118,7 @@ export function undo(viewer: Viewer): boolean {
 export function redo(viewer: Viewer): boolean {
   const a = _redo.pop();
   if (!a) return false;
+  const tgt = viewer.getTargetObject();
   if (a.kind === "create") {
     viewer.getScene().add(a.obj);
     _undo.push(a);
@@ -125,15 +130,17 @@ export function redo(viewer: Viewer): boolean {
     a.obj.updateMatrixWorld(true);
     _undo.push(a);
   } else if (a.kind === "replace") {
+    if (tgt && a.removed.includes(tgt)) viewer.deselectCurrent();
     for (const obj of a.removed) viewer.getScene().remove(obj);
     viewer.getScene().add(a.added);
     _undo.push(a);
   } else if (a.kind === "delete") {
+    if (tgt === a.obj) viewer.deselectCurrent();
     if (a.obj.parent) a.obj.parent.remove(a.obj);
     else viewer.getScene().remove(a.obj);
     _undo.push(a);
   } else {
-    for (const obj of a.objs) viewer.getScene().add(obj);
+    viewer.getScene().add(...a.objs);
     _undo.push(a);
   }
   return true;
