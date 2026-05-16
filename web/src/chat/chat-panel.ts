@@ -14,7 +14,7 @@ import { isSimplePlan } from "../agent/plan";
 import { lastTurn } from "../agent/telemetry";
 import { buildDispatchSummary } from "./chat-dispatch-summary";
 import { classifyDispatchResult } from "./chat-dispatch-routing";
-import { setPickerHint } from "../viewer/create-mode";
+import { setPickerHint } from "../viewer/picker-hint";
 
 type Message = {
   role: "user" | "assistant";

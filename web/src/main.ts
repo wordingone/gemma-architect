@@ -46,7 +46,9 @@ import {
 import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
-import { initCreateMode, emitClickWorld, getSnapTarget, makeLevelSprite, updateLevelSprite } from "./viewer/create-mode";
+import { initCreateMode, emitClickWorld } from "./tools/index";
+import { getSnapTarget } from "./viewer/snap-state";
+import { makeLevelSprite, updateLevelSprite } from "./tools/structural";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory } from "./history";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";

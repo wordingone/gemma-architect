@@ -9,7 +9,7 @@ import { runAgentTurn } from "../agent/agent-harness";
 import { dispatch, dispatchSync } from "../commands/dispatch";
 import { setConsoleMode } from "../shell/workbench";
 import { startCommandSession } from "../commands/command-session";
-import { setPickerHint, setChooserHint } from "../viewer/create-mode";
+import { setPickerHint, setChooserHint } from "../viewer/picker-hint";
 
 type Cmd = {
   group: "GENERATE" | "MODEL" | "VIEW" | "FILE";
