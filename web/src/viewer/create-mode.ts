@@ -1548,7 +1548,8 @@ function setMarker(viewer: Viewer, pt: { x: number; y: number; z?: number }): vo
   const z = pt.z ?? 0;
   // Black-ring / white-fill dot — matches the snap cursor style.
   const c = document.createElement("canvas"); c.width = 32; c.height = 32;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d");
+  if (!ctx) return; // no canvas2d support (test env) — skip visual marker
   ctx.clearRect(0, 0, 32, 32);
   ctx.beginPath(); ctx.arc(16, 16, 10, 0, Math.PI * 2);
   ctx.fillStyle = "#ffffff"; ctx.fill();
