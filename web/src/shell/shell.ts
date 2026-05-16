@@ -99,7 +99,7 @@ const MENUS: MenuItem[] = [
   ]},
   { label: "Help", entries: [
     { label: "Keyboard shortcuts",    shortcut: "⌘K", onAction: () => document.getElementById("ribbon-palette-btn")?.click() },
-    { label: "About Gemma·Architect", stub: true,    onAction: () => alert("Gemma·Architect\n\nOpen-source architectural design environment.\ngithub.com/wordingone/gemma-architect") },
+    { label: "About Gemma-CAD", stub: true,    onAction: () => alert("Gemma-CAD\n\nOpen-source architectural design environment.\ngithub.com/wordingone/gemma-architect") },
   ]},
 ];
 
@@ -386,7 +386,7 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   }
 }
 
-const THEME_KEY = "gemma-architect.theme";
+const THEME_KEY = "gemma-cad.theme";
 type ThemeMode = "day" | "night";
 
 function setTheme(mode: ThemeMode) {
@@ -418,7 +418,7 @@ function buildBrand(): HTMLElement {
 
   const name = document.createElement("span");
   name.className = "brand-name";
-  name.innerHTML = `GEMMA<span class="b-slash">/</span>ARCHITECT`;
+  name.innerHTML = `GEMMA<span class="b-slash">-</span>CAD`;
   brand.appendChild(name);
 
   return brand;

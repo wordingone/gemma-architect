@@ -2603,7 +2603,7 @@ async function exportIfc(stem: string): Promise<void> {
           ? currentDemo.label
           : currentSource.kind === "file"
             ? `Imported ${currentSource.filename}`
-            : "GemmaArchitect Element";
+            : "GemmaCad Element";
       bytes = buildIfc({ vertices: data.vertices, indices: data.indices }, label);
     }
     const result = await ifcRoundTrip(bytes);

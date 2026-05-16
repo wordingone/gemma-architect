@@ -999,7 +999,7 @@ export function exportNurbsToStep(surface: NurbsSurface): Uint8Array {
     `ISO-10303-21;\n` +
     `HEADER;\n` +
     `FILE_DESCRIPTION(('AVIR NURBS surface export'),'2;1');\n` +
-    `FILE_NAME('avir-nurbs.step','${ts}',(''),(''),'gemma-architect','nurbs-kernel.ts','');\n` +
+    `FILE_NAME('avir-nurbs.step','${ts}',(''),(''),'gemma-cad','nurbs-kernel.ts','');\n` +
     `FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));\n` +
     `ENDSEC;\n`;
   const data = `DATA;\n${lines.join("\n")}\nENDSEC;\n`;
@@ -1071,7 +1071,7 @@ export async function exportNurbsTo3dm(surface: NurbsSurface): Promise<Uint8Arra
 
   // ---- File3dm ----
   const file = new RhinoModule.File3dm();
-  file.applicationName = "gemma-architect";
+  file.applicationName = "gemma-cad";
   file.applicationDetails = "AVIR NURBS export via rhino3dm";
   file.objects().addSurface(ns);
 

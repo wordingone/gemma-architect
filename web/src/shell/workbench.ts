@@ -170,10 +170,11 @@ const DOCK_TABS: DockTab[] = [
 //   "console" → DSL / `:verb` registry → compileDsl/dispatchSync → JS → kernel
 // Persists per-session via localStorage.
 type ConsoleMode = "prompt" | "console";
-const CONSOLE_MODE_LS_KEY = "gemma-architect:console-mode-v1";
+const CONSOLE_MODE_LS_KEY = "gemma-cad:console-mode-v1";
+const CONSOLE_MODE_LS_KEY_LEGACY = "gemma-architect:console-mode-v1";
 function loadConsoleMode(): ConsoleMode {
   try {
-    const v = localStorage.getItem(CONSOLE_MODE_LS_KEY);
+    const v = localStorage.getItem(CONSOLE_MODE_LS_KEY) ?? localStorage.getItem(CONSOLE_MODE_LS_KEY_LEGACY);
     return v === "console" ? "console" : "prompt";
   } catch { return "prompt"; }
 }
@@ -1484,12 +1485,13 @@ const PROMPT_CHIPS: { label: string; demoId: string }[] = [
 ];
 
 // localStorage-backed real session history — populated when user generates geometry.
-const RECENT_LS_KEY = "gemma-architect:recent-v1";
+const RECENT_LS_KEY = "gemma-cad:recent-v1";
+const RECENT_LS_KEY_LEGACY = "gemma-architect:recent-v1";
 type RecentEntry = { ts: string; label: string };
 
 function loadRecentEntries(): RecentEntry[] {
   try {
-    const raw = localStorage.getItem(RECENT_LS_KEY);
+    const raw = localStorage.getItem(RECENT_LS_KEY) ?? localStorage.getItem(RECENT_LS_KEY_LEGACY);
     return raw ? (JSON.parse(raw) as RecentEntry[]) : [];
   } catch { return []; }
 }

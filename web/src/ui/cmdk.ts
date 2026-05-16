@@ -57,7 +57,7 @@ const ALL_CMDS: Cmd[] = [
     label: "Agent: describe what to build…",
     kbd: "⌘⌥G",
     run: () => {
-      const userPrompt = window.prompt("Describe what to build (Gemma·Architect agent):");
+      const userPrompt = window.prompt("Describe what to build (Gemma agent):");
       if (!userPrompt?.trim()) return;
       runAgentTurn({ prompt: userPrompt.trim() }).then((resp) => {
         if (resp.dispatches.length === 0) {

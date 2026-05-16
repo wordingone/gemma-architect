@@ -44,11 +44,12 @@ export type CanvasGraph = {
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-const LS_KEY = "gemma-architect:skill-canvas-v1";
+const LS_KEY = "gemma-cad:skill-canvas-v1";
+const LS_KEY_LEGACY = "gemma-architect:skill-canvas-v1";
 
 function loadGraph(): CanvasGraph {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw = localStorage.getItem(LS_KEY) ?? localStorage.getItem(LS_KEY_LEGACY);
     if (raw) return JSON.parse(raw) as CanvasGraph;
   } catch { /* ignore */ }
   return { nodes: [], edges: [] };

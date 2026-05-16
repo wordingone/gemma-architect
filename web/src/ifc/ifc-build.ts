@@ -116,7 +116,7 @@ function buildIfcHeader(lines: string[], next: () => string): {
   lines.push(`${unitAssignment}=IFCUNITASSIGNMENT((${lenUnit},${angUnit},${areaUnit},${volUnit}));`);
 
   const project = next();
-  lines.push(`${project}=IFCPROJECT(${stepString(ifcGuid())},${ownerHistory},${stepString("GemmaArchitect Demo Project")},$,$,$,$,(${ctx}),${unitAssignment});`);
+  lines.push(`${project}=IFCPROJECT(${stepString(ifcGuid())},${ownerHistory},${stepString("GemmaCad Demo Project")},$,$,$,$,(${ctx}),${unitAssignment});`);
 
   const localPlacement = next();
   lines.push(`${localPlacement}=IFCLOCALPLACEMENT($,${axis3});`);
@@ -155,7 +155,7 @@ function emitElementPropertySet(
   }
   if (propRefs.length === 0) return;
   const pset = next();
-  lines.push(`${pset}=IFCPROPERTYSET(${stepString(ifcGuid())},${ownerHistory},${stepString("Pset_GemmaArchitectParams")},$,(${propRefs.join(",")}));`);
+  lines.push(`${pset}=IFCPROPERTYSET(${stepString(ifcGuid())},${ownerHistory},${stepString("Pset_GemmaCadParams")},$,(${propRefs.join(",")}));`);
   const relDef = next();
   lines.push(`${relDef}=IFCRELDEFINESBYPROPERTIES(${stepString(ifcGuid())},${ownerHistory},$,$,(${entityRef}),${pset});`);
 }
@@ -259,7 +259,7 @@ export function buildIfcScene(elements: IfcSceneElement[], levels?: IfcLevel[]):
   return new TextEncoder().encode(lines.join("\n"));
 }
 
-export function buildIfc(mesh: IfcMesh, label: string = "GemmaArchitect Element"): Uint8Array {
+export function buildIfc(mesh: IfcMesh, label: string = "GemmaCad Element"): Uint8Array {
   const lines: string[] = [];
   let id = 0;
   const next = () => `#${++id}`;
@@ -322,7 +322,7 @@ export function buildIfc(mesh: IfcMesh, label: string = "GemmaArchitect Element"
 
   // Project.
   refs.project = next();
-  lines.push(`${refs.project}=IFCPROJECT(${stepString(ifcGuid())},${ownerHistory},${stepString("GemmaArchitect Demo Project")},$,$,$,$,(${ctx}),${unitAssignment});`);
+  lines.push(`${refs.project}=IFCPROJECT(${stepString(ifcGuid())},${ownerHistory},${stepString("GemmaCad Demo Project")},$,$,$,$,(${ctx}),${unitAssignment});`);
 
   // Local placement chain (project → site → building → storey).
   const localPlacement = next();

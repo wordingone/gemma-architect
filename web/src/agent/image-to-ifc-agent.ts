@@ -133,7 +133,7 @@ export async function imageToIFCAgent(
   // once the kernel-side harvest (T11) lands; the dispatch log records
   // what the agent wanted regardless.
   const mesh = emptyPlaceholderMesh();
-  const ifcBuffer = buildIfc(mesh, "GemmaArchitect Agent Reconstruction");
+  const ifcBuffer = buildIfc(mesh, "GemmaCad Agent Reconstruction");
 
   return { ifcBuffer, dispatchLog, turnCount };
 }
