@@ -1685,6 +1685,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
   hideCursorDot();
+  setPickerHint(null);
   dispatchSync("setActiveTool", { toolId: "select" });
   return out;
 }
@@ -1706,7 +1707,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   }
   // Unlimited tools: update hint, never auto-commit; wait for Enter or double-click.
   if (handler.clicks === -1) {
-    setPickerHint(`${tool} — ${_pending.length} point${_pending.length > 1 ? "s" : ""}  [double-click or Enter] commit  [Esc] cancel`);
+    setPickerHint(`${tool} — ${_pending.length} point${_pending.length > 1 ? "s" : ""}  [double-click, Enter, or Space] commit  [Esc] cancel`);
     return null;
   }
   if (_pending.length < handler.clicks) return null;
@@ -1741,6 +1742,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
 export function resetPending(): void {
   if (_viewer) { clearTemporary(_viewer); clearSmartTrack(_viewer); }
   hideCursorDot();
+  setPickerHint(null);
   _pending = [];
   _shiftAxisChoice = null;
 }
@@ -3918,6 +3920,7 @@ export function initCreateMode(viewer: Viewer): void {
         clearTemporary(viewer);
         clearSmartTrack(viewer);
         hideCursorDot();
+        setPickerHint(null);
         _pending = [];
         dispatchSync("setActiveTool", { toolId: "select" });
       }

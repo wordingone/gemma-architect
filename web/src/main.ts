@@ -2657,6 +2657,8 @@ initShellChrome({
   onModeChange: (k) => {
     activateMode(k, workbenchEl);
     setRibbonMode(k as "model" | "layout" | "research");
+    if (k === "layout") applyDrafting(viewer.getScene());
+    else removeDrafting(viewer.getScene());
   },
   onSplitMode: (mode) => viewer.splitMode(mode),
 });
