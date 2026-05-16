@@ -1736,7 +1736,7 @@ export function exportLayoutAsAi(host: HTMLElement): string {
   const svg = composeSvg(c);
   // PostScript-flavored preamble inside an XML comment so the file remains
   // valid SVG; Illustrator detects on extension as well.
-  const ps = "<!--%!PS-Adobe-3.0\n%%Creator: gemma-architect\n%%Title: layout export\n%%Pages: 1\n%%EndComments\n-->";
+  const ps = "<!--%!PS-Adobe-3.0\n%%Creator: gemma-cad\n%%Title: layout export\n%%Pages: 1\n%%EndComments\n-->";
   return svg.replace("<?xml version=\"1.0\" encoding=\"UTF-8\"?>", `<?xml version="1.0" encoding="UTF-8"?>\n${ps}`);
 }
 
