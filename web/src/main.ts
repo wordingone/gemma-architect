@@ -1368,8 +1368,22 @@ registerHandler("SdLevel", (args) => {
   mesh.add(label);
   levelStore.setActive(level.id);
   viewer.addMesh(mesh, "brep");
+  autoHideNonActiveLevels();
   return { created: "level", elevation: elev, levelId: level.id };
 });
+
+// Hide all non-active levels' geometry. Called whenever the active level changes.
+// Users can re-enable any hidden level manually via the visibility toggle.
+function autoHideNonActiveLevels(): void {
+  const activeId = levelStore.getActive().id;
+  for (const lvl of levelStore.all()) {
+    if (lvl.id === activeId) continue;
+    levelStore.setVisible(lvl.id, false);
+    viewer.forEachSceneChild((child) => {
+      if (child.userData?.levelId === lvl.id) child.visible = false;
+    });
+  }
+}
 
 registerHandler("setActiveLevel", (args) => {
   const id = args.id as string | undefined;
@@ -1378,6 +1392,7 @@ registerHandler("setActiveLevel", (args) => {
   if (!ok) return { error: `level not found: ${id}` };
   const level = levelStore.get(id);
   if (level) viewer.setTargetElevation(level.elevation);
+  autoHideNonActiveLevels();
   return { ok: true, activeLevel: id, elevation: level?.elevation };
 });
 

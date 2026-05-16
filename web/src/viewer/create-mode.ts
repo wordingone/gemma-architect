@@ -537,8 +537,9 @@ function projectToScreen(viewer: Viewer, x: number, y: number, z = 0): { x: numb
 }
 
 // Unproject canvas-space (px) to world coords on the view-derived working plane.
-// For top/persp views this is Z=0 (XY plane). Front/back use Y=0 (XZ plane).
-// Left/right use X=0 (YZ plane). Uses the active camera so ortho views unproject correctly.
+// For top/persp views this is the active level's XY plane (Z = active elevation).
+// Front/back use Y=0 (XZ plane). Left/right use X=0 (YZ plane).
+// Uses the active camera so ortho views unproject correctly.
 function unprojectToXY(viewer: Viewer, clientX: number, clientY: number): THREE.Vector3 | null {
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
@@ -549,14 +550,28 @@ function unprojectToXY(viewer: Viewer, clientX: number, clientY: number): THREE.
   const camera = viewer.getActiveCamera();
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(ndc, camera);
-  // View-derived working plane: XY for top/default, XZ for front/back, YZ for right/left.
+  // View-derived working plane: XY at active level elevation for top/default,
+  // XZ (Y=0) for front/back, YZ (X=0) for right/left.
   let planeNormal: THREE.Vector3;
+  let planeConstant: number;
   switch (viewer.activeView) {
-    case "front": case "back":  planeNormal = new THREE.Vector3(0, 1, 0); break;
-    case "right": case "left":  planeNormal = new THREE.Vector3(1, 0, 0); break;
-    default:                    planeNormal = new THREE.Vector3(0, 0, 1); break;
+    case "front": case "back":
+      planeNormal = new THREE.Vector3(0, 1, 0);
+      planeConstant = 0;
+      break;
+    case "right": case "left":
+      planeNormal = new THREE.Vector3(1, 0, 0);
+      planeConstant = 0;
+      break;
+    default: {
+      // XY plane at the active level's elevation so cursor XY matches snap XY.
+      const elev = levelStore.getActive().elevation;
+      planeNormal = new THREE.Vector3(0, 0, 1);
+      planeConstant = -elev;
+      break;
+    }
   }
-  const plane = new THREE.Plane(planeNormal, 0);
+  const plane = new THREE.Plane(planeNormal, planeConstant);
   const point = new THREE.Vector3();
   const hit = raycaster.ray.intersectPlane(plane, point);
   if (hit) return point;
