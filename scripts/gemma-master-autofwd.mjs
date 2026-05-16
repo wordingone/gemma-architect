@@ -54,62 +54,69 @@ function run(cmd) {
 }
 
 async function poll() {
-  rotateLog();
-  writeFileSync(HEARTBEAT, ts());
+  try {
+    rotateLog();
+    writeFileSync(HEARTBEAT, ts());
 
-  const remoteResult = run("git ls-remote origin master");
-  if (remoteResult.status !== 0) {
-    log(`SKIP ls-remote failed: ${(remoteResult.stderr ?? "").trim()}`);
-    return;
-  }
-  const remoteSha = (remoteResult.stdout ?? "").trim().split(/\s+/)[0];
-  if (!remoteSha || remoteSha.length < 7) {
-    log(`SKIP empty or invalid remote SHA`);
-    return;
-  }
+    const remoteResult = run("git ls-remote origin master");
+    if (remoteResult.status !== 0) {
+      log(`SKIP ls-remote failed: ${(remoteResult.stderr ?? "").trim()}`);
+      return;
+    }
+    const remoteSha = (remoteResult.stdout ?? "").trim().split(/\s+/)[0];
+    if (!remoteSha || remoteSha.length < 7) {
+      log(`SKIP empty or invalid remote SHA`);
+      return;
+    }
 
-  const localResult = run("git rev-parse HEAD");
-  if (localResult.status !== 0) {
-    log(`SKIP rev-parse failed: ${(localResult.stderr ?? "").trim()}`);
-    return;
-  }
-  const localSha = (localResult.stdout ?? "").trim();
+    const localResult = run("git rev-parse HEAD");
+    if (localResult.status !== 0) {
+      log(`SKIP rev-parse failed: ${(localResult.stderr ?? "").trim()}`);
+      return;
+    }
+    const localSha = (localResult.stdout ?? "").trim();
 
-  if (remoteSha === localSha) return; // already current
+    if (remoteSha === localSha) {
+      log(`skip: already current (${localSha.slice(0, 7)})`);
+      return;
+    }
 
-  const branchResult = run("git branch --show-current");
-  const branch = (branchResult.stdout ?? "").trim();
-  if (branch !== "master") {
-    log(`SKIP-WRONG-BRANCH serving tree on '${branch}', not 'master' (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
-    return;
-  }
+    const branchResult = run("git branch --show-current");
+    const branch = (branchResult.stdout ?? "").trim();
+    if (branch !== "master") {
+      log(`SKIP-WRONG-BRANCH serving tree on '${branch}', not 'master' (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
+      return;
+    }
 
-  // Only tracked changes block the pull; untracked files are harmless for ff-only.
-  const statusResult = run("git status --porcelain");
-  const trackedDirty = (statusResult.stdout ?? "")
-    .split("\n")
-    .filter(l => l.length >= 2 && !l.startsWith("??"))
-    .join("\n")
-    .trim();
-  if (trackedDirty) {
-    log(`SKIP-DIRTY serving tree has tracked uncommitted changes (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
-    return;
-  }
+    // Only tracked changes block the pull; untracked files are harmless for ff-only.
+    const statusResult = run("git status --porcelain");
+    const trackedDirty = (statusResult.stdout ?? "")
+      .split("\n")
+      .filter(l => l.length >= 2 && !l.startsWith("??"))
+      .join("\n")
+      .trim();
+    if (trackedDirty) {
+      log(`SKIP-DIRTY serving tree has tracked uncommitted changes (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
+      return;
+    }
 
-  const label = `local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)}`;
+    const label = `local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)}`;
 
-  if (DRY_RUN) {
-    log(`DRY-RUN would-pull ${label}`);
-    return;
-  }
+    if (DRY_RUN) {
+      log(`DRY-RUN would-pull ${label}`);
+      return;
+    }
 
-  log(`PULL ${label}`);
-  run("git fetch origin");
-  const pullResult = run("git pull --ff-only origin master");
-  if (pullResult.status === 0) {
-    log(`OK pulled to ${remoteSha.slice(0, 7)} — HMR will fire on :5175`);
-  } else {
-    log(`PULL-FAILED ${(pullResult.stderr ?? "").trim()}`);
+    log(`PULL ${label}`);
+    run("git fetch origin");
+    const pullResult = run("git pull --ff-only origin master");
+    if (pullResult.status === 0) {
+      log(`OK pulled to ${remoteSha.slice(0, 7)} — HMR will fire on :5175`);
+    } else {
+      log(`PULL-FAILED ${(pullResult.stderr ?? "").trim()}`);
+    }
+  } catch (err) {
+    log(`ERROR poll threw: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
   }
 }
 
