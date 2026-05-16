@@ -931,6 +931,17 @@ class LayoutController {
     this._thumbRAF = requestAnimationFrame(tick);
   }
 
+  pauseThumbLoop(): void {
+    if (this._thumbRAF) {
+      cancelAnimationFrame(this._thumbRAF);
+      this._thumbRAF = 0;
+    }
+  }
+
+  resumeThumbLoop(): void {
+    if (this._thumbCanvases.size > 0) this._startThumbLoop();
+  }
+
   // --- Panel CRUD ----
 
   private _enterNavigate(p: PanelState, canvas: HTMLCanvasElement): void {

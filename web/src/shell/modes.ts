@@ -20,7 +20,7 @@
 // All scoring is in `research-index.ts` (TF-IDF + cosine, hand-rolled).
 
 import { iconSVG } from "../ui/icons";
-import { buildLayoutMode, addPanel, type SceneBounds } from "./layout";
+import { buildLayoutMode, addPanel, getController, type SceneBounds } from "./layout";
 import {
   buildResearchIndex,
   queryResearch,
@@ -428,7 +428,11 @@ export function activateMode(key: string, workbench: HTMLElement | null) {
   workbench.dataset.mode = key;
   const showPaper = key === "layout";
   const showResearch = key === "research";
-  if (paperEl)    paperEl.style.display    = showPaper    ? "" : "none";
+  if (paperEl) {
+    paperEl.style.display = showPaper ? "" : "none";
+    if (showPaper) getController(paperEl)?.resumeThumbLoop();
+    else           getController(paperEl)?.pauseThumbLoop();
+  }
   if (researchEl) researchEl.style.display = showResearch ? "" : "none";
   // Reset accumulated body scroll so the ribbon/modebar are never off-screen.
   // Chrome keeps document.body.scrollTop independent from window.scrollY when
