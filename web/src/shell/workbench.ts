@@ -22,7 +22,7 @@ import {
 import { generateGeometry, GenerateError } from "../agent/ai-generate";
 import { ChatPanel } from "../chat/chat-panel";
 import { compileDsl } from "../commands/dsl-eval";
-import { dispatchSync, type DispatchArgs } from "../commands/dispatch";
+import { dispatch, dispatchSync, registerPostDispatch, type DispatchArgs } from "../commands/dispatch";
 import { startCommandSession } from "../commands/command-session";
 import { setPickerHint } from "../viewer/create-mode";
 import { getState, setState, subscribe as subscribeAppState, type ViewName } from "../app-state";
@@ -35,9 +35,9 @@ import { refLineStore } from "../geometry/ref-lines";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "../viewer/selection-state";
 import { getCreateSequence } from "../viewer/create-mode";
-import { prefetchModel, MODEL_ID } from "../agent/agent-harness";
+import { prefetchModel, MODEL_ID, setClusterCatalog } from "../agent/agent-harness";
 import { checkConsentAndLoad } from "../agent/model-consent";
-import { listSavedSkills, deleteSkill, type SavedSkill, type SkillStep } from "../skills/skill-store";
+import { listSavedSkills, deleteSkill, listClusters, saveCluster, deleteCluster, type SavedSkill, type SkillStep, type SkillCluster, type SkillClusterStep } from "../skills/skill-store";
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { SkillCanvas } from "../skills/skill-canvas";
@@ -1739,6 +1739,13 @@ function buildConsoleInner(): HTMLElement {
 // skill capture. Cleared whenever the scene is cleared (gemma:run-ok resets).
 const _sessionSteps: SkillStep[] = [];
 
+// ── Cluster recording state ────────────────────────────────────────────────
+let _recording = false;
+let _recordSteps: SkillClusterStep[] = [];
+let _recordStart = 0;
+let _recordBtn: HTMLButtonElement | null = null;
+let _recordStatus: HTMLSpanElement | null = null;
+
 interface NodeRecord { label: string; verb?: string; args?: Record<string, unknown>; }
 const _nodes: NodeRecord[] = [];
 let _nodesLastSeqLen = 0;
@@ -1792,9 +1799,17 @@ function escHtml(s: string): string {
 
 let _skillsWrap: HTMLElement | null = null;
 
+async function refreshClusterCatalog(): Promise<void> {
+  const clusters = await listClusters().catch(() => [] as SkillCluster[]);
+  setClusterCatalog(clusters.map(c => ({ name: c.name, steps: c.steps.length })));
+}
+
 async function renderSkillNodes(): Promise<void> {
   if (!_skillsWrap) return;
-  const saved = await listSavedSkills().catch(() => [] as SavedSkill[]);
+  const [saved, clusters] = await Promise.all([
+    listSavedSkills().catch(() => [] as SavedSkill[]),
+    listClusters().catch(() => [] as SkillCluster[]),
+  ]);
   _skillsWrap.innerHTML = "";
 
   // Session steps header + Save button
@@ -1857,6 +1872,39 @@ async function renderSkillNodes(): Promise<void> {
       _skillsWrap.appendChild(card);
     }
   }
+
+  // Clusters section
+  if (clusters.length > 0) {
+    const clustersHeader = document.createElement("div");
+    clustersHeader.className = "skill-nodes-saved-header";
+    clustersHeader.textContent = `Clusters (${clusters.length})`;
+    _skillsWrap.appendChild(clustersHeader);
+
+    for (const cluster of clusters) {
+      const card = document.createElement("div");
+      card.className = "skill-card";
+      card.innerHTML = `
+        <div class="skill-card-name">${escHtml(cluster.name)}</div>
+        <div class="skill-card-meta">${cluster.steps.length} step${cluster.steps.length === 1 ? "" : "s"} · cluster</div>
+        <div class="skill-card-actions">
+          <button class="btn btn-sm skill-card-run" type="button">Run</button>
+          <button class="btn btn-sm skill-card-delete" type="button">Delete</button>
+        </div>
+      `;
+      card.querySelector<HTMLButtonElement>(".skill-card-run")!.addEventListener("click", async () => {
+        for (const step of cluster.steps) {
+          await dispatch(step.verb, step.params as DispatchArgs);
+          await new Promise(r => setTimeout(r, 50));
+        }
+      });
+      card.querySelector<HTMLButtonElement>(".skill-card-delete")!.addEventListener("click", async () => {
+        await deleteCluster(cluster.id);
+        await refreshClusterCatalog();
+        void renderSkillNodes();
+      });
+      _skillsWrap.appendChild(card);
+    }
+  }
 }
 
 let _canvasInstance: SkillCanvas | null = null;
@@ -1871,6 +1919,51 @@ function buildSkillsTabBody(): HTMLElement {
   const nodesCol = document.createElement("div");
   nodesCol.className = "skills-nodes-col";
   nodesCol.style.cssText = "flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; border-right:var(--lw-construction) solid var(--border);";
+
+  // Record toolbar
+  const recordBar = document.createElement("div");
+  recordBar.className = "skill-nodes-record-bar";
+  recordBar.style.cssText = "display:flex; align-items:center; padding:4px 8px; gap:8px; border-bottom:1px solid var(--hairline);";
+  const recordBtn = document.createElement("button");
+  recordBtn.className = "btn btn-sm skill-nodes-record-btn";
+  recordBtn.textContent = "⏺ Record";
+  _recordBtn = recordBtn;
+  const recordStatus = document.createElement("span");
+  recordStatus.style.cssText = "font-size:11px; color:var(--ink-faint); flex:1;";
+  _recordStatus = recordStatus;
+  recordBar.appendChild(recordBtn);
+  recordBar.appendChild(recordStatus);
+  nodesCol.appendChild(recordBar);
+
+  recordBtn.addEventListener("click", async () => {
+    if (!_recording) {
+      _recording = true;
+      _recordSteps = [];
+      _recordStart = Date.now();
+      recordBtn.textContent = "⏹ Stop";
+      recordBtn.style.color = "var(--accent-red, #e53e3e)";
+      if (_recordStatus) _recordStatus.textContent = "Recording…";
+    } else {
+      _recording = false;
+      recordBtn.textContent = "⏺ Record";
+      recordBtn.style.color = "";
+      const steps = _recordSteps.slice();
+      _recordSteps = [];
+      if (steps.length === 0) {
+        if (_recordStatus) _recordStatus.textContent = "No steps captured.";
+        return;
+      }
+      const name = window.prompt(`Name this cluster (${steps.length} step${steps.length === 1 ? "" : "s"}):`);
+      if (!name?.trim()) {
+        if (_recordStatus) _recordStatus.textContent = "Cancelled.";
+        return;
+      }
+      await saveCluster({ name: name.trim(), steps });
+      if (_recordStatus) _recordStatus.textContent = `Saved "${name.trim()}"`;
+      await refreshClusterCatalog();
+      void renderSkillNodes();
+    }
+  });
 
   // View switcher: LIST | CANVAS
   const switcher = document.createElement("div");
@@ -2054,6 +2147,16 @@ function jsToNodeLabels(js: string): string[] {
 }
 
 function initLiveTabSubscriptions(): void {
+  // Wire post-dispatch recording hook (captures Ifc/Sd verb sequences for clusters).
+  registerPostDispatch((canonical, args) => {
+    if (_recording && /^(Ifc|Sd)/.test(canonical) && canonical !== "SdRunCluster" && canonical !== "SdListClusters") {
+      _recordSteps.push({ verb: canonical, params: args as Record<string, unknown>, relativeTs: Date.now() - _recordStart });
+    }
+  });
+
+  // Initialize cluster catalog for agent system prompt on startup.
+  void refreshClusterCatalog();
+
   // Replicad worker path: fires when run-ok completes geometry compilation.
   window.addEventListener("gemma:run-ok", (rawEv) => {
     const ev = rawEv as CustomEvent<{ js: string; label: string }>;

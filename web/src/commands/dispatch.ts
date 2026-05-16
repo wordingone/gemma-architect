@@ -59,11 +59,21 @@ export type DispatchHandler = (
   entry: SpatialDictionaryEntry,
 ) => unknown | Promise<unknown>;
 
+export type PostDispatchCallback = (canonical: string, args: DispatchArgs) => void;
+
 // ============================================================
 // Handler registry
 // ============================================================
 
 const handlers = new Map<string, DispatchHandler>();
+
+const _postDispatchCallbacks = new Set<PostDispatchCallback>();
+
+/** Register a callback fired after every successful dispatch. Returns an unsubscribe fn. */
+export function registerPostDispatch(cb: PostDispatchCallback): () => void {
+  _postDispatchCallbacks.add(cb);
+  return () => _postDispatchCallbacks.delete(cb);
+}
 
 // Dispatch context — set while a handler is executing so viewer.addMesh can
 // tag newly created meshes with the dispatch verb + args automatically.
@@ -290,6 +300,9 @@ export async function dispatch(
     _dispatchCtx = { canonical, args };
     const result = await handler(args, entry);
     _dispatchCtx = null;
+    for (const cb of _postDispatchCallbacks) {
+      try { cb(canonical, args); } catch {}
+    }
     return { ok: true, canonical, result };
   } catch (e) {
     _dispatchCtx = null;

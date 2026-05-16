@@ -1356,3 +1356,23 @@
   synonyms: [listobjects, "list objects", "list", ls, "what is in the scene", "what's in the scene", "whats in scene", "scene contents", "show objects", "show scene"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
+
+- canonical_name: SdRunCluster
+  kernel_op: runCluster
+  args:
+    - {name: name, type: string, required: true, description: "Name of the saved skill cluster to run"}
+    - {name: repeat, type: integer, required: false, default: 1, description: "Number of times to repeat the cluster"}
+  topology_role: system
+  kg_predicates: []
+  synonyms: [runcluster, "run cluster", "execute cluster", "play cluster", "run macro", "play macro"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdListClusters
+  kernel_op: listClusters
+  args: []
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [listclusters, "list clusters", "show clusters", "list macros", "show macros", "list saved clusters"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary

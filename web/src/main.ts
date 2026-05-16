@@ -48,7 +48,8 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld, getSnapTarget } from "./viewer/create-mode";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform } from "./history";
-import { registerHandler, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
+import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
+import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
 import { runIteration, runDesignLoop } from "./chat/chat-panel";
@@ -1899,6 +1900,25 @@ registerHandler("SdSetUnits", (args) => {
   const valid = sys === "metric" || sys === "imperial" ? sys : "metric";
   setState("unitSystem", valid);
   return { ok: true, unitSystem: valid };
+});
+
+registerHandler("SdRunCluster", async (args) => {
+  const name = args["name"] as string;
+  const repeat = Math.max(1, typeof args["repeat"] === "number" ? (args["repeat"] as number) : 1);
+  const cluster = await getClusterByName(name);
+  if (!cluster) return { ok: false, error: `No cluster named "${name}"` };
+  for (let r = 0; r < repeat; r++) {
+    for (const step of cluster.steps as SkillClusterStep[]) {
+      await dispatch(step.verb, step.params as Record<string, unknown>);
+      await new Promise(res => setTimeout(res, 50));
+    }
+  }
+  return { ok: true, ran: cluster.steps.length * repeat };
+});
+
+registerHandler("SdListClusters", async () => {
+  const clusters = await listClusters();
+  return { clusters: clusters.map(c => ({ name: c.name, steps: c.steps.length, createdAt: c.createdAt })) };
 });
 
 // Install shim handlers for every dictionary verb that doesn't have a native

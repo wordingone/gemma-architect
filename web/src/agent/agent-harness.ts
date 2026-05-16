@@ -20,6 +20,13 @@
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
+
+// ── Cluster catalog (populated by workbench after each save/delete) ──────────
+let _clusterCatalog: { name: string; steps: number }[] = [];
+
+export function setClusterCatalog(clusters: { name: string; steps: number }[]): void {
+  _clusterCatalog = clusters;
+}
 import { snapshotAsText } from "../scene/scene-kg";
 import { captureViewport } from "./viewport-capture";
 import type { Skill } from "./skills-loader";
@@ -282,6 +289,11 @@ function summariseDictionary(): string {
 function summariseSkills(skills: Skill[] | undefined): string {
   if (!skills || skills.length === 0) return "Available skills: none active.";
   return `Available skills:\n${skills.map((s) => `  ${s.name} (v${s.version}): ${s.description}`).join("\n")}`;
+}
+
+function summariseClusters(): string {
+  if (_clusterCatalog.length === 0) return "";
+  return `Saved skill clusters (run with SdRunCluster({name:"…"})):\n${_clusterCatalog.map(c => `  ${c.name} (${c.steps} steps)`).join("\n")}`;
 }
 
 function buildSceneContext(): string {
@@ -706,8 +718,8 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     `Current scene: ${buildSceneContext()}`,
     "SCENE QUERY RESPONSE: when asked what is in the scene or what you see — (1) describe the viewport image visually: shapes, colors, materials, arrangement, scale (2-3 sentences); (2) narrate the object inventory from the \'Current scene:\' line above in plain English. Combine into ONE natural prose paragraph. No bullet lists. No Sd* names in prose — verb chips are shown separately in the UI.",
     summariseSkills(skills),
-    
-  ].join("\n\n");
+    summariseClusters(),
+  ].filter(Boolean).join("\n\n");
 }
 
 // Compact system prompt for the on-device WebGPU path (#424 follow-up).
@@ -734,8 +746,9 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     verbList,
     `Current scene: ${buildSceneContext()}`,
     summariseSkills(skills),
+    summariseClusters(),
     "SCENE QUERY — if the user asks what is in the scene or what you see: write PLAIN TEXT ONLY, NO tool_call blocks, NO SdListObjects. ONE paragraph: (1) describe the viewport image you received — geometry, colors, scale; if only a reference grid is visible say 'The workspace is empty'; (2) summarize 'Current scene:' above in plain English. Max 60 words.",
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
 }
 
 export function buildToolDefinitions(): Record<string, unknown>[] {

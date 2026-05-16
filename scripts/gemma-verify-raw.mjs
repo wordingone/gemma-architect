@@ -3058,6 +3058,70 @@ await resetScene('before-box-inject');
   record('responsive-layout', overallPassed, { breakpoints: bpResults });
 }
 
+// ── Surface: record-and-invoke-roundtrip (#655) ────────────────────────────
+// Verifies: (1) Record button rendered in SKILLS tab, (2) SdRunCluster
+// recognized by console DSL (not "unknown verb").
+{
+  // Navigate to SKILLS tab to check Record button.
+  const rSkills = await evaluate(`(() => {
+    try {
+      const tab = document.querySelector('.dock-tab[data-tab="skills"]');
+      if (tab) tab.click();
+      return { tabFound: !!tab };
+    } catch(e) { return { tabFound: false, error: e.message }; }
+  })()`);
+  await new Promise(r => setTimeout(r, 400));
+
+  const rBtn = await evaluate(`(() => {
+    try {
+      const btn = document.querySelector('.skill-nodes-record-btn');
+      return { passed: !!btn, btnText: btn ? btn.textContent.trim() : null };
+    } catch(e) { return { passed: false, error: e.message }; }
+  })()`);
+
+  // Switch to prompt tab + console mode to test SdRunCluster recognition.
+  await evaluate(`(() => {
+    const tab = document.querySelector('[data-tab=prompt]');
+    if (tab) tab.click();
+  })()`);
+  await new Promise(r => setTimeout(r, 200));
+
+  await evaluate(`(async () => {
+    const pill = document.querySelector('.mode-pill');
+    if (pill && pill.getAttribute('data-mode') !== 'console') {
+      pill.click();
+      await new Promise(r => setTimeout(r, 300));
+    }
+  })()`);
+  await new Promise(r => setTimeout(r, 400));
+
+  const rVerb = await evaluate(`(async () => {
+    try {
+      const input = document.querySelector('#console-input');
+      if (!input) return { passed: false, reason: 'no #console-input' };
+      const before = document.querySelector('#console-history')?.children.length || 0;
+      input.value = 'SdRunCluster';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+      await new Promise(r => setTimeout(r, 500));
+      const lines = Array.from(document.querySelectorAll('#console-history .console-line'));
+      const newLines = lines.slice(before).map(l => l.textContent).join(' | ');
+      const isUnknownVerb = /unknown verb/i.test(newLines);
+      return { passed: !isUnknownVerb, newLines: newLines.slice(0, 200), isUnknownVerb };
+    } catch(e) { return { passed: false, error: e.message }; }
+  })()`);
+
+  const passed = (rBtn?.passed ?? false) && (rVerb?.passed ?? false);
+  record('record-and-invoke-roundtrip', passed, {
+    tabFound: rSkills?.tabFound ?? false,
+    recordBtnFound: rBtn?.passed ?? false,
+    recordBtnText: rBtn?.btnText ?? null,
+    sdRunClusterKnown: rVerb?.passed ?? false,
+    consoleOutput: rVerb?.newLines ?? null,
+  });
+}
+
 } finally {
   await cleanup();
 }
