@@ -2783,7 +2783,8 @@ function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3
   result.userData.creator = creator;
   viewer.getScene().remove(objA);
   viewer.getScene().remove(objB);
-  viewer.addMesh(result, "brep");
+  // noHistory: true — pushReplaceAction below is the single canonical undo entry.
+  viewer.addMesh(result, "brep", { noHistory: true });
   pushReplaceAction(result, [objA, objB], creator);
   opFinish(viewer);
 }

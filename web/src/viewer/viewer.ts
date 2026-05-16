@@ -17,7 +17,7 @@ import { getCurrentDispatchCtx } from "../commands/dispatch.js";
 import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
-import { pushAction, pushDeleteAction } from "../history.js";
+import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, type TransformSnapshot } from "../history.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -336,6 +336,9 @@ export class Viewer {
       const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
       const makeGumball = (mode: "translate" | "rotate" | "scale") => {
         const g = new TransformControls(perspPane.camera, perspPane.body);
+        // Snapshots captured at drag-start so drag-end can push to undo stack.
+        let _dragStartSnapshot: TransformSnapshot | null = null;
+        let _dragStartMultiSnapshots: TransformSnapshot[] = [];
         g.setMode(mode);
         g.setSpace("local");
         if (mode === "translate") g.size = 1.0;
@@ -421,6 +424,9 @@ export class Viewer {
             this.pivotMatrixBeforeDrag.copy(this.pivotProxy.matrix);
             this.targetMatrixBeforeDrag.copy(this.targetObject.matrix);
             this.multiTargetMatricesBeforeDrag = this.multiTargets.map(mt => mt.matrix.clone());
+            // Capture transform snapshots for undo stack (recorded at drag-end).
+            _dragStartSnapshot = captureTransform(this.targetObject);
+            _dragStartMultiSnapshots = this.multiTargets.map(mt => captureTransform(mt));
           } else if (!dragging && this.pivotProxy && this.targetObject) {
             // Drag complete — geometry already updated live by objectChange.
             // Recompute IFC centroid cache since the element has moved.
@@ -458,6 +464,16 @@ export class Viewer {
             if (fragment && !this.subTargetObject) emitChainFragment(fragment);
             // Re-sync proxy from new target + current offset.
             this.syncPivot();
+            // Record transform on undo stack. Skip sub-object drags (control-point edits
+            // rebuild geometry in-place and don't have a clean before/after snapshot).
+            if (_dragStartSnapshot && !this.subTargetObject) {
+              pushTransformAction(this.targetObject, _dragStartSnapshot);
+              for (let _i = 0; _i < this.multiTargets.length; _i++) {
+                if (_dragStartMultiSnapshots[_i]) pushTransformAction(this.multiTargets[_i], _dragStartMultiSnapshots[_i]);
+              }
+            }
+            _dragStartSnapshot = null;
+            _dragStartMultiSnapshots = [];
           }
         });
         g.userData.noSnap = true;
