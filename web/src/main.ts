@@ -52,7 +52,7 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld } from "./tools/index";
 import { onElementCommitted } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair } from "./tools/structural";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection } from "./viewer/csg";
@@ -725,28 +725,19 @@ registerHandler("SdMember", (args) => {
 });
 
 registerHandler("SdStair", (args) => {
-  const s    = (args.start as number[] | undefined) ?? [0, 0, 0];
-  const e    = (args.end   as number[] | undefined) ?? [3, 0, 0];
-  const w    = (args.width as number | undefined) ?? 1;
-  const rise = (args.riser as number | undefined) ?? 0.18;
-  const tread = (args.tread as number | undefined) ?? 0.27;
-  const dx   = e[0] - s[0], dy = e[1] - s[1];
-  const run  = Math.sqrt(dx * dx + dy * dy) || 3;
-  const steps = Math.max(2, Math.round(run / tread));
-  const totalH = steps * rise;
-  const geom = new THREE.BoxGeometry(run, w, totalH);
-  geom.translate(run / 2, 0, totalH / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xb89968, roughness: 0.6, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(s[0], s[1], (s[2] as number | undefined) ?? getActiveLevelElevation());
-  mesh.rotation.z = Math.atan2(dy, dx);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdStair";
+  const s = (args.start as number[] | undefined) ?? [0, 0];
+  const e = (args.end   as number[] | undefined) ?? [3, 0];
+  const a = { x: s[0], y: s[1] };
+  const b = { x: e[0], y: e[1] };
+  const { mesh, chain } = buildStair(a, b);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.layerId = resolveLayerId("SdStair", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "stair", steps, run, height: totalH };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "stair" };
 });
 
 // ── Boolean void cut for box-geometry walls/slabs (#324) ─────────────────────
@@ -965,154 +956,9 @@ registerHandler("SdWindow", (args) => {
   return { created: "window", width: w, height: h, sillH: sill, submeshes: group.children.length, voidCut };
 });
 
-function buildRoofGeometry(
-  type: string, w: number, d: number, ridgeH: number,
-): THREE.BufferGeometry {
-  switch (type) {
-    case "pitched": {
-      // Gable roof: triangular cross-section extruded along depth.
-      // Ridge runs along Y. Vertices: 4 base corners + 2 ridge points.
-      const v = new Float32Array([
-        -w/2, -d/2, 0,      // 0 front-left
-         w/2, -d/2, 0,      // 1 front-right
-         w/2,  d/2, 0,      // 2 back-right
-        -w/2,  d/2, 0,      // 3 back-left
-           0, -d/2, ridgeH, // 4 front ridge
-           0,  d/2, ridgeH, // 5 back ridge
-      ]);
-      const idx = new Uint16Array([
-        0,1,4,  3,5,2,       // gable ends
-        0,4,5, 0,5,3,        // left slope
-        1,2,5, 1,5,4,        // right slope
-        0,2,1, 0,3,2,        // floor
-      ]);
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
-      geo.setIndex(new THREE.BufferAttribute(idx, 1));
-      geo.computeVertexNormals();
-      return geo;
-    }
-    case "hipped": {
-      // Hip roof: ridge runs along long axis (Y if d>w), set back w/2 from each end.
-      const setback = Math.min(w / 2, d / 2);
-      const v = new Float32Array([
-        -w/2, -d/2, 0,                       // 0
-         w/2, -d/2, 0,                       // 1
-         w/2,  d/2, 0,                       // 2
-        -w/2,  d/2, 0,                       // 3
-           0, -(d/2 - setback), ridgeH,      // 4 near ridge pt
-           0,  (d/2 - setback), ridgeH,      // 5 far ridge pt
-      ]);
-      const idx = new Uint16Array([
-        // Near hip: 0,1,4
-        0,1,4,
-        // Far hip: 2,3,5
-        2,3,5,
-        // Left slopes: 0,4,5, 0,5,3
-        0,4,5, 0,5,3,
-        // Right slopes: 1,2,5, 1,5,4
-        1,2,5, 1,5,4,
-        // Floor
-        0,2,1, 0,3,2,
-      ]);
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
-      geo.setIndex(new THREE.BufferAttribute(idx, 1));
-      geo.computeVertexNormals();
-      return geo;
-    }
-    case "curved": {
-      // Barrel vault: half-cylinder, radius=w/2, length=d, axis=Y.
-      const segs = 24;
-      const positions: number[] = [];
-      const indices: number[] = [];
-      // Build top half-circle cross-section (theta 0..PI) × 2 depth positions.
-      for (let si = 0; si <= segs; si++) {
-        const t = (si / segs) * Math.PI; // 0..PI gives top half
-        const x = (w / 2) * Math.cos(Math.PI - t); // -w/2 .. +w/2
-        const z = (w / 2) * Math.sin(Math.PI - t); // 0 .. ridgeH-approx
-        positions.push(x, -d/2, z, x, d/2, z);
-      }
-      for (let si = 0; si < segs; si++) {
-        const a = si * 2, b = si * 2 + 1, c = si * 2 + 2, e = si * 2 + 3;
-        indices.push(a, c, b, b, c, e);
-      }
-      // End caps
-      const nv = (segs + 1) * 2;
-      // Front cap: fan from (0, -d/2, 0)
-      positions.push(0, -d/2, 0); const fc = nv;
-      for (let si = 0; si < segs; si++) indices.push(fc, si * 2, si * 2 + 2);
-      // Back cap: fan from (0, +d/2, 0)
-      positions.push(0, d/2, 0); const bc = nv + 1;
-      for (let si = 0; si < segs; si++) indices.push(bc, si * 2 + 3, si * 2 + 1);
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
-      geo.setIndex(indices);
-      geo.computeVertexNormals();
-      return geo;
-    }
-    case "combination": {
-      // Flat centre slab + pitched ends (L-wing approach).
-      // Centre: flat slab w × d/2 (middle third)
-      // Ends: two smaller pitched roofs.
-      const geo = new THREE.BufferGeometry();
-      const hw = w / 2, hd = d / 2, wh = Math.max(0.15, ridgeH * 0.4);
-      const v = new Float32Array([
-        // Flat centre (z = wh)
-        -hw, -hd/2, wh,  hw, -hd/2, wh,  hw, hd/2, wh,  -hw, hd/2, wh,
-        // Front pitched end (below centre)
-        -hw, -hd, 0,  hw, -hd, 0,  0, -hd, ridgeH,  0, -hd/2, ridgeH,
-        // Back pitched end
-        -hw, hd, 0,   hw, hd, 0,   0, hd, ridgeH,   0, hd/2, ridgeH,
-      ]);
-      const idx = new Uint16Array([
-        // Flat slab (4 verts 0-3)
-        0,2,1, 0,3,2,
-        // Front end: verts 4,5,6,7
-        4,6,5, 4,7,6, 4,0,7, 5,6,7, // approximate
-        // Back end: verts 8,9,10,11
-        8,9,10, 8,10,11, 8,11,3, 9,10,11,
-      ]);
-      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
-      geo.setIndex(new THREE.BufferAttribute(idx, 1));
-      geo.computeVertexNormals();
-      return geo;
-    }
-    case "shed": {
-      // Mono-pitched (lean-to): front edge low, back edge at ridgeH.
-      const v = new Float32Array([
-        -w/2, -d/2, 0,       // 0 front-left (low)
-         w/2, -d/2, 0,       // 1 front-right (low)
-         w/2,  d/2, ridgeH,  // 2 back-right (high)
-        -w/2,  d/2, ridgeH,  // 3 back-left (high)
-        -w/2,  d/2, 0,       // 4 back-left (base)
-         w/2,  d/2, 0,       // 5 back-right (base)
-      ]);
-      const idx = new Uint16Array([
-        0,1,2, 0,2,3,   // slope surface
-        0,3,4,          // left gable end
-        1,5,2,          // right gable end
-        0,4,5, 0,5,1,   // floor
-      ]);
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(v, 3));
-      geo.setIndex(new THREE.BufferAttribute(idx, 1));
-      geo.computeVertexNormals();
-      return geo;
-    }
-    default: {
-      // flat: low box slab
-      const geo = new THREE.BoxGeometry(w, d, Math.max(0.15, ridgeH * 0.3));
-      geo.translate(0, 0, Math.max(0.15, ridgeH * 0.3) / 2);
-      return geo;
-    }
-  }
-}
-
 registerHandler("SdRoof", (args) => {
   const roofType = (args.roofType as string | undefined) ?? "flat";
-  const pitch   = (args.pitchDeg    as number | undefined) ?? 30;
-  const fp      = args.footprint as number[][] | undefined;
+  const fp = args.footprint as number[][] | undefined;
   let w = 8, d = 10;
   if (fp && fp.length >= 2) {
     const xs = fp.map((p) => p[0]);
@@ -1120,14 +966,10 @@ registerHandler("SdRoof", (args) => {
     w = (Math.max(...xs) - Math.min(...xs)) || 8;
     d = (Math.max(...ys) - Math.min(...ys)) || 10;
   }
-  const ridgeH = (args.ridgeHeight as number | undefined) ?? (Math.min(w, d) / 2 * Math.tan((pitch * Math.PI) / 180));
-  const geom   = buildRoofGeometry(roofType, w, d, ridgeH);
-  const mat  = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geom, mat);
-  const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 3);
-  mesh.position.z = elev;
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdRoof";
+  const a = { x: -w / 2, y: -d / 2 };
+  const b = { x: w / 2, y: d / 2 };
+  const { mesh, chain } = buildRoof(a, b);
+  mesh.position.z = getActiveLevelElevation() + 3;
   mesh.userData.roofType = roofType;
   mesh.userData.ifcPredefinedType = ({
     flat: "FLAT_ROOF",
@@ -1140,12 +982,14 @@ registerHandler("SdRoof", (args) => {
   mesh.userData.layerId = resolveLayerId("SdRoof", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "roof", roofType, width: w, depth: d, ridgeHeight: ridgeH, ifcPredefinedType: mesh.userData.ifcPredefinedType };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "roof", roofType, width: w, depth: d, ifcPredefinedType: mesh.userData.ifcPredefinedType };
 });
 
+
 registerHandler("SdSpace", (args) => {
-  const h  = (args.height as number | undefined) ?? 2.8;
   const fp = args.footprint as number[][] | undefined;
   let w = 5, d = 4;
   if (fp && fp.length >= 2) {
@@ -1154,80 +998,75 @@ registerHandler("SdSpace", (args) => {
     w = (Math.max(...xs) - Math.min(...xs)) || 5;
     d = (Math.max(...ys) - Math.min(...ys)) || 4;
   }
-  const geom = new THREE.BoxGeometry(w, d, h);
-  geom.translate(0, 0, h / 2);
-  const mat  = new THREE.MeshBasicMaterial({ color: 0x90c8ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(geom, mat);
+  const a = { x: -w / 2, y: -d / 2 };
+  const b = { x: w / 2, y: d / 2 };
+  const { mesh, chain } = buildSpace(a, b);
   mesh.position.z = getActiveLevelElevation();
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdSpace";
   mesh.userData.layerId = resolveLayerId("SdSpace", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   if (args.name) mesh.userData.spaceName = args.name as string;
   viewer.addMesh(mesh, "brep");
-  return { created: "space", width: w, depth: d, height: h };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "space", width: w, depth: d };
 });
 
 // ── IFC Tier 3: Foundation / Ceiling / CurtainWall / Skylight / Opening / Ramp / Railing / Grid / Level / Datum ──
 
 registerHandler("SdFoundation", (args) => {
-  const w = (args.width     as number | undefined) ?? 6;
-  const d = (args.depth     as number | undefined) ?? 6;
-  const t = (args.thickness as number | undefined) ?? 0.5;
-  const geom = new THREE.BoxGeometry(w, d, t);
-  geom.translate(0, 0, -t / 2);
-  const mat  = new THREE.MeshStandardMaterial({ color: 0x8a7563, roughness: 0.85, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
-  const pos  = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
-  else mesh.position.z = getActiveLevelElevation();
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdFoundation";
+  const w = (args.width as number | undefined) ?? 6;
+  const d = (args.depth as number | undefined) ?? 6;
+  const a = { x: -w / 2, y: -d / 2 };
+  const b = { x: w / 2, y: d / 2 };
+  const { mesh, chain } = buildFoundation(a, b);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.layerId = resolveLayerId("SdFoundation", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
+  onElementCommitted(mesh, viewer.getScene());
   return { created: "foundation", width: w, depth: d };
 });
 
 registerHandler("SdCeiling", (args) => {
-  const w    = (args.width     as number | undefined) ?? 5;
-  const d    = (args.depth     as number | undefined) ?? 4;
-  const t    = (args.thickness as number | undefined) ?? 0.05;
-  const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 2.8);
-  const geom = new THREE.BoxGeometry(w, d, t);
-  const mat  = new THREE.MeshStandardMaterial({ color: 0xfaf5ec, roughness: 0.5, metalness: 0.02 });
-  const mesh = new THREE.Mesh(geom, mat);
-  const pos  = args.position as number[] | undefined;
-  mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, elev);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdCeiling";
+  const w = (args.width as number | undefined) ?? 5;
+  const d = (args.depth as number | undefined) ?? 4;
+  const a = { x: -w / 2, y: -d / 2 };
+  const b = { x: w / 2, y: d / 2 };
+  const { mesh, chain } = buildCeiling(a, b);
+  mesh.position.z = getActiveLevelElevation() + 3;
   mesh.userData.layerId = resolveLayerId("SdCeiling", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "ceiling", width: w, depth: d, elevation: elev };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "ceiling", width: w, depth: d };
 });
 
 registerHandler("SdCurtainWall", (args) => {
   const wallLen = (args.length as number | undefined) ?? 6;
-  const h  = (args.height as number | undefined) ?? 3;
-  const t  = 0.02;
-  const geom = new THREE.BoxGeometry(wallLen, t, h);
-  geom.translate(0, 0, h / 2);
-  const mat  = new THREE.MeshBasicMaterial({ color: 0xaadcff, transparent: true, opacity: 0.35 });
-  const mesh = new THREE.Mesh(geom, mat);
-  const pos  = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? getActiveLevelElevation());
-  else mesh.position.z = getActiveLevelElevation();
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdCurtainWall";
+  const startArg = args.start as number[] | undefined;
+  const endArg = args.end as number[] | undefined;
+  let a: { x: number; y: number }, b: { x: number; y: number };
+  if (startArg && endArg) {
+    a = { x: startArg[0] ?? 0, y: startArg[1] ?? 0 };
+    b = { x: endArg[0] ?? wallLen, y: endArg[1] ?? 0 };
+  } else {
+    a = { x: 0, y: 0 };
+    b = { x: wallLen, y: 0 };
+  }
+  const { mesh, chain } = buildCurtainWall(a, b);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.layerId = resolveLayerId("SdCurtainWall", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "curtainwall", length: wallLen, height: h };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "curtainwall", length: wallLen };
 });
 
 registerHandler("SdPlate", (args) => {
@@ -1258,21 +1097,18 @@ registerHandler("SdPlate", (args) => {
 });
 
 registerHandler("SdSkylight", (args) => {
-  const w    = (args.width     as number | undefined) ?? 1.2;
-  const d    = (args.depth     as number | undefined) ?? 1.2;
-  const elev = (args.elevation as number | undefined) ?? (getActiveLevelElevation() + 3);
-  const geom = new THREE.BoxGeometry(w, d, 0.04);
-  const mat  = new THREE.MeshBasicMaterial({ color: 0xeef5ff, transparent: true, opacity: 0.6 });
-  const mesh = new THREE.Mesh(geom, mat);
-  const pos  = args.position as number[] | undefined;
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elev);
-  else mesh.position.z = elev;
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdSkylight";
+  const w = (args.width as number | undefined) ?? 1.2;
+  const d = (args.depth as number | undefined) ?? 1.2;
+  const a = { x: -w / 2, y: -d / 2 };
+  const b = { x: w / 2, y: d / 2 };
+  const { mesh, chain } = buildSkylight(a, b);
+  mesh.position.z = getActiveLevelElevation() + 3;
   mesh.userData.layerId = resolveLayerId("SdSkylight", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
+  onElementCommitted(mesh, viewer.getScene());
   return { created: "skylight", width: w, depth: d };
 });
 
