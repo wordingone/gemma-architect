@@ -63,6 +63,12 @@ export function getMtpSessions(model: unknown): MtpSessions | null {
     return null;
   }
   console.info("[mtp-backend] Sessions acquired — embed + decoder reusing VRAM allocation.");
+  try {
+    for (const name of (decoder as any).inputNames ?? []) {
+      const meta = (decoder as any).inputMetadata?.[name];
+      if (meta) console.info(`[mtp-backend] ${name}`, { type: meta?.type, dims: meta?.dims });
+    }
+  } catch { /* inputMetadata not available in this ORT version */ }
   return { embed, decoder };
 }
 
@@ -74,8 +80,9 @@ function emptyKvFeed(ort: any): Record<string, any> {
   const feed: Record<string, any> = {};
   for (let i = 0; i < NUM_KV_LAYERS; i++) {
     const hd = FULL_ATTN.has(i) ? 512 : 256;
-    feed[`past_key_values.${i}.key`]   = new ort.Tensor("float32", new Float32Array(0), [1, 1, 0, hd]);
-    feed[`past_key_values.${i}.value`] = new ort.Tensor("float32", new Float32Array(0), [1, 1, 0, hd]);
+    // Decoder ONNX expects fp16 KV tensors; onnxruntime-web uses Uint16Array as fp16 storage.
+    feed[`past_key_values.${i}.key`]   = new ort.Tensor("float16", new Uint16Array(0), [1, 1, 0, hd]);
+    feed[`past_key_values.${i}.value`] = new ort.Tensor("float16", new Uint16Array(0), [1, 1, 0, hd]);
   }
   return feed;
 }
