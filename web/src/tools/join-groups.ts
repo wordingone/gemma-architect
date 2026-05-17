@@ -59,6 +59,34 @@ function _worldBrush(mesh: THREE.Mesh): Brush {
   return brush;
 }
 
+/**
+ * Build a Brush for CSG. Wall meshes in multi-member groups get extended by their own
+ * thickness (t) so perpendicular corners fill — the outer t/2×t/2 void is covered.
+ * This extension lives only in the CSG brush geometry; the stored mesh geometry and
+ * chain string keep the honest user-clicked length (no contract change).
+ */
+function _brushForCsg(mesh: THREE.Mesh): Brush {
+  if (mesh.userData?.creator === "wall") {
+    const params = (mesh.geometry as THREE.BoxGeometry).parameters;
+    if (params?.width) {
+      // params: { width: wallLength, height: thickness, depth: wallHeight }
+      const extLen = params.width + params.height; // length + t
+      const extGeom = new THREE.BoxGeometry(extLen, params.height, params.depth);
+      extGeom.translate(0, 0, params.depth / 2); // same floor-anchor as original
+      mesh.updateMatrixWorld(true);
+      extGeom.applyMatrix4(mesh.matrixWorld);
+      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      const brush = new Brush(extGeom, mat);
+      brush.position.set(0, 0, 0);
+      brush.rotation.set(0, 0, 0);
+      brush.scale.set(1, 1, 1);
+      brush.updateMatrixWorld(true);
+      return brush;
+    }
+  }
+  return _worldBrush(mesh);
+}
+
 /** Remove an existing display mesh for a group from the scene. */
 function _removeDisplayMesh(scene: THREE.Scene, groupId: string): void {
   const displayId = _displayMesh.get(groupId);
@@ -97,11 +125,12 @@ function _rebuildGroupDisplay(scene: THREE.Scene, groupId: string, primaryMat: T
   for (const m of members) m.visible = false;
 
   // Fold union: result = A ∪ B ∪ C ∪ …
+  // Wall brushes are extended by t so corners fill without changing stored geometry.
   // Returns the folded Brush, or null if CSG fails.
   const buildUnion = (): Brush | null => {
-    let acc: Brush = _worldBrush(members[0]);
+    let acc: Brush = _brushForCsg(members[0]);
     for (let i = 1; i < members.length; i++) {
-      const brushB = _worldBrush(members[i]);
+      const brushB = _brushForCsg(members[i]);
       const merged: Brush = _evaluator.evaluate(acc, brushB, ADDITION);
       if (i > 1) acc.geometry.dispose();
       brushB.geometry.dispose();

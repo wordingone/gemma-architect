@@ -41,9 +41,7 @@ function round(n: number, digits = 4): number {
 export function buildWall(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
   const t = DEFAULT_WALL_THICKNESS, h = DEFAULT_WALL_HEIGHT;
   const dx = b.x - a.x, dy = b.y - a.y;
-  // Extend by t/2 at each end so adjacent wall bodies overlap at corners,
-  // giving the CSG union a solid region to merge (no outer-corner gap).
-  const length = Math.sqrt(dx * dx + dy * dy) + t;
+  const length = Math.sqrt(dx * dx + dy * dy);
   const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
   const geom = new THREE.BoxGeometry(length, t, h);
@@ -71,7 +69,7 @@ export function rebuildWallInPlace(mesh: THREE.Mesh, a: { x: number; y: number }
   const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
   mesh.geometry.dispose();
-  const geom = new THREE.BoxGeometry(length + t, t, h);
+  const geom = new THREE.BoxGeometry(length, t, h);
   geom.translate(0, 0, h / 2);
   mesh.geometry = geom;
   mesh.position.set(cx, cy, 0);
