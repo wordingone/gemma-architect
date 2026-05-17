@@ -402,6 +402,86 @@ function showScaleModeMenu(anchor: HTMLElement): void {
   document.addEventListener("pointerup", onUp);
 }
 
+function showWallModeMenu(anchor: HTMLElement): void {
+  document.querySelector(".sel-mode-menu")?.remove();
+
+  const modes: Array<{ label: string; sub: string; toolId: string }> = [
+    { label: "Wall",              sub: "Click two endpoints",                   toolId: "wall"          },
+    { label: "Polyline Walls",    sub: "Click chain of points — wall per segment", toolId: "wall-polyline" },
+    { label: "Curve Walls",       sub: "Click control pts — spline-fit walls",  toolId: "wall-curve"    },
+    { label: "Walls from Object", sub: "Pick existing polygon / curve / line",  toolId: "wall-pick"     },
+  ];
+
+  const menu = el("div", "sel-mode-menu");
+  menu.setAttribute("role", "menu");
+  const rows: HTMLElement[] = [];
+  for (const mode of modes) {
+    const row = el("div", "sel-mode-row");
+    row.setAttribute("role", "menuitem");
+    row.setAttribute("tabindex", "0");
+    row.dataset.toolId = mode.toolId;
+    const labelEl = el("span", "sel-mode-label");
+    labelEl.textContent = mode.label;
+    const subEl = el("span", "sel-mode-sub");
+    subEl.textContent = mode.sub;
+    row.appendChild(labelEl);
+    row.appendChild(subEl);
+    row.addEventListener("click", () => {
+      menu.remove();
+      cleanup();
+      dispatchSync("setActiveTool", { toolId: mode.toolId });
+    });
+    row.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); row.click(); }
+    });
+    rows.push(row);
+    menu.appendChild(row);
+  }
+
+  document.body.appendChild(menu);
+
+  const rect = anchor.getBoundingClientRect();
+  menu.style.left = rect.left + "px";
+  menu.style.top  = (rect.bottom + 4) + "px";
+
+  const onMove = (ev: PointerEvent) => {
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const hovered = under?.closest<HTMLElement>(".sel-mode-row") ?? null;
+    for (const r of rows) r.classList.toggle("active", r === hovered);
+  };
+
+  const onUp = (ev: PointerEvent) => {
+    cleanup();
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    const row = under?.closest<HTMLElement>(".sel-mode-row");
+    if (row?.dataset.toolId) {
+      menu.remove();
+      dispatchSync("setActiveTool", { toolId: row.dataset.toolId });
+      return;
+    }
+    if (!menu.contains(under as Node)) {
+      menu.remove();
+      return;
+    }
+    setTimeout(() => document.addEventListener("pointerdown", onOutside, true), 0);
+  };
+
+  const onOutside = (ev: PointerEvent) => {
+    if (!menu.contains(ev.target as Node)) {
+      menu.remove();
+      document.removeEventListener("pointerdown", onOutside, true);
+    }
+  };
+
+  const cleanup = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp);
+}
+
 function buildPalette(host: HTMLElement) {
   host.innerHTML = "";
 
@@ -433,12 +513,14 @@ function buildPalette(host: HTMLElement) {
     if (i === COMP_SECTION_IDX) sec.classList.add("palette-section--hidden");
     for (const tool of section.tools) {
       const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
-      const hasCorner = tool.id === "select" || tool.id === "scale";
+      const hasCorner = tool.id === "select" || tool.id === "scale" || tool.id === "wall";
       btn.innerHTML = iconSVG(tool.icon, 18) + (hasCorner ? `<span class="corner"></span>` : "");
-      if (tool.id === "select" || tool.id === "scale") {
+      if (tool.id === "select" || tool.id === "scale" || tool.id === "wall") {
         // Hold anywhere on the button to open the mode dropdown;
         // short click (< 280ms) dispatches the default tool action.
-        const showMenu = tool.id === "select" ? showSelModeMenu : showScaleModeMenu;
+        const showMenu = tool.id === "select" ? showSelModeMenu
+          : tool.id === "scale" ? showScaleModeMenu
+          : showWallModeMenu;
         const defaultToolId = tool.id; // "select" or "scale"
         let holdTimer: ReturnType<typeof setTimeout> | null = null;
         let menuOpened = false;

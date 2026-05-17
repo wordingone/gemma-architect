@@ -235,13 +235,12 @@ export function destroyCursorDot(): void {
 
 // ── Tool handler types & atZ wrapper ─────────────────────────────────────────
 
+type SingleResult = { mesh: THREE.Object3D; chain: string; dispatchOnCommit?: { verb: string; args: Record<string, unknown> } };
 type ToolHandler = {
   clicks: number;
-  handler: (pts: Array<{ x: number; y: number; z?: number }>) => {
-    mesh: THREE.Object3D;
-    chain: string;
-    dispatchOnCommit?: { verb: string; args: Record<string, unknown> };
-  };
+  handler: (pts: Array<{ x: number; y: number; z?: number }>) => SingleResult;
+  chain?: boolean;
+  commitMulti?: (pts: Array<{ x: number; y: number; z?: number }>) => SingleResult[];
 };
 
 // 9 ft above the active level — canonical offset for ceiling and roof placement.
@@ -276,7 +275,13 @@ function atTopOfLevel<T extends { mesh: THREE.Object3D; chain: string }>(
 }
 
 const TOOL_HANDLERS: Record<string, ToolHandler> = {
-  wall:        { clicks: 2, handler: atZ(([a, b]) => buildWall(a, b)) },
+  wall:          { clicks: 2, handler: atZ(([a, b]) => buildWall(a, b)) },
+  "wall-polyline": { clicks: 2, chain: true, handler: atZ(([a, b]) => buildWall(a, b)) },
+  "wall-curve":    {
+    clicks: -1,
+    handler: atZ((pts) => pts.length >= 2 ? buildPolyline(pts) : buildPolyline([pts[0], pts[0]])),
+    commitMulti: (pts) => buildWallsAlongCurve(pts),
+  },
   rect:        { clicks: 2, handler: atZ(([a, b]) => buildRect(a, b)) },
   circle:      { clicks: 2, handler: atZ(([a, b]) => buildCircle(a, b)) },
   line:        { clicks: 2, handler: atZ(([a, b]) => buildLine(a, b)) },
@@ -366,6 +371,68 @@ function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: 
   }
 }
 
+// ── Wall sub-mode helpers ─────────────────────────────────────────────────────
+
+function buildWallsAlongCurve(pts: Array<{x: number; y: number; z?: number}>): SingleResult[] {
+  if (pts.length < 2) return [];
+  const z0 = pts[0]?.z ?? 0;
+  const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p.x, p.y, 0)));
+  const N = Math.max((pts.length - 1) * 4, 8);
+  const curvePts = curve.getPoints(N);
+  const results: SingleResult[] = [];
+  for (let i = 0; i < curvePts.length - 1; i++) {
+    const r = buildWall({ x: curvePts[i].x, y: curvePts[i].y }, { x: curvePts[i + 1].x, y: curvePts[i + 1].y });
+    r.mesh.position.z = z0;
+    results.push(r);
+  }
+  return results;
+}
+
+function commitMultiWalls(viewer: Viewer, results: SingleResult[]): void {
+  for (const r of results) {
+    viewer.addMesh(r.mesh, r.mesh.userData.kind ?? "brep", { noHistory: true });
+    if (r.mesh instanceof THREE.Mesh && r.mesh.userData.creator === "wall") {
+      attemptWallCornerJoins(r.mesh, viewer.getScene());
+    }
+    if (r.mesh instanceof THREE.Mesh) onElementCommitted(r.mesh, viewer.getScene());
+    _createSequence.push(r.chain);
+    pushAction(r.mesh, r.chain);
+  }
+}
+
+function commitWallPick(viewer: Viewer, obj: THREE.Object3D): void {
+  const cps = obj.userData.controlPoints as Array<{x: number; y: number; z?: number}> | undefined;
+  const z0 = obj instanceof THREE.Mesh ? (obj as THREE.Mesh).position.z : 0;
+  let pts: Array<{x: number; y: number; z?: number}>;
+  if (cps && cps.length >= 2) {
+    pts = cps.map(p => ({ x: p.x, y: p.y, z: p.z ?? z0 }));
+  } else {
+    const box = new THREE.Box3().setFromObject(obj);
+    const mn = box.min, mx = box.max;
+    pts = [
+      { x: mn.x, y: mn.y, z: z0 }, { x: mx.x, y: mn.y, z: z0 },
+      { x: mx.x, y: mx.y, z: z0 }, { x: mn.x, y: mx.y, z: z0 },
+    ];
+  }
+  if (pts.length < 2) {
+    setPickerHint("wall-pick — no usable geometry on that object");
+    return;
+  }
+  const closedKinds = new Set(["rectangle", "polygon", "circle", "slab"]);
+  const closed = closedKinds.has(obj.userData.kind as string ?? "");
+  const n = pts.length;
+  const results: SingleResult[] = [];
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const r = buildWall(pts[i], pts[(i + 1) % n]);
+    r.mesh.position.z = z0;
+    results.push(r);
+  }
+  commitMultiWalls(viewer, results);
+  hideCursorDot();
+  setPickerHint(null);
+  dispatchSync("setActiveTool", { toolId: "select" });
+}
+
 // ── commitUnlimited & emitClickWorld ─────────────────────────────────────────
 
 function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string } | null {
@@ -375,14 +442,23 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   if (!handler || handler.clicks !== -1 || _pending.length < 2) return null;
   clearTemporary(viewer);
   clearSmartTrack(viewer);
-  const out = handler.handler(_pending);
+  const pts = [..._pending];
   _pending = [];
+  hideCursorDot();
+  setPickerHint(null);
+
+  if (handler.commitMulti) {
+    const results = handler.commitMulti(pts);
+    commitMultiWalls(viewer, results);
+    dispatchSync("setActiveTool", { toolId: "select" });
+    return results[0] ?? null;
+  }
+
+  const out = handler.handler(pts);
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
-  hideCursorDot();
-  setPickerHint(null);
   dispatchSync("setActiveTool", { toolId: "select" });
   return out;
 }
@@ -410,7 +486,13 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   clearTemporary(viewer);
   clearSmartTrack(viewer);
   const out = handler.handler(_pending);
-  _pending = [];
+  if (handler.chain) {
+    const newStart = { ..._pending[_pending.length - 1] };
+    _pending = [newStart];
+    setMarker(viewer, newStart);
+  } else {
+    _pending = [];
+  }
   // noHistory: true — undo managed via explicit push / transaction below.
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh && out.mesh.userData.creator === "wall") {
@@ -457,7 +539,11 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
     dispatchSync(out.dispatchOnCommit.verb, out.dispatchOnCommit.args);
     document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   }
-  dispatchSync("setActiveTool", { toolId: "select" });
+  if (handler.chain) {
+    setPickerHint(`wall-polyline — click next wall endpoint  [Enter] finish  [Esc] cancel`);
+  } else {
+    dispatchSync("setActiveTool", { toolId: "select" });
+  }
 
   if (tool === "level") {
     const levelId = (out as { levelId?: string }).levelId;
@@ -596,7 +682,14 @@ export function initCreateMode(viewer: Viewer): void {
       if (getOpPhase()) opCancel(viewer);
       const h = tool ? TOOL_HANDLERS[tool] : null;
       if (h?.clicks === -1) {
-        setPickerHint(`${tool} — click points  [double-click or Enter] commit  [Esc] cancel`);
+        const label = tool === "wall-curve"
+          ? "wall-curve — click control points  [Enter] build spline walls  [Esc] cancel"
+          : `${tool} — click points  [double-click or Enter] commit  [Esc] cancel`;
+        setPickerHint(label);
+      } else if (h?.chain) {
+        setPickerHint(`wall-polyline — click first wall start point  [Esc] cancel`);
+      } else if (tool === "wall-pick") {
+        setPickerHint("wall-pick — click a polygon, polyline, circle, or line to trace walls");
       }
     }
   });
@@ -722,6 +815,17 @@ export function initCreateMode(viewer: Viewer): void {
           }
         });
       }
+      return;
+    }
+
+    if (tool === "wall-pick") {
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY);
+      if (!hit) {
+        setPickerHint("wall-pick — click a polygon, polyline, circle, or line to trace walls");
+        return;
+      }
+      ev.stopImmediatePropagation();
+      commitWallPick(viewer, hit.obj);
       return;
     }
 
@@ -1084,6 +1188,18 @@ export function initCreateMode(viewer: Viewer): void {
       }
       if (_ptPhase && document.activeElement !== ptInput) {
         _ptHandleEnter(viewer);
+        return;
+      }
+      // Exit chain-mode tools (wall-polyline) on Enter
+      const chainTool = readActiveTool();
+      const chainHandler = chainTool ? TOOL_HANDLERS[chainTool] : null;
+      if (chainHandler?.chain && _pending.length > 0) {
+        clearTemporary(viewer);
+        clearSmartTrack(viewer);
+        hideCursorDot();
+        setPickerHint(null);
+        _pending = [];
+        dispatchSync("setActiveTool", { toolId: "select" });
         return;
       }
       commitUnlimited(viewer);
