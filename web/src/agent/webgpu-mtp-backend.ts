@@ -150,6 +150,22 @@ function fp16Head0ToFp32Tail(kvTensor: any, W: number, ort: any): any {
   return new ort.Tensor("float32", f32, [B, 1, W, H]);
 }
 
+// After each verify step, rejected draft tokens leave stale KV entries at the tail of
+// the verifyOut present tensors. Truncate to `newLen` on axis-2 before storing in kvCache.
+// verifyOut present shape: [B, numHeads, past+K2, H] (fp16 Uint16Array).
+// Returns fp16 [B, numHeads, newLen, H] with each head's last K2-accepted entries dropped.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sliceKvAxis2(kvTensor: any, newLen: number, ort: any): any {
+  const [B, numHeads, , H] = kvTensor.dims as number[];
+  const src = kvTensor.data as Uint16Array;
+  const dst = new Uint16Array(B * numHeads * newLen * H);
+  for (let h = 0; h < B * numHeads; h++) {
+    // Each head lane is contiguous; copy only the first newLen token entries.
+    dst.set(src.subarray(h * (kvTensor.dims[2] as number) * H, h * (kvTensor.dims[2] as number) * H + newLen * H), h * newLen * H);
+  }
+  return new ort.Tensor("float16", dst, [B, numHeads, newLen, H]);
+}
+
 // ── Main export: spec-decode loop ────────────────────────────────────────────
 
 export interface MtpDecodeResult {
@@ -329,12 +345,16 @@ export async function runMtpSpecDecode(
       nextToken = targetTok;
     }
 
-    // Update KV cache with verify outputs (covers accepted token positions)
+    // Update KV cache — truncate to accepted tokens only.
+    // verifyOut present dims[2] = kvSeqLen + K2 (includes all K2 draft positions).
+    // Rejected drafts at the tail must be dropped; otherwise pastKeyDims[2] diverges
+    // from kvSeqLen and the next iteration's attention_mask length mismatches scores.
+    const newCacheLen = kvSeqLen + accepted;
     for (let i = 0; i < NUM_KV_LAYERS; i++) {
-      kvCache[`present.${i}.key`]   = verifyOut[`present.${i}.key`];
-      kvCache[`present.${i}.value`] = verifyOut[`present.${i}.value`];
+      kvCache[`present.${i}.key`]   = sliceKvAxis2(verifyOut[`present.${i}.key`],   newCacheLen, O);
+      kvCache[`present.${i}.value`] = sliceKvAxis2(verifyOut[`present.${i}.value`], newCacheLen, O);
     }
-    kvSeqLen += accepted;
+    kvSeqLen = newCacheLen;
 
     if (eos) break;
   }
