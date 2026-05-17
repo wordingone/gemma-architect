@@ -234,9 +234,10 @@ export async function runMtpSpecDecode(
 
   try {
     console.info("[mtp-backend] drafter.inputNames:", JSON.stringify((drafter as any).inputNames ?? []));
+    console.info("[mtp-backend] drafter.outputNames:", JSON.stringify((drafter as any).outputNames ?? []));
     for (const name of (drafter as any).inputNames ?? []) {
       const meta = (drafter as any).inputMetadata?.[name];
-      if (meta) console.info(`[mtp-backend] drafter ${name}`, { type: meta?.type, dims: meta?.dims });
+      if (meta) console.info(`[mtp-backend] drafter in:${name}`, { type: meta?.type, dims: meta?.dims });
     }
   } catch { /* inputMetadata not available in this ORT version */ }
 
@@ -323,7 +324,23 @@ export async function runMtpSpecDecode(
       const draftLogit = argmax(draftOut["logits"].data as Float32Array);
       draftTokens.push(draftLogit);
       projState = draftOut["proj_state"];
+      // Probe on first draft step of first spec iteration to confirm projState wiring.
+      if (d === 0 && specAttempts === 1) {
+        const ps = draftOut["proj_state"];
+        const psData = ps?.data as Float32Array | undefined;
+        console.info("[mtp-backend] d=0 probe:", {
+          outputKeys: Object.keys(draftOut),
+          proj_state_dims: ps?.dims,
+          proj_state_defined: ps != null,
+          proj_state_nonzero: psData ? psData.slice(0, 4) : null,
+          draftLogit,
+        });
+      }
       lastToken = draftLogit;
+    }
+    // Log first-iteration draft summary.
+    if (specAttempts <= draftK) {
+      console.info("[mtp-backend] iter-1 draftTokens:", draftTokens);
     }
 
     // ── 2b. Verify K draft tokens with target decoder ─────────────────────────
