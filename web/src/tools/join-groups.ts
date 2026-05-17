@@ -59,7 +59,33 @@ function _worldBrush(mesh: THREE.Mesh): Brush {
   return brush;
 }
 
+/**
+ * Build a CSG Brush for a mesh. Wall brushes are extended by their own thickness
+ * so perpendicular corners get a t×t overlap region — essential for clean CSG union
+ * (non-overlapping touching volumes produce degenerate CSG output).
+ */
 function _brushForCsg(mesh: THREE.Mesh): Brush {
+  if (mesh.userData?.creator === "wall") {
+    const params = (mesh.geometry as THREE.BoxGeometry).parameters;
+    if (params?.width) {
+      // params: { width: wallLen, height: wallThickness, depth: wallHeight }
+      const extGeom = new THREE.BoxGeometry(
+        params.width + params.height,  // extend t/2 at each end
+        params.height,
+        params.depth,
+      );
+      extGeom.translate(0, 0, params.depth / 2);
+      mesh.updateMatrixWorld(true);
+      extGeom.applyMatrix4(mesh.matrixWorld);
+      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      const brush = new Brush(extGeom, mat);
+      brush.position.set(0, 0, 0);
+      brush.rotation.set(0, 0, 0);
+      brush.scale.set(1, 1, 1);
+      brush.updateMatrixWorld(true);
+      return brush;
+    }
+  }
   return _worldBrush(mesh);
 }
 

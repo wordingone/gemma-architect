@@ -963,7 +963,7 @@ export class Viewer {
     this.relocate.active = false;
     this.updateRelocateBadge();
     // Show CP handles for line/polyline/curve; clear for everything else.
-    const handleCreators = new Set(["line", "polyline", "curve"]);
+    const handleCreators = new Set(["line", "polyline", "curve", "wall"]);
     if (obj && handleCreators.has(obj.userData.creator as string)) {
       showHandlesFor(obj, this);
     } else {
