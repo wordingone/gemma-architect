@@ -54,7 +54,7 @@ import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, type RoofParams, type CurtainWallParams } from "./tools/structural";
-import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint } from "./tools/sketch";
+import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction } from "./history";
@@ -357,11 +357,20 @@ registerHandler("SdScale", (args) => {
   if (!sel) return { scaled: false, reason: "no selection" };
   const before = captureTransform(sel);
   const f = (args.factor as number | undefined) ?? 1;
-  sel.scale.multiplyScalar(f);
+  // axis: null/"" = uniform 3D; "x"/"y"/"z" = 1D axis-locked; "xy"/"xz"/"yz" = 2D plane-locked (#821).
+  const axis = (args.axis as string | undefined) ?? null;
+  if (!axis) {
+    sel.scale.multiplyScalar(f);
+  } else {
+    const ax = axis.toLowerCase();
+    if (ax.includes("x")) sel.scale.x *= f;
+    if (ax.includes("y")) sel.scale.y *= f;
+    if (ax.includes("z")) sel.scale.z *= f;
+  }
   sel.updateMatrix();
   sel.updateMatrixWorld(true);
   pushTransformAction(sel, before);
-  return { scaled: true, factor: f };
+  return { scaled: true, factor: f, axis: axis ?? "uniform" };
 });
 
 registerHandler("SdRotate", (args) => {
@@ -573,17 +582,39 @@ registerHandler("SdCone", (args) => {
 
 // SdExtrude — extrude a closed 2D profile along a direction vector.
 // profile: list of [x,y] points (closed polyline). Defaults to 1×1 unit square.
+// object_id: UUID of an existing Line/curve scene object — extracts its XY points as profile.
 // distance: extrude depth in metres.
 // direction: extrude axis (default [0,0,1] = vertical).
 registerHandler("SdExtrude", (args) => {
   const distance = (args.distance as number | undefined) ?? (args.height as number | undefined) ?? 1;
   const rawProfile = args.profile as [number, number][] | undefined;
+  const objectId = args.object_id as string | undefined;
   const dirRaw = args.direction as [number, number, number] | undefined;
 
+  // If object_id provided: extract XY profile from the scene object's geometry (#821).
+  let resolvedProfile: [number, number][] | undefined;
+  if (objectId) {
+    const srcObj = viewer.getScene().getObjectByProperty("uuid", objectId)
+      ?? viewer.getScene().getObjectByProperty("name", objectId);
+    if (srcObj) {
+      srcObj.updateMatrixWorld(true);
+      const posAttr = (srcObj as THREE.Line | THREE.Mesh).geometry?.attributes?.position;
+      if (posAttr) {
+        const tmp = new THREE.Vector3();
+        const extracted: [number, number][] = [];
+        for (let i = 0; i < posAttr.count; i++) {
+          tmp.fromBufferAttribute(posAttr, i);
+          tmp.applyMatrix4(srcObj.matrixWorld);
+          extracted.push([tmp.x, tmp.y]);
+        }
+        if (extracted.length >= 3) resolvedProfile = extracted;
+      }
+    }
+  }
+
   // Build THREE.Shape from profile points
-  const pts: [number, number][] = Array.isArray(rawProfile) && rawProfile.length >= 3
-    ? (rawProfile as [number, number][])
-    : [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const pts: [number, number][] = resolvedProfile
+    ?? (Array.isArray(rawProfile) && rawProfile.length >= 3 ? (rawProfile as [number, number][]) : [[0, 0], [1, 0], [1, 1], [0, 1]]);
   const shape = new THREE.Shape();
   shape.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
@@ -1453,6 +1484,20 @@ registerHandler("SdSpline", (args) => {
   obj.userData.controlPoints = pts3.map(p => new THREE.Vector3(p.x, p.y, p.z));
   viewer.addMesh(obj, "mesh");
   return { created: "spline", points: pts3.map(p => ptToArray(p)) };
+});
+
+// SdCurve — Catmull-Rom curve matching the palette `curve` tool (#821).
+// Distinct from SdSpline (clampedUniform NURBS = interpolating B-spline / InterpCrv equivalent).
+registerHandler("SdCurve", (args) => {
+  const rawPts = (args.points as number[][] | undefined) ?? [];
+  if (rawPts.length < 2) {
+    return { error: "SdCurve requires at least 2 points", created: null };
+  }
+  const pts = rawPts.map(p => ({ x: p[0] ?? 0, y: p[1] ?? 0 }));
+  const { mesh } = buildCurve(pts);
+  mesh.userData.creator = "SdCurve";
+  viewer.addMesh(mesh, "mesh");
+  return { created: "curve", points: pts.length, nurbsKind: "catmull-rom" };
 });
 
 // ── Tier 3 handlers: SdRevolve / SdSweep / SdLoft (#78) ─────────────────────

@@ -124,6 +124,19 @@
   kernel: nurbs-webgpu
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdCurve
+  kernel_op: drawCurve
+  args:
+    - {name: points, type: list_point2, required: true}
+    - {name: closed, type: boolean,     required: false, default: false}
+  topology_role: curve
+  kg_predicates: []
+  synonyms: [curve, freeform, catmullrom]
+  hotkey: ~
+  kernel: nurbs-webgpu
+  alias_source: generic_cad_vocabulary
+  note: "Catmull-Rom interpolating spline — matches palette `curve` tool. Distinct from SdSpline (clamped uniform NURBS = InterpCrv-equivalent)."
+
 - canonical_name: SdSpline
   kernel_op: drawSpline
   args:
@@ -131,9 +144,10 @@
     - {name: degree, type: integer, required: false, default: 3}
   topology_role: curve
   kg_predicates: []
-  synonyms: [spline, curve, bspline]
+  synonyms: [spline, bspline, interpcrv]
   kernel: nurbs-webgpu
   alias_source: generic_cad_vocabulary
+  note: "Clamped uniform NURBS cubic — InterpCrv equivalent. Use SdCurve for Catmull-Rom (palette-matching)."
 
 - canonical_name: SdPoint
   kernel_op: makePoint
@@ -214,9 +228,10 @@
   ifc4_class: IfcExtrudedAreaSolid
   kernel_op: extrude
   args:
-    - {name: profile,  type: edge_or_surface, required: true}
-    - {name: distance, type: number,          required: true, unit: m}
-    - {name: direction, type: vector3,        required: false, default: [0, 0, 1]}
+    - {name: profile,   type: edge_or_surface, required: false}
+    - {name: object_id, type: string,          required: false, note: "UUID of existing scene Line/curve object to use as profile"}
+    - {name: distance,  type: number,          required: true, unit: m}
+    - {name: direction, type: vector3,         required: false, default: [0, 0, 1]}
   topology_role: solid
   kg_predicates: [aggregatedBy]
   synonyms: [extrude, e, push]
@@ -428,6 +443,7 @@
   args:
     - {name: target, type: any,     required: false}
     - {name: factor, type: number_or_vector3, required: true}
+    - {name: axis,   type: string,  required: false, default: null, note: "null=uniform 3D; x/y/z=1D axis-locked; xy/xz/yz=2D plane-locked"}
     - {name: pivot,  type: point3,  required: false, default: [0, 0, 0]}
   topology_role: transform
   kg_predicates: []
