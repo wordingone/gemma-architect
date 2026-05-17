@@ -1299,6 +1299,14 @@ export function initCreateMode(viewer: Viewer): void {
         setPickerHint(null);
         _pending = [];
         dispatchSync("setActiveTool", { toolId: "select" });
+      } else {
+        // ESC deactivates an active tool even before the first click (#844).
+        const _escTool = readActiveTool();
+        if (_escTool) {
+          hideCursorDot();
+          setPickerHint(null);
+          dispatchSync("setActiveTool", { toolId: "select" });
+        }
       }
       if (getActiveCommandSession()?.state === "collecting_args") {
         clearCommandSession();
