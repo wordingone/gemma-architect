@@ -1300,7 +1300,10 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     path: "webgpu",
   });
 
-  const decoded: string[] = proc.batch_decode(generated, { skip_special_tokens: true });
+  const decoded: string[] = proc.batch_decode(
+    typeof (generated as any).tolist === "function" ? (generated as any).tolist() : generated,
+    { skip_special_tokens: true },
+  );
   const responseText = decoded[0] ?? "";
 
   // Extract <plan> block before dispatch parsing.
