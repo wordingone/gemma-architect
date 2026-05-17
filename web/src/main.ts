@@ -53,6 +53,8 @@ import { initCreateMode, emitClickWorld } from "./tools/index";
 import { onElementCommitted } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair } from "./tools/structural";
+import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint } from "./tools/sketch";
+import { buildDoor, buildWindow, buildOpening } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection } from "./viewer/csg";
@@ -808,111 +810,40 @@ function cutRectVoidFromBoxMesh(
   return group;
 }
 
-// ── Realistic door geometry: frame (jambs + head) + panel leaf ───────────────
-function buildDoorGroup(w: number, h: number, wallT: number): THREE.Group {
-  const fw = 0.05;  // 50mm frame width
-  const pt = 0.04;  // 40mm panel thickness
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xa09080, roughness: 0.8, metalness: 0.0 });
-  const panelMat = new THREE.MeshStandardMaterial({ color: 0xc4a06a, roughness: 0.65, metalness: 0.0 });
-  const group = new THREE.Group();
-
-  // Left jamb
-  const lj = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
-  lj.position.set(-fw / 2, 0, h / 2);
-  group.add(lj);
-
-  // Right jamb
-  const rj = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
-  rj.position.set(w + fw / 2, 0, h / 2);
-  group.add(rj);
-
-  // Head rail
-  const head = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat);
-  head.position.set(w / 2, 0, h + fw / 2);
-  group.add(head);
-
-  // Panel leaf (single-swing-left default: IfcDoorTypeOperationEnum.SINGLE_SWING_LEFT)
-  const panel = new THREE.Mesh(new THREE.BoxGeometry(w, pt, h - fw), panelMat);
-  panel.position.set(w / 2, 0, (h - fw) / 2);
-  group.add(panel);
-
-  // Mid-rail detail at ~1/3 height
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(w, pt + 0.005, fw * 0.6), panelMat);
-  rail.position.set(w / 2, 0, h / 3);
-  group.add(rail);
-
-  return group;
-}
-
-// ── Realistic window geometry: frame (4 rails) + translucent pane ────────────
-function buildWindowGroup(w: number, h: number, wallT: number): THREE.Group {
-  const fw = 0.04;  // 40mm frame rail width
-  const paneT = 0.006;  // 6mm glass pane
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x909090, roughness: 0.4, metalness: 0.2 });
-  const paneMat  = new THREE.MeshStandardMaterial({ color: 0xadd8e6, roughness: 0.05, metalness: 0.0, transparent: true, opacity: 0.35 });
-  const group = new THREE.Group();
-
-  const lRail = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
-  lRail.position.set(-fw / 2, 0, h / 2);
-  group.add(lRail);
-  const rRail = new THREE.Mesh(new THREE.BoxGeometry(fw, wallT, h), frameMat);
-  rRail.position.set(w + fw / 2, 0, h / 2);
-  group.add(rRail);
-  const bRail = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat);
-  bRail.position.set(w / 2, 0, -fw / 2);
-  group.add(bRail);
-  const tRail = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * fw, wallT, fw), frameMat);
-  tRail.position.set(w / 2, 0, h + fw / 2);
-  group.add(tRail);
-
-  // Glass pane (single panel — IfcWindowTypePartitioningEnum.SINGLE_PANEL)
-  const pane = new THREE.Mesh(new THREE.BoxGeometry(w, paneT, h), paneMat);
-  pane.position.set(w / 2, 0, h / 2);
-  group.add(pane);
-
-  return group;
-}
-
 registerHandler("SdDoor", (args) => {
   const hostUuidDoor = args.hostUuid as string | undefined;
   const hostObjDoor = hostUuidDoor
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidDoor) ?? undefined
     : undefined;
   const cplane = resolveCPlane("SdDoor", args as Record<string, unknown>, viewer, hostObjDoor);
-  const w     = (args.width  as number | undefined) ?? 0.9;
-  const h     = (args.height as number | undefined) ?? 2.1;
-  const wallT = (args.wallThickness as number | undefined) ?? 0.2;
-  const group = buildDoorGroup(w, h, wallT);
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
-  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elevation);
-  else group.position.z = elevation;
-  // Align door to host wall normal (W-2).
+  const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
+  const { mesh, chain } = buildDoor(p);
+  mesh.position.z = elevation;
   if (cplane.kind === "host-derived") {
-    const q = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0), cplane.normal,
-    );
-    group.quaternion.copy(q);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
+    mesh.quaternion.copy(q);
   }
-  group.userData.kind = "brep";
-  group.userData.creator = "SdDoor";
-  group.userData.cplaneKind = cplane.kind;
-  group.userData.layerId = resolveLayerId("SdDoor", args);
-  group.userData.levelId = getActiveLevelId();
-  group.userData.dispatchArgs = args;
-  viewer.addMesh(group, "brep");
+  mesh.userData.creator = "SdDoor";
+  mesh.userData.cplaneKind = cplane.kind;
+  mesh.userData.layerId = resolveLayerId("SdDoor", args);
+  mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "brep");
   let voidCut = false;
-  const hostUuid = args.hostUuid as string | undefined;
-  if (hostUuid) {
-    const host = viewer.getScene().getObjectByProperty("uuid", hostUuid);
+  if (hostUuidDoor) {
+    const host = viewer.getScene().getObjectByProperty("uuid", hostUuidDoor);
     if (host instanceof THREE.Mesh) {
-      const voidCenter = group.position.clone();
-      voidCenter.z = elevation + h / 2;
-      cutRectVoidFromBoxMesh(host, voidCenter, w, h);
+      const voidCenter = mesh.position.clone();
+      voidCenter.z = elevation + 1.05;
+      cutRectVoidFromBoxMesh(host, voidCenter, 0.9, 2.1);
       voidCut = true;
     }
   }
-  return { created: "door", width: w, height: h, submeshes: group.children.length, voidCut };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "door", voidCut };
 });
 
 registerHandler("SdWindow", (args) => {
@@ -921,39 +852,33 @@ registerHandler("SdWindow", (args) => {
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidWin) ?? undefined
     : undefined;
   const cplane = resolveCPlane("SdWindow", args as Record<string, unknown>, viewer, hostObjWin);
-  const w     = (args.width  as number | undefined) ?? 1.2;
-  const h     = (args.height as number | undefined) ?? 1.5;
-  const sill  = (args.sillH  as number | undefined) ?? 0.9;
-  const wallT = (args.wallThickness as number | undefined) ?? 0.2;
-  const group = buildWindowGroup(w, h, wallT);
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
-  if (pos) group.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? (elevation + sill));
-  else group.position.z = elevation + sill;
-  // Align window to host wall normal (W-2).
+  const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
+  const { mesh, chain } = buildWindow(p);
+  mesh.position.z = elevation + mesh.position.z;
   if (cplane.kind === "host-derived") {
-    const q = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0), cplane.normal,
-    );
-    group.quaternion.copy(q);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
+    mesh.quaternion.copy(q);
   }
-  group.userData.kind = "brep";
-  group.userData.creator = "SdWindow";
-  group.userData.cplaneKind = cplane.kind;
-  group.userData.layerId = resolveLayerId("SdWindow", args);
-  group.userData.levelId = getActiveLevelId();
-  group.userData.dispatchArgs = args;
-  viewer.addMesh(group, "brep");
+  mesh.userData.creator = "SdWindow";
+  mesh.userData.cplaneKind = cplane.kind;
+  mesh.userData.layerId = resolveLayerId("SdWindow", args);
+  mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "brep");
   let voidCut = false;
   if (hostUuidWin) {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidWin);
     if (host instanceof THREE.Mesh) {
-      const voidCenter = group.position.clone();
-      cutRectVoidFromBoxMesh(host, voidCenter, w, h);
+      const voidCenter = mesh.position.clone();
+      cutRectVoidFromBoxMesh(host, voidCenter, 1.2, 1.4);
       voidCut = true;
     }
   }
-  return { created: "window", width: w, height: h, sillH: sill, submeshes: group.children.length, voidCut };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "window", voidCut };
 });
 
 registerHandler("SdRoof", (args) => {
@@ -1118,85 +1043,67 @@ registerHandler("SdOpening", (args) => {
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidOp) ?? undefined
     : undefined;
   const cplane = resolveCPlane("SdOpening", args as Record<string, unknown>, viewer, hostObjOp);
-  const w = (args.width  as number | undefined) ?? 1;
-  const h = (args.height as number | undefined) ?? 2;
-  const t = 0.25;
-  const geom = new THREE.BoxGeometry(w, t, h);
-  geom.translate(0, 0, h / 2);
-  const mat  = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, wireframe: true });
-  const mesh = new THREE.Mesh(geom, mat);
-  const pos  = args.position as number[] | undefined;
+  const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
-  if (pos) mesh.position.set(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? elevation);
-  else mesh.position.z = elevation;
-  // Align opening marker to host wall normal (W-2).
+  const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
+  const { mesh, chain } = buildOpening(p);
+  mesh.position.z = elevation;
   if (cplane.kind === "host-derived") {
-    const q = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 1, 0), cplane.normal,
-    );
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
-  mesh.userData.kind = "brep";
   mesh.userData.creator = "SdOpening";
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdOpening", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
   let voidCut = false;
-  const hostUuid = args.hostUuid as string | undefined;
-  if (hostUuid) {
-    const host = viewer.getScene().getObjectByProperty("uuid", hostUuid);
+  if (hostUuidOp) {
+    const host = viewer.getScene().getObjectByProperty("uuid", hostUuidOp);
     if (host instanceof THREE.Mesh) {
       const voidCenter = mesh.position.clone();
-      voidCenter.z = elevation + h / 2;
-      cutRectVoidFromBoxMesh(host, voidCenter, w, h);
+      voidCenter.z = elevation + 1;
+      cutRectVoidFromBoxMesh(host, voidCenter, 1, 2);
       voidCut = true;
     }
   }
-  return { created: "opening", width: w, height: h, voidCut };
+  return { created: "opening", voidCut };
 });
 
 registerHandler("SdRamp", (args) => {
-  const s   = (args.start as number[] | undefined) ?? [0, 0, 0];
-  const e   = (args.end   as number[] | undefined) ?? [4, 0, 0];
-  const w   = (args.width as number | undefined) ?? 1.2;
-  const dx  = e[0] - s[0], dy = e[1] - s[1];
-  const run = Math.sqrt(dx * dx + dy * dy) || 4;
-  const geom = new THREE.BoxGeometry(run, w, 0.15);
-  geom.translate(run / 2, 0, 0);
-  const mat  = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.65, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(s[0], s[1], (s[2] as number | undefined) ?? getActiveLevelElevation());
-  mesh.rotation.z = Math.atan2(dy, dx);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdRamp";
+  const s = (args.start as number[] | undefined) ?? [0, 0];
+  const e = (args.end   as number[] | undefined) ?? [4, 0];
+  const a = { x: s[0] ?? 0, y: s[1] ?? 0 };
+  const b = { x: e[0] ?? 4, y: e[1] ?? 0 };
+  const { mesh, chain } = buildRamp(a, b);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.layerId = resolveLayerId("SdRamp", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "ramp", run, width: w };
+  onElementCommitted(mesh, viewer.getScene());
+  const dx = b.x - a.x, dy = b.y - a.y;
+  return { created: "ramp", run: Math.sqrt(dx * dx + dy * dy) || 1 };
 });
 
 registerHandler("SdRailing", (args) => {
-  const s   = (args.start  as number[] | undefined) ?? [0, 0, 0];
-  const e   = (args.end    as number[] | undefined) ?? [3, 0, 0];
-  const h   = (args.height as number | undefined) ?? 1;
-  const dx  = e[0] - s[0], dy = e[1] - s[1];
-  const len = Math.sqrt(dx * dx + dy * dy) || 3;
-  const geom = new THREE.BoxGeometry(len, 0.05, h);
-  geom.translate(0, 0, h / 2);
-  const mat  = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.4, metalness: 0.6 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, (s[2] as number | undefined) ?? getActiveLevelElevation());
-  mesh.rotation.z = Math.atan2(dy, dx);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdRailing";
+  const s = (args.start as number[] | undefined) ?? [0, 0];
+  const e = (args.end   as number[] | undefined) ?? [3, 0];
+  const a = { x: s[0] ?? 0, y: s[1] ?? 0 };
+  const b = { x: e[0] ?? 3, y: e[1] ?? 0 };
+  const { mesh, chain } = buildRailing(a, b);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.layerId = resolveLayerId("SdRailing", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "railing", length: len, height: h };
+  onElementCommitted(mesh, viewer.getScene());
+  const dx = b.x - a.x, dy = b.y - a.y;
+  return { created: "railing", length: Math.sqrt(dx * dx + dy * dy) || 1 };
 });
 
 registerHandler("SdRefGrid", (args) => {
@@ -1418,71 +1325,54 @@ function buildPointMaterial(sizePx = 14): THREE.PointsMaterial {
 }
 
 registerHandler("SdPoint", (args) => {
-  const pos = (args.position as number[] | undefined) ?? [0, 0, 0];
-  const p = Prim3.create(pos[0] ?? 0, pos[1] ?? 0, pos[2] ?? 0);
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute([p.x, p.y, p.z], 3));
-  const obj = new THREE.Points(geom, buildPointMaterial());
-  obj.userData.kind = "point";
-  obj.userData.creator = "SdPoint";
-  viewer.addMesh(obj, "mesh");
-  return { created: "point", position: [p.x, p.y, p.z] };
+  const pos = (args.position as number[] | undefined) ?? [0, 0];
+  const p = { x: pos[0] ?? 0, y: pos[1] ?? 0 };
+  const { mesh, chain } = buildPoint(p);
+  mesh.userData.creator = "SdPoint";
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "mesh");
+  return { created: "point", position: [p.x, p.y, 0] };
 });
 
 registerHandler("SdLine", (args) => {
-  const start = (args.start as number[] | undefined) ?? [0, 0, 0];
-  const end   = (args.end   as number[] | undefined) ?? [1, 0, 0];
-  const sx = start[0] ?? 0, sy = start[1] ?? 0, sz = start[2] ?? 0;
-  const ex = end[0] ?? 1, ey = end[1] ?? 0, ez = end[2] ?? 0;
-  const cx = (sx + ex) / 2, cy = (sy + ey) / 2, cz = (sz + ez) / 2;
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute([
-    sx - cx, sy - cy, sz - cz,
-    ex - cx, ey - cy, ez - cz,
-  ], 3));
-  const mat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
-  const obj = new THREE.LineSegments(geom, mat);
-  obj.position.set(cx, cy, cz);
-  obj.userData.kind = "line";
-  obj.userData.creator = "line";
-  obj.userData.controlPoints = [new THREE.Vector3(sx, sy, sz), new THREE.Vector3(ex, ey, ez)];
-  viewer.addMesh(obj, "mesh");
+  const start = (args.start as number[] | undefined) ?? [0, 0];
+  const end   = (args.end   as number[] | undefined) ?? [1, 0];
+  const a = { x: start[0] ?? 0, y: start[1] ?? 0 };
+  const b = { x: end[0] ?? 1, y: end[1] ?? 0 };
+  const { mesh, chain } = buildLine(a, b);
+  mesh.userData.creator = "SdLine";
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "mesh");
   return { created: "line", start, end };
 });
 
 registerHandler("SdRectangle", (args) => {
   const w = (args.width  as number | undefined) ?? 1;
-  const h = (args.depth  as number | undefined) ?? (args.height as number | undefined) ?? 1;
-  const c = (args.center as number[] | undefined) ?? [0, 0, 0];
-  const x0 = (c[0] ?? 0) - w / 2, x1 = (c[0] ?? 0) + w / 2;
-  const y0 = (c[1] ?? 0) - h / 2, y1 = (c[1] ?? 0) + h / 2;
-  const z  =  c[2] ?? 0;
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute([
-    x0, y0, z,  x1, y0, z,  x1, y1, z,  x0, y1, z,
-  ], 3));
-  const mat = new THREE.LineBasicMaterial({ color: 0x000000 });
-  const obj = new THREE.LineLoop(geom, mat);
-  obj.userData.kind = "rectangle";
-  obj.userData.creator = "SdRectangle";
-  viewer.addMesh(obj, "mesh");
-  return { created: "rectangle", width: w, depth: h, center: c };
+  const d = (args.depth  as number | undefined) ?? (args.height as number | undefined) ?? 1;
+  const c = (args.center as number[] | undefined) ?? [0, 0];
+  const cx = c[0] ?? 0, cy = c[1] ?? 0;
+  const a = { x: cx - w / 2, y: cy - d / 2 };
+  const b = { x: cx + w / 2, y: cy + d / 2 };
+  const { mesh, chain } = buildRect(a, b);
+  mesh.userData.creator = "SdRectangle";
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "mesh");
+  return { created: "rectangle", width: w, depth: d };
 });
 
 registerHandler("SdPolyline", (args) => {
   const points = (args.points as number[][] | undefined) ?? [];
   if (points.length < 2) return { error: "SdPolyline requires at least 2 points", created: null };
-  const closed = (args.closed as boolean | undefined) ?? false;
-  const flat = points.flatMap((p) => [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0]);
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.Float32BufferAttribute(flat, 3));
-  const mat = new THREE.LineBasicMaterial({ color: 0x000000 });
-  const obj = closed ? new THREE.LineLoop(geom, mat) : new THREE.Line(geom, mat);
-  obj.userData.kind = "polyline";
-  obj.userData.creator = "polyline";
-  obj.userData.controlPoints = points.map((p) => new THREE.Vector3(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0));
-  viewer.addMesh(obj, "mesh");
-  return { created: "polyline", points, closed };
+  const pts = points.map((p) => ({ x: p[0] ?? 0, y: p[1] ?? 0 }));
+  const { mesh, chain } = buildPolyline(pts);
+  mesh.userData.creator = "SdPolyline";
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "mesh");
+  return { created: "polyline", points };
 });
 
 // ── Tier 2 handlers: SdArc / SdCircle / SdEllipse / SdSpline (#72) ───────────
@@ -1526,22 +1416,16 @@ registerHandler("SdArc", (args) => {
 });
 
 registerHandler("SdCircle", (args) => {
-  const c = (args.center as number[] | undefined) ?? [0, 0, 0];
+  const c = (args.center as number[] | undefined) ?? [0, 0];
   const radius = (args.radius as number | undefined) ?? 1;
-  const arc: PrimArc = {
-    center: Prim3.create(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0),
-    radius,
-    startAngle: 0,
-    endAngle: 2 * Math.PI,
-    plane: PrimPlane.worldXY(),
-  };
-  const nurbs = nurbsCurveFromArc(arc);
-  const pts = tessellate(nurbs, 128);
-  const obj = new THREE.LineLoop(polylineToGeom(pts), curveMat());
-  obj.userData.kind = "circle";
-  obj.userData.creator = "SdCircle";
-  viewer.addMesh(obj, "mesh");
-  return { created: "circle", center: ptToArray(arc.center), radius };
+  const center = { x: c[0] ?? 0, y: c[1] ?? 0 };
+  const radial = { x: center.x + radius, y: center.y };
+  const { mesh, chain } = buildCircle(center, radial);
+  mesh.userData.creator = "SdCircle";
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "mesh");
+  return { created: "circle", center: [center.x, center.y, 0], radius };
 });
 
 registerHandler("SdEllipse", (args) => {
