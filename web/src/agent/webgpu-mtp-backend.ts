@@ -4,28 +4,45 @@
 // transformers.js — no extra model download. Drafter session passed in from
 // agent-harness.ts (loaded via drafter-cache.ts, #750).
 //
-// Decoder ONNX structure (onnx-community/gemma-4-E4B-it-ONNX, q4):
-//   Authoritative: ONNX topology parse of decoder_model_merged_q4.onnx (814 KB, no weights).
-//   24 KV layers (0..23); num_kv_heads=2 (static ONNX dim, confirmed by OrtRun index-1 error).
-//   head_dim varies per layer: sliding=256, full-attention=512.
-//   Full-attention layers: {5, 11, 17, 23} — every 6th from layer 5.
-//   LAST_SLIDING=22 (layer 22: sliding, hd=256), LAST_FULL=23 (layer 23: full, hd=512).
-//   See web/src/agent/decoder-kv-shapes.json for complete per-layer table.
-//   Inputs:  inputs_embeds [B,S,1536], per_layer_inputs [B,S,35,256],
-//            attention_mask [B,S+past] int64, position_ids [B,S] int64,
-//            num_logits_to_keep [] int64, past_key_values.N.key/value [B,2,past,hd]
-//   Outputs: logits [B,keep,262144], present.N.key/value [B,2,S,hd]
+// Drafter target model: google/gemma-4-E2B-it (from drafter ONNX metadata).
+// MTP therefore only fires when the browser loads E2B — gated in agent-harness.ts.
+//
+// Decoder ONNX structure differs by model variant:
+//   E4B (default, 24 KV layers): ONNX topology parse of decoder_model_merged_q4.onnx.
+//     num_kv_heads=2, FULL_ATTN={5,11,17,23}, LAST_SLIDING=22, LAST_FULL=23.
+//     See web/src/agent/decoder-kv-shapes.json for complete per-layer table.
+//   E2B (MTP-active variant, 15 KV layers): ONNX topology parse of E2B decoder.
+//     num_kv_heads=1, FULL_ATTN={4,9,14}, LAST_SLIDING=13, LAST_FULL=14.
+//   Both: inputs_embeds [B,S,1536], per_layer_inputs [B,S,35,256],
+//         attention_mask [B,S+past] int64, position_ids [B,S] int64,
+//         num_logits_to_keep [] int64, past_key_values.N.key/value [B,nh,past,hd]
+//         Outputs: logits [B,keep,262144], present.N.key/value [B,nh,S,hd]
+//
+// Drafter ONNX inputs (drafter-fp16.onnx, confirmed by ONNX parse):
+//   inputs_embeds float32 [1,1,3072], position_ids int64 [1,1],
+//   sliding_k/v float32 [1,1,16,256], full_k/v float32 [1,1,16,512]
 
-const NUM_KV_LAYERS      = 24;
-const NUM_KV_HEADS       = 2;   // confirmed: OrtRun "index 1 Got: 1 Expected: 2"; ONNX static dim
-const LAST_SLIDING       = 22;  // layer 22: last sliding-attn layer [B,2,past,256] → drafter sliding_k/v
-const LAST_FULL          = 23;  // layer 23: last full-attn layer [B,2,past,512] → drafter full_k/v
-const HIDDEN_SIZE        = 1536;
-const VOCAB_SIZE         = 262144;
-// Full-attention layers (head_dim=512): {5,11,17,23} — every 6th from layer 5. Confirmed via ONNX parse.
-const FULL_ATTN: Set<number> = new Set([5, 11, 17, 23]);
-// Drafter sliding window: input dim[2] is static 16 — confirmed by OrtRun "Got: 936 Expected: 16".
-const DRAFTER_KV_WINDOW  = 16;
+const HIDDEN_SIZE = 1536;
+const VOCAB_SIZE  = 262144;
+
+// Per-model KV config — drafter targets E2B, so only E2B config is used for MTP.
+export interface MtpModelConfig {
+  numKvLayers:    number;
+  numKvHeads:     number;
+  lastSliding:    number;
+  lastFull:       number;
+  fullAttn:       Set<number>;
+  drafterKvWindow: number;
+}
+
+export const MTP_CONFIG_E2B: MtpModelConfig = {
+  numKvLayers:    15,
+  numKvHeads:     1,
+  lastSliding:    13,
+  lastFull:       14,
+  fullAttn:       new Set([4, 9, 14]),
+  drafterKvWindow: 16,
+};
 
 export interface MtpSessions {
   embed: unknown;    // embed_tokens ORT session
@@ -81,25 +98,25 @@ export function getMtpSessions(model: unknown): MtpSessions | null {
 // ── KV cache helpers ─────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function emptyKvFeed(ort: any): Record<string, any> {
+function emptyKvFeed(ort: any, cfg: MtpModelConfig): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const feed: Record<string, any> = {};
-  for (let i = 0; i < NUM_KV_LAYERS; i++) {
-    const hd = FULL_ATTN.has(i) ? 512 : 256;
-    // fp16 backed by Uint16Array; shape [B, NUM_KV_HEADS, past_seq, head_dim].
-    const t = new ort.Tensor("float16", new Uint16Array(0), [1, NUM_KV_HEADS, 0, hd]);
+  for (let i = 0; i < cfg.numKvLayers; i++) {
+    const hd = cfg.fullAttn.has(i) ? 512 : 256;
+    // fp16 backed by Uint16Array; shape [B, numKvHeads, past_seq, head_dim].
+    const t = new ort.Tensor("float16", new Uint16Array(0), [1, cfg.numKvHeads, 0, hd]);
     feed[`past_key_values.${i}.key`]   = t;
     feed[`past_key_values.${i}.value`] = t;
   }
-  console.info(`[mtp-backend] emptyKvFeed: float16 NUM_KV_HEADS=${NUM_KV_HEADS} FULL_ATTN=[${[...FULL_ATTN]}]`);
+  console.info(`[mtp-backend] emptyKvFeed: float16 numKvHeads=${cfg.numKvHeads} fullAttn=[${[...cfg.fullAttn]}]`);
   return feed;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function kvCacheToPast(kvCache: Record<string, any>): Record<string, any> {
+function kvCacheToPast(kvCache: Record<string, any>, cfg: MtpModelConfig): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const feed: Record<string, any> = {};
-  for (let i = 0; i < NUM_KV_LAYERS; i++) {
+  for (let i = 0; i < cfg.numKvLayers; i++) {
     feed[`past_key_values.${i}.key`]   = kvCache[`present.${i}.key`];
     feed[`past_key_values.${i}.value`] = kvCache[`present.${i}.value`];
   }
@@ -196,6 +213,7 @@ export interface MtpDecodeResult {
  * @param maxNew        max new tokens to generate
  * @param draftK        draft tokens per target verify step
  * @param eosTokenId    EOS token id (1 for Gemma)
+ * @param config        per-model KV layout — must match the loaded decoder variant
  */
 export async function runMtpSpecDecode(
   sessions: MtpSessions,
@@ -205,6 +223,7 @@ export async function runMtpSpecDecode(
   maxNew: number,
   draftK: number,
   eosTokenId = 1,
+  config: MtpModelConfig = MTP_CONFIG_E2B,
 ): Promise<MtpDecodeResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { embed, decoder } = sessions as any;
@@ -243,17 +262,13 @@ export async function runMtpSpecDecode(
     attention_mask:     new O.Tensor("int64", attnMask0, [1, seqLen0]),
     position_ids:       new O.Tensor("int64", posIds0,   [1, seqLen0]),
     num_logits_to_keep: new O.Tensor("int64", [BigInt(1)], []),
-    ...emptyKvFeed(O),
+    ...emptyKvFeed(O, config),
   });
 
-  // Cache all KV outputs from prefill; probe sliding (0,4) and first full-attn (5) shapes.
-  for (let i = 0; i < NUM_KV_LAYERS; i++) {
+  // Cache all KV outputs from prefill.
+  for (let i = 0; i < config.numKvLayers; i++) {
     kvCache[`present.${i}.key`]   = prefillOut[`present.${i}.key`];
     kvCache[`present.${i}.value`] = prefillOut[`present.${i}.value`];
-    if (i === 0 || i === 4 || i === 5) {
-      const t = prefillOut[`present.${i}.key`];
-      console.info(`[mtp-backend] present.${i}.key after prefill: type=${t?.type} dims=${JSON.stringify(t?.dims)}`);
-    }
   }
 
   // First predicted token from prefill logits
@@ -269,11 +284,12 @@ export async function runMtpSpecDecode(
   while (tokens.length < maxNew) {
     const K = Math.min(draftK, maxNew - tokens.length);
 
-    // Drafter KV window = 16 tokens (static ONNX dim). Slice tail + fp16→fp32 + head-0.
-    const slidingK = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_SLIDING}.key`],   DRAFTER_KV_WINDOW, O);
-    const slidingV = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_SLIDING}.value`], DRAFTER_KV_WINDOW, O);
-    const fullK    = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_FULL}.key`],      DRAFTER_KV_WINDOW, O);
-    const fullV    = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_FULL}.value`],    DRAFTER_KV_WINDOW, O);
+    // Drafter KV window = 16 tokens (static ONNX dim). Slice tail + fp16→fp32 + head-avg.
+    const { lastSliding, lastFull, drafterKvWindow } = config;
+    const slidingK = fp16HeadAvgToFp32Tail(kvCache[`present.${lastSliding}.key`],   drafterKvWindow, O);
+    const slidingV = fp16HeadAvgToFp32Tail(kvCache[`present.${lastSliding}.value`], drafterKvWindow, O);
+    const fullK    = fp16HeadAvgToFp32Tail(kvCache[`present.${lastFull}.key`],      drafterKvWindow, O);
+    const fullV    = fp16HeadAvgToFp32Tail(kvCache[`present.${lastFull}.value`],    drafterKvWindow, O);
 
     // ── 2a. Draft K tokens with drafter ──────────────────────────────────────
     const draftTokens: number[] = [];
@@ -339,7 +355,7 @@ export async function runMtpSpecDecode(
       attention_mask:     new O.Tensor("int64", attnMask, [1, attnLen]),
       position_ids:       new O.Tensor("int64", posIdsV,  [1, K2]),
       num_logits_to_keep: new O.Tensor("int64", [BigInt(K2)], []),
-      ...kvCacheToPast(kvCache),
+      ...kvCacheToPast(kvCache, config),
     });
 
     // ── 2c. Greedy acceptance — take target tokens (correct by construction) ──
@@ -366,7 +382,7 @@ export async function runMtpSpecDecode(
     // Rejected drafts at the tail must be dropped; otherwise pastKeyDims[2] diverges
     // from kvSeqLen and the next iteration's attention_mask length mismatches scores.
     const newCacheLen = kvSeqLen + accepted;
-    for (let i = 0; i < NUM_KV_LAYERS; i++) {
+    for (let i = 0; i < config.numKvLayers; i++) {
       kvCache[`present.${i}.key`]   = sliceKvAxis2(verifyOut[`present.${i}.key`],   newCacheLen, O);
       kvCache[`present.${i}.value`] = sliceKvAxis2(verifyOut[`present.${i}.value`], newCacheLen, O);
     }

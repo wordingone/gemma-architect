@@ -20,7 +20,7 @@
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
-import { getMtpSessions, runMtpSpecDecode } from "./webgpu-mtp-backend.js";
+import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E2B } from "./webgpu-mtp-backend.js";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -1143,11 +1143,17 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   _drafterLoadPromise ??= loadDrafter();
   await _drafterLoadPromise;
 
-  // Three-gate (#740-C): drafter loaded + verification wired + text-only request.
-  // MTP drafter (gemma-4-E2B-it-assistant) is text-only — no vision/audio adapter.
-  // Multimodal inputs (image/audio/viewport) bypass spec-decode so the modality is
-  // never silently stripped. Telemetry reports mtp_on: false honestly on those turns.
-  const drafterReady = _drafterSession !== null && MTP_VERIFICATION_WIRED && !payloadHasMultimodal(req);
+  // Three-gate (#740-C) + E2B model guard:
+  //   drafter loaded + verification wired + text-only request + E2B model active.
+  // Drafter was trained on google/gemma-4-E2B-it (confirmed by drafter ONNX metadata).
+  // Feeding E4B's KV (24 layers, 2 KV heads) to a drafter expecting E2B's KV
+  // (15 layers, 1 KV head) produces accept_rate=0 — structurally guaranteed mismatch.
+  // MTP only fires when the browser loaded E2B via ?gemma_model=e2b.
+  const drafterReady =
+    _drafterSession !== null &&
+    MTP_VERIFICATION_WIRED &&
+    !payloadHasMultimodal(req) &&
+    MODEL_ID === MODEL_ID_CANDIDATES.e2b;
 
   let specAttempts = 0;
   let specAccepts = 0;
@@ -1178,6 +1184,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
           safeMaxNewTokens,
           MTP_DRAFT_N,
           eosId,
+          MTP_CONFIG_E2B,
         );
 
         specAttempts = result.specAttempts;
