@@ -6,20 +6,22 @@
 //
 // Decoder ONNX structure (onnx-community/gemma-4-E2B-it-ONNX, q4):
 //   24 KV layers (0..23); confirmed via decoder.inputNames → 48 inputs (24×{key,value}).
-//   Full-attention (head_dim=512) at layers 4, 9, 14, 19 (every 5th from 4).
-//   Last sliding layer: 23 (head_dim=256) → drafter sliding_k/v input.
-//   Last full layer:    19 (head_dim=512) → drafter full_k/v input.
+//   All layers: num_kv_heads=2, head_dim=256 — uniform across full- and sliding-attn layers.
+//   (global_head_dim=512 in config is 2×256 concatenated — not a per-head KV dim.)
+//   Last layer:  23 → drafter sliding_k/v input [B, 2, S, 256].
+//   Layer 19:    drafter full_k/v input [B, 2, S, 256].
 //   Inputs:  inputs_embeds [B,S,1536], per_layer_inputs [B,S,35,256],
 //            attention_mask [B,S+past] int64, position_ids [B,S] int64,
-//            num_logits_to_keep [] int64, past_key_values.N.key/value
-//   Outputs: logits [B,keep,262144], present.N.key/value
+//            num_logits_to_keep [] int64, past_key_values.N.key/value [B,2,past,256]
+//   Outputs: logits [B,keep,262144], present.N.key/value [B,2,S,256]
 
 const NUM_KV_LAYERS   = 24;
-const LAST_SLIDING    = 23;   // present.23.key/value — head_dim 256 (last layer, sliding)
-const LAST_FULL       = 19;   // present.19.key/value — head_dim 512 (last full-attn)
+const NUM_KV_HEADS    = 2;    // confirmed: index 1 of past_key_values shape
+const HEAD_DIM        = 256;  // uniform across all 24 layers (OrtRun confirmed)
+const LAST_SLIDING    = 23;   // layer index for drafter sliding_k/v input
+const LAST_FULL       = 19;   // layer index for drafter full_k/v input
 const HIDDEN_SIZE     = 1536;
 const VOCAB_SIZE      = 262144;
-const FULL_ATTN: Set<number> = new Set([4, 9, 14, 19]);  // layers with head_dim 512
 
 export interface MtpSessions {
   embed: unknown;    // embed_tokens ORT session
@@ -78,17 +80,14 @@ export function getMtpSessions(model: unknown): MtpSessions | null {
 function emptyKvFeed(ort: any): Record<string, any> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const feed: Record<string, any> = {};
+  // Shape [B, NUM_KV_HEADS, past_seq, HEAD_DIM] — uniform across all layers; fp16 backed by Uint16Array.
+  const emptyShape = [1, NUM_KV_HEADS, 0, HEAD_DIM];
   for (let i = 0; i < NUM_KV_LAYERS; i++) {
-    const hd = FULL_ATTN.has(i) ? 512 : 256;
-    // Decoder ONNX expects fp16 KV tensors; onnxruntime-web uses Uint16Array as fp16 storage.
-    // num_kv_heads=2 (ONNX export materialises 2 despite HF config.json claiming 1).
-    const t = new ort.Tensor("float16", new Uint16Array(0), [1, 2, 0, hd]);
+    const t = new ort.Tensor("float16", new Uint16Array(0), emptyShape);
     feed[`past_key_values.${i}.key`]   = t;
     feed[`past_key_values.${i}.value`] = t;
-    if (i === 0 || i === 4) {
-      console.info(`[mtp-backend] emptyKvFeed layer ${i}: type=float16 dims=[1,2,0,${hd}] (${FULL_ATTN.has(i) ? "full" : "sliding"})`);
-    }
   }
+  console.info(`[mtp-backend] emptyKvFeed: float16 [${emptyShape}] × ${NUM_KV_LAYERS} layers`);
   return feed;
 }
 
