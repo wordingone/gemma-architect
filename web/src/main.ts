@@ -865,7 +865,7 @@ registerHandler("SdRoof", (args) => {
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  onElementCommitted(mesh, viewer.getScene());
+  if (mesh instanceof THREE.Mesh) onElementCommitted(mesh, viewer.getScene());
   return { created: "roof", roofType, width: w, depth: d, ifcPredefinedType: mesh.userData.ifcPredefinedType };
 });
 

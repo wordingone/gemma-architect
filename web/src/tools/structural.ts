@@ -206,154 +206,367 @@ export type RoofParams = {
   thickness?: number;
 };
 
+// Section-drawing-quality roof (#847). Returns a Group of named sub-elements:
+// ridge beam, rafters (IfcMember), wall plates, fascia, soffit, sheathing (IfcCovering).
 export function buildRoof(
   a: { x: number; y: number },
   b: { x: number; y: number },
   params: RoofParams = {},
-): { mesh: THREE.Mesh; chain: string } {
+): { mesh: THREE.Group; chain: string } {
   const w  = Math.abs(b.x - a.x) || 6;
   const d  = Math.abs(b.y - a.y) || 8;
   const cx = (a.x + b.x) / 2;
   const cy = (a.y + b.y) / 2;
 
-  const roofType  = params.type ?? "pitched";
-  const pitchDeg  = Math.max(5, Math.min(70, params.pitchDeg ?? 30));
-  const overhang  = params.overhang ?? 0.4;
-  const thickness = params.thickness ?? 0.15;
+  const roofType = params.type ?? "pitched";
+  const pitchDeg = Math.max(5, Math.min(70, params.pitchDeg ?? 30));
+  const overhang = params.overhang ?? 0.6;
 
   const pitchRad = (pitchDeg * Math.PI) / 180;
-  const ew = w + 2 * overhang;
-  const ed = d + 2 * overhang;
-  const hw = ew / 2;
-  const hd = ed / 2;
-  const ridgeH = Math.min(hw, hd) * Math.tan(pitchRad);
+  // Eave half-extents include overhang.
+  const hw = (w + 2 * overhang) / 2;
+  const hd = (d + 2 * overhang) / 2;
+  // Ridge height above wall plate level.
+  const ridgeH = hd * Math.tan(pitchRad);
 
-  let geom: THREE.BufferGeometry;
+  const group = new THREE.Group();
+  group.position.set(cx, cy, 0);
+  group.userData.kind = "brep";
+  group.userData.creator = "roof";
+  group.userData.ifcClass = "IfcRoof";
+  group.userData.roofParams = { type: roofType, pitchDeg, overhang };
+
+  const frameMat  = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.80, metalness: 0.01 });
+  const sheathMat = new THREE.MeshStandardMaterial({ color: 0x5a3a2a, roughness: 0.85, metalness: 0.00 });
+  const soffitMat = new THREE.MeshStandardMaterial({ color: 0xede8e0, roughness: 0.60, metalness: 0.00 });
+
+  const member = (sx: number, sy: number, sz: number, mat: THREE.Material): THREE.Mesh => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.userData.ifcClass = "IfcMember";
+    return m;
+  };
 
   if (roofType === "flat" || ridgeH < 0.05) {
-    geom = new THREE.BoxGeometry(ew, ed, thickness);
-    geom.translate(0, 0, thickness / 2);
+    // Flat: perimeter beams + regular joists + deck slab.
+    const joistH = 0.20, joistW = 0.05;
+    const deckT  = 0.12;
+    const nJoists = Math.max(2, Math.round((w + 2 * overhang) / 0.6));
+    const joistSpan = (w + 2 * overhang) / nJoists;
+
+    const perimFront = member(w + 2 * overhang, joistW, joistH, frameMat.clone());
+    perimFront.position.set(0, -hd + joistW / 2, joistH / 2);
+    group.add(perimFront);
+
+    const perimBack = member(w + 2 * overhang, joistW, joistH, frameMat.clone());
+    perimBack.position.set(0,  hd - joistW / 2, joistH / 2);
+    group.add(perimBack);
+
+    for (let i = 0; i < nJoists; i++) {
+      const xPos = -hw + (i + 0.5) * joistSpan;
+      const joist = member(joistW, d + 2 * overhang, joistH, frameMat.clone());
+      joist.position.set(xPos, 0, joistH / 2);
+      group.add(joist);
+    }
+
+    const deck = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 2 * overhang, d + 2 * overhang, deckT),
+      sheathMat.clone(),
+    );
+    deck.userData.ifcClass = "IfcCovering";
+    deck.position.set(0, 0, joistH + deckT / 2);
+    group.add(deck);
+
   } else if (roofType === "shed") {
-    // Mono-pitch: low at -y, high at +y
-    const verts = new Float32Array([
-      -hw, -hd,           0,   // 0 front-left low
-       hw, -hd,           0,   // 1 front-right low
-       hw,  hd,      ridgeH,   // 2 back-right high
-      -hw,  hd,      ridgeH,   // 3 back-left high
-      -hw, -hd,   -thickness,  // 4
-       hw, -hd,   -thickness,  // 5
-       hw,  hd, ridgeH - thickness, // 6
-      -hw,  hd, ridgeH - thickness, // 7
-    ]);
-    geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
-    geom.setIndex([
-      0,1,2, 0,2,3,    // top slope
-      0,5,1, 0,4,5,    // front
-      1,5,6, 1,6,2,    // right
-      3,2,6, 3,6,7,    // back
-      0,3,7, 0,7,4,    // left
-      4,7,6, 4,6,5,    // bottom
-    ]);
-    geom.computeVertexNormals();
+    // Shed: mono-pitch, low at front (−y), high at back (+y).
+    const shedH  = (d + 2 * overhang) * Math.tan(pitchRad);
+    const rLen   = Math.sqrt((d + 2 * overhang) ** 2 + shedH ** 2);
+    const rafterW = 0.05, rafterD = 0.15;
+    const nRafters = Math.max(3, Math.round((w + 2 * overhang) / 0.5) + 1);
+    const rafterRx = Math.atan2(shedH, d + 2 * overhang) - Math.PI / 2;
+
+    // High-end wall plate (back)
+    const plateback = member(w + 2 * overhang, 0.1, 0.1, frameMat.clone());
+    plateback.position.set(0, hd, 0.05);
+    group.add(plateback);
+
+    // Low-end wall plate (front)
+    const plateFront = member(w + 2 * overhang, 0.1, 0.1, frameMat.clone());
+    plateFront.position.set(0, -hd, 0.05);
+    group.add(plateFront);
+
+    // Fascia at low eave
+    const fascia = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * overhang, 0.03, 0.15), soffitMat.clone());
+    fascia.userData.ifcClass = "IfcCovering";
+    fascia.position.set(0, -hd, -0.075);
+    group.add(fascia);
+
+    // Soffit under low eave overhang
+    const soffit = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 2 * overhang, overhang, 0.02),
+      soffitMat.clone(),
+    );
+    soffit.userData.ifcClass = "IfcCovering";
+    soffit.position.set(0, -hd + overhang / 2, -0.01);
+    group.add(soffit);
+
+    // Rafters
+    for (let i = 0; i < nRafters; i++) {
+      const xPos = -hw + i * ((w + 2 * overhang) / (nRafters - 1));
+      const rafter = member(rafterW, rafterD, rLen, frameMat.clone());
+      rafter.rotation.x = rafterRx;
+      rafter.position.set(xPos, 0, shedH / 2);
+      group.add(rafter);
+    }
+
+    // Sheathing
+    const sheath = new THREE.Mesh(new THREE.BoxGeometry(w + 2 * overhang, rLen, 0.025), sheathMat.clone());
+    sheath.userData.ifcClass = "IfcCovering";
+    sheath.rotation.x = rafterRx;
+    sheath.position.set(0, 0, shedH / 2);
+    group.add(sheath);
+
   } else if (roofType === "hip") {
-    // Hip: 4 sloped faces meeting at a ridge shorter than the footprint
-    const hipSetback = Math.min(hw, hd) / Math.tan(pitchRad);
-    // Ridge along the longer axis; setback from each end
-    const landscape = hw >= hd;
-    const ridgeHalfLen = landscape
-      ? Math.max(0.2, hw - hipSetback)
-      : Math.max(0.2, hd - hipSetback);
-    const verts = landscape
+    // Hip: 4 sloped faces. Ridge shorter than footprint. Hip rafters at corners.
+    const isLandscape = w >= d;
+    const shortHalf  = isLandscape ? hd : hw;
+    const longHalf   = isLandscape ? hw : hd;
+    const hipRidgeH  = shortHalf * Math.tan(pitchRad);
+    const ridgeHL    = Math.max(0.3, longHalf - shortHalf);
+
+    // Ridge beam along long axis
+    const ridgeBeam = isLandscape
+      ? member(ridgeHL * 2, 0.10, 0.12, frameMat.clone())
+      : member(0.10, ridgeHL * 2, 0.12, frameMat.clone());
+    ridgeBeam.position.set(0, 0, hipRidgeH + 0.06);
+    group.add(ridgeBeam);
+
+    // Perimeter fascia (4 sides)
+    const fW = 0.03, fH = 0.15;
+    const fasciaFront = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, fW, fH), soffitMat.clone());
+    fasciaFront.userData.ifcClass = "IfcCovering";
+    fasciaFront.position.set(0, -hd, -fH / 2);
+    group.add(fasciaFront);
+    const fasciaBack = fasciaFront.clone();
+    fasciaBack.position.set(0, hd, -fH / 2);
+    group.add(fasciaBack);
+    const fasciaLeft = new THREE.Mesh(new THREE.BoxGeometry(fW, hd * 2, fH), soffitMat.clone());
+    fasciaLeft.userData.ifcClass = "IfcCovering";
+    fasciaLeft.position.set(-hw, 0, -fH / 2);
+    group.add(fasciaLeft);
+    const fasciaRight = fasciaLeft.clone();
+    fasciaRight.position.set(hw, 0, -fH / 2);
+    group.add(fasciaRight);
+
+    // 4 hip rafters (corner diagonals)
+    const hipLen = Math.sqrt(shortHalf ** 2 + shortHalf ** 2 + hipRidgeH ** 2);
+    const hipRx = Math.atan2(hipRidgeH, Math.sqrt(shortHalf ** 2 + shortHalf ** 2)) - Math.PI / 2;
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
+    for (const [sx, sy] of corners) {
+      const hr = member(0.06, 0.12, hipLen, frameMat.clone());
+      hr.rotation.z = Math.atan2(sy * shortHalf, sx * shortHalf);
+      hr.rotation.x = hipRx;
+      hr.position.set(sx * longHalf / 2, sy * shortHalf / 2, hipRidgeH / 2);
+      group.add(hr);
+    }
+
+    // Sheathing planes for front/back slopes
+    const frontSlopeLen = Math.sqrt(hd ** 2 + hipRidgeH ** 2);
+    const frontRx = Math.PI / 2 + Math.atan2(hipRidgeH, hd);
+    const sheathFront = new THREE.Mesh(
+      new THREE.BoxGeometry(hw * 2, frontSlopeLen, 0.025), sheathMat.clone());
+    sheathFront.userData.ifcClass = "IfcCovering";
+    sheathFront.rotation.x = frontRx;
+    sheathFront.position.set(0, -hd / 2, hipRidgeH / 2);
+    group.add(sheathFront);
+    const sheathBack = sheathFront.clone();
+    (sheathBack.material as THREE.Material) = (sheathFront.material as THREE.Material).clone();
+    sheathBack.rotation.x = -frontRx;
+    sheathBack.position.set(0, hd / 2, hipRidgeH / 2);
+    group.add(sheathBack);
+
+    // Sheathing for side slopes (if landscape: short sides)
+    const sideSlopeLen = Math.sqrt(hw ** 2 + hipRidgeH ** 2);
+    const sideRx = Math.PI / 2 + Math.atan2(hipRidgeH, hw);
+    const sheathLeft = new THREE.Mesh(
+      new THREE.BoxGeometry(hd * 2, sideSlopeLen, 0.025), sheathMat.clone());
+    sheathLeft.userData.ifcClass = "IfcCovering";
+    sheathLeft.rotation.y = Math.PI / 2;
+    sheathLeft.rotation.x = sideRx;
+    sheathLeft.position.set(-hw / 2, 0, hipRidgeH / 2);
+    group.add(sheathLeft);
+    const sheathRight = sheathLeft.clone();
+    (sheathRight.material as THREE.Material) = (sheathLeft.material as THREE.Material).clone();
+    sheathRight.position.set(hw / 2, 0, hipRidgeH / 2);
+    group.add(sheathRight);
+
+  } else {
+    // Pitched (gabled) — full section-drawing-quality structure (#847).
+    // Ridge runs along the longer plan axis.
+    const landscape = w >= d;
+    // For the slope span dimension: hd (landscape) or hw (portrait).
+    const spanHalf = landscape ? hd : hw;
+    // For the ridge length dimension: hw (landscape) or hd (portrait).
+    const ridgeLenHalf = landscape ? hw : hd;
+    const rafterLen = Math.sqrt(spanHalf ** 2 + ridgeH ** 2);
+    const rafterW = 0.05, rafterD = 0.15;
+    const rafterSpacing = 0.5;
+    const nRafters = Math.max(4, Math.round(ridgeLenHalf * 2 / rafterSpacing) + 1);
+
+    // Rafter rotation (x-axis) for front slope:
+    // Box Z must align with direction from ridge toward eave.
+    // For landscape: direction (0, -spanHalf, -ridgeH) → Rx = π/2 + pitchRad.
+    // For portrait:  direction (-spanHalf, 0, -ridgeH) → Ry = -(π/2 + pitchRad).
+    const slopeRx = Math.PI / 2 + pitchRad;
+
+    // Ridge beam
+    const ridgeBeam = landscape
+      ? member(ridgeLenHalf * 2, 0.10, 0.12, frameMat.clone())
+      : member(0.10, ridgeLenHalf * 2, 0.12, frameMat.clone());
+    ridgeBeam.position.set(0, 0, ridgeH + 0.06);
+    group.add(ridgeBeam);
+
+    // Wall plates (at wall-top line, just inside the eaves)
+    const wallPlateLen = ridgeLenHalf * 2;
+    const wp1 = landscape
+      ? member(wallPlateLen, 0.10, 0.10, frameMat.clone())
+      : member(0.10, wallPlateLen, 0.10, frameMat.clone());
+    wp1.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, 0.05);
+    group.add(wp1);
+    const wp2 = wp1.clone();
+    (wp2.material as THREE.Material) = (wp1.material as THREE.Material).clone();
+    wp2.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, 0.05);
+    group.add(wp2);
+
+    // Fascia boards at eaves (outside face of rafter ends)
+    const fW = 0.03, fH = 0.15;
+    const fasciaA = landscape
+      ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, fW, fH), soffitMat.clone())
+      : new THREE.Mesh(new THREE.BoxGeometry(fW, ridgeLenHalf * 2, fH), soffitMat.clone());
+    fasciaA.userData.ifcClass = "IfcCovering";
+    fasciaA.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, -fH / 2);
+    group.add(fasciaA);
+    const fasciaB = fasciaA.clone();
+    (fasciaB.material as THREE.Material) = (fasciaA.material as THREE.Material).clone();
+    fasciaB.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, -fH / 2);
+    group.add(fasciaB);
+
+    // Soffit under eave overhang (2 sides)
+    const soffitDepth = overhang;
+    const soffitA = landscape
+      ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, soffitDepth, 0.02), soffitMat.clone())
+      : new THREE.Mesh(new THREE.BoxGeometry(soffitDepth, ridgeLenHalf * 2, 0.02), soffitMat.clone());
+    soffitA.userData.ifcClass = "IfcCovering";
+    soffitA.position.set(
+      landscape ? 0 : -(spanHalf - overhang / 2),
+      landscape ? -(spanHalf - overhang / 2) : 0,
+      -0.01,
+    );
+    group.add(soffitA);
+    const soffitB = soffitA.clone();
+    (soffitB.material as THREE.Material) = (soffitA.material as THREE.Material).clone();
+    soffitB.position.set(
+      landscape ? 0 : (spanHalf - overhang / 2),
+      landscape ? (spanHalf - overhang / 2) : 0,
+      -0.01,
+    );
+    group.add(soffitB);
+
+    // Rafters — two slopes
+    for (let i = 0; i < nRafters; i++) {
+      const axialPos = -ridgeLenHalf + i * (ridgeLenHalf * 2 / (nRafters - 1));
+
+      // Front slope rafter
+      const rfA = member(rafterW, rafterD, rafterLen, frameMat.clone());
+      if (landscape) {
+        rfA.rotation.x = slopeRx;
+        rfA.position.set(axialPos, -spanHalf / 2, ridgeH / 2);
+      } else {
+        rfA.rotation.y = -slopeRx;
+        rfA.position.set(-spanHalf / 2, axialPos, ridgeH / 2);
+      }
+      group.add(rfA);
+
+      // Back slope rafter (mirror)
+      const rfB = member(rafterW, rafterD, rafterLen, frameMat.clone());
+      if (landscape) {
+        rfB.rotation.x = -slopeRx;
+        rfB.position.set(axialPos, spanHalf / 2, ridgeH / 2);
+      } else {
+        rfB.rotation.y = slopeRx;
+        rfB.position.set(spanHalf / 2, axialPos, ridgeH / 2);
+      }
+      group.add(rfB);
+    }
+
+    // Sheathing (2 sloped planes, one per slope)
+    const sheathA = landscape
+      ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, rafterLen, 0.025), sheathMat.clone())
+      : new THREE.Mesh(new THREE.BoxGeometry(rafterLen, ridgeLenHalf * 2, 0.025), sheathMat.clone());
+    sheathA.userData.ifcClass = "IfcCovering";
+    if (landscape) {
+      sheathA.rotation.x = slopeRx;
+      sheathA.position.set(0, -spanHalf / 2, ridgeH / 2);
+    } else {
+      sheathA.rotation.y = -slopeRx;
+      sheathA.position.set(-spanHalf / 2, 0, ridgeH / 2);
+    }
+    group.add(sheathA);
+
+    const sheathB = sheathA.clone();
+    (sheathB.material as THREE.Material) = (sheathA.material as THREE.Material).clone();
+    if (landscape) {
+      sheathB.rotation.x = -slopeRx;
+      sheathB.position.set(0, spanHalf / 2, ridgeH / 2);
+    } else {
+      sheathB.rotation.y = slopeRx;
+      sheathB.position.set(spanHalf / 2, 0, ridgeH / 2);
+    }
+    group.add(sheathB);
+
+    // Gable-end fill panels (vertical face at each end)
+    const gableH = ridgeH;
+    const gableLen = spanHalf;
+    const gableA_geom = new THREE.BufferGeometry();
+    const gv = landscape
       ? new Float32Array([
-          -hw, -hd, 0,               // 0 base corners
-           hw, -hd, 0,               // 1
-           hw,  hd, 0,               // 2
-          -hw,  hd, 0,               // 3
-          -ridgeHalfLen, 0, ridgeH,  // 4 ridge left
-           ridgeHalfLen, 0, ridgeH,  // 5 ridge right
+          -ridgeLenHalf, -gableLen, 0,
+          -ridgeLenHalf,  gableLen, 0,
+          -ridgeLenHalf,  0,       gableH,
         ])
       : new Float32Array([
-          -hw, -hd, 0,               // 0
-           hw, -hd, 0,               // 1
-           hw,  hd, 0,               // 2
-          -hw,  hd, 0,               // 3
-          0, -ridgeHalfLen, ridgeH,  // 4 ridge front
-          0,  ridgeHalfLen, ridgeH,  // 5 ridge back
+          -gableLen, -ridgeLenHalf, 0,
+           gableLen, -ridgeLenHalf, 0,
+           0,        -ridgeLenHalf, gableH,
         ]);
-    const idxLandscape = [
-      0,1,5, 0,5,4,   // front slope
-      3,4,5, 3,5,2,   // back slope
-      0,4,3,          // left hip
-      1,2,5,          // right hip
-      0,3,2, 0,2,1,   // bottom
-    ];
-    const idxPortrait = [
-      0,1,4,          // front hip
-      2,3,5,          // back hip
-      0,4,5, 0,5,3,   // left slope
-      1,5,4, 1,2,5,   // right slope
-      0,3,2, 0,2,1,   // bottom
-    ];
-    geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
-    geom.setIndex(landscape ? idxLandscape : idxPortrait);
-    geom.computeVertexNormals();
-  } else {
-    // pitched (gable): ridge along longer axis
-    const landscape = w >= d;
-    let verts: Float32Array;
-    let idx: number[];
-    if (landscape) {
-      // Ridge along x
-      verts = new Float32Array([
-        -hw, -hd, 0,       // 0
-         hw, -hd, 0,       // 1
-         hw,  hd, 0,       // 2
-        -hw,  hd, 0,       // 3
-        -hw,   0, ridgeH,  // 4 left gable peak
-         hw,   0, ridgeH,  // 5 right gable peak
-      ]);
-      idx = [
-        0,1,5, 0,5,4,   // front slope
-        3,4,5, 3,5,2,   // back slope
-        0,4,3,          // left gable
-        1,2,5,          // right gable
-        0,3,2, 0,2,1,   // bottom
-      ];
-    } else {
-      // Ridge along y
-      verts = new Float32Array([
-        -hw, -hd, 0,       // 0
-         hw, -hd, 0,       // 1
-         hw,  hd, 0,       // 2
-        -hw,  hd, 0,       // 3
-          0, -hd, ridgeH,  // 4 front gable peak
-          0,  hd, ridgeH,  // 5 back gable peak
-      ]);
-      idx = [
-        0,1,4,          // front gable
-        2,3,5,          // back gable
-        0,4,5, 0,5,3,   // left slope
-        1,5,4, 1,2,5,   // right slope
-        0,3,2, 0,2,1,   // bottom
-      ];
-    }
-    geom = new THREE.BufferGeometry();
-    geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
-    geom.setIndex(idx);
-    geom.computeVertexNormals();
+    gableA_geom.setAttribute("position", new THREE.BufferAttribute(gv, 3));
+    gableA_geom.setIndex([0, 1, 2]);
+    gableA_geom.computeVertexNormals();
+    const gableA = new THREE.Mesh(gableA_geom, frameMat.clone());
+    gableA.userData.ifcClass = "IfcCovering";
+    group.add(gableA);
+
+    const gableB_geom = new THREE.BufferGeometry();
+    const gvB = landscape
+      ? new Float32Array([
+          ridgeLenHalf, -gableLen, 0,
+          ridgeLenHalf,  0,       gableH,
+          ridgeLenHalf,  gableLen, 0,
+        ])
+      : new Float32Array([
+          -gableLen, ridgeLenHalf, 0,
+           0,        ridgeLenHalf, gableH,
+           gableLen, ridgeLenHalf, 0,
+        ]);
+    gableB_geom.setAttribute("position", new THREE.BufferAttribute(gvB, 3));
+    gableB_geom.setIndex([0, 1, 2]);
+    gableB_geom.computeVertexNormals();
+    const gableB = new THREE.Mesh(gableB_geom, frameMat.clone());
+    gableB.userData.ifcClass = "IfcCovering";
+    group.add(gableB);
   }
 
-  const mat = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(cx, cy, 0);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "roof";
-  mesh.userData.roofParams = { type: roofType, pitchDeg, overhang, thickness };
-
-  const chain = `const roof = buildParametricRoof(${round(w)}, ${round(d)}, { type:"${roofType}", pitchDeg:${round(pitchDeg)}, overhang:${round(overhang)}, thickness:${round(thickness)} }).translate([${round(cx)}, ${round(cy)}, 0]);`;
-  return { mesh, chain };
+  const chain = `const roof = buildSectionRoof(${round(w)}, ${round(d)}, { type:"${roofType}", pitchDeg:${round(pitchDeg)}, overhang:${round(overhang)} }).translate([${round(cx)}, ${round(cy)}, 0]);`;
+  return { mesh: group, chain };
 }
 
 export function buildSpace(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {

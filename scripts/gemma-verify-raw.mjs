@@ -3298,6 +3298,56 @@ await resetScene('before-box-inject');
   record('skills-palette-templates', v.passed ?? false, v.evidence ?? {});
 }
 
+// ── Surface: roof-group-structure (#847 AC6) ───────────────────────────────
+// Place a roof via DSL console → assert the resulting scene object is a Group
+// with ≥6 child meshes (ridge + rafters + fascia + soffit + sheathing).
+{
+  await resetScene("roof-group-structure");
+
+  const r = await evaluate(`(async () => {
+    try {
+      const v = window.__viewer;
+      if (!v) return { passed: false, reason: 'no __viewer' };
+
+      // Switch to prompt tab → console mode
+      const tab = document.querySelector('[data-tab=prompt]');
+      if (tab) tab.click();
+      await new Promise(r => setTimeout(r, 200));
+      const pill = document.querySelector('.mode-pill');
+      if (pill && pill.getAttribute('data-mode') !== 'console') {
+        pill.click();
+        await new Promise(r => setTimeout(r, 300));
+      }
+
+      const input = document.querySelector('#console-input');
+      if (!input) return { passed: false, reason: 'no #console-input' };
+
+      const before = v.scene.children.length;
+      // Place a gabled 6m×8m roof via DSL
+      input.value = 'SdRoof 6 8';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keyup',  { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+      await new Promise(r => setTimeout(r, 600));
+
+      const after = v.scene.children.length;
+      if (after <= before) return { passed: false, reason: 'scene did not grow', before, after };
+
+      // Find the most-recently added object
+      const added = v.scene.children[v.scene.children.length - 1];
+      const isGroup = added && added.type === 'Group';
+      let childMeshCount = 0;
+      if (added) {
+        added.traverse(obj => { if (obj.isMesh) childMeshCount++; });
+      }
+      const passed = isGroup && childMeshCount >= 6;
+      return { passed, isGroup, childMeshCount, creator: added?.userData?.creator ?? null };
+    } catch(e) { return { passed: false, error: e.message }; }
+  })()`);
+
+  record('roof-group-structure', r?.passed ?? false, r ?? { reason: 'evaluate returned null' });
+}
+
 } finally {
   await cleanup();
 }
