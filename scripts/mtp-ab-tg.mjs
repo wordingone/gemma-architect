@@ -27,26 +27,46 @@ const BASE_URL = process.env.APP_URL ?? "http://localhost:5175/";
 // Must NOT match VISUAL_RE in chat-panel.ts:
 // /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i
 // A visual-query prompt triggers auto-capture → userImage set → payloadHasMultimodal=true → MTP bypassed.
-const PROMPT   = "Build a simple floor slab at the origin.";
+// Option C (per #788): substantive two-dispatch build prompt — avoids VISUAL_RE, produces ≥50 tokens,
+// realistic demo-flow scenario that exercises MTP on real user-facing build turns.
+const PROMPT   = "Build a 5m wall at the origin, then add a 5x5 floor slab beneath it.";
 const TURN_TIMEOUT_MS = 180_000; // 3 min — E2B cold-start can be slow
 
 async function cdpConnect(wsUrl) {
   const consoleLogs = [];
+  const eventHandlers = new Map(); // event name → handler[]
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
     let msgId = 0;
     const pending = new Map();
-    ws.on("open", () => resolve({
+    const cdp = {
       ws, consoleLogs,
       send: (method, params = {}) =>
         new Promise((res, rej) => {
           const id = ++msgId;
           pending.set(id, { res, rej });
           ws.send(JSON.stringify({ id, method, params }));
-        })
-    }));
+        }),
+      // One-shot event listener — resolves when the named CDP event fires
+      once: (event) =>
+        new Promise((res) => {
+          const list = eventHandlers.get(event) ?? [];
+          list.push(res);
+          eventHandlers.set(event, list);
+        }),
+    };
+    ws.on("open", () => resolve(cdp));
     ws.on("message", (raw) => {
       const msg = JSON.parse(raw.toString());
+      // Dispatch named events (Page.loadEventFired, etc.)
+      if (msg.method) {
+        const handlers = eventHandlers.get(msg.method);
+        if (handlers?.length) {
+          const h = handlers.shift();
+          if (handlers.length === 0) eventHandlers.delete(msg.method);
+          h(msg.params);
+        }
+      }
       // Capture console events (requires Runtime.enable + Console.enable)
       if (msg.method === "Runtime.consoleAPICalled") {
         const text = msg.params?.args?.map(a => a.value ?? a.description ?? "").join(" ");
@@ -55,8 +75,13 @@ async function cdpConnect(wsUrl) {
       if (msg.id && pending.has(msg.id)) {
         const { res, rej } = pending.get(msg.id);
         pending.delete(msg.id);
-        if (msg.error) rej(new Error(JSON.stringify(msg.error)));
-        else res(msg.result);
+        if (msg.error) {
+          // -32000 = page navigated or closed during evaluate — resolve null so callers can retry
+          if (msg.error.code === -32000) res(null);
+          else rej(new Error(JSON.stringify(msg.error)));
+        } else {
+          res(msg.result);
+        }
       }
     });
     ws.on("error", reject);
@@ -72,19 +97,23 @@ async function getTarget() {
   return t;
 }
 
-async function navigate({ ws, send }, url) {
-  await send("Page.navigate", { url });
-  // Wait for page load
-  await new Promise(r => setTimeout(r, 4000));
+async function navigate(cdp, url) {
+  const loadPromise = cdp.once("Page.loadEventFired");
+  await cdp.send("Page.navigate", { url });
+  // Wait for Page.loadEventFired (real signal) or 15s fallback
+  await Promise.race([loadPromise, new Promise(r => setTimeout(r, 15_000))]);
+  // Extra settle time — React hydration and model init start after DOMContentLoaded
+  await new Promise(r => setTimeout(r, 2000));
 }
 
-async function evaluate({ ws, send }, expression, timeoutMs = TURN_TIMEOUT_MS) {
-  const r = await send("Runtime.evaluate", {
+async function evaluate(cdp, expression, timeoutMs = TURN_TIMEOUT_MS) {
+  const r = await cdp.send("Runtime.evaluate", {
     expression,
     awaitPromise: true,
     returnByValue: true,
     timeout: timeoutMs,
   });
+  if (!r) throw new Error("CDP_NAVIGATED: page context gone during evaluate");
   if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails));
   return r.result?.value;
 }
@@ -116,20 +145,27 @@ async function sendPromptAndWait(cdp, beforeCount) {
 }
 
 async function waitLive(cdp) {
-  console.log("[mtp-ab] waiting for model LIVE badge...");
-  const loaded = await evaluate(cdp, `
-    new Promise((resolve, reject) => {
-      const deadline = Date.now() + ${TURN_TIMEOUT_MS};
-      const check = () => {
-        const badge = document.getElementById('ai-model-badge');
-        if (badge && badge.textContent.includes('LIVE')) { resolve(true); return; }
-        if (Date.now() > deadline) { reject(new Error('model load timeout')); return; }
-        setTimeout(check, 2000);
-      };
-      check();
-    })
-  `);
-  if (!loaded) throw new Error("Model failed to reach LIVE state");
+  console.log("[mtp-ab] waiting for model READY badge...");
+  const deadline = Date.now() + TURN_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      // Short synchronous expression — survives -32000 if page is mid-navigation
+      const r = await cdp.send("Runtime.evaluate", {
+        expression: `(() => { const b = document.getElementById('ai-model-badge'); return b ? b.textContent : null; })()`,
+        returnByValue: true,
+        timeout: 5000,
+      });
+      const text = r?.result?.value;
+      // Wait for READY, not just LIVE — PRIMING state (KV prewarm) comes after LIVE and
+      // blocks inference. Sending a turn while badge shows ⟳ PRIMING causes turn timeout.
+      if (text?.includes("READY")) return;
+      if (text) process.stdout.write(`\r[mtp-ab] badge: ${text.trim().slice(0, 60)}   `);
+    } catch (_) {
+      // Evaluation failed (page context gone) — retry after delay
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  throw new Error("model READY timeout");
 }
 
 // Trigger drafter ONNX load and wait for it via window.__loadDrafter() (set by agent-harness).
