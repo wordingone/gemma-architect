@@ -52,7 +52,7 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld } from "./tools/index";
 import { onElementCommitted } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam } from "./tools/structural";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory } from "./history";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
@@ -531,113 +531,86 @@ function getActiveLevelElevation(): number {
 
 registerHandler("SdWall", (args) => {
   const cplane = resolveCPlane("SdWall", args as Record<string, unknown>, viewer);
-  // Accept start/end point args in addition to profile array
   const startArg = args.start as { x?: number; y?: number } | undefined;
   const endArg = args.end as { x?: number; y?: number } | undefined;
   const rawProfile = args.profile as [number, number][] | undefined;
   const wallLen = (args.length as number | undefined) ?? 4;
-  let profile: [number, number][];
-  if (rawProfile) {
-    profile = rawProfile;
+  let a: { x: number; y: number }, b: { x: number; y: number };
+  if (rawProfile && rawProfile.length >= 2) {
+    a = { x: rawProfile[0][0], y: rawProfile[0][1] };
+    b = { x: rawProfile[rawProfile.length - 1][0], y: rawProfile[rawProfile.length - 1][1] };
   } else if (startArg && endArg) {
-    profile = [[startArg.x ?? 0, startArg.y ?? 0], [endArg.x ?? wallLen, endArg.y ?? 0]];
+    a = { x: startArg.x ?? 0, y: startArg.y ?? 0 };
+    b = { x: endArg.x ?? wallLen, y: endArg.y ?? 0 };
   } else {
-    profile = [[0, 0], [wallLen, 0]];
+    a = { x: 0, y: 0 };
+    b = { x: wallLen, y: 0 };
   }
-  const t = (args.thickness as number | undefined) ?? 0.2;
-  const wallH = (args.height as number | undefined) ?? 3;
-  // Compute total polyline length
-  let len = 0;
-  for (let i = 0; i < profile.length - 1; i++) {
-    const dx = profile[i + 1][0] - profile[i][0];
-    const dy = profile[i + 1][1] - profile[i][1];
-    len += Math.sqrt(dx * dx + dy * dy);
-  }
-  if (len < 0.01) len = 4;
-  const geom = new THREE.BoxGeometry(len, t, wallH);
-  geom.translate(0, 0, wallH / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
-  if (profile.length >= 2) {
-    const dx = profile[profile.length - 1][0] - profile[0][0];
-    const dy = profile[profile.length - 1][1] - profile[0][1];
-    mesh.position.set((profile[0][0] + profile[profile.length - 1][0]) / 2, (profile[0][1] + profile[profile.length - 1][1]) / 2, getActiveLevelElevation());
-    mesh.rotation.z = Math.atan2(dy, dx);
-  }
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "wall";
-  mesh.userData.wallThickness = t;
-  mesh.userData.wallHeight = wallH;
+  const { mesh, chain } = buildWall(a, b);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWall", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
   onElementCommitted(mesh, viewer.getScene());
-  return { created: "wall", length: len, thickness: t, height: wallH };
+  const dx = b.x - a.x, dy = b.y - a.y;
+  return { created: "wall", length: Math.sqrt(dx * dx + dy * dy) || wallLen };
 });
 
 registerHandler("SdSlab", (args) => {
   const cplane = resolveCPlane("SdSlab", args as Record<string, unknown>, viewer);
   const w = (args.width as number | undefined) ?? (args.length as number | undefined) ?? 4;
   const d = (args.depth as number | undefined) ?? (args.width as number | undefined) ?? 4;
-  const t = (args.thickness as number | undefined) ?? 0.2;
   const elev = (args.elevation as number | undefined) ?? getActiveLevelElevation();
-  const geom = new THREE.BoxGeometry(w, d, t);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xa8a097, roughness: 0.7, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
+  const a = { x: -w / 2, y: -d / 2 };
+  const b = { x: w / 2, y: d / 2 };
+  const { mesh, chain } = buildSlab(a, b);
   mesh.position.z = elev;
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdSlab";
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdSlab", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
+  onElementCommitted(mesh, viewer.getScene());
   return { created: "slab", width: w, depth: d };
 });
 
 registerHandler("SdColumn", (args) => {
   const cplane = resolveCPlane("SdColumn", args as Record<string, unknown>, viewer);
-  const s = (args.size as number | undefined) ?? 0.3;
-  const h = (args.height as number | undefined) ?? 4;
-  const geom = new THREE.BoxGeometry(s, s, h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xd1c5b0, roughness: 0.6, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
-  const p = args.position as [number, number] | undefined;
-  if (p) mesh.position.set(p[0], p[1], getActiveLevelElevation());
-  else mesh.position.z = getActiveLevelElevation();
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdColumn";
+  const posArr = args.position as [number, number] | undefined;
+  const p = { x: posArr?.[0] ?? 0, y: posArr?.[1] ?? 0 };
+  const { mesh, chain } = buildColumn(p);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdColumn", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "column", height: h };
+  onElementCommitted(mesh, viewer.getScene());
+  return { created: "column" };
 });
 
 // ── IFC Tier 2: Beam / Stair / Door / Window / Roof / Space ─────────────────
 
 registerHandler("SdBeam", (args) => {
-  const s  = (args.start as number[] | undefined) ?? [0, 0, 3];
-  const e  = (args.end   as number[] | undefined) ?? [4, 0, 3];
-  const dx = e[0] - s[0], dy = e[1] - s[1], dz = (e[2] ?? 0) - (s[2] ?? 0);
-  const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 4;
-  const bw = (args.size as number | undefined) ?? 0.2;
-  const geom = new THREE.BoxGeometry(len, bw, bw);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xa0856a, roughness: 0.6, metalness: 0.1 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, (s[2] + e[2]) / 2 || 3);
-  mesh.rotation.z = Math.atan2(dy, dx);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdBeam";
+  const s = args.start as number[] | undefined;
+  const e = args.end as number[] | undefined;
+  const a = { x: s?.[0] ?? 0, y: s?.[1] ?? 0 };
+  const b = { x: e?.[0] ?? 4, y: e?.[1] ?? 0 };
+  const { mesh, chain } = buildBeam(a, b);
+  mesh.position.z += getActiveLevelElevation();
   mesh.userData.layerId = resolveLayerId("SdBeam", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  return { created: "beam", length: len };
+  onElementCommitted(mesh, viewer.getScene());
+  const dx = b.x - a.x, dy = b.y - a.y;
+  return { created: "beam", length: Math.sqrt(dx * dx + dy * dy) || 4 };
 });
 
 registerHandler("SdMember", (args) => {
