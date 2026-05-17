@@ -163,6 +163,45 @@ function _rebuildGroupDisplay(scene: THREE.Scene, groupId: string, primaryMat: T
   _displayMesh.set(groupId, resultBrush.uuid);
 }
 
+/** Dissolve the join group containing mesh `uuid`:
+ *  removes the CSG display mesh, restores logical-member visibility,
+ *  and clears all group bookkeeping so elements can be moved independently.
+ */
+export function dissolveGroupForMesh(uuid: string, scene: THREE.Scene): void {
+  const groupId = _meshToGroup.get(uuid);
+  if (!groupId) return;
+  _removeDisplayMesh(scene, groupId);
+  const members = _groups.get(groupId);
+  if (members) {
+    for (const id of members) {
+      const obj = scene.getObjectByProperty("uuid", id);
+      if (obj) obj.visible = true;
+      _meshToGroup.delete(id);
+    }
+  }
+  _groups.delete(groupId);
+  _displayMesh.delete(groupId);
+}
+
+/** Among the logical members of `groupId`, return the mesh whose bounding-box center
+ *  is nearest to `point` in world space. Returns null if no live members exist. */
+export function nearestGroupMember(groupId: string, point: THREE.Vector3, scene: THREE.Scene): THREE.Mesh | null {
+  const memberIds = _groups.get(groupId);
+  if (!memberIds) return null;
+  let best: THREE.Mesh | null = null;
+  let bestDist = Infinity;
+  const center = new THREE.Vector3();
+  for (const id of memberIds) {
+    const obj = scene.getObjectByProperty("uuid", id);
+    if (!(obj instanceof THREE.Mesh)) continue;
+    obj.updateMatrixWorld(true);
+    new THREE.Box3().setFromObject(obj).getCenter(center);
+    const d = point.distanceTo(center);
+    if (d < bestDist) { bestDist = d; best = obj; }
+  }
+  return best;
+}
+
 /**
  * Call immediately after any structural mesh is added to the scene.
  * Detects AABB overlaps with existing structural elements, merges into join groups,

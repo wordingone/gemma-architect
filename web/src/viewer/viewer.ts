@@ -18,6 +18,7 @@ import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
 import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, type TransformSnapshot } from "../history.js";
+import { dissolveGroupForMesh, nearestGroupMember } from "../tools/join-groups.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -893,7 +894,20 @@ export class Viewer {
            !gizmoSet.has(c) && c !== this.pivotProxy && c !== this._cplaneGizmo.group
     );
     const hits = this.raycaster.intersectObjects(pickables, true);
-    const hit = hits[0]?.object ?? null;
+    let hit = hits[0]?.object ?? null;
+    // CSG display mesh hit: dissolve the join group so elements can be moved
+    // independently, then redirect selection to the nearest logical member.
+    if (hit?.userData?.isJoinDisplay) {
+      const groupId = hit.userData.joinGroupId as string | undefined;
+      if (groupId) {
+        const hitPoint = hits[0]?.point ?? new THREE.Vector3();
+        const nearest = nearestGroupMember(groupId, hitPoint, this.scene);
+        if (nearest) {
+          dissolveGroupForMesh(nearest.uuid, this.scene);
+          hit = nearest;
+        }
+      }
+    }
     // IFC-imported meshes carry expressID and represent individual elements —
     // use the hit mesh directly. Other objects: walk to parent group/mesh.
     const isIfcElement = (hit?.userData?.expressID) != null;
