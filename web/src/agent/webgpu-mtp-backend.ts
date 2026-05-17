@@ -81,8 +81,12 @@ function emptyKvFeed(ort: any): Record<string, any> {
   for (let i = 0; i < NUM_KV_LAYERS; i++) {
     const hd = FULL_ATTN.has(i) ? 512 : 256;
     // Decoder ONNX expects fp16 KV tensors; onnxruntime-web uses Uint16Array as fp16 storage.
-    feed[`past_key_values.${i}.key`]   = new ort.Tensor("float16", new Uint16Array(0), [1, 1, 0, hd]);
-    feed[`past_key_values.${i}.value`] = new ort.Tensor("float16", new Uint16Array(0), [1, 1, 0, hd]);
+    const t = new ort.Tensor("float16", new Uint16Array(0), [1, 1, 0, hd]);
+    feed[`past_key_values.${i}.key`]   = t;
+    feed[`past_key_values.${i}.value`] = t;
+    if (i === 0 || i === 4) {
+      console.info(`[mtp-backend] emptyKvFeed layer ${i}: type=float16 dims=[1,1,0,${hd}] (${FULL_ATTN.has(i) ? "full" : "sliding"})`);
+    }
   }
   return feed;
 }
@@ -166,10 +170,14 @@ export async function runMtpSpecDecode(
     ...emptyKvFeed(O),
   });
 
-  // Cache all KV outputs from prefill
+  // Cache all KV outputs from prefill; probe layer 0 and 4 shapes (authoritative for past_key_values input)
   for (let i = 0; i < NUM_KV_LAYERS; i++) {
     kvCache[`present.${i}.key`]   = prefillOut[`present.${i}.key`];
     kvCache[`present.${i}.value`] = prefillOut[`present.${i}.value`];
+    if (i === 0 || i === 4) {
+      const t = prefillOut[`present.${i}.key`];
+      console.info(`[mtp-backend] present.${i}.key after prefill: type=${t?.type} dims=${JSON.stringify(t?.dims)}`);
+    }
   }
 
   // First predicted token from prefill logits
