@@ -1,8 +1,0 @@
-{
-  "name": "extrude-walls",
-  "version": "0.1.0",
-  "schema_version": 1,
-  "keywords": ["wall", "extrude", "polyline", "sketch", "footprint", "height", "thickness"],
-  "examples_count": 3,
-  "eval_id": "skill-extrude-walls-v01"
-}

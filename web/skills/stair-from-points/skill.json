@@ -1,8 +1,0 @@
-{
-  "name": "stair-from-points",
-  "version": "0.1.0",
-  "schema_version": 1,
-  "keywords": ["stair", "stairs", "staircase", "steps", "riser", "tread", "climb", "points", "between"],
-  "examples_count": 2,
-  "eval_id": "skill-stair-from-points-v01"
-}

@@ -1,8 +1,0 @@
-{
-  "name": "mirror-across-axis",
-  "version": "0.1.0",
-  "schema_version": 1,
-  "keywords": ["mirror", "reflect", "duplicate", "symmetric", "axis", "flip", "copy", "cplane"],
-  "examples_count": 3,
-  "eval_id": "skill-mirror-across-axis-v01"
-}

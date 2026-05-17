@@ -1,8 +1,0 @@
-{
-  "name": "room-from-prompt",
-  "version": "0.1.0",
-  "schema_version": 1,
-  "keywords": ["room", "four-walls", "slab", "floor", "door", "footprint", "enclosure", "space"],
-  "examples_count": 3,
-  "eval_id": "skill-room-from-prompt-v01"
-}

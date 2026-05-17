@@ -12,32 +12,6 @@ import { saveSkill, listSavedSkills, type SkillStep, type SavedSkill } from "./s
 import { openSaveSkillModal } from "./skill-modal";
 import { subscribe as subscribeAppState, getState } from "../app-state";
 
-// ── Built-in skill names ──────────────────────────────────────────────────────
-
-const BUILT_IN_SKILL_NAMES: string[] = [
-  "align-to-grid", "dimension-chain", "extrude-walls", "fire-station",
-  "hospitality-cabin", "mirror-across-axis", "office-25desk", "place-doors",
-  "replicate-from-video", "research-from-prompt", "research-pavilion",
-  "room-from-prompt", "sf-residence-2br", "stair-from-points",
-];
-
-let _builtInCache: Array<{ name: string; steps: SkillStep[] }> | null = null;
-
-async function loadBuiltInSkills(): Promise<Array<{ name: string; steps: SkillStep[] }>> {
-  if (_builtInCache) return _builtInCache;
-  const results = await Promise.all(
-    BUILT_IN_SKILL_NAMES.map(async (slug) => {
-      try {
-        const res = await fetch(`/skills/${slug}/skill.json`);
-        if (!res.ok) return null;
-        const d = await res.json() as { name?: string; steps?: SkillStep[] };
-        return { name: d.name ?? slug, steps: d.steps ?? [] };
-      } catch { return null; }
-    })
-  );
-  _builtInCache = results.filter((r): r is { name: string; steps: SkillStep[] } => r !== null);
-  return _builtInCache;
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -167,6 +141,7 @@ export class SkillCanvas {
   private _transformEl!: HTMLElement;
   private _viewport!: HTMLElement;
   private _paletteEl!: HTMLElement;
+  private _emptyHint: HTMLElement | null = null;
 
   // Selection
   private _selected = new Set<string>();
@@ -507,56 +482,35 @@ export class SkillCanvas {
   // ── Palette ────────────────────────────────────────────────────────────────
 
   private async _buildPalette(): Promise<void> {
-    const [builtIn, saved] = await Promise.all([
-      loadBuiltInSkills(),
-      listSavedSkills().catch(() => [] as SavedSkill[]),
-    ]);
+    const saved = await listSavedSkills().catch(() => [] as SavedSkill[]);
 
     this._paletteEl.innerHTML = "";
-    const makeTitle = (text: string, mt = false): HTMLElement => {
-      const t = document.createElement("div");
-      t.className = "skill-canvas-palette-title";
-      if (mt) t.style.marginTop = "8px";
-      t.textContent = text;
-      return t;
-    };
 
-    // Built-in
-    this._paletteEl.appendChild(makeTitle("Built-in"));
-    for (const skill of builtIn) {
-      this._paletteEl.appendChild(this._makePaletteItem(skill.name, skill.steps.length, {
-        kind: "skill", skillId: skill.name, skillName: skill.name, skillSteps: skill.steps,
-      }));
-    }
+    // Template: + Skill
+    const skillItem = document.createElement("div");
+    skillItem.className = "skill-canvas-palette-item sc-palette-template";
+    skillItem.dataset.template = "skill";
+    skillItem.textContent = "+ Skill";
+    skillItem.title = "Drag to add an empty skill node";
+    skillItem.draggable = true;
+    skillItem.addEventListener("dragstart", (e) => {
+      e.dataTransfer!.setData("text/plain", JSON.stringify({ kind: "skill", skillId: "", skillName: "untitled skill", skillSteps: [] }));
+      e.dataTransfer!.effectAllowed = "copy";
+    });
+    skillItem.addEventListener("dblclick", () => {
+      const rect = this._viewport.getBoundingClientRect();
+      this._addSkillNode("", "untitled skill", [],
+        (rect.width  / 2 - this._tx) / this._tz - 80,
+        (rect.height / 2 - this._ty) / this._tz - 20);
+    });
+    this._paletteEl.appendChild(skillItem);
 
-    // Recorded skills (description === "Recorded skill")
-    const recorded = saved.filter(s => s.description === "Recorded skill");
-    if (recorded.length > 0) {
-      this._paletteEl.appendChild(makeTitle("Recorded", true));
-      for (const skill of recorded) {
-        this._paletteEl.appendChild(this._makePaletteItem(skill.name, skill.steps.length, {
-          kind: "skill", skillId: skill.id, skillName: skill.name, skillSteps: skill.steps,
-        }));
-      }
-    }
-
-    // Other saved
-    const other = saved.filter(s => s.description !== "Recorded skill");
-    if (other.length > 0) {
-      this._paletteEl.appendChild(makeTitle("Saved", true));
-      for (const skill of other) {
-        this._paletteEl.appendChild(this._makePaletteItem(skill.name, skill.steps.length, {
-          kind: "skill", skillId: skill.id, skillName: skill.name, skillSteps: skill.steps,
-        }));
-      }
-    }
-
-    // Custom script
-    this._paletteEl.appendChild(makeTitle("Custom", true));
+    // Template: + Script
     const scriptItem = document.createElement("div");
-    scriptItem.className = "skill-canvas-palette-item sc-palette-script";
+    scriptItem.className = "skill-canvas-palette-item sc-palette-template";
+    scriptItem.dataset.template = "script";
     scriptItem.textContent = "+ Script";
-    scriptItem.title = "Drag to add an inline DSL script node";
+    scriptItem.title = "Drag to add an inline DSL/JS script node";
     scriptItem.draggable = true;
     scriptItem.addEventListener("dragstart", (e) => {
       e.dataTransfer!.setData("text/plain", JSON.stringify({ kind: "script" }));
@@ -564,6 +518,25 @@ export class SkillCanvas {
     });
     scriptItem.addEventListener("dblclick", () => this._addScriptAtCenter());
     this._paletteEl.appendChild(scriptItem);
+
+    // Saved skills
+    if (saved.length > 0) {
+      const title = document.createElement("div");
+      title.className = "skill-canvas-palette-title";
+      title.style.marginTop = "8px";
+      title.textContent = "Saved";
+      this._paletteEl.appendChild(title);
+      for (const skill of saved) {
+        this._paletteEl.appendChild(this._makePaletteItem(skill.name, skill.steps.length, {
+          kind: "skill", skillId: skill.id, skillName: skill.name, skillSteps: skill.steps,
+        }));
+      }
+    } else {
+      const hint = document.createElement("div");
+      hint.className = "sc-palette-empty-hint";
+      hint.textContent = "No saved skills yet — record one with ⏺ RECORD.";
+      this._paletteEl.appendChild(hint);
+    }
   }
 
   private _makePaletteItem(
@@ -677,6 +650,18 @@ export class SkillCanvas {
 
   private _renderGraph(): void {
     this._nodesEl.innerHTML = "";
+    if (this._graph.nodes.length === 0) {
+      if (!this._emptyHint) {
+        const hint = document.createElement("div");
+        hint.className = "sc-canvas-empty-hint";
+        hint.textContent = "Drag a Skill or Script to begin";
+        this._viewport.appendChild(hint);
+        this._emptyHint = hint;
+      }
+    } else if (this._emptyHint) {
+      this._emptyHint.remove();
+      this._emptyHint = null;
+    }
     // Group backdrops (behind nodes)
     for (const group of this._graph.groups) {
       this._nodesEl.appendChild(this._buildGroupEl(group));

@@ -1,8 +1,0 @@
-{
-  "name": "place-doors",
-  "version": "0.1.0",
-  "schema_version": 1,
-  "keywords": ["door", "opening", "doorway", "wall", "cut", "insert", "frame", "clicked"],
-  "examples_count": 3,
-  "eval_id": "skill-place-doors-v01"
-}

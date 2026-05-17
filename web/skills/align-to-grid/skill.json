@@ -1,8 +1,0 @@
-{
-  "name": "align-to-grid",
-  "version": "0.1.0",
-  "schema_version": 1,
-  "keywords": ["align", "snap", "grid", "nearest", "intersection", "position", "translate", "round"],
-  "examples_count": 2,
-  "eval_id": "skill-align-to-grid-v01"
-}

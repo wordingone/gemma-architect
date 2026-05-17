@@ -3268,6 +3268,36 @@ await resetScene('before-box-inject');
   });
 }
 
+// ── Surface: skills-palette-templates (#838 AC9) ──────────────────────────────
+{
+  await send('Runtime.evaluate', {
+    expression: `(function() {
+      const tab = document.querySelector('.dock-tab[data-tab="skills"]');
+      if (!tab) return { passed: false, evidence: { reason: 'no skills tab' } };
+      tab.click();
+      return { clicked: true };
+    })()`,
+    awaitPromise: false,
+  });
+  await new Promise(r => setTimeout(r, 600));
+  const r = await send('Runtime.evaluate', {
+    expression: `(function() {
+      const templates = Array.from(document.querySelectorAll('.skill-canvas-palette-item[data-template]'));
+      const names = templates.map(el => el.textContent.trim());
+      const hasSkill = names.includes('+ Skill');
+      const hasScript = names.includes('+ Script');
+      const SYNTHETIC = ['fire-station','sf-residence-2br','hospitality-cabin','office-25desk','research-pavilion','align-to-grid','dimension-chain','extrude-walls','mirror-across-axis','place-doors','replicate-from-video','research-from-prompt','room-from-prompt','stair-from-points'];
+      const allItems = Array.from(document.querySelectorAll('.skill-canvas-palette-item'));
+      const syntheticPresent = allItems.some(el => SYNTHETIC.some(n => el.textContent.includes(n)));
+      const passed = hasSkill && hasScript && templates.length === 2 && !syntheticPresent;
+      return { passed, evidence: { templates: names, count: templates.length, hasSkill, hasScript, syntheticPresent } };
+    })()`,
+    awaitPromise: false,
+  });
+  const v = r?.result?.value ?? {};
+  record('skills-palette-templates', v.passed ?? false, v.evidence ?? {});
+}
+
 } finally {
   await cleanup();
 }
