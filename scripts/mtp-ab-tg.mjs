@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
-// mtp-ab-tg.mjs — Dual-scenario MTP validation for E4B (#788 / #793).
+// mtp-ab-tg.mjs — E4B MTP A/B dual-scenario (#788 / #793).
 //
-// Connects to shared browser at :9222 (raw CDP WS, no Playwright).
-// Loads E4B (default model — no ?gemma_model= param needed post #804).
-// Runs two scenarios per #793's gate removal:
-//   Scenario A (text-only): canonical build prompt — confirms MTP fires on text turns.
-//   Scenario B (visual):    describe-scene prompt — confirms MTP fires on visual turns
-//                           (multimodal bypass was removed in #793; accept_rate is lower
-//                            but >0, so mtp_on must be true for both scenarios).
+// Two arms × two scenarios:
+//   Arm ON  (E4B default): MTP active via E4B drafter
+//   Arm OFF (E4B + ?mtp=off): drafter short-circuited, standard generate
+//   Scenario 1 (build):  "Build a 5m wall..." — text-only, no VISUAL_RE
+//   Scenario 2 (visual): "What's currently in the scene?" — triggers VISUAL_RE → auto-capture
+//
+// Acceptance (#751 gate from Leo #8347):
+//   - ON arm: mtp_on=true for BOTH scenarios
+//   - spec_attempts > 0 on ≥1 scenario
+//   - ratio ≥ 1.10 on ≥1 scenario
 //
 // Usage:
 //   bun scripts/mtp-ab-tg.mjs
@@ -28,12 +31,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT_CDP = parseInt(process.env.PORT_CDP ?? "9222", 10);
 const BASE_URL = process.env.APP_URL ?? "http://localhost:5175/";
-// Scenario A: text-only build prompt — does NOT match VISUAL_RE in chat-panel.ts.
+// Scenario 1: text-only build prompt — does NOT match VISUAL_RE in chat-panel.ts.
 // /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i
 const PROMPT_TEXT   = "Build a 5m wall at the origin, then add a 5x5 floor slab beneath it.";
-// Scenario B: visual prompt — DOES match VISUAL_RE, triggers auto-capture + multimodal.
-// Per #793 gate removal: MTP must fire on visual turns too (mtp_on: true).
-const PROMPT_VISUAL = "Describe what is currently visible in the scene.";
+// Scenario 2: canonical perception prompt per `feedback_test_scenarios_must_match_user_facing_use_case`.
+// Matches VISUAL_RE ("what"/"currently"/"scene") → auto-capture + multimodal.
+// Per #793 gate removal: MTP must fire on visual turns too (mtp_on:true in ON arm).
+const PROMPT_VISUAL = "What's currently in the scene?";
 const TURN_TIMEOUT_MS = 180_000; // 3 min — E4B cold-start can be slow
 
 async function cdpConnect(wsUrl) {
@@ -205,45 +209,50 @@ async function waitDrafter(cdp) {
   }
 }
 
-async function runTurn(cdp, url, { warmup = true, prompt = PROMPT_TEXT } = {}) {
-  console.log(`\n[mtp-ab] navigating → ${url}`);
+async function runArm(cdp, url, armName) {
+  console.log(`\n[mtp-ab] ── Arm ${armName} → ${url}`);
   await navigate(cdp, url);
   await waitLive(cdp);
   await waitDrafter(cdp);
 
-  // Pre-turn diagnostic: verify page state before sending any turn.
+  // Pre-arm diagnostic
   const diag = await evaluate(cdp, `({
     href: window.location.href,
     mtpParam: new URLSearchParams(window.location.search).get('mtp'),
-    modelParam: new URLSearchParams(window.location.search).get('gemma_model'),
     drafterLoaded: window.__drafterLoaded,
     hasLoadFn: typeof window.__loadDrafter,
     badge: document.getElementById('ai-model-badge')?.textContent?.trim() ?? null,
   })`);
-  console.log("[mtp-ab] page state:", JSON.stringify(diag));
+  console.log(`[mtp-ab] [${armName}] page state:`, JSON.stringify(diag));
 
-  if (warmup) {
-    // Warmup turn: lets WebGPU shaders compile and drafter session initialize.
-    console.log("[mtp-ab] warmup turn...");
-    const wBefore = await evaluate(cdp, `(window.__telemetry || []).length`);
-    const wTurn = await sendPromptAndWait(cdp, wBefore, PROMPT_TEXT);
-    console.log(`[mtp-ab] warmup done: mtp_on=${wTurn?.mtp_on}, tg=${wTurn?.tg_tps?.toFixed(2)}`);
+  // Warmup turn — WebGPU shader compile + drafter session init
+  console.log(`[mtp-ab] [${armName}] warmup turn...`);
+  const wBefore = await evaluate(cdp, `(window.__telemetry || []).length`);
+  const wTurn = await sendPromptAndWait(cdp, wBefore, PROMPT_TEXT);
+  console.log(`[mtp-ab] [${armName}] warmup done: mtp_on=${wTurn?.mtp_on}, tg=${wTurn?.tg_tps?.toFixed(2)}`);
 
-    if (!wTurn?.mtp_on) {
-      const drafterLogs = cdp.consoleLogs
-        .filter(l => l.text.includes("[agent-harness]") || l.text.includes("[mtp") || l.text.includes("Drafter") || l.text.includes("warn"))
-        .slice(-20)
-        .map(l => `[${l.level}] ${l.text}`);
-      console.warn("[mtp-ab] mtp_on=false after warmup — relevant logs:");
-      drafterLogs.forEach(l => console.warn(" ", l));
-    }
+  if (armName === "ON" && !wTurn?.mtp_on) {
+    const drafterLogs = cdp.consoleLogs
+      .filter(l => l.text.includes("[agent-harness]") || l.text.includes("[mtp") || l.text.includes("Drafter") || l.text.includes("warn"))
+      .slice(-20)
+      .map(l => `[${l.level}] ${l.text}`);
+    console.warn(`[mtp-ab] [${armName}] mtp_on=false after warmup — relevant logs:`);
+    drafterLogs.forEach(l => console.warn(" ", l));
   }
 
-  // Measurement turn with specified prompt
-  console.log(`[mtp-ab] measurement turn (prompt: ${JSON.stringify(prompt.slice(0, 60))}...)...`);
-  const mBefore = await evaluate(cdp, `(window.__telemetry || []).length`);
-  const turn = await sendPromptAndWait(cdp, mBefore, prompt);
-  return turn;
+  // Scenario 1: build (text-only, no VISUAL_RE)
+  console.log(`[mtp-ab] [${armName}] scenario build...`);
+  const bBefore = await evaluate(cdp, `(window.__telemetry || []).length`);
+  const buildTurn = await sendPromptAndWait(cdp, bBefore, PROMPT_TEXT);
+  console.log(`[mtp-ab] [${armName}] build: mtp_on=${buildTurn?.mtp_on}, tg=${buildTurn?.tg_tps?.toFixed(2)}, specAttempts=${buildTurn?.specAttempts}`);
+
+  // Scenario 2: visual — triggers VISUAL_RE → auto-capture + multimodal
+  console.log(`[mtp-ab] [${armName}] scenario visual...`);
+  const vBefore = await evaluate(cdp, `(window.__telemetry || []).length`);
+  const visualTurn = await sendPromptAndWait(cdp, vBefore, PROMPT_VISUAL);
+  console.log(`[mtp-ab] [${armName}] visual: mtp_on=${visualTurn?.mtp_on}, tg=${visualTurn?.tg_tps?.toFixed(2)}, specAttempts=${visualTurn?.specAttempts}`);
+
+  return { build: buildTurn, visual: visualTurn };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -255,41 +264,61 @@ await cdp.send("Runtime.enable");
 await cdp.send("Page.enable");
 await cdp.send("Console.enable");
 
-const results = {};
+// Arm ON:  E4B default URL — MTP active via E4B drafter.
+// Arm OFF: same E4B model + ?mtp=off — drafter short-circuited, standard generate.
+const urlOn  = `${BASE_URL}`;
+const urlOff = `${BASE_URL}?mtp=off`;
 
-// Scenario A: text-only — E4B default, canonical build prompt.
-// MTP must fire: mtp_on=true.
-const e4bUrl = `${BASE_URL}`;  // E4B is default — no ?gemma_model= param needed post #804
-results.text = await runTurn(cdp, e4bUrl, { warmup: true, prompt: PROMPT_TEXT });
-console.log("[mtp-ab] Scenario A (text-only):", JSON.stringify(results.text, null, 2));
+const on  = await runArm(cdp, urlOn,  "ON");
+const off = await runArm(cdp, urlOff, "OFF");
 
-// Scenario B: visual — same URL, prompt triggers VISUAL_RE → auto-capture.
-// MTP must still fire (bypass removed in #793): mtp_on=true.
-results.visual = await runTurn(cdp, e4bUrl, { warmup: false, prompt: PROMPT_VISUAL });
-console.log("[mtp-ab] Scenario B (visual):", JSON.stringify(results.visual, null, 2));
+console.log("[mtp-ab] ON  arm:", JSON.stringify(on,  null, 2));
+console.log("[mtp-ab] OFF arm:", JSON.stringify(off, null, 2));
 
-// Gate: both scenarios must show mtp_on:true per #793
-const textPass   = results.text?.mtp_on   === true;
-const visualPass = results.visual?.mtp_on === true;
-const bothPass   = textPass && visualPass;
+// Ratios: tg_tps ON / tg_tps OFF per scenario
+const ratioBuild  = (on.build?.tg_tps  ?? 0) / (off.build?.tg_tps  ?? 1);
+const ratioVisual = (on.visual?.tg_tps ?? 0) / (off.visual?.tg_tps ?? 1);
+
+// Gate (#751 — Leo #8347):
+//   ON arm: mtp_on=true for BOTH scenarios
+//   spec_attempts > 0 on ≥1 scenario
+//   ratio ≥ 1.10 on ≥1 scenario
+const onBuildMtp  = on.build?.mtp_on  === true;
+const onVisualMtp = on.visual?.mtp_on === true;
+const specAttempts = (on.build?.specAttempts ?? 0) + (on.visual?.specAttempts ?? 0);
+const ratioPass    = ratioBuild >= 1.10 || ratioVisual >= 1.10;
 
 const verdict =
-  !textPass   ? "FAIL — text scenario mtp_on=false" :
-  !visualPass ? "FAIL — visual scenario mtp_on=false" :
-  "PASS — mtp_on=true for both text and visual scenarios";
+  !onBuildMtp   ? "FAIL — ON arm build scenario mtp_on=false" :
+  !onVisualMtp  ? "FAIL — ON arm visual scenario mtp_on=false" :
+  specAttempts === 0 ? "FAIL — spec_attempts=0 on both scenarios" :
+  !ratioPass    ? `FAIL — ratio below 1.10 (build=${ratioBuild.toFixed(3)}, visual=${ratioVisual.toFixed(3)})` :
+  "PASS";
 
 const summary = {
-  scenario_text:   { mtp_on: results.text?.mtp_on, tg_tps: results.text?.tg_tps, specAttempts: results.text?.specAttempts, specAccepts: results.text?.specAccepts },
-  scenario_visual: { mtp_on: results.visual?.mtp_on, tg_tps: results.visual?.tg_tps, specAttempts: results.visual?.specAttempts, specAccepts: results.visual?.specAccepts },
+  arm_on: {
+    build:  { mtp_on: on.build?.mtp_on,  tg_tps: on.build?.tg_tps,  specAttempts: on.build?.specAttempts,  specAccepts: on.build?.specAccepts  },
+    visual: { mtp_on: on.visual?.mtp_on, tg_tps: on.visual?.tg_tps, specAttempts: on.visual?.specAttempts, specAccepts: on.visual?.specAccepts },
+  },
+  arm_off: {
+    build:  { tg_tps: off.build?.tg_tps  },
+    visual: { tg_tps: off.visual?.tg_tps },
+  },
+  ratio_build:  ratioBuild,
+  ratio_visual: ratioVisual,
   verdict,
-  text_turn:   results.text,
-  visual_turn: results.visual,
+  on_turns:  on,
+  off_turns: off,
 };
 
-console.log("\n── E4B MTP Dual-Scenario Result (#788/#793) ──────────────────────────");
-console.log(`  Scenario A (text-only): mtp_on=${results.text?.mtp_on}, tg=${results.text?.tg_tps?.toFixed(2)} t/s`);
-console.log(`  Scenario B (visual):    mtp_on=${results.visual?.mtp_on}, tg=${results.visual?.tg_tps?.toFixed(2)} t/s`);
-console.log(`  Verdict:                ${verdict}`);
+console.log("\n── E4B MTP A/B Result (#788/#793) ────────────────────────────────────");
+console.log(`  ON  build:  mtp_on=${on.build?.mtp_on},  tg=${on.build?.tg_tps?.toFixed(2)} t/s, specAttempts=${on.build?.specAttempts}`);
+console.log(`  ON  visual: mtp_on=${on.visual?.mtp_on}, tg=${on.visual?.tg_tps?.toFixed(2)} t/s, specAttempts=${on.visual?.specAttempts}`);
+console.log(`  OFF build:  tg=${off.build?.tg_tps?.toFixed(2)} t/s`);
+console.log(`  OFF visual: tg=${off.visual?.tg_tps?.toFixed(2)} t/s`);
+console.log(`  Ratio build:  ${ratioBuild.toFixed(3)}`);
+console.log(`  Ratio visual: ${ratioVisual.toFixed(3)}`);
+console.log(`  Verdict: ${verdict}`);
 console.log("──────────────────────────────────────────────────────────────────────");
 
 const outFile = resolve(__dirname, "mtp-ab-result.json");
