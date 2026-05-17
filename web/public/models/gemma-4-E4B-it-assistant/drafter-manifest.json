@@ -1,0 +1,84 @@
+{
+  "model_id": "google/gemma-4-E4B-it-assistant",
+  "export_dtype": "float32",
+  "inputs": {
+    "inputs_embeds": {
+      "shape": [
+        "batch",
+        "seq",
+        5120
+      ],
+      "dtype": "float32",
+      "note": "cat([target_token_embedding, target_last_hidden_state], dim=-1)"
+    },
+    "position_ids": {
+      "shape": [
+        "batch",
+        "seq"
+      ],
+      "dtype": "int64",
+      "note": "constant at last-seen-token position for all draft steps"
+    },
+    "sliding_k": {
+      "shape": [
+        "batch",
+        2,
+        "kv_seq",
+        256
+      ],
+      "dtype": "float32",
+      "note": "target's last sliding_attention layer K, 2 KV heads for E4B"
+    },
+    "sliding_v": {
+      "shape": [
+        "batch",
+        2,
+        "kv_seq",
+        256
+      ],
+      "dtype": "float32"
+    },
+    "full_k": {
+      "shape": [
+        "batch",
+        2,
+        "kv_seq",
+        512
+      ],
+      "dtype": "float32",
+      "note": "target's last full_attention layer K, 2 KV heads for E4B"
+    },
+    "full_v": {
+      "shape": [
+        "batch",
+        2,
+        "kv_seq",
+        512
+      ],
+      "dtype": "float32"
+    }
+  },
+  "outputs": {
+    "logits": {
+      "shape": [
+        "batch",
+        "seq",
+        262144
+      ],
+      "dtype": "float32",
+      "note": "vocabulary logits; use argmax for greedy draft token"
+    },
+    "projected_state": {
+      "shape": [
+        "batch",
+        "seq",
+        2560
+      ],
+      "dtype": "float32",
+      "note": "post_projection output; concat with next token embed as next draft step's inputs_embeds"
+    }
+  },
+  "target_model": "google/gemma-4-E4B-it",
+  "target_hidden_size": 2560,
+  "target_num_kv_heads": 2
+}

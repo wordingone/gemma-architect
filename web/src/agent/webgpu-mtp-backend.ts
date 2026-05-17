@@ -4,28 +4,28 @@
 // transformers.js — no extra model download. Drafter session passed in from
 // agent-harness.ts (loaded via drafter-cache.ts, #750).
 //
-// Drafter target model: google/gemma-4-E2B-it (from drafter ONNX metadata).
-// MTP therefore only fires when the browser loads E2B — gated in agent-harness.ts.
+// Drafter target model: google/gemma-4-E4B-it-assistant (E4B drafter, #793).
+// MTP fires when the browser loads E4B — gated in agent-harness.ts.
 //
 // Decoder ONNX structure differs by model variant:
 //   E4B (default, 24 KV layers): ONNX topology parse of decoder_model_merged_q4.onnx.
 //     num_kv_heads=2, FULL_ATTN={5,11,17,23}, LAST_SLIDING=22, LAST_FULL=23.
 //     See web/src/agent/decoder-kv-shapes.json for complete per-layer table.
-//   E2B (MTP-active variant, 15 KV layers): ONNX topology parse of E2B decoder.
+//   E2B (legacy, 15 KV layers): ONNX topology parse of E2B decoder.
 //     num_kv_heads=1, FULL_ATTN={4,9,14}, LAST_SLIDING=13, LAST_FULL=14.
-//   Both: inputs_embeds [B,S,1536], per_layer_inputs [B,S,35,256],
+//   Both: inputs_embeds [B,S,hidden], per_layer_inputs [B,S,35,256],
 //         attention_mask [B,S+past] int64, position_ids [B,S] int64,
 //         num_logits_to_keep [] int64, past_key_values.N.key/value [B,nh,past,hd]
 //         Outputs: logits [B,keep,262144], present.N.key/value [B,nh,S,hd]
 //
-// Drafter ONNX inputs (drafter-fp16.onnx, confirmed by ONNX parse):
+// Drafter ONNX inputs (E4B drafter, drafter.onnx, 302 MB fp32):
+//   inputs_embeds float32 [1,1,5120], position_ids int64 [1,1],
+//   sliding_k/v float32 [1,2,16,256], full_k/v float32 [1,2,16,512]
+// E2B drafter (legacy, drafter-fp16.onnx):
 //   inputs_embeds float32 [1,1,3072], position_ids int64 [1,1],
 //   sliding_k/v float32 [1,1,16,256], full_k/v float32 [1,1,16,512]
-
-const HIDDEN_SIZE = 1536;
 const VOCAB_SIZE  = 262144;
 
-// Per-model KV config — drafter targets E2B, so only E2B config is used for MTP.
 export interface MtpModelConfig {
   numKvLayers:    number;
   numKvHeads:     number;
@@ -33,6 +33,7 @@ export interface MtpModelConfig {
   lastFull:       number;
   fullAttn:       Set<number>;
   drafterKvWindow: number;
+  hiddenSize:     number;
 }
 
 export const MTP_CONFIG_E2B: MtpModelConfig = {
@@ -42,6 +43,17 @@ export const MTP_CONFIG_E2B: MtpModelConfig = {
   lastFull:       14,
   fullAttn:       new Set([4, 9, 14]),
   drafterKvWindow: 16,
+  hiddenSize:     1536,
+};
+
+export const MTP_CONFIG_E4B: MtpModelConfig = {
+  numKvLayers:    24,
+  numKvHeads:     2,
+  lastSliding:    22,
+  lastFull:       23,
+  fullAttn:       new Set([5, 11, 17, 23]),
+  drafterKvWindow: 16,
+  hiddenSize:     2560,
 };
 
 export interface MtpSessions {
@@ -154,21 +166,20 @@ function headAvgToFp32Tail(kvTensor: any, W: number, ort: any): any {
   const [B, numHeads, S, H] = kvTensor.dims as number[];
   const isF16 = kvTensor.type === "float16";
   const src = kvTensor.data as Uint16Array | Float32Array;
-  const f32 = new Float32Array(W * H);       // zero-filled → zero-pad when S < W
+  const f32 = new Float32Array(numHeads * W * H);  // zero-filled → zero-pad when S < W
   const copyLen   = Math.min(S, W);
-  const srcTokOff = S - copyLen;             // first token to copy (tail of the sequence)
-  const dstTokOff = W - copyLen;             // destination token (zero-pad at front)
-  for (let t = 0; t < copyLen; t++) {
-    for (let h = 0; h < H; h++) {
-      let sum = 0;
-      for (let nh = 0; nh < numHeads; nh++) {
-        const idx = nh * S * H + (srcTokOff + t) * H + h;
-        sum += isF16 ? fp16ToFloat32((src as Uint16Array)[idx]) : (src as Float32Array)[idx];
+  const srcTokOff = S - copyLen;
+  const dstTokOff = W - copyLen;
+  for (let nh = 0; nh < numHeads; nh++) {
+    for (let t = 0; t < copyLen; t++) {
+      for (let h = 0; h < H; h++) {
+        const srcIdx = nh * S * H + (srcTokOff + t) * H + h;
+        const dstIdx = nh * W * H + (dstTokOff + t) * H + h;
+        f32[dstIdx] = isF16 ? fp16ToFloat32((src as Uint16Array)[srcIdx]) : (src as Float32Array)[srcIdx];
       }
-      f32[(dstTokOff + t) * H + h] = sum / numHeads;
     }
   }
-  return new ort.Tensor("float32", f32, [B, 1, W, H]);
+  return new ort.Tensor("float32", f32, [B, numHeads, W, H]);
 }
 
 // After each verify step, rejected draft tokens leave stale KV entries at the tail of
@@ -288,7 +299,7 @@ export async function runMtpSpecDecode(
   console.info(`[mtp] spec-decode loop active, K=${draftK}`);
 
   // projState persists across outer iterations so d=0 of each batch is seeded
-  // from the drafter's last proj_state rather than zeros. On the very first
+  // from the drafter's last projected_state rather than zeros. On the very first
   // batch (projState===null), tokenEmbed is used as a non-degenerate proxy for
   // both halves of inputs_embeds — the decoder's last_hidden_state is not
   // available (E2B ONNX does not expose it), and zeros produce NaN.
@@ -299,8 +310,8 @@ export async function runMtpSpecDecode(
   while (tokens.length < maxNew) {
     const K = Math.min(draftK, maxNew - tokens.length);
 
-    // Drafter KV window = 16 tokens (static ONNX dim). Slice tail + fp16→fp32 + head-avg.
-    const { lastSliding, lastFull, drafterKvWindow } = config;
+    // Drafter KV window = 16 tokens (static ONNX dim). Slice tail + fp16→fp32, preserve heads.
+    const { lastSliding, lastFull, drafterKvWindow, hiddenSize } = config;
     const slidingK = headAvgToFp32Tail(kvCache[`present.${lastSliding}.key`],   drafterKvWindow, O);
     const slidingV = headAvgToFp32Tail(kvCache[`present.${lastSliding}.value`], drafterKvWindow, O);
     const fullK    = headAvgToFp32Tail(kvCache[`present.${lastFull}.key`],      drafterKvWindow, O);
@@ -318,32 +329,33 @@ export async function runMtpSpecDecode(
       });
       const tokenEmbed = tokenEmbedOut["inputs_embeds"].data as Float32Array; // [1536]
 
-      const combined = new Float32Array(HIDDEN_SIZE * 2);
+      const combined = new Float32Array(hiddenSize * 2);
       const psData = projState ? (projState.data as Float32Array) : null;
-      for (let i = 0; i < HIDDEN_SIZE; i++) {
-        combined[i]               = tokenEmbed[i] ?? 0;
-        // projState===null only on the very first d=0 ever (E2B decoder does not
+      for (let i = 0; i < hiddenSize; i++) {
+        combined[i]              = tokenEmbed[i] ?? 0;
+        // projState===null only on the very first d=0 ever (decoder does not
         // expose last_hidden_state). Use tokenEmbed as a non-degenerate seed;
         // zeros would propagate NaN through the drafter's attention layers.
-        combined[i + HIDDEN_SIZE] = psData ? psData[i] ?? 0 : tokenEmbed[i] ?? 0;
+        combined[i + hiddenSize] = psData ? psData[i] ?? 0 : tokenEmbed[i] ?? 0;
       }
 
       // Probe NaN sources on first draft step of first spec iteration.
       if (d === 0 && specAttempts === 1) {
         const slidingKData = slidingK.data as Float32Array;
         console.info("[mtp-backend] nan-probe d=0:", {
-          combined_0:    combined[0],
-          combined_1536: combined[HIDDEN_SIZE],
-          combined_0_isNaN:    Number.isNaN(combined[0]),
-          combined_1536_isNaN: Number.isNaN(combined[HIDDEN_SIZE]),
-          slidingK_0:    slidingKData[0],
-          slidingK_0_isNaN: Number.isNaN(slidingKData[0]),
-          projState_null: projState === null,
+          combined_0:            combined[0],
+          combined_hiddenSize:   combined[hiddenSize],
+          combined_0_isNaN:      Number.isNaN(combined[0]),
+          combined_hs_isNaN:     Number.isNaN(combined[hiddenSize]),
+          slidingK_0:            slidingKData[0],
+          slidingK_0_isNaN:      Number.isNaN(slidingKData[0]),
+          projState_null:        projState === null,
+          hiddenSize,
         });
       }
 
       const draftOut = await drafter.run({
-        inputs_embeds: new O.Tensor("float32", combined, [1, 1, HIDDEN_SIZE * 2]),
+        inputs_embeds: new O.Tensor("float32", combined, [1, 1, hiddenSize * 2]),
         // Drafter operates in LOCAL position space: KV window occupies 0..drafterKvWindow-1,
         // draft token d is at drafterKvWindow+d. Passing absolute kvSeqLen+d (e.g. 936+)
         // is semantically incompatible with the drafter's learned RoPE associations even
@@ -358,16 +370,16 @@ export async function runMtpSpecDecode(
 
       const draftLogit = argmax(draftOut["logits"].data as Float32Array);
       draftTokens.push(draftLogit);
-      projState = draftOut["proj_state"];
+      projState = draftOut["projected_state"];
       // Probe on first draft step of first spec iteration to confirm projState wiring.
       if (d === 0 && specAttempts === 1) {
-        const ps = draftOut["proj_state"];
+        const ps = draftOut["projected_state"];
         const psData = ps?.data as Float32Array | undefined;
         console.info("[mtp-backend] d=0 probe:", {
           outputKeys: Object.keys(draftOut),
-          proj_state_dims: ps?.dims,
-          proj_state_defined: ps != null,
-          proj_state_nonzero: psData ? psData.slice(0, 4) : null,
+          projected_state_dims: ps?.dims,
+          projected_state_defined: ps != null,
+          projected_state_nonzero: psData ? psData.slice(0, 4) : null,
           draftLogit,
         });
       }

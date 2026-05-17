@@ -20,7 +20,7 @@
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
-import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E2B } from "./webgpu-mtp-backend.js";
+import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -118,14 +118,14 @@ let _loadPromise: Promise<{ model: PreTrainedModel; processor: unknown }> | null
 // when any prerequisite fails. (#679 added condition 3 to prevent drafter-only unverified
 // output from silently activating when conditions 1+2 become true upstream.)
 //
-// Drafter ONNX input interface (see scripts/export-drafter-onnx.py):
-//   inputs_embeds [B, seq, 3072] = cat([target_token_embed, target_hidden_state], dim=-1)
+// Drafter ONNX input interface (E4B — see scripts/export-drafter-e4b-onnx.py):
+//   inputs_embeds [B, seq, 5120] = cat([target_token_embed, target_hidden_state], dim=-1)
 //   position_ids  [B, seq]       = constant at last-seen-token position for all draft steps
-//   sliding_k     [B, 1, kv, 256] = target last sliding_attention layer K
-//   sliding_v     [B, 1, kv, 256] = target last sliding_attention layer V
-//   full_k        [B, 1, kv, 512] = target last full_attention layer K
-//   full_v        [B, 1, kv, 512] = target last full_attention layer V
-// Outputs: scatter [B, seq, 262144], linear_21 [B, seq, 1536]  (dynamo export names)
+//   sliding_k     [B, 2, kv, 256] = target last sliding_attention layer K (2 KV heads)
+//   sliding_v     [B, 2, kv, 256] = target last sliding_attention layer V
+//   full_k        [B, 2, kv, 512] = target last full_attention layer K (2 KV heads)
+//   full_v        [B, 2, kv, 512] = target last full_attention layer V
+// Outputs: logits [B, seq, 262144], projected_state [B, seq, 2560]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OrtSession = any; // onnxruntime-web InferenceSession (loaded dynamically)
@@ -134,9 +134,9 @@ let _drafterSession: OrtSession | null = null;
 let _drafterLoadAttempted = false;
 let _drafterLoadPromise: Promise<void> | null = null;
 
-const DRAFTER_ONNX_URL = "/models/gemma-4-E2B-it-assistant/drafter-fp16.onnx";
+const DRAFTER_ONNX_URL = "/models/gemma-4-E4B-it-assistant/drafter.onnx";
 // Bump this key to bust the IDB cache when a new drafter export is deployed.
-const DRAFTER_CACHE_KEY = "mtp-drafter-fp16-v1";
+const DRAFTER_CACHE_KEY = "mtp-drafter-e4b-v1";
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
 // Flip to true when drafter ONNX is deployed and output names are confirmed (#738).
 // Two-gate design: drafter loaded + verification wired. Target hidden-state exposure
@@ -1180,16 +1180,14 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
   // Two-gate (#793) + E2B model guard:
   //   drafter loaded + verification wired + E2B model active.
-  // Visual turns now included (#793 reversal): drafter is unconditioned on the image;
-  // accept_rate is lower on visual turns but >0, which beats the prior 0% bypass.
-  // Drafter was trained on google/gemma-4-E2B-it (confirmed by drafter ONNX metadata).
-  // Feeding E4B's KV (24 layers, 2 KV heads) to a drafter expecting E2B's KV
-  // (15 layers, 1 KV head) produces accept_rate=0 — structurally guaranteed mismatch.
-  // MTP only fires when the browser loaded E2B via ?gemma_model=e2b.
+  // E4B drafter (#793): exported from google/gemma-4-E4B-it-assistant (302 MB fp32).
+  // KV shapes match E4B target: 24 layers, 2 KV heads, hidden_size=2560.
+  // Visual turns included — drafter is unconditioned on the image; accept_rate is
+  // lower on visual turns but >0, which beats the prior 0% bypass on all-E4B sessions.
   const drafterReady =
     _drafterSession !== null &&
     MTP_VERIFICATION_WIRED &&
-    MODEL_ID === MODEL_ID_CANDIDATES.e2b &&
+    MODEL_ID === MODEL_ID_CANDIDATES.e4b &&
     !_MTP_OFF;
 
   let specAttempts = 0;
@@ -1221,7 +1219,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
           safeMaxNewTokens,
           MTP_DRAFT_N,
           eosId,
-          MTP_CONFIG_E2B,
+          MTP_CONFIG_E4B,
         );
 
         specAttempts = result.specAttempts;
