@@ -20,6 +20,7 @@
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
+import { getMtpSessions, runMtpSpecDecode } from "./webgpu-mtp-backend.js";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -1149,116 +1150,55 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   let outputs: unknown;
 
   if (drafterReady) {
-    console.debug(`[mtp] spec-decode path active — drafter loaded, text-only request, draft_k=${MTP_DRAFT_N}`);
-    // ── Spec-decode loop (AC3) ─────────────────────────────────────────────
-    // Pattern: draft MTP_DRAFT_N tokens with drafter → verify with target in
-    // one forward pass → accept prefix to first mismatch → repeat.
-    // Reference: HF Python `_assisted_decoding` + SinglePositionMultiTokenCandidateGenerator.
-    //
-    // Drafter ONNX inputs (see scripts/export-drafter-onnx.py):
-    //   inputs_embeds [B, 1, 3072] = cat([target_token_embed, target_hidden_state], dim=-1)
-    //   position_ids  [B, 1]       = last-seen-token position (constant across draft steps)
-    //   sliding_k/v   [B, 1, kv, 256] = target's last sliding_attention layer KV
-    //   full_k/v      [B, 1, kv, 512] = target's last full_attention layer KV
+    // ── Three-session MTP spec-decode (#751) ──────────────────────────────────
+    // embed_tokens + decoder_model_merged sessions reused from already-loaded
+    // transformers.js model — no extra VRAM cost. Drafter session loaded via
+    // drafter-cache.ts. Full greedy verification with KV cache accumulation.
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ort = (globalThis as any).ort;
-      let currentIds = (inputs as any).input_ids as { data: BigInt64Array; dims: number[] };
-      let remainingTokens = safeMaxNewTokens;
+      const mtpSessions = getMtpSessions(model);
 
-      while (remainingTokens > 0) {
-        // Target forward — must request hidden_states + shared_kv_states.
+      if (!mtpSessions) {
+        // Session keys don't match (model variant or transformers.js version).
+        console.debug("[mtp] getMtpSessions() returned null — standard generate path.");
+      } else {
+        const inputIdsTensor = (inputs as any).input_ids as { data: BigInt64Array; dims: number[] };
+        const eosId: number = (model as any).config?.eos_token_id ?? 1;
+
+        const result = await runMtpSpecDecode(
+          mtpSessions,
+          _drafterSession!,
+          ort,
+          inputIdsTensor.data,
+          safeMaxNewTokens,
+          MTP_DRAFT_N,
+          eosId,
+        );
+
+        specAttempts = result.specAttempts;
+        specAccepts  = result.specAccepts;
+
+        // Build a duck-typed tensor compatible with transformers.js batch_decode().
+        // batch_decode calls .tolist() → [[n, n, ...]] (number[], not BigInt).
+        const promptLen = inputIdsTensor.dims[1];
+        const newToks   = result.tokens; // number[] — generated tokens only
+        const allNums   = [...Array.from(inputIdsTensor.data, Number), ...newToks];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const targetOut: any = await (model as any).session.run({
-          ...(inputs as any),
-          output_hidden_states: new ort.Tensor("bool", [true], []),
-          return_shared_kv_states: new ort.Tensor("bool", [true], []),
+        const makeTensor = (nums: number[]): any => ({
+          data: new BigInt64Array(nums.map(BigInt)),
+          dims: [1, nums.length],
+          tolist: () => [nums.slice()],
+          slice: (_ax: null, range: [number, null | undefined]) => makeTensor(nums.slice(range[0])),
         });
-
-        const targetHidden  = targetOut["last_hidden_state"];  // [B, seq, 1536]
-        const targetEmbeds  = (model as any).get_input_embeddings();
-        const lastTokenId   = currentIds.data[currentIds.data.length - 1];
-        // token embedding from target vocab table
-        const tokenEmbed    = targetEmbeds ? targetEmbeds(BigInt(lastTokenId)) : targetHidden;
-
-        // shared_kv_states from target (flattened to named tensors for drafter)
-        const slidingK = targetOut["shared_kv_states.sliding_attention.key"];
-        const slidingV = targetOut["shared_kv_states.sliding_attention.value"];
-        const fullK    = targetOut["shared_kv_states.full_attention.key"];
-        const fullV    = targetOut["shared_kv_states.full_attention.value"];
-
-        if (!slidingK || !slidingV || !fullK || !fullV) {
-          // Target ONNX doesn't expose shared_kv_states — spec-decode inert on this build.
-          // Fix: wire three-session pipeline (embed_tokens + decoder_model_merged + drafter).
-          console.debug("[mtp] fallthrough — target ONNX missing shared_kv_states; standard generate path.", {
-            has_hidden: !!targetOut["last_hidden_state"],
-            has_sliding_k: !!slidingK, has_full_k: !!fullK,
-          });
-          break;
-        }
-
-        // Draft MTP_DRAFT_N tokens autoregressively (drafter, cheap).
-        // Each step: inputs_embeds = cat([token_embed, proj_state], dim=-1).
-        // projState falls back to tokenEmbed when target doesn't expose last_hidden_state.
-        const draftTokens: number[] = [];
-        let projState = targetHidden ?? tokenEmbed; // [B, 1, 1536] or approximation
-
-        for (let d = 0; d < MTP_DRAFT_N && remainingTokens > 0; d++) {
-          specAttempts++;
-          // Concatenate along last dim: [B, 1, 1536] + [B, 1, 1536] → [B, 1, 3072]
-          const embData = tokenEmbed?.data ?? projState.data;
-          const hidData = projState.data;
-          const combined = new Float32Array(3072);
-          for (let i = 0; i < 1536; i++) {
-            combined[i]        = (embData as Float32Array)[i] ?? 0;
-            combined[i + 1536] = (hidData as Float32Array)[i] ?? 0;
-          }
-          const inputsEmbedsTensor = new ort.Tensor("float32", combined, [1, 1, 3072]);
-          const posTensor = new ort.Tensor("int64", [BigInt(currentIds.dims[1] - 1)], [1, 1]);
-
-          const draftOut = await _drafterSession!.run({
-            inputs_embeds: inputsEmbedsTensor,
-            position_ids:  posTensor,
-            sliding_k: slidingK,
-            sliding_v: slidingV,
-            full_k:    fullK,
-            full_v:    fullV,
-          });
-
-          const logits = draftOut["logits"].data as Float32Array; // [262144]
-          let maxIdx = 0;
-          for (let j = 1; j < logits.length; j++) {
-            if (logits[j] > logits[maxIdx]) maxIdx = j;
-          }
-          draftTokens.push(maxIdx);
-          projState = draftOut["proj_state"]; // [1, 1, 1536]; next draft step input
-          remainingTokens--;
-        }
-
-        // Verify draft tokens against target in one parallel pass.
-        // For simplicity, verify greedily (compare argmax; no sampling).
-        let accepted = 0;
-        for (const _tok of draftTokens) {
-          // Simplified: accept all (full verification requires re-running target with
-          // draft token position_ids, which requires KV cache rewind support in the
-          // ONNX graph — placeholder until KV-rewind is available).
-          accepted++;
-          specAccepts++;
-        }
-
-        // Append accepted tokens to output ids and continue or break on EOS.
-        const eos = (model as any).config?.eos_token_id ?? 1;
-        const newIds = [...Array.from(currentIds.data), ...draftTokens.slice(0, accepted).map(BigInt)];
-        currentIds = { data: BigInt64Array.from(newIds), dims: [1, newIds.length] };
-        if (draftTokens.slice(0, accepted).includes(eos)) break;
+        outputs = makeTensor(allNums);
       }
-
-      outputs = currentIds; // final token sequence
     } catch (specErr) {
-      console.warn("[agent-harness] spec-decode loop error — falling back to standard generate:", (specErr as Error).message?.slice(0, 120));
+      console.warn("[agent-harness] MTP spec-decode error — falling back to standard generate:",
+        (specErr as Error).message?.slice(0, 120));
       specAttempts = 0;
       specAccepts  = 0;
-      outputs = undefined; // trigger standard generate below
+      outputs = undefined;
     }
   }
 
