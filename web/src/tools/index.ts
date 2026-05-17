@@ -280,7 +280,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   "wall-curve":    {
     clicks: -1,
     handler: atZ((pts) => pts.length >= 2 ? buildPolyline(pts) : buildPolyline([pts[0], pts[0]])),
-    commitMulti: (pts) => buildWallsAlongCurve(pts),
+    commitMulti: (pts) => pts.length >= 2 ? [buildCurveWall(pts)] : [],
   },
   rect:        { clicks: 2, handler: atZ(([a, b]) => buildRect(a, b)) },
   circle:      { clicks: 2, handler: atZ(([a, b]) => buildCircle(a, b)) },
@@ -373,25 +373,71 @@ function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: 
 
 // ── Wall sub-mode helpers ─────────────────────────────────────────────────────
 
-function buildWallsAlongCurve(pts: Array<{x: number; y: number; z?: number}>): SingleResult[] {
-  if (pts.length < 2) return [];
+function buildCurveWall(pts: Array<{x: number; y: number; z?: number}>): SingleResult {
+  const t = 0.2, h = 3.0;
   const z0 = pts[0]?.z ?? 0;
   const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p.x, p.y, 0)));
-  const N = Math.max((pts.length - 1) * 4, 8);
-  const curvePts = curve.getPoints(N);
-  const results: SingleResult[] = [];
-  for (let i = 0; i < curvePts.length - 1; i++) {
-    const r = buildWall({ x: curvePts[i].x, y: curvePts[i].y }, { x: curvePts[i + 1].x, y: curvePts[i + 1].y });
-    r.mesh.position.z = z0;
-    results.push(r);
+  const N = Math.max((pts.length - 1) * 16, 32);
+  const cPts = curve.getPoints(N); // N+1 points
+  const M = cPts.length;
+  const hw = t / 2;
+
+  // Per-sample tangent via central differences
+  const tangs = cPts.map((_, i) => {
+    const prev = cPts[Math.max(0, i - 1)];
+    const next = cPts[Math.min(M - 1, i + 1)];
+    const dx = next.x - prev.x, dy = next.y - prev.y;
+    const l = Math.sqrt(dx * dx + dy * dy) || 1;
+    return { x: dx / l, y: dy / l };
+  });
+
+  // 4 vertices per sample: outer-bottom[4i], outer-top[4i+1], inner-bottom[4i+2], inner-top[4i+3]
+  const pos: number[] = [];
+  for (let i = 0; i < M; i++) {
+    const p = cPts[i], tg = tangs[i];
+    const nx = -tg.y, ny = tg.x; // XY normal (90° CCW from tangent)
+    pos.push(p.x + hw * nx, p.y + hw * ny, z0);      // outer bottom
+    pos.push(p.x + hw * nx, p.y + hw * ny, z0 + h);  // outer top
+    pos.push(p.x - hw * nx, p.y - hw * ny, z0);      // inner bottom
+    pos.push(p.x - hw * nx, p.y - hw * ny, z0 + h);  // inner top
   }
-  return results;
+
+  const idx: number[] = [];
+  for (let i = 0; i < M - 1; i++) {
+    const ob0 = 4*i, ot0 = 4*i+1, ib0 = 4*i+2, it0 = 4*i+3;
+    const ob1 = 4*(i+1), ot1 = 4*(i+1)+1, ib1 = 4*(i+1)+2, it1 = 4*(i+1)+3;
+    idx.push(ob0, ot0, ob1,  ob1, ot0, ot1); // outer (+n normal)
+    idx.push(ib0, ib1, it0,  ib1, it1, it0); // inner (-n normal)
+    idx.push(ot0, it0, ot1,  ot1, it0, it1); // top (+z normal)
+    idx.push(ob0, ob1, ib0,  ob1, ib1, ib0); // bottom (-z normal)
+  }
+  idx.push(0, 2, 1,  1, 2, 3); // start cap (-tangent normal)
+  const e = M - 1;
+  idx.push(4*e, 4*e+1, 4*e+2,  4*e+1, 4*e+3, 4*e+2); // end cap (+tangent normal)
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geom.setIndex(idx);
+  geom.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "wall";
+  mesh.userData.isCurveWall = true;
+  mesh.userData.wallThickness = t;
+  mesh.userData.wallHeight = h;
+  mesh.userData.controlPoints = pts.map(p => ({ x: p.x, y: p.y, z: p.z ?? z0 }));
+  const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
+  const pStr = pts.map(p => `[${r4(p.x)},${r4(p.y)}]`).join(",");
+  const chain = `curveWall: spline(${pStr}) t(${t}) h(${h})`;
+  return { mesh, chain };
 }
 
 function commitMultiWalls(viewer: Viewer, results: SingleResult[]): void {
   for (const r of results) {
     viewer.addMesh(r.mesh, r.mesh.userData.kind ?? "brep", { noHistory: true });
-    if (r.mesh instanceof THREE.Mesh && r.mesh.userData.creator === "wall") {
+    if (r.mesh instanceof THREE.Mesh && r.mesh.userData.creator === "wall" && !r.mesh.userData.isCurveWall) {
       attemptWallCornerJoins(r.mesh, viewer.getScene());
     }
     if (r.mesh instanceof THREE.Mesh) onElementCommitted(r.mesh, viewer.getScene());
