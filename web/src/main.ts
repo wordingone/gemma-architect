@@ -12,7 +12,8 @@ import { assertCrossOriginIsolated } from "./agent/wasm-backend";
 assertCrossOriginIsolated();
 
 import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell/shell";
-import { formatLength } from "./units";
+import { formatLength, formatArea, formatVolume } from "./units";
+import { opAddLabel, opBuildAnnotLine } from "./viewer/op-tool";
 import { buildWorkbench } from "./shell/workbench";
 import { buildModes, activateMode } from "./shell/modes";
 import { initCmdK } from "./ui/cmdk";
@@ -1744,7 +1745,9 @@ registerHandler("SdSetUnits", (args) => {
   return { ok: true, unitSystem: valid };
 });
 
-// ---- Dimension verbs (#819 priority-2) — compute-only, no visual annotation ----
+// ---- Dimension verbs (#819 priority-2 / #832 visual closure) ----
+// Each handler computes the value AND renders a scene annotation + DOM label.
+// annotationUuid identifies the THREE.Object3D added to the scene for later removal.
 
 registerHandler("SdAlignedDim", (args) => {
   const aArr = (args.a as number[] | undefined) ?? [0, 0, 0];
@@ -1752,7 +1755,11 @@ registerHandler("SdAlignedDim", (args) => {
   const ptA = new THREE.Vector3(aArr[0] ?? 0, aArr[1] ?? 0, aArr[2] ?? 0);
   const ptB = new THREE.Vector3(bArr[0] ?? 0, bArr[1] ?? 0, bArr[2] ?? 0);
   const dist = ptA.distanceTo(ptB);
-  return { measured: "length", distance: parseFloat(dist.toFixed(4)), unit: "m" };
+  const mid = ptA.clone().add(ptB).multiplyScalar(0.5);
+  const lineObj = opBuildAnnotLine([ptA, ptB]);
+  viewer.getScene().add(lineObj);
+  opAddLabel(formatLength(dist), mid, viewer);
+  return { measured: "length", distance: parseFloat(dist.toFixed(4)), unit: "m", annotationUuid: lineObj.uuid };
 });
 
 registerHandler("SdAngularDim", (args) => {
@@ -1760,21 +1767,35 @@ registerHandler("SdAngularDim", (args) => {
   const r1Arr = (args.ray1   as number[] | undefined) ?? [1, 0, 0];
   const r2Arr = (args.ray2   as number[] | undefined) ?? [0, 1, 0];
   const vertex = new THREE.Vector3(vArr[0] ?? 0, vArr[1] ?? 0, vArr[2] ?? 0);
-  const d1 = new THREE.Vector3(r1Arr[0] ?? 0, r1Arr[1] ?? 0, r1Arr[2] ?? 0).sub(vertex).normalize();
-  const d2 = new THREE.Vector3(r2Arr[0] ?? 0, r2Arr[1] ?? 0, r2Arr[2] ?? 0).sub(vertex).normalize();
+  const ray1 = new THREE.Vector3(r1Arr[0] ?? 0, r1Arr[1] ?? 0, r1Arr[2] ?? 0);
+  const ray2 = new THREE.Vector3(r2Arr[0] ?? 0, r2Arr[1] ?? 0, r2Arr[2] ?? 0);
+  const d1 = ray1.clone().sub(vertex).normalize();
+  const d2 = ray2.clone().sub(vertex).normalize();
   const angleDeg = (Math.acos(Math.max(-1, Math.min(1, d1.dot(d2)))) * 180) / Math.PI;
-  return { measured: "angle", angleDeg: parseFloat(angleDeg.toFixed(2)), unit: "deg" };
+  const lineObj = opBuildAnnotLine([vertex, ray1, vertex, ray2]);
+  viewer.getScene().add(lineObj);
+  opAddLabel(`${angleDeg.toFixed(1)}°`, vertex, viewer);
+  return { measured: "angle", angleDeg: parseFloat(angleDeg.toFixed(2)), unit: "deg", annotationUuid: lineObj.uuid };
 });
 
 registerHandler("SdAreaDim", (args) => {
-  const pts = (args.points as number[][] | undefined) ?? [];
-  if (pts.length < 3) return { error: "SdAreaDim requires at least 3 points", measured: null };
+  const rawPts = (args.points as number[][] | undefined) ?? [];
+  if (rawPts.length < 3) return { error: "SdAreaDim requires at least 3 points", measured: null };
   let area = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const j = (i + 1) % pts.length;
-    area += (pts[i][0] ?? 0) * (pts[j][1] ?? 0) - (pts[j][0] ?? 0) * (pts[i][1] ?? 0);
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < rawPts.length; i++) {
+    const j = (i + 1) % rawPts.length;
+    area += (rawPts[i][0] ?? 0) * (rawPts[j][1] ?? 0) - (rawPts[j][0] ?? 0) * (rawPts[i][1] ?? 0);
+    cx += rawPts[i][0] ?? 0; cy += rawPts[i][1] ?? 0; cz += rawPts[i][2] ?? 0;
   }
-  return { measured: "area", area: parseFloat((Math.abs(area) / 2).toFixed(4)), unit: "m2" };
+  area = Math.abs(area) / 2;
+  const n = rawPts.length;
+  const centroid = new THREE.Vector3(cx / n, cy / n, cz / n);
+  const vec3Pts = rawPts.map((p) => new THREE.Vector3(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0));
+  const lineObj = opBuildAnnotLine([...vec3Pts, vec3Pts[0]]);
+  viewer.getScene().add(lineObj);
+  opAddLabel(`Area: ${formatArea(area)}`, centroid, viewer);
+  return { measured: "area", area: parseFloat(area.toFixed(4)), unit: "m2", annotationUuid: lineObj.uuid };
 });
 
 registerHandler("SdVolumeDim", (args) => {
@@ -1782,9 +1803,16 @@ registerHandler("SdVolumeDim", (args) => {
   if (!id) return { error: "SdVolumeDim requires id", measured: null };
   const obj = viewer.getScene().getObjectByProperty("uuid", id);
   if (!obj) return { error: `SdVolumeDim — object not found: ${id}`, measured: null };
+  const box = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3();
-  new THREE.Box3().setFromObject(obj).getSize(size);
-  return { measured: "volume", volume: parseFloat((size.x * size.y * size.z).toFixed(4)), unit: "m3" };
+  const ctr = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(ctr);
+  const volume = size.x * size.y * size.z;
+  const lineObj = opBuildAnnotLine([box.min, box.max]);
+  viewer.getScene().add(lineObj);
+  opAddLabel(`Vol: ${formatVolume(volume)}`, ctr, viewer);
+  return { measured: "volume", volume: parseFloat(volume.toFixed(4)), unit: "m3", annotationUuid: lineObj.uuid };
 });
 
 // Translate position/point fields in a cluster step's params by an anchor offset.

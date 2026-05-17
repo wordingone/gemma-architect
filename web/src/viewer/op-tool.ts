@@ -144,7 +144,7 @@ export function opCancel(viewer: Viewer): void {
   opFinish(viewer);
 }
 
-function opAddLabel(text: string, worldPt: THREE.Vector3, viewer: Viewer): HTMLElement {
+export function opAddLabel(text: string, worldPt: THREE.Vector3, viewer: Viewer): HTMLElement {
   const el = document.createElement("div");
   el.style.cssText = [
     "position:fixed",
@@ -166,7 +166,7 @@ function opAddLabel(text: string, worldPt: THREE.Vector3, viewer: Viewer): HTMLE
   return el;
 }
 
-function opBuildAnnotLine(pts: THREE.Vector3[], color = 0x4488ff): THREE.Object3D {
+export function opBuildAnnotLine(pts: THREE.Vector3[], color = 0x4488ff): THREE.Object3D {
   const geo = new THREE.BufferGeometry().setFromPoints(pts);
   const mat = new THREE.LineBasicMaterial({ color, depthTest: false });
   const line = new THREE.Line(geo, mat);
