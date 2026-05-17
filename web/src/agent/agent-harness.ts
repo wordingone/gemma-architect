@@ -1178,8 +1178,10 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   _drafterLoadPromise ??= loadDrafter();
   await _drafterLoadPromise;
 
-  // Three-gate (#740-C) + E2B model guard:
-  //   drafter loaded + verification wired + text-only request + E2B model active.
+  // Two-gate (#793) + E2B model guard:
+  //   drafter loaded + verification wired + E2B model active.
+  // Visual turns now included (#793 reversal): drafter is unconditioned on the image;
+  // accept_rate is lower on visual turns but >0, which beats the prior 0% bypass.
   // Drafter was trained on google/gemma-4-E2B-it (confirmed by drafter ONNX metadata).
   // Feeding E4B's KV (24 layers, 2 KV heads) to a drafter expecting E2B's KV
   // (15 layers, 1 KV head) produces accept_rate=0 — structurally guaranteed mismatch.
@@ -1187,7 +1189,6 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const drafterReady =
     _drafterSession !== null &&
     MTP_VERIFICATION_WIRED &&
-    !payloadHasMultimodal(req) &&
     MODEL_ID === MODEL_ID_CANDIDATES.e2b &&
     !_MTP_OFF;
 
