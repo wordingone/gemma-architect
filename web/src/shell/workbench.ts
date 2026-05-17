@@ -1180,7 +1180,7 @@ function buildLayersTab(): HTMLElement {
   function applyVisibility(layerId: string, visible: boolean): void {
     const v = getViewer();
     if (!v) return;
-    v.getScene().children.forEach((obj) => {
+    v.getScene().traverse((obj) => {
       if ((obj as THREE.Object3D & { userData: Record<string, unknown> }).userData?.layerId === layerId) {
         obj.visible = visible;
       }

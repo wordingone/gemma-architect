@@ -21,6 +21,7 @@ import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, ty
 import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted } from "../tools/join-groups.js";
 import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from "../tools/wall-corners.js";
 import { ClipFillManager } from "./clip-fill.js";
+import { getLayerForCreator } from "../geometry/layers.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -2173,6 +2174,9 @@ export class Viewer {
     if (ctx && mesh.userData.dispatchArgs === undefined) {
       mesh.userData.dispatchVerb = ctx.canonical;
       mesh.userData.dispatchArgs = { ...ctx.args };
+    }
+    if (!mesh.userData.layerId && mesh.userData.creator) {
+      mesh.userData.layerId = getLayerForCreator(mesh.userData.creator as string);
     }
     this.scene.add(mesh);
     this._applyActiveClipPlanesToSubtree(mesh);
