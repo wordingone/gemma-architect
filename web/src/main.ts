@@ -8,6 +8,9 @@
 // Export menu is shared: the active source (whether replicad-generated or
 // loaded-from-file) is queried via viewer.getActiveMeshData().
 
+import { assertCrossOriginIsolated } from "./agent/wasm-backend";
+assertCrossOriginIsolated();
+
 import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell/shell";
 import { formatLength } from "./units";
 import { buildWorkbench } from "./shell/workbench";

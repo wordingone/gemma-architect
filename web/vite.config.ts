@@ -25,7 +25,7 @@ export default defineConfig({
   server: {
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "credentialless",
+      "Cross-Origin-Embedder-Policy": "require-corp",
     },
     fs: {
       // Allow reading sibling outputs/ for canned demo prompts in dev.
@@ -35,7 +35,7 @@ export default defineConfig({
   preview: {
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "credentialless",
+      "Cross-Origin-Embedder-Policy": "require-corp",
     },
   },
   optimizeDeps: {
