@@ -287,6 +287,14 @@ export async function runMtpSpecDecode(
 
   console.info(`[mtp] spec-decode loop active, K=${draftK}`);
 
+  // projState persists across outer iterations so d=0 of each batch is seeded
+  // from the drafter's last proj_state rather than zeros. On the very first
+  // batch (projState===null), tokenEmbed is used as a non-degenerate proxy for
+  // both halves of inputs_embeds — the decoder's last_hidden_state is not
+  // available (E2B ONNX does not expose it), and zeros produce NaN.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let projState: any = null;
+
   // ── 2. Spec-decode iterations ───────────────────────────────────────────────
   while (tokens.length < maxNew) {
     const K = Math.min(draftK, maxNew - tokens.length);
@@ -300,8 +308,6 @@ export async function runMtpSpecDecode(
 
     // ── 2a. Draft K tokens with drafter ──────────────────────────────────────
     const draftTokens: number[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let projState: any = null;
     let lastToken = nextToken;
 
     for (let d = 0; d < K; d++) {
@@ -313,9 +319,13 @@ export async function runMtpSpecDecode(
       const tokenEmbed = tokenEmbedOut["inputs_embeds"].data as Float32Array; // [1536]
 
       const combined = new Float32Array(HIDDEN_SIZE * 2);
+      const psData = projState ? (projState.data as Float32Array) : null;
       for (let i = 0; i < HIDDEN_SIZE; i++) {
         combined[i]               = tokenEmbed[i] ?? 0;
-        combined[i + HIDDEN_SIZE] = projState ? (projState.data as Float32Array)[i] ?? 0 : 0;
+        // projState===null only on the very first d=0 ever (E2B decoder does not
+        // expose last_hidden_state). Use tokenEmbed as a non-degenerate seed;
+        // zeros would propagate NaN through the drafter's attention layers.
+        combined[i + HIDDEN_SIZE] = psData ? psData[i] ?? 0 : tokenEmbed[i] ?? 0;
       }
 
       // Probe NaN sources on first draft step of first spec iteration.
