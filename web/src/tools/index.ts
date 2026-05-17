@@ -11,7 +11,7 @@ import { getSnapTarget, setSnapTarget, getLastSnapEdgeDir, getLastSurfaceHit, HO
 import { pushAction } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
-import { levelStore } from "../geometry/levels";
+import { levelStore, getActiveLevelId } from "../geometry/levels";
 import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "../viewer/selection-state";
 import { projectToScreen, unprojectToXY, unprojectForClipTool, snapWorldForView, getGeometryZ, showLevelChip } from "../viewer/projection";
 import { initPickerHint, setPickerHint, setChooserHint, getChooserEl, readActiveTool, opSetHover, OP_TOOL_IDS } from "../viewer/picker-hint";
@@ -243,6 +243,9 @@ type ToolHandler = {
   };
 };
 
+// 9 ft above the active level — canonical offset for ceiling and roof placement.
+export const DEFAULT_CEILING_OFFSET = 2.7432;
+
 // Inject the clicked Z into the mesh after the builder returns.
 // All XY-plane builders hardcode position.z=0; this wrapper lifts them to the
 // active level elevation using the first clicked point's z.
@@ -252,6 +255,21 @@ function atZ<T extends { mesh: THREE.Object3D; chain: string }>(
   return (pts) => {
     const r = fn(pts);
     r.mesh.position.z = pts[0]?.z ?? 0;
+    return r;
+  };
+}
+
+// Position mesh at the top of the active level (elevation + offset) regardless
+// of click-point Z. Used for ceiling and roof — elements that float above the
+// floor, not on it.
+function atTopOfLevel<T extends { mesh: THREE.Object3D; chain: string }>(
+  fn: (pts: Array<{ x: number; y: number; z?: number }>) => T,
+  offset: number,
+): (pts: Array<{ x: number; y: number; z?: number }>) => T {
+  return (pts) => {
+    const r = fn(pts);
+    const elev = levelStore.get(getActiveLevelId())?.elevation ?? 0;
+    r.mesh.position.z = elev + offset;
     return r;
   };
 }
@@ -272,10 +290,10 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   point:       { clicks: 1, handler: atZ(([p]) => buildPoint(p)) },
   extrude:     { clicks: 3, handler: atZ(([c1, c2, c3]) => buildBox(c1, c2, c3)) },
   beam:        { clicks: 2, handler: atZ(([a, b]) => buildBeam(a, b)) },
-  roof:        { clicks: 2, handler: atZ(([a, b]) => buildRoof(a, b)) },
+  roof:        { clicks: 2, handler: atTopOfLevel(([a, b]) => buildRoof(a, b), DEFAULT_CEILING_OFFSET) },
   space:       { clicks: 2, handler: atZ(([a, b]) => buildSpace(a, b)) },
   foundation:  { clicks: 2, handler: atZ(([a, b]) => buildFoundation(a, b)) },
-  ceiling:     { clicks: 2, handler: atZ(([a, b]) => buildCeiling(a, b)) },
+  ceiling:     { clicks: 2, handler: atTopOfLevel(([a, b]) => buildCeiling(a, b), DEFAULT_CEILING_OFFSET) },
   curtainwall: { clicks: 2, handler: atZ(([a, b]) => buildCurtainWall(a, b)) },
   skylight:    { clicks: 2, handler: atZ(([a, b]) => buildSkylight(a, b)) },
   opening:     { clicks: 1, handler: atZ(([p]) => buildOpening(p)) },

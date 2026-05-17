@@ -50,7 +50,7 @@ import {
 import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
-import { initCreateMode, emitClickWorld } from "./tools/index";
+import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair } from "./tools/structural";
@@ -895,7 +895,7 @@ registerHandler("SdRoof", (args) => {
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
   const { mesh, chain } = buildRoof(a, b);
-  mesh.position.z = getActiveLevelElevation() + 3;
+  mesh.position.z = getActiveLevelElevation() + DEFAULT_CEILING_OFFSET;
   mesh.userData.roofType = roofType;
   mesh.userData.ifcPredefinedType = ({
     flat: "FLAT_ROOF",
@@ -962,7 +962,7 @@ registerHandler("SdCeiling", (args) => {
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
   const { mesh, chain } = buildCeiling(a, b);
-  mesh.position.z = getActiveLevelElevation() + 3;
+  mesh.position.z = getActiveLevelElevation() + DEFAULT_CEILING_OFFSET;
   mesh.userData.layerId = resolveLayerId("SdCeiling", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
@@ -1028,7 +1028,7 @@ registerHandler("SdSkylight", (args) => {
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
   const { mesh, chain } = buildSkylight(a, b);
-  mesh.position.z = getActiveLevelElevation() + 3;
+  mesh.position.z = getActiveLevelElevation() + DEFAULT_CEILING_OFFSET;
   mesh.userData.layerId = resolveLayerId("SdSkylight", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
