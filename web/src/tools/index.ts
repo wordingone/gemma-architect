@@ -321,22 +321,39 @@ const TOOL_TODOS: Record<string, string> = {
 function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: number; y: number; z?: number }): void {
   clearPreview(viewer);
   const isUnlimited = handler.clicks === -1;
-  if (!isUnlimited && _pending.length !== 1) return;
+  const isOneClick  = handler.clicks === 1;
   if (isUnlimited && _pending.length < 1) return;
+  if (!isUnlimited && !isOneClick && _pending.length !== 1) return;
 
-  const previewPts = isUnlimited ? [..._pending, livePoint] : [_pending[0], livePoint];
+  const previewPts = isUnlimited
+    ? [..._pending, livePoint]
+    : (isOneClick && _pending.length === 0)
+      ? [livePoint]                    // 1-click: ghost at cursor before commit
+      : [_pending[0], livePoint];      // 2-click: rubber-band from anchor
 
-  const last = previewPts[previewPts.length - 1];
-  const prev = previewPts[previewPts.length - 2];
-  const dx = last.x - prev.x;
-  const dy = last.y - prev.y;
-  const dz = (last.z ?? 0) - (prev.z ?? 0);
-  if (dx * dx + dy * dy + dz * dz < 1e-4) return;
+  // Distance check only when ≥2 points (rubber-band / unlimited).
+  if (previewPts.length >= 2) {
+    const last = previewPts[previewPts.length - 1];
+    const prev = previewPts[previewPts.length - 2];
+    const dx = last.x - prev.x;
+    const dy = last.y - prev.y;
+    const dz = (last.z ?? 0) - (prev.z ?? 0);
+    if (dx * dx + dy * dy + dz * dz < 1e-4) return;
+  }
 
   if (isUnlimited && previewPts.length < 2) return;
 
   try {
     const out = handler.handler(previewPts);
+    // For 1-click host-aware tools (door/window): orient preview to host wall (#845).
+    if (isOneClick) {
+      const _pvCreator = out.mesh.userData.creator as string | undefined;
+      const _pvHostCreators = _pvCreator ? HOST_TOOL_CREATORS[_pvCreator] : undefined;
+      if (_pvHostCreators) {
+        const _pvHost = findHostMesh(viewer, _lastPointerClient.x, _lastPointerClient.y, _pvHostCreators);
+        if (_pvHost) (out.mesh as THREE.Object3D).rotation.z = (_pvHost as THREE.Object3D).rotation.z;
+      }
+    }
     const preview = out.mesh;
     const applyPreviewMat = (m: THREE.Mesh) => {
       const origMat = Array.isArray(m.material) ? m.material[0] : m.material;
@@ -411,6 +428,15 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   clearSmartTrack(viewer);
   const out = handler.handler(_pending);
   _pending = [];
+
+  // Orient door/window to host wall before scene insertion (#845, #846).
+  const _commitCreator = out.mesh.userData.creator as string | undefined;
+  const _commitHostCreators = _commitCreator ? HOST_TOOL_CREATORS[_commitCreator] : undefined;
+  if (_commitHostCreators) {
+    const _commitHost = findHostMesh(viewer, _lastPointerClient.x, _lastPointerClient.y, _commitHostCreators);
+    if (_commitHost) (out.mesh as THREE.Object3D).rotation.z = (_commitHost as THREE.Object3D).rotation.z;
+  }
+
   // noHistory: true — undo managed via explicit push / transaction below.
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh && out.mesh.userData.creator === "wall") {
@@ -998,9 +1024,11 @@ export function initCreateMode(viewer: Viewer): void {
     // (remaining PT live-preview phases are handled inside transforms.ts ptHandlePoint)
 
     if (!tool) return;
-    if (_pending.length === 0) return;
     const handler = TOOL_HANDLERS[tool];
-    if (!handler || (handler.clicks > 0 && handler.clicks < 2)) return;
+    if (!handler) return;
+    // 1-click tools (door/window/column…): show ghost from first cursor move.
+    // Multi-click + unlimited: wait for first anchor point.
+    if (handler.clicks !== 1 && _pending.length === 0) return;
     updateRubberBand(viewer, handler, snapped);
   });
 
