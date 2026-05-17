@@ -1146,43 +1146,55 @@ export class Viewer {
     }
   }
 
-  /** Delete the currently selected object. Called by SdDelete dispatch handler. */
+  /** Delete the currently selected object(s). Handles both single and multi-selection. */
   deleteSelected(): boolean {
-    const removed = this.targetObject;
-    if (!removed) return false;
-    // If this mesh is a logical member of a CSG join group, dissolve the group
-    // first — removes the display mesh and makes all other members visible as
-    // standalone walls. No-op when the mesh is not in any group.
-    dissolveGroupForMesh(removed.uuid, this.scene);
-    // If the deleted object is a clip plane, remove the mathematical plane so
-    // the clipping effect is lifted along with the visualization mesh.
-    const clipLabel = removed.userData.clipLabel as string | undefined;
-    if (clipLabel) this.removeClippingPlane(clipLabel);
-    // IFC sub-meshes are children of currentObject (not direct scene children);
-    // remove from their actual parent so scene.remove() doesn't silently no-op.
-    const removedParent = removed.parent;
-    if (removed.parent === this.scene) {
-      this.scene.remove(removed);
-    } else if (removed.parent) {
-      removed.parent.remove(removed);
-    } else {
-      return false;
+    // Collect all targets: multiTargets when a multi-selection is active, else single targetObject.
+    const targets: THREE.Object3D[] = this.multiTargets.length > 0
+      ? [...this.multiTargets]
+      : (this.targetObject ? [this.targetObject] : []);
+    if (targets.length === 0) return false;
+
+    let anyRemoved = false;
+    for (const removed of targets) {
+      // If this mesh is a logical member of a CSG join group, dissolve the group
+      // first — removes the display mesh and makes all other members visible as
+      // standalone walls. No-op when the mesh is not in any group.
+      dissolveGroupForMesh(removed.uuid, this.scene);
+      // If the deleted object is a clip plane, remove the mathematical plane so
+      // the clipping effect is lifted along with the visualization mesh.
+      const clipLabel = removed.userData.clipLabel as string | undefined;
+      if (clipLabel) this.removeClippingPlane(clipLabel);
+      // IFC sub-meshes are children of currentObject (not direct scene children);
+      // remove from their actual parent so scene.remove() doesn't silently no-op.
+      const removedParent = removed.parent;
+      if (removed.parent === this.scene) {
+        this.scene.remove(removed);
+      } else if (removed.parent) {
+        removed.parent.remove(removed);
+      } else {
+        continue;
+      }
+      // Geometry is NOT disposed here — pushDeleteAction keeps it alive so undo
+      // can re-add the object. Disposal happens in clearHistory() on scene wipe.
+      pushDeleteAction(removed, removedParent);
+      this.pivotOffsetByUuid.delete(removed.uuid);
+      anyRemoved = true;
     }
-    // Geometry is NOT disposed here — pushDeleteAction keeps it alive so undo
-    // can re-add the object. Disposal happens in clearHistory() on scene wipe.
-    pushDeleteAction(removed, removedParent);
-    this.pivotOffsetByUuid.delete(removed.uuid);
-    this.targetObject = null;
-    this.pivotOffset.identity();
-    this.relocate.active = false;
-    for (const g of this.gizmos) g.detach();
-    this.updateRelocateBadge();
-    emitChainFragment(`// removed: uuid=${removed.uuid}`);
-    clearSelected();
-    window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
-    // Rebuild fill so the deleted solid's cross-section disappears.
-    if (this._sectionPlanes.length > 0 || this._clipPlanes.length > 0) this._rebuildFill();
-    return true;
+
+    if (anyRemoved) {
+      this.targetObject = null;
+      this.multiTargets = [];
+      this.pivotOffset.identity();
+      this.relocate.active = false;
+      for (const g of this.gizmos) g.detach();
+      this.updateRelocateBadge();
+      emitChainFragment(`// removed: ${targets.length} object(s)`);
+      clearSelected();
+      window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
+      // Rebuild fill so deleted solids' cross-sections disappear.
+      if (this._sectionPlanes.length > 0 || this._clipPlanes.length > 0) this._rebuildFill();
+    }
+    return anyRemoved;
   }
 
   // Sync the pivot proxy from targetObject + pivotOffset. Called every
