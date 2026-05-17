@@ -22,7 +22,7 @@ import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, b
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
-import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H } from "./openings";
+import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./openings";
 
 // ── Append-only construction sequence ────────────────────────────────────────
 
@@ -281,8 +281,8 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   circle:      { clicks: 2, handler: atZ(([a, b]) => buildCircle(a, b)) },
   line:        { clicks: 2, handler: atZ(([a, b]) => buildLine(a, b)) },
   slab:        { clicks: 2, handler: atZ(([a, b]) => buildSlab(a, b)) },
-  door:        { clicks: 1, handler: atZ(([p]) => buildDoor(p)) },
-  window:      { clicks: 1, handler: atZ(([p]) => buildWindow(p)) },
+  door:        { clicks: 1, handler: atTopOfLevel(([p]) => buildDoor(p), 0) },
+  window:      { clicks: 1, handler: atTopOfLevel(([p]) => buildWindow(p), FZK_WINDOW_SILL) },
   column:      { clicks: 1, handler: atZ(([p]) => buildColumn(p)) },
   stair:       { clicks: 2, handler: atZ(([a, b]) => buildStair(a, b)) },
   polygon:     { clicks: 2, handler: atZ(([a, b]) => buildPolygon(a, b)) },
@@ -429,12 +429,23 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   const out = handler.handler(_pending);
   _pending = [];
 
-  // Orient door/window to host wall before scene insertion (#845, #846).
+  // Orient door/window to host wall + snap to centerline before scene insertion (#845, #846).
   const _commitCreator = out.mesh.userData.creator as string | undefined;
   const _commitHostCreators = _commitCreator ? HOST_TOOL_CREATORS[_commitCreator] : undefined;
   if (_commitHostCreators) {
     const _commitHost = findHostMesh(viewer, _lastPointerClient.x, _lastPointerClient.y, _commitHostCreators);
-    if (_commitHost) (out.mesh as THREE.Object3D).rotation.z = (_commitHost as THREE.Object3D).rotation.z;
+    if (_commitHost) {
+      const _wallRotZ = (_commitHost as THREE.Object3D).rotation.z;
+      (out.mesh as THREE.Object3D).rotation.z = _wallRotZ;
+      // Project click X,Y onto wall centerline so door sits in wall (not inside/outside).
+      const _wallPos = (_commitHost as THREE.Object3D).position;
+      const _cos = Math.cos(-_wallRotZ), _sin = Math.sin(-_wallRotZ);
+      const _dx = out.mesh.position.x - _wallPos.x;
+      const _dy = out.mesh.position.y - _wallPos.y;
+      const _localX = _dx * _cos - _dy * _sin;
+      out.mesh.position.x = _wallPos.x + _localX * Math.cos(_wallRotZ);
+      out.mesh.position.y = _wallPos.y + _localX * Math.sin(_wallRotZ);
+    }
   }
 
   // noHistory: true — undo managed via explicit push / transaction below.
