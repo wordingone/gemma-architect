@@ -222,7 +222,13 @@ export class Viewer {
     this.scene.add(fill);
 
     // Reference grid + axes — lighter lineweight so drawn geometry reads over it.
-    this.grid = new THREE.GridHelper(20, 20, 0xa8a8b0, 0xd8d4cc);
+    // Divisions derive from snap step so visible lines coincide with snap targets
+    // from the first frame; rebuildGrid uses the same formula on snap changes.
+    const initSize = 20;
+    const initStep = Math.max(0.001, getSnap().step);
+    const initDivs = Math.min(500, Math.max(4, Math.round(initSize / initStep)));
+    this.grid = new THREE.GridHelper(initSize, initDivs, 0xa8a8b0, 0xd8d4cc);
+    (this.grid as unknown as { __lastSize?: number }).__lastSize = initSize;
     this.grid.rotation.x = Math.PI / 2;
     this.grid.renderOrder = -1;
     const gridMat = Array.isArray(this.grid.material) ? this.grid.material : [this.grid.material];
@@ -770,6 +776,9 @@ export class Viewer {
     // lines match the snap increment exactly. Without this, dragging snaps
     // to a step that has no visible reference and looks wrong.
     subscribeSnap(() => this.rebuildGrid());
+    // Sync initial grid to the snap step that was set before this constructor
+    // ran (e.g. imperial 0.3048 m from PR #799 unitSystem init in snap-state.ts).
+    this.rebuildGrid();
 
     this.animate();
   }
