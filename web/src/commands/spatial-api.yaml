@@ -457,7 +457,9 @@
   ifc4_class: IfcWall
   kernel_op: makeWall
   args:
-    - {name: profile,   type: polyline, required: true}
+    - {name: profile,   type: polyline, required: false}
+    - {name: start,     type: point,    required: false, description: "Start point {x,y,z}. Alternative to profile."}
+    - {name: end,       type: point,    required: false, description: "End point {x,y,z}. Alternative to profile."}
     - {name: length,    type: number,   required: false, unit: m, default: 4.0}
     - {name: thickness, type: number,   required: false, unit: m, default: 0.2}
     - {name: height,    type: number,   required: false, unit: m, default: 3.0}

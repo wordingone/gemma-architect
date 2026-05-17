@@ -239,13 +239,14 @@ describe("SdWall profile requirement (#326)", () => {
     if (r.ok) expect(r.canonical).toBe("SdWall");
   });
 
-  test("dispatch returns ArgValidationError when profile is missing — use startCommandSession for picker flow", async () => {
+  test("dispatch accepts SdWall with start/end args (profile now optional)", async () => {
     registerHandler("SdWall", () => "ok");
-    const r = await dispatch("SdWall", {});
-    // profile is required: direct dispatch without it must fail validation.
-    // The human-flow path (console/cmdk) routes through startCommandSession → needs_input.
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toBe("ArgValidationError");
+    // profile is now optional; start+end are the alternative form.
+    const r = await dispatch("SdWall", { start: { x: 0, y: 0, z: 0 }, end: { x: 5, y: 0, z: 0 } });
+    expect(r.ok).toBe(true);
+    // empty args still succeed (handler uses defaults)
+    const r2 = await dispatch("SdWall", {});
+    expect(r2.ok).toBe(true);
   });
 });
 

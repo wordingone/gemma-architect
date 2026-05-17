@@ -50,6 +50,7 @@ import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld } from "./tools/index";
+import { onElementCommitted } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite } from "./tools/structural";
 import { initSectionHandles } from "./viewer/section-handles";
@@ -530,20 +531,27 @@ function getActiveLevelElevation(): number {
 
 registerHandler("SdWall", (args) => {
   const cplane = resolveCPlane("SdWall", args as Record<string, unknown>, viewer);
+  // Accept start/end point args in addition to profile array
+  const startArg = args.start as { x?: number; y?: number } | undefined;
+  const endArg = args.end as { x?: number; y?: number } | undefined;
   const rawProfile = args.profile as [number, number][] | undefined;
   const wallLen = (args.length as number | undefined) ?? 4;
-  const profile: [number, number][] = rawProfile ?? [[0, 0], [wallLen, 0]];
+  let profile: [number, number][];
+  if (rawProfile) {
+    profile = rawProfile;
+  } else if (startArg && endArg) {
+    profile = [[startArg.x ?? 0, startArg.y ?? 0], [endArg.x ?? wallLen, endArg.y ?? 0]];
+  } else {
+    profile = [[0, 0], [wallLen, 0]];
+  }
   const t = (args.thickness as number | undefined) ?? 0.2;
   const wallH = (args.height as number | undefined) ?? 3;
   // Compute total polyline length
   let len = 0;
-  let cx = 0, cy = 0;
   for (let i = 0; i < profile.length - 1; i++) {
     const dx = profile[i + 1][0] - profile[i][0];
     const dy = profile[i + 1][1] - profile[i][1];
     len += Math.sqrt(dx * dx + dy * dy);
-    cx += (profile[i][0] + profile[i + 1][0]) / 2;
-    cy += (profile[i][1] + profile[i + 1][1]) / 2;
   }
   if (len < 0.01) len = 4;
   const geom = new THREE.BoxGeometry(len, t, wallH);
@@ -557,12 +565,15 @@ registerHandler("SdWall", (args) => {
     mesh.rotation.z = Math.atan2(dy, dx);
   }
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdWall";
+  mesh.userData.creator = "wall";
+  mesh.userData.wallThickness = t;
+  mesh.userData.wallHeight = wallH;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWall", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   viewer.addMesh(mesh, "brep");
+  onElementCommitted(mesh, viewer.getScene());
   return { created: "wall", length: len, thickness: t, height: wallH };
 });
 
