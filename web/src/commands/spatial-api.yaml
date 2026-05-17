@@ -1188,6 +1188,49 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdAlignedDim
+  kernel_op: alignedDim
+  args:
+    - {name: a, type: point3, required: true}
+    - {name: b, type: point3, required: true}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [aligned dim, linear dim, distance, measure length]
+  returns: {measured: length, distance: number, unit: m}
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdAngularDim
+  kernel_op: angularDim
+  args:
+    - {name: vertex, type: point3, required: true}
+    - {name: ray1,   type: point3, required: true}
+    - {name: ray2,   type: point3, required: true}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [angular dim, angle between, measure angle]
+  returns: {measured: angle, angleDeg: number, unit: deg}
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdAreaDim
+  kernel_op: areaDim
+  args:
+    - {name: points, type: point2_array, required: true}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [area dim, measure area, polygon area, floor area]
+  returns: {measured: area, area: number, unit: m2}
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdVolumeDim
+  kernel_op: volumeDim
+  args:
+    - {name: id, type: object_id, required: true}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [volume dim, measure volume, object volume]
+  returns: {measured: volume, volume: number, unit: m3}
+  alias_source: generic_cad_vocabulary
+
 - canonical_name: SdLabel
   kernel_op: label
   args:

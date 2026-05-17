@@ -844,6 +844,13 @@ Assistant:
 1. SdBoolean — op=union, a=abc123, b=def456
 </plan>
 <tool_call>{"command":"SdBoolean","parameters":{"op":"union","a":"abc123","b":"def456"},"metadata":{"source":"agent"}}</tool_call>
+
+User: what is the distance between [0,0,0] and [3,4,0]?
+Assistant:
+<plan>
+1. SdAlignedDim — a=[0,0,0], b=[3,4,0]
+</plan>
+<tool_call>{"command":"SdAlignedDim","parameters":{"a":[0,0,0],"b":[3,4,0]},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
