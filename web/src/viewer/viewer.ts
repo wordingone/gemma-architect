@@ -2196,6 +2196,10 @@ export class Viewer {
     if (!this.scene.children.includes(obj)) return false;
     const clipLabel = obj.userData.clipLabel as string | undefined;
     if (clipLabel) this.removeClippingPlane(clipLabel);
+    obj.traverse((child) => {
+      const labels = (child.userData as { dimLabelEls?: HTMLElement[] }).dimLabelEls;
+      if (labels) labels.forEach((el) => el.remove());
+    });
     this.scene.remove(obj);
     if (this.currentMesh === obj) this.currentMesh = null;
     if (this.currentEdges === obj) this.currentEdges = null;

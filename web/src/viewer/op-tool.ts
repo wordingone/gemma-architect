@@ -166,6 +166,27 @@ export function opAddLabel(text: string, worldPt: THREE.Vector3, viewer: Viewer)
   return el;
 }
 
+function opBuildDimLabel(text: string, worldPt: THREE.Vector3, viewer: Viewer): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = [
+    "position:fixed",
+    "background:rgba(0,0,0,0.72)",
+    "color:#fff",
+    "padding:2px 6px",
+    "border-radius:3px",
+    "font-size:11px",
+    "font-family:var(--mono,monospace)",
+    "pointer-events:none",
+    "z-index:9999",
+    "white-space:nowrap",
+  ].join(";");
+  el.textContent = text;
+  document.body.appendChild(el);
+  const sc = projectToScreen(viewer, worldPt.x, worldPt.y, worldPt.z);
+  if (sc) { el.style.left = (sc.x + 8) + "px"; el.style.top = (sc.y - 14) + "px"; }
+  return el;
+}
+
 export function opBuildAnnotLine(pts: THREE.Vector3[], color = 0x4488ff): THREE.Object3D {
   const geo = new THREE.BufferGeometry().setFromPoints(pts);
   const mat = new THREE.LineBasicMaterial({ color, depthTest: false });
@@ -173,6 +194,28 @@ export function opBuildAnnotLine(pts: THREE.Vector3[], color = 0x4488ff): THREE.
   line.renderOrder = 100;
   line.userData.noSnap = true;
   return line;
+}
+
+export function opUpdateDimPreview(viewer: Viewer, snapped3: THREE.Vector3): void {
+  const phase = _opPhase;
+  if (!phase) return;
+  opClearPreview(viewer);
+  if (phase.kind === "dim_b") {
+    _opPreview = opBuildAnnotLine([phase.ptA, snapped3]);
+    viewer.getScene().add(_opPreview);
+  } else if (phase.kind === "dim_c" && !phase.ptA.equals(phase.ptB)) {
+    const grp = new THREE.Group();
+    grp.add(opBuildAnnotLine([phase.ptA, phase.ptB]));
+    grp.add(opBuildAnnotLine([phase.ptA, snapped3]));
+    _opPreview = grp;
+    viewer.getScene().add(_opPreview);
+  } else if (phase.kind === "dim_area" && phase.pts.length >= 1) {
+    const pts = [...phase.pts, snapped3];
+    const grp = new THREE.Group();
+    if (pts.length >= 2) grp.add(opBuildAnnotLine(pts));
+    _opPreview = grp;
+    viewer.getScene().add(_opPreview);
+  }
 }
 
 function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
@@ -639,9 +682,12 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   if (phase.kind === "dim_b" && snapped3) {
     const dist = snapped3.distanceTo(phase.ptA);
     const mid = phase.ptA.clone().add(snapped3).multiplyScalar(0.5);
-    const lineObj = opBuildAnnotLine([phase.ptA, snapped3]);
-    viewer.getScene().add(lineObj);
-    opAddLabel(formatLength(dist), mid, viewer);
+    const grp = new THREE.Group();
+    grp.add(opBuildAnnotLine([phase.ptA, snapped3]));
+    grp.userData.creator = "IfcAnnotationDimension";
+    const labelEl = opBuildDimLabel(formatLength(dist), mid, viewer);
+    grp.userData.dimLabelEls = [labelEl];
+    viewer.addMesh(grp, "dim");
     opFinish(viewer);
     return true;
   }
@@ -654,7 +700,13 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
       const v1 = phase.ptB.clone().sub(phase.ptA).normalize();
       const v2 = snapped3.clone().sub(phase.ptA).normalize();
       const angleDeg = Math.acos(Math.max(-1, Math.min(1, v1.dot(v2)))) * 180 / Math.PI;
-      opAddLabel(`${angleDeg.toFixed(1)}°`, phase.ptA, viewer);
+      const grp = new THREE.Group();
+      grp.add(opBuildAnnotLine([phase.ptA, phase.ptB]));
+      grp.add(opBuildAnnotLine([phase.ptA, snapped3]));
+      grp.userData.creator = "IfcAnnotationDimension";
+      const labelEl = opBuildDimLabel(`${angleDeg.toFixed(1)}°`, phase.ptA, viewer);
+      grp.userData.dimLabelEls = [labelEl];
+      viewer.addMesh(grp, "dim");
       opFinish(viewer);
     }
     return true;
@@ -766,9 +818,12 @@ export function opHandleEnter(viewer: Viewer): void {
     }
     area = Math.abs(area) / 2;
     const ctr = pts.reduce((a, b) => a.clone().add(b), new THREE.Vector3()).multiplyScalar(1 / pts.length);
-    const lineObj = opBuildAnnotLine([...pts, pts[0]]);
-    viewer.getScene().add(lineObj);
-    opAddLabel(`Area: ${formatArea(area)}`, ctr, viewer);
+    const grp = new THREE.Group();
+    grp.add(opBuildAnnotLine([...pts, pts[0]]));
+    grp.userData.creator = "IfcAnnotationDimension";
+    const labelEl = opBuildDimLabel(`Area: ${formatArea(area)}`, ctr, viewer);
+    grp.userData.dimLabelEls = [labelEl];
+    viewer.addMesh(grp, "dim");
     opFinish(viewer);
     return;
   }
