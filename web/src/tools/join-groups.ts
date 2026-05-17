@@ -326,3 +326,74 @@ export function onElementCommitted(newMesh: THREE.Mesh, scene: THREE.Scene): voi
 
   _rebuildGroupDisplay(scene, targetGroupId, primaryMat);
 }
+
+// ── Boolean void cut for box-geometry walls (#324 / #754) ────────────────────
+// Decomposes a BoxGeometry host into segments, replacing it with a Group that
+// has a rectangular void at voidWorldCenter. Operates in the host's local space
+// so works for any wall rotation. Silently skips if geometry is not a box.
+export function cutRectVoidFromBoxMesh(
+  host: THREE.Mesh,
+  voidWorldCenter: THREE.Vector3,
+  voidW: number,
+  voidH: number,
+): THREE.Group | null {
+  host.updateMatrixWorld(true);
+  const geom = host.geometry as THREE.BufferGeometry;
+  geom.computeBoundingBox();
+  const bb = geom.boundingBox;
+  if (!bb) return null;
+  const wallLen   = bb.max.x - bb.min.x;
+  const wallThick = bb.max.y - bb.min.y;
+  const wallHt    = bb.max.z - bb.min.z;
+  const wallZMin  = bb.min.z;
+
+  // Void center in wall local space — only X and Z matter for a box wall.
+  const localCenter = host.worldToLocal(voidWorldCenter.clone());
+  const vX   = localCenter.x;
+  const vZBot = localCenter.z - voidH / 2;
+  const vZTop = localCenter.z + voidH / 2;
+
+  const mat = (Array.isArray(host.material) ? host.material[0] : host.material) as THREE.Material;
+  const seg = (segW: number, segH: number, ox: number, oz: number): THREE.Mesh => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(segW, wallThick, segH), mat);
+    m.position.set(bb.min.x + ox + segW / 2, 0, wallZMin + oz + segH / 2);
+    return m;
+  };
+
+  const group = new THREE.Group();
+
+  // Left of void
+  const leftW = (vX - voidW / 2) - bb.min.x;
+  if (leftW > 0.001) group.add(seg(leftW, wallHt, 0, 0));
+
+  // Right of void
+  const rightX = vX + voidW / 2;
+  const rightW = bb.max.x - rightX;
+  if (rightW > 0.001) group.add(seg(rightW, wallHt, rightX - bb.min.x, 0));
+
+  // Below void (sill — for windows)
+  const belowH = Math.max(0, vZBot - wallZMin);
+  if (belowH > 0.001) group.add(seg(voidW, belowH, vX - voidW / 2 - bb.min.x, 0));
+
+  // Above void
+  const aboveBot = Math.min(vZTop, wallZMin + wallHt) - wallZMin;
+  const aboveH   = (wallZMin + wallHt) - (wallZMin + aboveBot);
+  if (aboveH > 0.001) group.add(seg(voidW, aboveH, vX - voidW / 2 - bb.min.x, aboveBot));
+
+  // Copy host transform + metadata
+  group.position.copy(host.position);
+  group.rotation.copy(host.rotation);
+  group.scale.copy(host.scale);
+  group.userData = { ...host.userData };
+
+  // Swap host with group in parent
+  const parent = host.parent;
+  if (!parent) return null;
+  parent.remove(host);
+  geom.dispose();
+  parent.add(group);
+
+  // Suppress local variable warning; wallLen is useful for callers inspecting the group
+  void wallLen;
+  return group;
+}

@@ -51,11 +51,11 @@ import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
-import { onElementCommitted } from "./tools/join-groups";
+import { onElementCommitted, cutRectVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, type RoofParams } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint } from "./tools/sketch";
-import { buildDoor, buildWindow, buildOpening } from "./tools/openings";
+import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection } from "./viewer/csg";
@@ -743,74 +743,6 @@ registerHandler("SdStair", (args) => {
   return { created: "stair" };
 });
 
-// ── Boolean void cut for box-geometry walls/slabs (#324) ─────────────────────
-// Decomposes a BoxGeometry host into segments, replacing it with a Group that
-// has a rectangular void at voidWorldCenter. Operates in the host's local space
-// so works for any wall rotation. Silently skips if geometry is not a box.
-function cutRectVoidFromBoxMesh(
-  host: THREE.Mesh,
-  voidWorldCenter: THREE.Vector3,
-  voidW: number,
-  voidH: number,
-): THREE.Group | null {
-  host.updateMatrixWorld(true);
-  const geom = host.geometry as THREE.BufferGeometry;
-  geom.computeBoundingBox();
-  const bb = geom.boundingBox;
-  if (!bb) return null;
-  const wallLen   = bb.max.x - bb.min.x;
-  const wallThick = bb.max.y - bb.min.y;
-  const wallHt    = bb.max.z - bb.min.z;
-  const wallZMin  = bb.min.z;
-
-  // Void center in wall local space — only X and Z matter for a box wall.
-  const localCenter = host.worldToLocal(voidWorldCenter.clone());
-  const vX = localCenter.x;   // x-center of void on wall length axis
-  const vZBot = localCenter.z - voidH / 2;
-  const vZTop = localCenter.z + voidH / 2;
-
-  const mat = (Array.isArray(host.material) ? host.material[0] : host.material) as THREE.Material;
-  const seg = (segW: number, segH: number, ox: number, oz: number): THREE.Mesh => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(segW, wallThick, segH), mat);
-    m.position.set(bb.min.x + ox + segW / 2, 0, wallZMin + oz + segH / 2);
-    return m;
-  };
-
-  const group = new THREE.Group();
-
-  // Left of void
-  const leftW = (vX - voidW / 2) - bb.min.x;
-  if (leftW > 0.001) group.add(seg(leftW, wallHt, 0, 0));
-
-  // Right of void
-  const rightX = vX + voidW / 2;
-  const rightW = bb.max.x - rightX;
-  if (rightW > 0.001) group.add(seg(rightW, wallHt, rightX - bb.min.x, 0));
-
-  // Below void (sill — for windows)
-  const belowH = Math.max(0, vZBot - wallZMin);
-  if (belowH > 0.001) group.add(seg(voidW, belowH, vX - voidW / 2 - bb.min.x, 0));
-
-  // Above void
-  const aboveBot = Math.min(vZTop, wallZMin + wallHt) - wallZMin;
-  const aboveH   = (wallZMin + wallHt) - (wallZMin + aboveBot);
-  if (aboveH > 0.001) group.add(seg(voidW, aboveH, vX - voidW / 2 - bb.min.x, aboveBot));
-
-  // Copy host transform + metadata
-  group.position.copy(host.position);
-  group.rotation.copy(host.rotation);
-  group.scale.copy(host.scale);
-  group.userData = { ...host.userData };
-
-  // Swap host with group in parent
-  const parent = host.parent;
-  if (!parent) return null;
-  parent.remove(host);
-  geom.dispose();
-  parent.add(group);
-  return group;
-}
-
 registerHandler("SdDoor", (args) => {
   const hostUuidDoor = args.hostUuid as string | undefined;
   const hostObjDoor = hostUuidDoor
@@ -838,8 +770,8 @@ registerHandler("SdDoor", (args) => {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidDoor);
     if (host instanceof THREE.Mesh) {
       const voidCenter = mesh.position.clone();
-      voidCenter.z = elevation + 1.05;
-      cutRectVoidFromBoxMesh(host, voidCenter, 0.9, 2.1);
+      voidCenter.z = elevation + FZK_DOOR_H / 2;
+      cutRectVoidFromBoxMesh(host, voidCenter, FZK_DOOR_W, FZK_DOOR_H);
       voidCut = true;
     }
   }
@@ -873,8 +805,13 @@ registerHandler("SdWindow", (args) => {
   if (hostUuidWin) {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidWin);
     if (host instanceof THREE.Mesh) {
-      const voidCenter = mesh.position.clone();
-      cutRectVoidFromBoxMesh(host, voidCenter, 1.2, 1.4);
+      // Window mesh is positioned at sill height; voidCenter is mid-height of opening
+      const voidCenter = new THREE.Vector3(
+        mesh.position.x,
+        mesh.position.y,
+        mesh.position.z + FZK_WINDOW_H / 2,
+      );
+      cutRectVoidFromBoxMesh(host, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
       voidCut = true;
     }
   }
@@ -883,7 +820,18 @@ registerHandler("SdWindow", (args) => {
 });
 
 registerHandler("SdRoof", (args) => {
-  const roofType = (args.roofType as string | undefined) ?? "flat";
+  const rawType = (args.roofType as string | undefined) ?? "pitched";
+  // Normalise roofType to our internal set
+  const typeMap: Record<string, RoofParams["type"]> = {
+    pitched: "pitched", gable: "pitched", hip: "hip", hipped: "hip",
+    shed: "shed", mono: "shed", "mono-pitch": "shed",
+    flat: "flat", mansard: "flat", combination: "flat",
+  };
+  const roofType: RoofParams["type"] = typeMap[rawType] ?? "pitched";
+  const pitchDeg = (args.pitchDeg as number | undefined) ?? (args.pitchAngleDeg as number | undefined) ?? 30;
+  const overhang = (args.overhang as number | undefined) ?? 0.4;
+  const thickness = (args.thickness as number | undefined) ?? 0.15;
+
   const fp = args.footprint as number[][] | undefined;
   let w = 8, d = 10;
   if (fp && fp.length >= 2) {
@@ -894,17 +842,16 @@ registerHandler("SdRoof", (args) => {
   }
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
-  const { mesh, chain } = buildRoof(a, b);
+  const roofParams: RoofParams = { type: roofType, pitchDeg, overhang, thickness };
+  const { mesh, chain } = buildRoof(a, b, roofParams);
   mesh.position.z = getActiveLevelElevation() + DEFAULT_CEILING_OFFSET;
   mesh.userData.roofType = roofType;
   mesh.userData.ifcPredefinedType = ({
-    flat: "FLAT_ROOF",
     pitched: "GABLE_ROOF",
-    hipped: "HIP_ROOF",
+    hip: "HIP_ROOF",
     shed: "SHED_ROOF",
-    curved: "BARREL_ROOF",
-    combination: "MANSARD_ROOF",
-  } as Record<string, string>)[roofType] ?? "NOTDEFINED";
+    flat: "FLAT_ROOF",
+  } as Record<string, string>)[roofType ?? "pitched"] ?? "NOTDEFINED";
   mesh.userData.layerId = resolveLayerId("SdRoof", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
@@ -1909,6 +1856,108 @@ layerStore.subscribe(() => {
     }
     obj.visible = layer.visible;
   });
+});
+
+// ── Roof selection inspector (#754) ─────────────────────────────────────────
+// When a roof mesh is selected, show parameter sliders in #element-inspector.
+// Changing sliders replaces the roof mesh with a re-dispatched SdRoof call.
+const _roofInspectorEl = ((): HTMLElement => {
+  let el = document.getElementById("element-inspector");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "element-inspector";
+    el.style.cssText = "display:none;position:fixed;bottom:1rem;right:1rem;background:rgba(20,20,20,0.93);border:1px solid #444;border-radius:6px;padding:10px 14px;min-width:210px;z-index:200;font:13px/1.5 sans-serif;color:#ddd;";
+    document.body.appendChild(el);
+  }
+  return el;
+})();
+
+let _roofInspectorMeshUuid: string | null = null;
+
+function _showRoofInspector(mesh: THREE.Mesh): void {
+  const p: RoofParams = (mesh.userData.roofParams as RoofParams) ?? { type: "pitched", pitchDeg: 30, overhang: 0.4, thickness: 0.15 };
+  _roofInspectorMeshUuid = mesh.uuid;
+
+  const mkSlider = (label: string, key: keyof RoofParams, min: number, max: number, step: number, unit: string) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:6px;margin:4px 0;";
+    const lbl = document.createElement("span");
+    lbl.style.cssText = "min-width:70px;font-size:11px;color:#aaa;";
+    lbl.textContent = label;
+    const val = document.createElement("span");
+    val.style.cssText = "min-width:32px;text-align:right;font-size:11px;";
+    const cur = (p[key] as number) ?? (key === "pitchDeg" ? 30 : key === "overhang" ? 0.4 : 0.15);
+    val.textContent = `${cur}${unit}`;
+    const inp = document.createElement("input");
+    inp.type = "range"; inp.min = String(min); inp.max = String(max); inp.step = String(step);
+    inp.value = String(cur); inp.style.cssText = "flex:1;";
+    inp.addEventListener("input", () => {
+      val.textContent = `${parseFloat(inp.value)}${unit}`;
+    });
+    inp.addEventListener("change", () => {
+      const updated: Record<string, unknown> = { ...p, [key]: parseFloat(inp.value) };
+      const existing = viewer.getScene().getObjectByProperty("uuid", _roofInspectorMeshUuid ?? "");
+      if (!existing) return;
+      const dispArgs = (existing.userData.dispatchArgs as Record<string, unknown>) ?? {};
+      dispatchSync("SdRoof", {
+        ...dispArgs,
+        roofType: updated.type as string,
+        pitchDeg: updated.pitchDeg as number,
+        overhang: updated.overhang as number,
+        thickness: updated.thickness as number,
+      });
+      // Remove the old mesh after dispatch added the new one
+      const stillOld = viewer.getScene().getObjectByProperty("uuid", _roofInspectorMeshUuid ?? "");
+      if (stillOld) viewer.getScene().remove(stillOld);
+    });
+    row.appendChild(lbl); row.appendChild(val); row.appendChild(inp);
+    return row;
+  };
+
+  const typeMap: Array<[RoofParams["type"], string]> = [
+    ["pitched", "Gable"], ["hip", "Hip"], ["shed", "Shed"], ["flat", "Flat"],
+  ];
+  const typeRow = document.createElement("div");
+  typeRow.style.cssText = "margin:2px 0 6px;";
+  const typeLbl = document.createElement("span");
+  typeLbl.style.cssText = "font-size:11px;color:#aaa;margin-right:6px;";
+  typeLbl.textContent = "Type";
+  const typeSel = document.createElement("select");
+  typeSel.style.cssText = "background:#333;color:#ddd;border:1px solid #555;border-radius:3px;padding:1px 4px;font-size:12px;";
+  for (const [val, lbl] of typeMap) {
+    const opt = document.createElement("option");
+    opt.value = val ?? ""; opt.textContent = lbl;
+    if (val === p.type) opt.selected = true;
+    typeSel.appendChild(opt);
+  }
+  typeSel.addEventListener("change", () => {
+    (p as Record<string, unknown>).type = typeSel.value;
+  });
+  typeRow.appendChild(typeLbl); typeRow.appendChild(typeSel);
+
+  _roofInspectorEl.innerHTML = "";
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:12px;font-weight:600;margin-bottom:6px;color:#fff;";
+  title.textContent = "Roof";
+  _roofInspectorEl.appendChild(title);
+  _roofInspectorEl.appendChild(typeRow);
+  _roofInspectorEl.appendChild(mkSlider("Pitch", "pitchDeg", 5, 70, 5, "°"));
+  _roofInspectorEl.appendChild(mkSlider("Overhang", "overhang", 0, 2, 0.1, "m"));
+  _roofInspectorEl.appendChild(mkSlider("Thickness", "thickness", 0.05, 0.5, 0.05, "m"));
+  _roofInspectorEl.style.display = "";
+}
+
+window.addEventListener("viewer:select", (e) => {
+  const uuid = (e as CustomEvent<{ uuid: string | null }>).detail?.uuid;
+  if (!uuid) { _roofInspectorEl.style.display = "none"; _roofInspectorMeshUuid = null; return; }
+  const obj = viewer.getScene().getObjectByProperty("uuid", uuid);
+  const creator = obj?.userData?.creator as string | undefined;
+  if (creator === "roof" && obj instanceof THREE.Mesh) {
+    _showRoofInspector(obj);
+  } else {
+    _roofInspectorEl.style.display = "none";
+    _roofInspectorMeshUuid = null;
+  }
 });
 
 // Isolate status bar indicator — show/hide #sb-isolate on viewer:isolate-changed.

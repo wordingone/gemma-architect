@@ -196,19 +196,160 @@ export function buildBeam(a: { x: number; y: number }, b: { x: number; y: number
   return { mesh, chain };
 }
 
-export function buildRoof(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
-  const w = Math.abs(b.x - a.x) || 1;
-  const d = Math.abs(b.y - a.y) || 1;
-  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-  const ridgeH = Math.max(0.5, Math.min(w, d) * 0.3);
-  const geom = new THREE.BoxGeometry(w, d, ridgeH);
-  geom.translate(0, 0, ridgeH / 2);
+export type RoofParams = {
+  type?: "pitched" | "hip" | "shed" | "flat";
+  pitchDeg?: number;
+  overhang?: number;
+  thickness?: number;
+};
+
+export function buildRoof(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  params: RoofParams = {},
+): { mesh: THREE.Mesh; chain: string } {
+  const w  = Math.abs(b.x - a.x) || 6;
+  const d  = Math.abs(b.y - a.y) || 8;
+  const cx = (a.x + b.x) / 2;
+  const cy = (a.y + b.y) / 2;
+
+  const roofType  = params.type ?? "pitched";
+  const pitchDeg  = Math.max(5, Math.min(70, params.pitchDeg ?? 30));
+  const overhang  = params.overhang ?? 0.4;
+  const thickness = params.thickness ?? 0.15;
+
+  const pitchRad = (pitchDeg * Math.PI) / 180;
+  const ew = w + 2 * overhang;
+  const ed = d + 2 * overhang;
+  const hw = ew / 2;
+  const hd = ed / 2;
+  const ridgeH = Math.min(hw, hd) * Math.tan(pitchRad);
+
+  let geom: THREE.BufferGeometry;
+
+  if (roofType === "flat" || ridgeH < 0.05) {
+    geom = new THREE.BoxGeometry(ew, ed, thickness);
+    geom.translate(0, 0, thickness / 2);
+  } else if (roofType === "shed") {
+    // Mono-pitch: low at -y, high at +y
+    const verts = new Float32Array([
+      -hw, -hd,           0,   // 0 front-left low
+       hw, -hd,           0,   // 1 front-right low
+       hw,  hd,      ridgeH,   // 2 back-right high
+      -hw,  hd,      ridgeH,   // 3 back-left high
+      -hw, -hd,   -thickness,  // 4
+       hw, -hd,   -thickness,  // 5
+       hw,  hd, ridgeH - thickness, // 6
+      -hw,  hd, ridgeH - thickness, // 7
+    ]);
+    geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+    geom.setIndex([
+      0,1,2, 0,2,3,    // top slope
+      0,5,1, 0,4,5,    // front
+      1,5,6, 1,6,2,    // right
+      3,2,6, 3,6,7,    // back
+      0,3,7, 0,7,4,    // left
+      4,7,6, 4,6,5,    // bottom
+    ]);
+    geom.computeVertexNormals();
+  } else if (roofType === "hip") {
+    // Hip: 4 sloped faces meeting at a ridge shorter than the footprint
+    const hipSetback = Math.min(hw, hd) / Math.tan(pitchRad);
+    // Ridge along the longer axis; setback from each end
+    const landscape = hw >= hd;
+    const ridgeHalfLen = landscape
+      ? Math.max(0.2, hw - hipSetback)
+      : Math.max(0.2, hd - hipSetback);
+    const verts = landscape
+      ? new Float32Array([
+          -hw, -hd, 0,               // 0 base corners
+           hw, -hd, 0,               // 1
+           hw,  hd, 0,               // 2
+          -hw,  hd, 0,               // 3
+          -ridgeHalfLen, 0, ridgeH,  // 4 ridge left
+           ridgeHalfLen, 0, ridgeH,  // 5 ridge right
+        ])
+      : new Float32Array([
+          -hw, -hd, 0,               // 0
+           hw, -hd, 0,               // 1
+           hw,  hd, 0,               // 2
+          -hw,  hd, 0,               // 3
+          0, -ridgeHalfLen, ridgeH,  // 4 ridge front
+          0,  ridgeHalfLen, ridgeH,  // 5 ridge back
+        ]);
+    const idxLandscape = [
+      0,1,5, 0,5,4,   // front slope
+      3,4,5, 3,5,2,   // back slope
+      0,4,3,          // left hip
+      1,2,5,          // right hip
+      0,3,2, 0,2,1,   // bottom
+    ];
+    const idxPortrait = [
+      0,1,4,          // front hip
+      2,3,5,          // back hip
+      0,4,5, 0,5,3,   // left slope
+      1,5,4, 1,2,5,   // right slope
+      0,3,2, 0,2,1,   // bottom
+    ];
+    geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+    geom.setIndex(landscape ? idxLandscape : idxPortrait);
+    geom.computeVertexNormals();
+  } else {
+    // pitched (gable): ridge along longer axis
+    const landscape = w >= d;
+    let verts: Float32Array;
+    let idx: number[];
+    if (landscape) {
+      // Ridge along x
+      verts = new Float32Array([
+        -hw, -hd, 0,       // 0
+         hw, -hd, 0,       // 1
+         hw,  hd, 0,       // 2
+        -hw,  hd, 0,       // 3
+        -hw,   0, ridgeH,  // 4 left gable peak
+         hw,   0, ridgeH,  // 5 right gable peak
+      ]);
+      idx = [
+        0,1,5, 0,5,4,   // front slope
+        3,4,5, 3,5,2,   // back slope
+        0,4,3,          // left gable
+        1,2,5,          // right gable
+        0,3,2, 0,2,1,   // bottom
+      ];
+    } else {
+      // Ridge along y
+      verts = new Float32Array([
+        -hw, -hd, 0,       // 0
+         hw, -hd, 0,       // 1
+         hw,  hd, 0,       // 2
+        -hw,  hd, 0,       // 3
+          0, -hd, ridgeH,  // 4 front gable peak
+          0,  hd, ridgeH,  // 5 back gable peak
+      ]);
+      idx = [
+        0,1,4,          // front gable
+        2,3,5,          // back gable
+        0,4,5, 0,5,3,   // left slope
+        1,5,4, 1,2,5,   // right slope
+        0,3,2, 0,2,1,   // bottom
+      ];
+    }
+    geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+    geom.setIndex(idx);
+    geom.computeVertexNormals();
+  }
+
   const mat = new THREE.MeshStandardMaterial({ color: 0x7a5c4a, roughness: 0.75, metalness: 0.02 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(cx, cy, DEFAULT_WALL_HEIGHT);
+  mesh.position.set(cx, cy, 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "roof";
-  const chain = `const roof = makeBox(${round(w)}, ${round(d)}, ${round(ridgeH)}).translate([${round(cx)}, ${round(cy)}, ${round(DEFAULT_WALL_HEIGHT)}]);`;
+  mesh.userData.roofParams = { type: roofType, pitchDeg, overhang, thickness };
+
+  const chain = `const roof = buildParametricRoof(${round(w)}, ${round(d)}, { type:"${roofType}", pitchDeg:${round(pitchDeg)}, overhang:${round(overhang)}, thickness:${round(thickness)} }).translate([${round(cx)}, ${round(cy)}, 0]);`;
   return { mesh, chain };
 }
 

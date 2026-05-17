@@ -19,9 +19,9 @@ import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPro
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
-import { onElementCommitted } from "./join-groups";
+import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
-import { buildDoor, buildWindow, buildOpening } from "./openings";
+import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H } from "./openings";
 
 // ── Append-only construction sequence ────────────────────────────────────────
 
@@ -412,6 +412,28 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   _pending = [];
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep");
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
+  // Void cut for door/window placed interactively (#754)
+  if (out.mesh instanceof THREE.Mesh) {
+    const _creator = out.mesh.userData.creator as string | undefined;
+    if (_creator === "door" || _creator === "window") {
+      const _hostId = out.mesh.userData.hostExpressID as string | undefined;
+      if (_hostId) {
+        let _host: THREE.Object3D | undefined;
+        viewer.getScene().traverse((obj) => {
+          if (_host || obj === out.mesh) return;
+          if (obj.uuid === _hostId || (obj.userData as Record<string, unknown>).expressID === _hostId) _host = obj;
+        });
+        if (_host instanceof THREE.Mesh) {
+          const _isWin = _creator === "window";
+          const _vW = _isWin ? FZK_WINDOW_W : FZK_DOOR_W;
+          const _vH = _isWin ? FZK_WINDOW_H : FZK_DOOR_H;
+          const _vc = out.mesh.position.clone();
+          _vc.z += _vH / 2;
+          cutRectVoidFromBoxMesh(_host, _vc, _vW, _vH);
+        }
+      }
+    }
+  }
   if (out.mesh.userData.creator === "wall") attemptWallJoins(out.mesh as THREE.Mesh, viewer);
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
