@@ -128,6 +128,8 @@ let _drafterSession: OrtSession | null = null;
 let _drafterLoadAttempted = false;
 
 const DRAFTER_ONNX_URL = "/models/gemma-4-E2B-it-assistant/drafter-fp16.onnx";
+// Bump this key to bust the IDB cache when a new drafter export is deployed.
+const DRAFTER_CACHE_KEY = "mtp-drafter-fp16-v1";
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
 // Flip to true when drafter ONNX is deployed and output names are confirmed (#738).
 // Two-gate design: drafter loaded + verification wired. Target hidden-state exposure
@@ -152,7 +154,12 @@ async function loadDrafter(): Promise<void> {
     // onnxruntime-web is already loaded by transformers.js — access the global.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ort = (globalThis as any).ort ?? (await import("onnxruntime-web"));
-    _drafterSession = await ort.InferenceSession.create(DRAFTER_ONNX_URL, {
+    // IDB-backed fetch: first call downloads 158 MB and caches; subsequent calls
+    // read from IDB (~ms) skipping the network entirely. Bump DRAFTER_CACHE_KEY
+    // to invalidate the cache when a new drafter export is deployed.
+    const { fetchDrafterCached } = await import("./drafter-cache.js");
+    const drafterBuf = await fetchDrafterCached(DRAFTER_ONNX_URL, DRAFTER_CACHE_KEY);
+    _drafterSession = await ort.InferenceSession.create(drafterBuf, {
       executionProviders: ["webgpu", "wasm"],
     });
     console.info("[agent-harness] Drafter ONNX loaded — MTP spec-decode active (#738).");

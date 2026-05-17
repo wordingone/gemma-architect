@@ -1,5 +1,7 @@
 {
   "model_id": "google/gemma-4-E2B-it-assistant",
+  "version": "fp16-v1",
+  "idb_cache_key": "mtp-drafter-fp16-v1",
   "export_dtype": "fp16-internal-fp32-io",
   "onnx_file": "drafter-fp16.onnx",
   "size_mb": 158.3,
