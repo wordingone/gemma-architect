@@ -82,6 +82,18 @@ export function rebuildWallInPlace(mesh: THREE.Mesh, a: { x: number; y: number }
   ] as SnapVertex[];
 }
 
+function extendExistingWallEnd(mesh: THREE.Mesh, existEps: SnapVertex[], joinIdx: number, t: number): void {
+  const jx = existEps[joinIdx].x, jy = existEps[joinIdx].y;
+  const ox = existEps[1 - joinIdx].x, oy = existEps[1 - joinIdx].y;
+  const edx = jx - ox, edy = jy - oy;
+  const elen = Math.sqrt(edx * edx + edy * edy);
+  if (elen < 0.01) return;
+  const f = (t / 2) / elen;
+  const extPt = { x: jx + edx * f, y: jy + edy * f };
+  const other = { x: ox, y: oy };
+  rebuildWallInPlace(mesh, joinIdx === 0 ? extPt : other, joinIdx === 0 ? other : extPt);
+}
+
 export function attemptWallJoins(newMesh: THREE.Mesh, viewer: Viewer): void {
   const t = DEFAULT_WALL_THICKNESS;
   const eps = newMesh.userData.endpoints as SnapVertex[];
@@ -101,21 +113,23 @@ export function attemptWallJoins(newMesh: THREE.Mesh, viewer: Viewer): void {
     for (let ei = 0; ei < 2; ei++) {
       const ex = existEps[ei].x, ey = existEps[ei].y;
       if (!bJoined && Math.hypot(bX - ex, bY - ey) < JOIN_TOL) {
-        bX = ex - dirX * t / 2;
-        bY = ey - dirY * t / 2;
+        bX = ex + dirX * (t / 2);
+        bY = ey + dirY * (t / 2);
         bJoined = true;
         if (!newMesh.userData.joins) newMesh.userData.joins = [];
         if (!obj.userData.joins) obj.userData.joins = [];
         newMesh.userData.joins.push({ partnerUuid: obj.uuid, myEndIdx: 1, partnerEndIdx: ei });
         obj.userData.joins.push({ partnerUuid: newMesh.uuid, myEndIdx: ei, partnerEndIdx: 1 });
+        extendExistingWallEnd(obj as THREE.Mesh, existEps, ei, t);
       } else if (!aJoined && Math.hypot(aX - ex, aY - ey) < JOIN_TOL) {
-        aX = ex + dirX * t / 2;
-        aY = ey + dirY * t / 2;
+        aX = ex - dirX * (t / 2);
+        aY = ey - dirY * (t / 2);
         aJoined = true;
         if (!newMesh.userData.joins) newMesh.userData.joins = [];
         if (!obj.userData.joins) obj.userData.joins = [];
         newMesh.userData.joins.push({ partnerUuid: obj.uuid, myEndIdx: 0, partnerEndIdx: ei });
         obj.userData.joins.push({ partnerUuid: newMesh.uuid, myEndIdx: ei, partnerEndIdx: 0 });
+        extendExistingWallEnd(obj as THREE.Mesh, existEps, ei, t);
       }
     }
     if (aJoined && bJoined) break;
