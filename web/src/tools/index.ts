@@ -604,6 +604,14 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
     attemptWallCornerJoins(out.mesh, viewer.getScene());
   }
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
+  // Curtain wall join shell: commit the invisible proxy brush so join-groups CSG pipeline
+  // can union it with adjacent structural elements (#841).
+  const _cwJoinShell = out.mesh.userData.joinableShell as THREE.Mesh | undefined;
+  if (_cwJoinShell instanceof THREE.Mesh) {
+    _cwJoinShell.position.z = out.mesh.position.z;
+    viewer.addMesh(_cwJoinShell, "brep", { noHistory: true });
+    onElementCommitted(_cwJoinShell, viewer.getScene());
+  }
 
   // Void cut for door/window placed interactively (#754).
   // Group door-add + wall-void-cut into one undo transaction (#850).

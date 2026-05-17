@@ -97,7 +97,9 @@ function _rebuildGroupDisplay(scene: THREE.Scene, groupId: string, primaryMat: T
 
   if (members.length === 1) {
     // Single member — show it directly, no CSG needed.
-    members[0].visible = true;
+    // Join shells are invisible proxies for composite-geometry elements (e.g., curtain walls)
+    // whose visual representation lives in a separate object — keep the shell hidden.
+    if (!members[0].userData.isJoinShell) members[0].visible = true;
     return;
   }
 

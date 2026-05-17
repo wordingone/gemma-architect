@@ -950,7 +950,16 @@ registerHandler("SdCurtainWall", (args) => {
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  // Group not directly joinable — individual child meshes are structural but CSG join is skipped for composite geometry.
+  // Commit the invisible join shell so join-groups CSG pipeline can union it with
+  // adjacent structural elements (#841). Shell inherits z from the group.
+  const _joinShell = mesh.userData.joinableShell as THREE.Mesh | undefined;
+  if (_joinShell instanceof THREE.Mesh) {
+    _joinShell.position.z = mesh.position.z;
+    _joinShell.userData.levelId = getActiveLevelId();
+    _joinShell.userData.layerId = resolveLayerId("SdCurtainWall", args);
+    viewer.addMesh(_joinShell, "brep");
+    onElementCommitted(_joinShell, viewer.getScene());
+  }
   return { created: "curtainwall", length: wallLen };
 });
 

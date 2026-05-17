@@ -472,6 +472,22 @@ export function buildCurtainWall(
   group.userData.kind = "brep";
   group.userData.creator = "curtainwall";
   group.userData.curtainWallParams = { mullionSpacing: mSp, transomSpacing: tSp };
+
+  // Invisible join shell: BoxGeometry brush representing the structural wall envelope.
+  // join-groups CSG pipeline uses this instead of trying to handle the THREE.Group directly.
+  // The visible composite group remains shown independently; the shell participates in CSG.
+  const shellGeom = new THREE.BoxGeometry(len, fd, h);
+  shellGeom.translate(0, 0, h / 2);  // base at z=0, top at z=h
+  const shellMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.4, metalness: 0.8 });
+  const joinableShell = new THREE.Mesh(shellGeom, shellMat);
+  joinableShell.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
+  joinableShell.rotation.z = (angDeg * Math.PI) / 180;
+  joinableShell.visible = false;
+  joinableShell.userData.kind = "brep";
+  joinableShell.userData.creator = "curtainwall";
+  joinableShell.userData.isJoinShell = true;
+  group.userData.joinableShell = joinableShell;
+
   const chain = `// curtainwall: ${round(len)}m × ${round(h)}m, ${cols} cols × ${rows} rows (mullion ${mSp}m, transom ${tSp}m)`;
   return { mesh: group, chain };
 }
