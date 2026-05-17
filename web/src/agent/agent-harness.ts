@@ -134,6 +134,17 @@ const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
 // is best-effort (approximated by token embedding when unavailable).
 const MTP_VERIFICATION_WIRED = true;
 
+/**
+ * Returns true when the request includes image/audio/viewport content.
+ * The MTP drafter is text-only; multimodal turns must bypass spec-decode so
+ * the modality is never silently stripped (#740-C).
+ */
+export function payloadHasMultimodal(req: AgentRequest): boolean {
+  if (req.userImage) return true;            // explicit data URL from chat panel
+  if (req.frames && req.frames.length > 0) return true; // viewport-capture or image bitmaps
+  return false;
+}
+
 async function loadDrafter(): Promise<void> {
   if (_drafterLoadAttempted) return;
   _drafterLoadAttempted = true;
@@ -1120,9 +1131,11 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // AC5: any drafter load failure is silently swallowed in loadDrafter(); no crash.
   void loadDrafter();
 
-  // Two-gate (#738): drafter loaded + verification wired.
-  // Target hidden-state exposure is opportunistic — approximated by token embedding when absent.
-  const drafterReady = _drafterSession !== null && MTP_VERIFICATION_WIRED;
+  // Three-gate (#740-C): drafter loaded + verification wired + text-only request.
+  // MTP drafter (gemma-4-E2B-it-assistant) is text-only — no vision/audio adapter.
+  // Multimodal inputs (image/audio/viewport) bypass spec-decode so the modality is
+  // never silently stripped. Telemetry reports mtp_on: false honestly on those turns.
+  const drafterReady = _drafterSession !== null && MTP_VERIFICATION_WIRED && !payloadHasMultimodal(req);
 
   let specAttempts = 0;
   let specAccepts = 0;
