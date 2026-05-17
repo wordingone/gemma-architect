@@ -8,7 +8,7 @@ import { setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { getSnap, snapPoint } from "../viewer/snap-state";
 import { getSnapTarget, setSnapTarget, getLastSnapEdgeDir, getLastSurfaceHit, HOST_TOOL_CREATORS, getPendingHostId, setPendingHostId, findHostMesh, nearestSnapVertex } from "../viewer/snap-state";
-import { pushAction } from "../history";
+import { pushAction, pushReplaceAction, beginTransaction, endTransaction } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
 import { levelStore, getActiveLevelId } from "../geometry/levels";
@@ -377,7 +377,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   clearSmartTrack(viewer);
   const out = handler.handler(_pending);
   _pending = [];
-  viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh");
+  viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
@@ -411,12 +411,17 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   clearSmartTrack(viewer);
   const out = handler.handler(_pending);
   _pending = [];
-  viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep");
+  // noHistory: true — undo managed via explicit push / transaction below.
+  viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh && out.mesh.userData.creator === "wall") {
     attemptWallCornerJoins(out.mesh, viewer.getScene());
   }
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
-  // Void cut for door/window placed interactively (#754)
+
+  // Void cut for door/window placed interactively (#754).
+  // Group door-add + wall-void-cut into one undo transaction (#850).
+  let _voidCutGroup: THREE.Object3D | null = null;
+  let _voidCutHost: THREE.Mesh | null = null;
   if (out.mesh instanceof THREE.Mesh) {
     const _creator = out.mesh.userData.creator as string | undefined;
     if (_creator === "door" || _creator === "window") {
@@ -433,13 +438,21 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
           const _vH = _isWin ? FZK_WINDOW_H : FZK_DOOR_H;
           const _vc = out.mesh.position.clone();
           _vc.z += _vH / 2;
-          cutRectVoidFromBoxMesh(_host, _vc, _vW, _vH);
+          _voidCutHost  = _host;
+          _voidCutGroup = cutRectVoidFromBoxMesh(_host, _vc, _vW, _vH);
         }
       }
     }
   }
+
   _createSequence.push(out.chain);
+  beginTransaction(out.mesh.userData.creator as string ?? "place");
+  if (_voidCutHost && _voidCutGroup) {
+    // Wall mesh was replaced by void-cut Group — record the swap.
+    pushReplaceAction(_voidCutGroup, [_voidCutHost], "wall-void-cut");
+  }
   pushAction(out.mesh, out.chain);
+  endTransaction();
   if (out.dispatchOnCommit) {
     dispatchSync(out.dispatchOnCommit.verb, out.dispatchOnCommit.args);
     document.dispatchEvent(new CustomEvent("viewer:clip-changed"));

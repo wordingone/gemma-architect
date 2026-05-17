@@ -13,6 +13,7 @@
 // keeps working without changes.
 
 import { layerStore, type Layer, DEFAULT_LAYER_ID } from "../geometry/layers";
+import { pushCustomAction } from "../history";
 import { Viewer } from "../viewer/viewer";
 import { iconSVG, axesGizmoSVG } from "../ui/icons";
 import {
@@ -1277,7 +1278,12 @@ function buildLayersTab(): HTMLElement {
         ? `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor"/><circle cx="6.5" cy="4.5" r="1.5" fill="currentColor"/></svg>`
         : `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor" stroke-dasharray="2 1"/></svg>`;
       eyeBtn.addEventListener("click", () => {
+        const oldVisible = layer.visible;
         const newVisible = !layer.visible;
+        pushCustomAction(
+          () => { layerStore.setVisible(layer.id, oldVisible); applyVisibility(layer.id, oldVisible); renderList(); },
+          () => { layerStore.setVisible(layer.id, newVisible); applyVisibility(layer.id, newVisible); renderList(); },
+        );
         layerStore.setVisible(layer.id, newVisible);
         applyVisibility(layer.id, newVisible);
       });
@@ -1290,7 +1296,13 @@ function buildLayersTab(): HTMLElement {
         ? `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`
         : `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor" stroke-dasharray="2 1"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`;
       lockBtn.addEventListener("click", () => {
-        layerStore.setLocked(layer.id, !layer.locked);
+        const oldLocked = layer.locked;
+        const newLocked = !layer.locked;
+        pushCustomAction(
+          () => { layerStore.setLocked(layer.id, oldLocked); renderList(); },
+          () => { layerStore.setLocked(layer.id, newLocked); renderList(); },
+        );
+        layerStore.setLocked(layer.id, newLocked);
       });
 
       // Color swatch
@@ -1300,8 +1312,14 @@ function buildLayersTab(): HTMLElement {
       colorInput.style.cssText = "width:14px; height:14px; border:none; padding:0; cursor:pointer; flex-shrink:0; border-radius:2px;";
       colorInput.title = "Layer color";
       colorInput.addEventListener("change", () => {
-        layerStore.setColor(layer.id, colorInput.value);
-        applyColor(layer.id, colorInput.value);
+        const oldColor = layer.color;
+        const newColor = colorInput.value;
+        pushCustomAction(
+          () => { layerStore.setColor(layer.id, oldColor); applyColor(layer.id, oldColor); renderList(); },
+          () => { layerStore.setColor(layer.id, newColor); applyColor(layer.id, newColor); renderList(); },
+        );
+        layerStore.setColor(layer.id, newColor);
+        applyColor(layer.id, newColor);
       });
 
       // Name — click toggles expand

@@ -57,7 +57,7 @@ import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, 
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
-import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction } from "./history";
+import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction } from "./history";
 import { csgUnion, csgDifference, csgIntersection } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
@@ -415,7 +415,7 @@ registerHandler("SdSelectAll", () => {
   const proxy = new THREE.Object3D();
   proxy.position.copy(centroid);
   proxy.userData.kind = "_selectAll_proxy";
-  viewer.getScene().add(proxy);
+  viewer.getScene().add(proxy); // audit-undo-ok — transient gumball anchor, not user content
   viewer.selectObject(proxy);
   window.dispatchEvent(new CustomEvent("viewer:selectAll", { detail: { count: selectable.length } }));
 });
@@ -446,8 +446,8 @@ registerHandler("SdBoolean", (args) => {
   result.userData.kind = "brep";
   result.userData.creator = creator;
   result.userData.dispatchArgs = args;
-  scene.remove(objA);
-  scene.remove(objB);
+  scene.remove(objA); // audit-undo-ok — paired with pushReplaceAction below
+  scene.remove(objB); // audit-undo-ok — paired with pushReplaceAction below
   viewer.addMesh(result, "brep", { noHistory: true });
   pushReplaceAction(result, [objA, objB], creator);
   return { created: result.uuid, op: opArg };
@@ -497,7 +497,7 @@ registerHandler("SdSelectByQuery", (args) => {
   const proxy = new THREE.Object3D();
   proxy.position.copy(centroid);
   proxy.userData.kind = "_selectQuery_proxy";
-  viewer.getScene().add(proxy);
+  viewer.getScene().add(proxy); // audit-undo-ok — transient gumball anchor, not user content
   viewer.selectObject(proxy);
   window.dispatchEvent(new CustomEvent("viewer:selectAll", { detail: { count: matches.length } }));
   return { selected: matches.map((o) => o.uuid), count: matches.length };
@@ -764,17 +764,21 @@ registerHandler("SdDoor", (args) => {
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
-  viewer.addMesh(mesh, "brep");
+  viewer.addMesh(mesh, "brep", { noHistory: true });
   let voidCut = false;
+  beginTransaction("SdDoor");
   if (hostUuidDoor) {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidDoor);
     if (host instanceof THREE.Mesh) {
       const voidCenter = mesh.position.clone();
       voidCenter.z = elevation + FZK_DOOR_H / 2;
-      cutRectVoidFromBoxMesh(host, voidCenter, FZK_DOOR_W, FZK_DOOR_H);
+      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, FZK_DOOR_W, FZK_DOOR_H);
+      if (voidGroup) pushReplaceAction(voidGroup, [host], "wall-void-cut");
       voidCut = true;
     }
   }
+  pushAction(mesh, chain);
+  endTransaction();
   onElementCommitted(mesh, viewer.getScene());
   return { created: "door", voidCut };
 });
@@ -800,8 +804,9 @@ registerHandler("SdWindow", (args) => {
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
-  viewer.addMesh(mesh, "brep");
+  viewer.addMesh(mesh, "brep", { noHistory: true });
   let voidCut = false;
+  beginTransaction("SdWindow");
   if (hostUuidWin) {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidWin);
     if (host instanceof THREE.Mesh) {
@@ -811,10 +816,13 @@ registerHandler("SdWindow", (args) => {
         mesh.position.y,
         mesh.position.z + FZK_WINDOW_H / 2,
       );
-      cutRectVoidFromBoxMesh(host, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
+      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
+      if (voidGroup) pushReplaceAction(voidGroup, [host], "wall-void-cut");
       voidCut = true;
     }
   }
+  pushAction(mesh, chain);
+  endTransaction();
   onElementCommitted(mesh, viewer.getScene());
   return { created: "window", voidCut };
 });
@@ -1010,17 +1018,21 @@ registerHandler("SdOpening", (args) => {
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
-  viewer.addMesh(mesh, "brep");
+  viewer.addMesh(mesh, "brep", { noHistory: true });
   let voidCut = false;
+  beginTransaction("SdOpening");
   if (hostUuidOp) {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidOp);
     if (host instanceof THREE.Mesh) {
       const voidCenter = mesh.position.clone();
       voidCenter.z = elevation + 1;
-      cutRectVoidFromBoxMesh(host, voidCenter, 1, 2);
+      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, 1, 2);
+      if (voidGroup) pushReplaceAction(voidGroup, [host], "wall-void-cut");
       voidCut = true;
     }
   }
+  pushAction(mesh, chain);
+  endTransaction();
   return { created: "opening", voidCut };
 });
 
@@ -1708,7 +1720,7 @@ registerHandler("SdAlignedDim", (args) => {
   const dist = ptA.distanceTo(ptB);
   const mid = ptA.clone().add(ptB).multiplyScalar(0.5);
   const lineObj = opBuildAnnotLine([ptA, ptB]);
-  viewer.getScene().add(lineObj);
+  viewer.addMesh(lineObj, "mesh");
   opAddLabel(formatLength(dist), mid, viewer);
   return { measured: "length", distance: parseFloat(dist.toFixed(4)), unit: "m", annotationUuid: lineObj.uuid };
 });
@@ -1724,7 +1736,7 @@ registerHandler("SdAngularDim", (args) => {
   const d2 = ray2.clone().sub(vertex).normalize();
   const angleDeg = (Math.acos(Math.max(-1, Math.min(1, d1.dot(d2)))) * 180) / Math.PI;
   const lineObj = opBuildAnnotLine([vertex, ray1, vertex, ray2]);
-  viewer.getScene().add(lineObj);
+  viewer.addMesh(lineObj, "mesh");
   opAddLabel(`${angleDeg.toFixed(1)}°`, vertex, viewer);
   return { measured: "angle", angleDeg: parseFloat(angleDeg.toFixed(2)), unit: "deg", annotationUuid: lineObj.uuid };
 });
@@ -1744,7 +1756,7 @@ registerHandler("SdAreaDim", (args) => {
   const centroid = new THREE.Vector3(cx / n, cy / n, cz / n);
   const vec3Pts = rawPts.map((p) => new THREE.Vector3(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0));
   const lineObj = opBuildAnnotLine([...vec3Pts, vec3Pts[0]]);
-  viewer.getScene().add(lineObj);
+  viewer.addMesh(lineObj, "mesh");
   opAddLabel(`Area: ${formatArea(area)}`, centroid, viewer);
   return { measured: "area", area: parseFloat(area.toFixed(4)), unit: "m2", annotationUuid: lineObj.uuid };
 });
@@ -1761,7 +1773,7 @@ registerHandler("SdVolumeDim", (args) => {
   box.getCenter(ctr);
   const volume = size.x * size.y * size.z;
   const lineObj = opBuildAnnotLine([box.min, box.max]);
-  viewer.getScene().add(lineObj);
+  viewer.addMesh(lineObj, "mesh");
   opAddLabel(`Vol: ${formatVolume(volume)}`, ctr, viewer);
   return { measured: "volume", volume: parseFloat(volume.toFixed(4)), unit: "m3", annotationUuid: lineObj.uuid };
 });
@@ -1912,7 +1924,7 @@ function _showRoofInspector(mesh: THREE.Mesh): void {
       });
       // Remove the old mesh after dispatch added the new one
       const stillOld = viewer.getScene().getObjectByProperty("uuid", _roofInspectorMeshUuid ?? "");
-      if (stillOld) viewer.getScene().remove(stillOld);
+      if (stillOld) viewer.removeObject(stillOld); // audit-undo-ok — inspector re-builds from dispatch, undo tracks the dispatch action
     });
     row.appendChild(lbl); row.appendChild(val); row.appendChild(inp);
     return row;
