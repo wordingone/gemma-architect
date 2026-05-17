@@ -4,7 +4,7 @@
 // and replace individual display meshes with the unioned display mesh.
 
 import * as THREE from "three";
-import { Brush, Evaluator, ADDITION } from "three-bvh-csg";
+import { Brush, Evaluator, ADDITION, SUBTRACTION } from "three-bvh-csg";
 
 // Structural types eligible for boolean union.
 const JOIN_CREATORS = new Set([
@@ -61,16 +61,15 @@ function _worldBrush(mesh: THREE.Mesh): Brush {
 
 /**
  * Build a CSG Brush for a mesh. Wall brushes are extended by their own thickness
- * so perpendicular corners get a t×t overlap region — essential for clean CSG union
- * (non-overlapping touching volumes produce degenerate CSG output).
+ * so corner overlap regions are robust enough for three-bvh-csg ADDITION.
+ * Miter trim (SUBTRACTION) is applied after union to remove the resulting protrusions.
  */
 function _brushForCsg(mesh: THREE.Mesh): Brush {
   if (mesh.userData?.creator === "wall") {
     const params = (mesh.geometry as THREE.BoxGeometry).parameters;
     if (params?.width) {
-      // params: { width: wallLen, height: wallThickness, depth: wallHeight }
       const extGeom = new THREE.BoxGeometry(
-        params.width + params.height,  // extend t/2 at each end
+        params.width + params.height,
         params.height,
         params.depth,
       );
@@ -87,6 +86,75 @@ function _brushForCsg(mesh: THREE.Mesh): Brush {
     }
   }
   return _worldBrush(mesh);
+}
+
+/**
+ * For two walls meeting endpoint-to-endpoint, returns a half-space cutter Brush
+ * that covers the "protrusion zone" on the negative side of the miter plane.
+ * Subtracting this from the CSG union result removes the star artifact at any angle.
+ */
+function _wallMiterCutter(wallA: THREE.Mesh, wallB: THREE.Mesh): Brush | null {
+  const cpsA = wallA.userData.controlPoints as THREE.Vector3[] | undefined;
+  const cpsB = wallB.userData.controlPoints as THREE.Vector3[] | undefined;
+  if (!cpsA || cpsA.length < 2 || !cpsB || cpsB.length < 2) return null;
+
+  wallA.updateMatrixWorld(true);
+  wallB.updateMatrixWorld(true);
+
+  const wpA = [
+    cpsA[0].clone().applyMatrix4(wallA.matrixWorld),
+    cpsA[1].clone().applyMatrix4(wallA.matrixWorld),
+  ];
+  const wpB = [
+    cpsB[0].clone().applyMatrix4(wallB.matrixWorld),
+    cpsB[1].clone().applyMatrix4(wallB.matrixWorld),
+  ];
+
+  // Find closest endpoint pair — this identifies the junction end of each wall.
+  let minDist = Infinity;
+  let iA = 0, iB = 0;
+  for (let a = 0; a < 2; a++) {
+    for (let b = 0; b < 2; b++) {
+      const d = wpA[a].distanceTo(wpB[b]);
+      if (d < minDist) { minDist = d; iA = a; iB = b; }
+    }
+  }
+
+  // Only trim L-junctions (endpoint-to-endpoint within 1 m).
+  if (minDist > 1.0) return null;
+
+  const P = wpA[iA].clone().add(wpB[iB]).multiplyScalar(0.5);
+
+  // Directions pointing AWAY from P along each wall's body.
+  const outA = wpA[1 - iA].clone().sub(P).normalize();
+  const outB = wpB[1 - iB].clone().sub(P).normalize();
+
+  // Miter normal bisects outA and outB — points into the "corner space"
+  // where both walls' extended geometry protrudes.
+  const miterNormal = outA.clone().add(outB).normalize();
+  if (miterNormal.length() < 0.1) return null; // collinear walls — no junction to trim
+
+  // Cutter: a large box on the NEGATIVE side of the miter plane from P.
+  // IMPORTANT: the box must be ROTATED so its local X axis aligns with miterNormal.
+  // An axis-aligned box would straddle the miter plane and incorrectly remove wall bodies.
+  const LARGE = 500;
+  const miterAngle = Math.atan2(miterNormal.y, miterNormal.x);
+  const cutCenter = P.clone().addScaledVector(miterNormal, -LARGE / 2);
+
+  const cutGeom = new THREE.BoxGeometry(LARGE, LARGE, LARGE);
+  // Bake rotation (local X → miterNormal) and translation into the geometry so the
+  // Evaluator sees a world-space brush at position (0,0,0).
+  const cutMatrix = new THREE.Matrix4().makeRotationZ(miterAngle);
+  cutMatrix.setPosition(cutCenter.x, cutCenter.y, cutCenter.z);
+  cutGeom.applyMatrix4(cutMatrix);
+
+  const mat = Array.isArray(wallA.material) ? wallA.material[0] : wallA.material;
+  const cutter = new Brush(cutGeom, mat);
+  cutter.position.set(0, 0, 0);
+  cutter.rotation.set(0, 0, 0);
+  cutter.scale.set(1, 1, 1);
+  cutter.updateMatrixWorld(true);
+  return cutter;
 }
 
 /** Remove an existing display mesh for a group from the scene. */
@@ -141,15 +209,38 @@ function _rebuildGroupDisplay(scene: THREE.Scene, groupId: string, primaryMat: T
     return acc;
   };
 
+  // Compute miter cutters for all wall-to-wall L-junctions before attempting CSG.
+  const wallMembers = members.filter(m => m.userData?.creator === "wall");
+  const mitreCutters: Brush[] = [];
+  for (let i = 0; i < wallMembers.length; i++) {
+    for (let j = i + 1; j < wallMembers.length; j++) {
+      const cutter = _wallMiterCutter(wallMembers[i], wallMembers[j]);
+      if (cutter) mitreCutters.push(cutter);
+    }
+  }
+
   let resultBrush: Brush;
   try {
     const union = buildUnion();
-    if (!union) return;
+    if (!union) { mitreCutters.forEach(c => c.geometry.dispose()); return; }
+
+    // Apply miter trim: subtract the protrusion zone at each L-junction.
     resultBrush = union;
+    for (const cutter of mitreCutters) {
+      try {
+        const trimmed = _evaluator.evaluate(resultBrush, cutter, SUBTRACTION);
+        if (resultBrush !== union) resultBrush.geometry.dispose();
+        resultBrush = trimmed;
+      } catch (e) {
+        console.warn("[join-groups] miter trim failed, skipping", e);
+      } finally {
+        cutter.geometry.dispose();
+      }
+    }
   } catch (err) {
     console.warn("[join-groups] CSG union failed for group", groupId, err);
-    // Fall back: keep all members visible.
     for (const m of members) m.visible = true;
+    mitreCutters.forEach(c => c.geometry.dispose());
     return;
   }
 

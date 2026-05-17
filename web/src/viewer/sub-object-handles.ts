@@ -9,26 +9,33 @@ import type { Viewer } from "./viewer.js";
 import { createClampedUniformNurbs, createCatmullRomAsNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 import { makeSnapId } from "./snap-state.js";
 
-const HANDLE_RADIUS = 0.07;
+const HANDLE_RADIUS = 0.06;
 
-let _handles: THREE.Mesh[] = [];
+let _handles: THREE.Object3D[] = [];
 let _parentObj: THREE.Object3D | null = null;
 
-function makeHandleMesh(pos: THREE.Vector3, index: number, parentUuid: string): THREE.Mesh {
-  const geom = new THREE.SphereGeometry(HANDLE_RADIUS, 10, 7);
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x2979ff,
-    roughness: 0.3,
-    metalness: 0.1,
-    depthTest: false,
-  });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.copy(pos);
-  mesh.renderOrder = 10;
-  mesh.userData.isSubObjectHandle = true;
-  mesh.userData.cpIndex = index;
-  mesh.userData.parentUuid = parentUuid;
-  return mesh;
+// Returns a group: outer dark sphere (outline) + inner white sphere (fill),
+// matching the sketch cursor-dot visual (black outline + white fill).
+function makeHandleMesh(pos: THREE.Vector3, index: number, parentUuid: string): THREE.Object3D {
+  const group = new THREE.Group();
+  group.position.copy(pos);
+  group.renderOrder = 10;
+  group.userData.isSubObjectHandle = true;
+  group.userData.cpIndex = index;
+  group.userData.parentUuid = parentUuid;
+
+  const outerGeom = new THREE.SphereGeometry(HANDLE_RADIUS * 1.5, 10, 7);
+  const outerMat = new THREE.MeshBasicMaterial({ color: 0x111111, depthTest: false });
+  const outerMesh = new THREE.Mesh(outerGeom, outerMat);
+  outerMesh.renderOrder = 10;
+
+  const innerGeom = new THREE.SphereGeometry(HANDLE_RADIUS, 10, 7);
+  const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
+  const innerMesh = new THREE.Mesh(innerGeom, innerMat);
+  innerMesh.renderOrder = 11;
+
+  group.add(outerMesh, innerMesh);
+  return group;
 }
 
 export function showHandlesFor(parent: THREE.Object3D, viewer: Viewer): void {
@@ -47,14 +54,18 @@ export function showHandlesFor(parent: THREE.Object3D, viewer: Viewer): void {
 export function clearHandles(viewer: Viewer): void {
   for (const h of _handles) {
     viewer.getScene().remove(h);
-    h.geometry.dispose();
-    (h.material as THREE.Material).dispose();
+    h.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+      }
+    });
   }
   _handles = [];
   _parentObj = null;
 }
 
-export function getHandles(): THREE.Mesh[] { return _handles; }
+export function getHandles(): THREE.Object3D[] { return _handles; }
 
 export function getHandleParent(): THREE.Object3D | null { return _parentObj; }
 

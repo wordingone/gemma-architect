@@ -742,8 +742,10 @@ export function initCreateMode(viewer: Viewer): void {
     if (!tool && !_ptPhase && !opPhase) {
       const activeBtn = document.querySelector<HTMLElement>(".palette-btn.active");
       if (activeBtn?.dataset.tool === "select") {
-        const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
-        opSetHover(hit ? hit.obj : null);
+        // Use viewer's pane-rect raycaster (same path as selection) so CSG display
+        // meshes and regular structural elements are both detected correctly.
+        const hoverObj = viewer.raycastForHover(ev.clientX, ev.clientY);
+        opSetHover(hoverObj);
       } else {
         opSetHover(null);
       }

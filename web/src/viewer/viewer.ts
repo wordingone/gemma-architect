@@ -12,13 +12,13 @@ import { getState, subscribe } from "../app-state.js";
 import { setSelected, clearSelected } from "./selection-state.js";
 import { emitChainFragment } from "./transforms.js";
 import { getSnap, subscribeSnap } from "./snap-state.js";
-import { showHandlesFor, clearHandles, isSubObjectHandle, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
+import { showHandlesFor, clearHandles, isSubObjectHandle, getHandles, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
 import { getCurrentDispatchCtx } from "../commands/dispatch.js";
 import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
 import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, type TransformSnapshot } from "../history.js";
-import { dissolveGroupForMesh, nearestGroupMember } from "../tools/join-groups.js";
+import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted } from "../tools/join-groups.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -222,13 +222,7 @@ export class Viewer {
     this.scene.add(fill);
 
     // Reference grid + axes — lighter lineweight so drawn geometry reads over it.
-    // Divisions derive from snap step so visible lines coincide with snap targets
-    // from the first frame; rebuildGrid uses the same formula on snap changes.
-    const initSize = 20;
-    const initStep = Math.max(0.001, getSnap().step);
-    const initDivs = Math.min(500, Math.max(4, Math.round(initSize / initStep)));
-    this.grid = new THREE.GridHelper(initSize, initDivs, 0xa8a8b0, 0xd8d4cc);
-    (this.grid as unknown as { __lastSize?: number }).__lastSize = initSize;
+    this.grid = new THREE.GridHelper(20, 20, 0xa8a8b0, 0xd8d4cc);
     this.grid.rotation.x = Math.PI / 2;
     this.grid.renderOrder = -1;
     const gridMat = Array.isArray(this.grid.material) ? this.grid.material : [this.grid.material];
@@ -406,6 +400,20 @@ export class Viewer {
               refitParentGeometry(parent);
             }
           }
+          // When the parent object (not a handle) is transformed, sync handle world positions.
+          if (!this.subTargetObject) {
+            const handleParent = getHandleParent();
+            if (handleParent && handleParent === this.targetObject) {
+              const cps = handleParent.userData.controlPoints as THREE.Vector3[] | undefined;
+              const handles = getHandles();
+              if (cps) {
+                handleParent.updateMatrixWorld(true);
+                for (let i = 0; i < handles.length && i < cps.length; i++) {
+                  handles[i].position.copy(handleParent.localToWorld(cps[i].clone()));
+                }
+              }
+            }
+          }
         });
 
         g.addEventListener("dragging-changed", (ev) => {
@@ -426,6 +434,11 @@ export class Viewer {
             }
           }
           if (dragging && this.pivotProxy && this.targetObject) {
+            // Dissolve the join group at drag start so the selected element
+            // can move independently (group stays intact on mere click).
+            if (this.targetObject instanceof THREE.Mesh) {
+              dissolveGroupForMesh(this.targetObject.uuid, this.scene);
+            }
             // Capture both pivot and target matrices at drag start so
             // objectChange can compute the live world-space delta.
             this.pivotMatrixBeforeDrag.copy(this.pivotProxy.matrix);
@@ -465,6 +478,11 @@ export class Viewer {
             if (fragment && !this.subTargetObject) emitChainFragment(fragment);
             // Re-sync proxy from new target + current offset.
             this.syncPivot();
+            // After a structural mesh is moved, re-evaluate CSG join groups so
+            // elements that now overlap other structural elements rejoin automatically.
+            if (!this.subTargetObject && this.targetObject instanceof THREE.Mesh) {
+              onElementCommitted(this.targetObject, this.scene);
+            }
             // Record transform on undo stack. Skip sub-object drags (control-point edits
             // rebuild geometry in-place and don't have a clean before/after snapshot).
             if (_dragStartSnapshot && !this.subTargetObject) {
@@ -752,9 +770,6 @@ export class Viewer {
     // lines match the snap increment exactly. Without this, dragging snaps
     // to a step that has no visible reference and looks wrong.
     subscribeSnap(() => this.rebuildGrid());
-    // Sync initial grid to the snap step that was set before this constructor
-    // ran (e.g. imperial 0.3048 m from PR #799 unitSystem init in snap-state.ts).
-    this.rebuildGrid();
 
     this.animate();
   }
@@ -904,17 +919,14 @@ export class Viewer {
     );
     const hits = this.raycaster.intersectObjects(pickables, true);
     let hit = hits[0]?.object ?? null;
-    // CSG display mesh hit: dissolve the join group so elements can be moved
-    // independently, then redirect selection to the nearest logical member.
+    // CSG display mesh hit: redirect selection to the nearest logical member
+    // WITHOUT dissolving the group — the join stays intact until the user drags.
     if (hit?.userData?.isJoinDisplay) {
       const groupId = hit.userData.joinGroupId as string | undefined;
       if (groupId) {
         const hitPoint = hits[0]?.point ?? new THREE.Vector3();
         const nearest = nearestGroupMember(groupId, hitPoint, this.scene);
-        if (nearest) {
-          dissolveGroupForMesh(nearest.uuid, this.scene);
-          hit = nearest;
-        }
+        if (nearest) hit = nearest;
       }
     }
     // IFC-imported meshes carry expressID and represent individual elements —
@@ -2086,6 +2098,36 @@ export class Viewer {
   getActiveCamera(): THREE.Camera {
     const perspPane = this.panes.find(p => p.view === "persp");
     return perspPane?.camera ?? this.camera;
+  }
+
+  /** Raycast for hover highlighting — uses pane-rect NDC (same as selection picker).
+   *  Returns the hit Object3D (possibly a CSG display mesh) or null. */
+  raycastForHover(clientX: number, clientY: number): THREE.Object3D | null {
+    const hitPane = this.panes.find(p => {
+      const r = p.el.getBoundingClientRect();
+      return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+    });
+    if (!hitPane) return null;
+    const pr = hitPane.el.getBoundingClientRect();
+    const ndcX = ((clientX - pr.left) / pr.width) * 2 - 1;
+    const ndcY = -((clientY - pr.top) / pr.height) * 2 + 1;
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), hitPane.camera);
+    const gizmoSet = new Set<THREE.Object3D>(this.gizmos);
+    const pickables = this.scene.children.filter(
+      c => c !== this.grid && c !== this.axes && !(c instanceof THREE.Sprite) &&
+           !(c instanceof THREE.DirectionalLight) && !(c instanceof THREE.AmbientLight) &&
+           !gizmoSet.has(c) && c !== this.pivotProxy && c !== this._cplaneGizmo.group,
+    );
+    const hits = this.raycaster.intersectObjects(pickables, true);
+    for (const h of hits) {
+      const o = h.object;
+      // Skip invisible objects unless they're a join-display mesh.
+      const isDisplay = !!o.userData.isJoinDisplay;
+      if (!o.visible && !isDisplay) continue;
+      if (o.userData.noSnap && !isDisplay) continue;
+      return o;
+    }
+    return null;
   }
 
   // noHistory: true opts out of the automatic undo push. Use for callers that
