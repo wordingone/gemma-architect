@@ -1198,8 +1198,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         outputs = makeTensor(allNums);
       }
     } catch (specErr) {
-      console.warn("[agent-harness] MTP spec-decode error — falling back to standard generate:",
-        (specErr as Error).message?.slice(0, 120));
+      console.warn(`[agent-harness] MTP spec-decode error — falling back to standard generate: ${(specErr as Error)?.message ?? specErr}`);
       specAttempts = 0;
       specAccepts  = 0;
       outputs = undefined;
