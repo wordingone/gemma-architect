@@ -65,9 +65,10 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
   mesh.userData.creator = "wall";
   mesh.userData.wallThickness = t;
   mesh.userData.wallHeight = h;
+  // CPs in local space: wall X-axis runs from -halfLen to +halfLen.
   mesh.userData.controlPoints = [
-    new THREE.Vector3(a.x - cx, a.y - cy, 0),
-    new THREE.Vector3(b.x - cx, b.y - cy, 0),
+    new THREE.Vector3(-len / 2, 0, 0),
+    new THREE.Vector3(len / 2, 0, 0),
   ];
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },

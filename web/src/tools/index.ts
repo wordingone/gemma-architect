@@ -19,7 +19,7 @@ import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPro
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
-import { onElementCommitted, peekNearestMember, clearMemberPeek } from "./join-groups";
+import { onElementCommitted } from "./join-groups";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening } from "./openings";
 
@@ -743,16 +743,8 @@ export function initCreateMode(viewer: Viewer): void {
       const activeBtn = document.querySelector<HTMLElement>(".palette-btn.active");
       if (activeBtn?.dataset.tool === "select") {
         const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
-        if (hit?.obj.userData.isJoinDisplay) {
-          const groupId = hit.obj.userData.joinGroupId as string;
-          peekNearestMember(groupId, hit.point, viewer.getScene());
-          opSetHover(null);
-        } else {
-          clearMemberPeek(viewer.getScene());
-          opSetHover(hit ? hit.obj : null);
-        }
+        opSetHover(hit ? hit.obj : null);
       } else {
-        clearMemberPeek(viewer.getScene());
         opSetHover(null);
       }
       hideCursorDot();
@@ -957,7 +949,6 @@ export function initCreateMode(viewer: Viewer): void {
   // ── pointerleave ──────────────────────────────────────────────────────────────
   vpBody.addEventListener("pointerleave", () => {
     hideCursorDot();
-    clearMemberPeek(viewer.getScene());
     opSetHover(null);
   });
 

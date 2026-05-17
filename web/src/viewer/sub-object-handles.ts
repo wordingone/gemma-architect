@@ -116,9 +116,9 @@ export function refitParentGeometry(parent: THREE.Object3D): void {
     parentMesh.position.set(cx, cy, 0);
     parentMesh.rotation.z = angRad;
     parentMesh.updateMatrixWorld(true);
-    // Re-anchor CPs in new local space.
-    cps[0].set(wA.x - cx, wA.y - cy, 0);
-    cps[1].set(wB.x - cx, wB.y - cy, 0);
+    // Re-anchor CPs in local space (wall X-axis runs endpoint-to-endpoint).
+    cps[0].set(-len / 2, 0, 0);
+    cps[1].set(len / 2, 0, 0);
     // Refresh snap endpoints.
     parentMesh.userData.endpoints = [
       { x: wA.x, y: wA.y, z: 0, id: makeSnapId(wA.x, wA.y, 0) },
