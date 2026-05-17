@@ -61,7 +61,9 @@ export function buildDoor(p: { x: number; y: number }): { mesh: THREE.Mesh; chai
   mesh.userData.creator = "door";
   const hostId = getPendingHostId();
   if (hostId) mesh.userData.hostExpressID = hostId;
-  const chain = `// door (FZK): ${round(w)}m × ${round(h)}m at [${round(p.x)}, ${round(p.y)}]`;
+  // Nominal void dimensions for CSC cut chain (900mm × 2100mm standard)
+  const vW = 0.9, vT = t, vH = 2.1;
+  const chain = `door: makeBox(${vW}, ${vT}, ${vH}) translate([${round(p.x)}, ${round(p.y)}, ${vH / 2}])`;
 
   // Suppress unused vars from intermediate mesh objects
   void frameM; void panelM;
@@ -108,7 +110,7 @@ export function buildWindow(p: { x: number; y: number }): { mesh: THREE.Mesh; ch
   mesh.userData.creator = "window";
   const hostId = getPendingHostId();
   if (hostId) mesh.userData.hostExpressID = hostId;
-  const chain = `// window (FZK): ${round(w)}m × ${round(h)}m sill=${round(sill)} at [${round(p.x)}, ${round(p.y)}]`;
+  const chain = `window: makeBox(${w}, ${t}, ${h}) translate([${round(p.x)}, ${round(p.y)}, ${Math.round(sill)}])`;
   return { mesh, chain };
 }
 
