@@ -12,7 +12,7 @@ import { getState, subscribe } from "../app-state.js";
 import { setSelected, clearSelected } from "./selection-state.js";
 import { emitChainFragment } from "./transforms.js";
 import { getSnap, subscribeSnap } from "./snap-state.js";
-import { showHandlesFor, clearHandles, isSubObjectHandle, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
+import { showHandlesFor, clearHandles, isSubObjectHandle, getHandles, getHandleParent, refitParentGeometry } from "./sub-object-handles.js";
 import { getCurrentDispatchCtx } from "../commands/dispatch.js";
 import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
@@ -398,6 +398,20 @@ export class Viewer {
               const local = parent.worldToLocal(this.subTargetObject.position.clone());
               (parent.userData.controlPoints as THREE.Vector3[])[cpIndex].copy(local);
               refitParentGeometry(parent);
+            }
+          }
+          // When the parent object (not a handle) is transformed, sync handle world positions.
+          if (!this.subTargetObject) {
+            const handleParent = getHandleParent();
+            if (handleParent && handleParent === this.targetObject) {
+              const cps = handleParent.userData.controlPoints as THREE.Vector3[] | undefined;
+              const handles = getHandles();
+              if (cps) {
+                handleParent.updateMatrixWorld(true);
+                for (let i = 0; i < handles.length && i < cps.length; i++) {
+                  handles[i].position.copy(handleParent.localToWorld(cps[i].clone()));
+                }
+              }
             }
           }
         });
