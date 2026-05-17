@@ -127,7 +127,7 @@ type OrtSession = any; // onnxruntime-web InferenceSession (loaded dynamically)
 let _drafterSession: OrtSession | null = null;
 let _drafterLoadAttempted = false;
 
-const DRAFTER_ONNX_URL = "/models/gemma-4-E2B-it-assistant/drafter.onnx";
+const DRAFTER_ONNX_URL = "/models/gemma-4-E2B-it-assistant/drafter-fp16.onnx";
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
 // Flip to true when drafter ONNX is deployed and output names are confirmed (#738).
 // Two-gate design: drafter loaded + verification wired. Target hidden-state exposure
@@ -1213,13 +1213,13 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
             full_v:    fullV,
           });
 
-          const logits = draftOut["scatter"].data as Float32Array; // [262144] — dynamo export name
+          const logits = draftOut["logits"].data as Float32Array; // [262144]
           let maxIdx = 0;
           for (let j = 1; j < logits.length; j++) {
             if (logits[j] > logits[maxIdx]) maxIdx = j;
           }
           draftTokens.push(maxIdx);
-          projState = draftOut["linear_21"]; // [1, 1, 1536] — dynamo export name; next draft step
+          projState = draftOut["proj_state"]; // [1, 1, 1536]; next draft step input
           remainingTokens--;
         }
 
