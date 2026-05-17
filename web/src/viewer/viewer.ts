@@ -770,6 +770,9 @@ export class Viewer {
     // lines match the snap increment exactly. Without this, dragging snaps
     // to a step that has no visible reference and looks wrong.
     subscribeSnap(() => this.rebuildGrid());
+    // subscribeSnap fires on changes only — kick once at init so the empty-scene
+    // mount uses snap-step-derived divisions rather than the hardcoded (20, 20).
+    this.rebuildGrid();
 
     this.animate();
   }
