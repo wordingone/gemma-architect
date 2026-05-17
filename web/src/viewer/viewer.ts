@@ -1119,6 +1119,10 @@ export class Viewer {
   deleteSelected(): boolean {
     const removed = this.targetObject;
     if (!removed) return false;
+    // If this mesh is a logical member of a CSG join group, dissolve the group
+    // first — removes the display mesh and makes all other members visible as
+    // standalone walls. No-op when the mesh is not in any group.
+    dissolveGroupForMesh(removed.uuid, this.scene);
     // If the deleted object is a clip plane, remove the mathematical plane so
     // the clipping effect is lifted along with the visualization mesh.
     const clipLabel = removed.userData.clipLabel as string | undefined;
