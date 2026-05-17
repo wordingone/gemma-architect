@@ -136,17 +136,29 @@ function fp16Head0ToFp32(kvTensor: any, ort: any): any {
 }
 
 // Drafter KV window is fixed at W tokens (static ONNX dim, confirmed by OrtRun "Got: 936 Expected: 16").
-// Slices the last W tokens from head-0 of the decoder fp16 cache and returns float32 [B, 1, W, H].
-// Zero-pads at the front when total seq_len < W (early prefill).
+// Takes the last W tokens from the decoder fp16 cache, averages across all numHeads heads,
+// and returns float32 [B, 1, W, H]. Zero-pads at front when S < W.
+//
+// Head-average, not head-0 slice: the drafter was trained on a target KV that folds numHeads=2
+// into a single-head representation. Averaging is the cheapest correct approximation.
+// If accept_rate is still poor after this, check drafter.inputMetadata.dims for sliding_k/full_k.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fp16Head0ToFp32Tail(kvTensor: any, W: number, ort: any): any {
-  const [B, , S, H] = kvTensor.dims as number[];  // [1, 2, S, hd]
-  const src = kvTensor.data as Uint16Array;        // fp16: head-0 data occupies first S*H elements
-  const f32 = new Float32Array(W * H);             // zero-filled → implicit zero-pad when S < W
-  const copyLen = Math.min(S, W);
-  const srcOff  = (S - copyLen) * H;              // start of last `copyLen` tokens in head-0
-  const dstOff  = (W - copyLen) * H;              // write at tail of output (zero-pad at front)
-  for (let i = 0; i < copyLen * H; i++) f32[dstOff + i] = fp16ToFloat32(src[srcOff + i]);
+function fp16HeadAvgToFp32Tail(kvTensor: any, W: number, ort: any): any {
+  const [B, numHeads, S, H] = kvTensor.dims as number[];
+  const src = kvTensor.data as Uint16Array;  // fp16: numHeads * S * H elements, row-major per head
+  const f32 = new Float32Array(W * H);       // zero-filled → zero-pad when S < W
+  const copyLen   = Math.min(S, W);
+  const srcTokOff = S - copyLen;             // first token to copy (tail of the sequence)
+  const dstTokOff = W - copyLen;             // destination token (zero-pad at front)
+  for (let t = 0; t < copyLen; t++) {
+    for (let h = 0; h < H; h++) {
+      let sum = 0;
+      for (let nh = 0; nh < numHeads; nh++) {
+        sum += fp16ToFloat32(src[nh * S * H + (srcTokOff + t) * H + h]);
+      }
+      f32[(dstTokOff + t) * H + h] = sum / numHeads;
+    }
+  }
   return new ort.Tensor("float32", f32, [B, 1, W, H]);
 }
 
@@ -203,7 +215,11 @@ export async function runMtpSpecDecode(
 
   try {
     console.info("[mtp-backend] drafter.inputNames:", JSON.stringify((drafter as any).inputNames ?? []));
-  } catch { /* ignore */ }
+    for (const name of (drafter as any).inputNames ?? []) {
+      const meta = (drafter as any).inputMetadata?.[name];
+      if (meta) console.info(`[mtp-backend] drafter ${name}`, { type: meta?.type, dims: meta?.dims });
+    }
+  } catch { /* inputMetadata not available in this ORT version */ }
 
   const seqLen0 = inputIds.length;
   const tokens: number[] = [];
@@ -254,10 +270,10 @@ export async function runMtpSpecDecode(
     const K = Math.min(draftK, maxNew - tokens.length);
 
     // Drafter KV window = 16 tokens (static ONNX dim). Slice tail + fp16→fp32 + head-0.
-    const slidingK = fp16Head0ToFp32Tail(kvCache[`present.${LAST_SLIDING}.key`],   DRAFTER_KV_WINDOW, O);
-    const slidingV = fp16Head0ToFp32Tail(kvCache[`present.${LAST_SLIDING}.value`], DRAFTER_KV_WINDOW, O);
-    const fullK    = fp16Head0ToFp32Tail(kvCache[`present.${LAST_FULL}.key`],      DRAFTER_KV_WINDOW, O);
-    const fullV    = fp16Head0ToFp32Tail(kvCache[`present.${LAST_FULL}.value`],    DRAFTER_KV_WINDOW, O);
+    const slidingK = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_SLIDING}.key`],   DRAFTER_KV_WINDOW, O);
+    const slidingV = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_SLIDING}.value`], DRAFTER_KV_WINDOW, O);
+    const fullK    = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_FULL}.key`],      DRAFTER_KV_WINDOW, O);
+    const fullV    = fp16HeadAvgToFp32Tail(kvCache[`present.${LAST_FULL}.value`],    DRAFTER_KV_WINDOW, O);
 
     // ── 2a. Draft K tokens with drafter ──────────────────────────────────────
     const draftTokens: number[] = [];
