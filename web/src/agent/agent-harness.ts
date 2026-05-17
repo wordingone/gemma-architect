@@ -127,6 +127,7 @@ type OrtSession = any; // onnxruntime-web InferenceSession (loaded dynamically)
 
 let _drafterSession: OrtSession | null = null;
 let _drafterLoadAttempted = false;
+let _drafterLoadPromise: Promise<void> | null = null;
 
 const DRAFTER_ONNX_URL = "/models/gemma-4-E2B-it-assistant/drafter-fp16.onnx";
 // Bump this key to bust the IDB cache when a new drafter export is deployed.
@@ -1137,19 +1138,16 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // Condition (b) is false in transformers.js 4.2.0 — the branch is structurally
   // dormant today but will fire automatically once the target ONNX is updated.
   // AC5: any drafter load failure is silently swallowed in loadDrafter(); no crash.
-  void loadDrafter();
+  // Store promise so turn-1 can await it (fixes drafter-race: gate evaluated before
+  // session.create completes even on IDB hit — #754 Finding #1).
+  _drafterLoadPromise ??= loadDrafter();
+  await _drafterLoadPromise;
 
   // Three-gate (#740-C): drafter loaded + verification wired + text-only request.
   // MTP drafter (gemma-4-E2B-it-assistant) is text-only — no vision/audio adapter.
   // Multimodal inputs (image/audio/viewport) bypass spec-decode so the modality is
   // never silently stripped. Telemetry reports mtp_on: false honestly on those turns.
   const drafterReady = _drafterSession !== null && MTP_VERIFICATION_WIRED && !payloadHasMultimodal(req);
-  console.warn("[agent-harness] MTP gate:", {
-    drafter: _drafterSession !== null,
-    wired: MTP_VERIFICATION_WIRED,
-    multimodal: payloadHasMultimodal(req),
-    drafterReady,
-  });
 
   let specAttempts = 0;
   let specAccepts = 0;
@@ -1162,7 +1160,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     // drafter-cache.ts. Full greedy verification with KV cache accumulation.
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ort = (globalThis as any).ort;
+      const ort = (globalThis as any).ort ?? (await import("onnxruntime-web"));
       const mtpSessions = getMtpSessions(model);
 
       if (!mtpSessions) {
