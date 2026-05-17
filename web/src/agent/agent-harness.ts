@@ -175,6 +175,8 @@ async function loadDrafter(): Promise<void> {
       preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
     });
     console.info("[agent-harness] Drafter ONNX loaded — MTP spec-decode active (#738).");
+    // Signal for external tooling (A/B scripts, verify harness) that drafter is ready.
+    (globalThis as any).__drafterLoaded = true;
   } catch (e) {
     // AC5: graceful fallback — network error, version mismatch, model not hosted yet.
     console.warn(
@@ -182,7 +184,18 @@ async function loadDrafter(): Promise<void> {
       (e as Error).message?.slice(0, 120),
     );
     _drafterSession = null;
+    (globalThis as any).__drafterLoaded = false;
   }
+}
+
+// Expose drafter load trigger and ready flag for external tooling (A/B scripts, verify).
+// __loadDrafter() returns a Promise that resolves when drafter is done loading (or failed).
+// __drafterLoaded is true on success, false on failure, undefined if load not yet triggered.
+if (typeof globalThis !== "undefined") {
+  (globalThis as any).__loadDrafter = (): Promise<void> => {
+    _drafterLoadPromise ??= loadDrafter();
+    return _drafterLoadPromise;
+  };
 }
 
 function updateBadge(inner: string): void {
