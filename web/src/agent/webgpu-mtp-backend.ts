@@ -266,7 +266,8 @@ export async function runMtpSpecDecode(
     ...emptyKvFeed(O, config),
   });
 
-  // Cache all KV outputs from prefill; probe dtype once.
+  // Cache all KV outputs from prefill; probe dtype + prefillOut keys once.
+  console.info("[mtp-backend] prefillOut keys:", Object.keys(prefillOut));
   const _kvSample = prefillOut[`present.0.key`];
   console.info("[mtp-backend] present.0.key after prefill:", {
     type: _kvSample?.type,
@@ -315,6 +316,20 @@ export async function runMtpSpecDecode(
       for (let i = 0; i < HIDDEN_SIZE; i++) {
         combined[i]               = tokenEmbed[i] ?? 0;
         combined[i + HIDDEN_SIZE] = projState ? (projState.data as Float32Array)[i] ?? 0 : 0;
+      }
+
+      // Probe NaN sources on first draft step of first spec iteration.
+      if (d === 0 && specAttempts === 1) {
+        const slidingKData = slidingK.data as Float32Array;
+        console.info("[mtp-backend] nan-probe d=0:", {
+          combined_0:    combined[0],
+          combined_1536: combined[HIDDEN_SIZE],
+          combined_0_isNaN:    Number.isNaN(combined[0]),
+          combined_1536_isNaN: Number.isNaN(combined[HIDDEN_SIZE]),
+          slidingK_0:    slidingKData[0],
+          slidingK_0_isNaN: Number.isNaN(slidingKData[0]),
+          projState_null: projState === null,
+        });
       }
 
       const draftOut = await drafter.run({
