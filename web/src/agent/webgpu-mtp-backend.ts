@@ -52,7 +52,13 @@ export function getMtpSessions(model: unknown): MtpSessions | null {
     null;
 
   if (!embed || !decoder) {
-    console.warn("[mtp-backend] Sessions not found. Keys:", Object.keys(sessions).slice(0, 8));
+    console.warn(
+      "[mtp-backend] getMtpSessions: sessions not found.",
+      "Model keys:", Object.keys(m ?? {}).slice(0, 12),
+      "Session keys:", Object.keys(sessions).slice(0, 12),
+      "embed found:", !!embed,
+      "decoder found:", !!decoder,
+    );
     return null;
   }
   console.info("[mtp-backend] Sessions acquired — embed + decoder reusing VRAM allocation.");

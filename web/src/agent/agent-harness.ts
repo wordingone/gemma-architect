@@ -1144,6 +1144,12 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // Multimodal inputs (image/audio/viewport) bypass spec-decode so the modality is
   // never silently stripped. Telemetry reports mtp_on: false honestly on those turns.
   const drafterReady = _drafterSession !== null && MTP_VERIFICATION_WIRED && !payloadHasMultimodal(req);
+  console.warn("[agent-harness] MTP gate:", {
+    drafter: _drafterSession !== null,
+    wired: MTP_VERIFICATION_WIRED,
+    multimodal: payloadHasMultimodal(req),
+    drafterReady,
+  });
 
   let specAttempts = 0;
   let specAccepts = 0;
@@ -1161,7 +1167,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
       if (!mtpSessions) {
         // Session keys don't match (model variant or transformers.js version).
-        console.debug("[mtp] getMtpSessions() returned null — standard generate path.");
+        console.warn("[mtp] getMtpSessions() returned null — standard generate path.");
       } else {
         const inputIdsTensor = (inputs as any).input_ids as { data: BigInt64Array; dims: number[] };
         const eosId: number = (model as any).config?.eos_token_id ?? 1;
