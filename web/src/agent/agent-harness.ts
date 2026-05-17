@@ -89,6 +89,11 @@ export const MODEL_ID: string =
   _modelParam === "e2b" ? MODEL_ID_CANDIDATES.e2b : MODEL_ID_CANDIDATES.e4b;
 const MODEL_LABEL: string = _modelParam === "e2b" ? "E2B" : "E4B";
 
+// ?mtp=off disables spec-decode even when all other gates pass — used for A/B tg baseline.
+const _MTP_OFF =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("mtp") === "off";
+
 const BADGE_ID = "ai-model-badge";
 
 let _model: PreTrainedModel | null = null;
@@ -1158,7 +1163,8 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     _drafterSession !== null &&
     MTP_VERIFICATION_WIRED &&
     !payloadHasMultimodal(req) &&
-    MODEL_ID === MODEL_ID_CANDIDATES.e2b;
+    MODEL_ID === MODEL_ID_CANDIDATES.e2b &&
+    !_MTP_OFF;
 
   let specAttempts = 0;
   let specAccepts = 0;
