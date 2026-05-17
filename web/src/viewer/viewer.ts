@@ -19,6 +19,7 @@ import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
 import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, type TransformSnapshot } from "../history.js";
 import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted } from "../tools/join-groups.js";
+import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from "../tools/wall-corners.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -444,6 +445,7 @@ export class Viewer {
             // can move independently (group stays intact on mere click).
             if (this.targetObject instanceof THREE.Mesh) {
               dissolveGroupForMesh(this.targetObject.uuid, this.scene);
+              resetWallCorners(this.targetObject);
             }
             // Capture both pivot and target matrices at drag start so
             // objectChange can compute the live world-space delta.
@@ -484,9 +486,13 @@ export class Viewer {
             if (fragment && !this.subTargetObject) emitChainFragment(fragment);
             // Re-sync proxy from new target + current offset.
             this.syncPivot();
-            // After a structural mesh is moved, re-evaluate CSG join groups so
-            // elements that now overlap other structural elements rejoin automatically.
+            // After a structural mesh is moved, re-evaluate join state.
             if (!this.subTargetObject && this.targetObject instanceof THREE.Mesh) {
+              if (this.targetObject.userData?.creator === "wall") {
+                // Update stale world endpoints, then re-attempt parametric corner joins.
+                recomputeWallEndpoints(this.targetObject);
+                attemptWallCornerJoins(this.targetObject, this.scene);
+              }
               onElementCommitted(this.targetObject, this.scene);
             }
             // Record transform on undo stack. Skip sub-object drags (control-point edits
@@ -927,7 +933,12 @@ export class Viewer {
            !gizmoSet.has(c) && c !== this.pivotProxy && c !== this._cplaneGizmo.group
     );
     const hits = this.raycaster.intersectObjects(pickables, true);
-    let hit = hits[0]?.object ?? null;
+    // Handles render without depth-test so they must be selectable even when
+    // geometrically behind walls. If any handle appears in the hit list (at any
+    // depth), prefer it over closer wall hits.
+    const handleSet = new Set(getHandles());
+    const handleHit = hits.find(h => handleSet.has(h.object) || (h.object.parent !== null && handleSet.has(h.object.parent)));
+    let hit = (handleHit ?? hits[0])?.object ?? null;
     // CSG display mesh hit: redirect selection to the nearest logical member
     // WITHOUT dissolving the group — the join stays intact until the user drags.
     if (hit?.userData?.isJoinDisplay) {

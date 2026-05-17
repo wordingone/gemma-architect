@@ -7,8 +7,11 @@ import * as THREE from "three";
 import { Brush, Evaluator, ADDITION } from "three-bvh-csg";
 
 // Structural types eligible for boolean union.
+// Walls are excluded: their junctions are solved parametrically by wall-corners.ts.
+// Including walls in CSG causes broken geometry when non-indexed wallPrism meshes
+// are unioned with slabs via three-bvh-csg.
 const JOIN_CREATORS = new Set([
-  "wall", "slab", "column", "beam", "stair", "roof",
+  "slab", "column", "beam", "stair", "roof",
   "foundation", "curtainwall", "ceiling",
 ]);
 

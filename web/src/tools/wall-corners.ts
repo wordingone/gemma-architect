@@ -16,31 +16,43 @@ export interface WallCorners {
 
 /**
  * Build a quadrilateral-prism BufferGeometry from 4 local-XY base corners + height.
- * Vertex layout: 0=aL-bot, 1=aR-bot, 2=bR-bot, 3=bL-bot; 4-7 = top copies.
- * Face normals verified by cross-product for outward CCW winding.
+ * Non-indexed geometry with flat per-face normals (no computeVertexNormals smoothing),
+ * matching how BoxGeometry handles hard-edged architectural shapes.
  */
 export function wallPrism(
   aL: THREE.Vector2, aR: THREE.Vector2,
   bL: THREE.Vector2, bR: THREE.Vector2,
   h: number,
 ): THREE.BufferGeometry {
-  const pos = new Float32Array([
-    aL.x, aL.y, 0,   aR.x, aR.y, 0,   bR.x, bR.y, 0,   bL.x, bL.y, 0,  // 0-3 bottom
-    aL.x, aL.y, h,   aR.x, aR.y, h,   bR.x, bR.y, h,   bL.x, bL.y, h,  // 4-7 top
-  ]);
-  // prettier-ignore
-  const idx = new Uint16Array([
-    0,2,1,  0,3,2,   // bottom (−Z)
-    4,5,6,  4,6,7,   // top (+Z)
-    0,4,7,  0,7,3,   // left (+Y side)
-    1,2,6,  1,6,5,   // right (−Y side)
-    0,1,5,  0,5,4,   // A-end (−X)
-    3,7,6,  3,6,2,   // B-end (+X)
-  ]);
+  const pos: number[] = [];
+  const nrm: number[] = [];
+
+  type V3 = [number, number, number];
+  function quad(v0: V3, v1: V3, v2: V3, v3: V3): void {
+    const ex = v1[0] - v0[0], ey = v1[1] - v0[1], ez = v1[2] - v0[2];
+    const fx = v2[0] - v0[0], fy = v2[1] - v0[1], fz = v2[2] - v0[2];
+    let nx = ey * fz - ez * fy, ny = ez * fx - ex * fz, nz = ex * fy - ey * fx;
+    const nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (nl > 1e-9) { nx /= nl; ny /= nl; nz /= nl; }
+    pos.push(...v0, ...v1, ...v2, ...v0, ...v2, ...v3);
+    for (let i = 0; i < 6; i++) nrm.push(nx, ny, nz);
+  }
+
+  const aLb: V3 = [aL.x, aL.y, 0], aRb: V3 = [aR.x, aR.y, 0];
+  const bRb: V3 = [bR.x, bR.y, 0], bLb: V3 = [bL.x, bL.y, 0];
+  const aLt: V3 = [aL.x, aL.y, h], aRt: V3 = [aR.x, aR.y, h];
+  const bRt: V3 = [bR.x, bR.y, h], bLt: V3 = [bL.x, bL.y, h];
+
+  quad(aLb, bLb, bRb, aRb);  // bottom
+  quad(aLt, aRt, bRt, bLt);  // top
+  quad(aLb, aLt, bLt, bLb);  // left  (+Y)
+  quad(aRb, bRb, bRt, aRt);  // right (−Y)
+  quad(aLb, aRb, aRt, aLt);  // A-end
+  quad(bLb, bLt, bRt, bRb);  // B-end
+
   const geom = new THREE.BufferGeometry();
-  geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  geom.setIndex(new THREE.BufferAttribute(idx, 1));
-  geom.computeVertexNormals();
+  geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pos), 3));
+  geom.setAttribute("normal",   new THREE.BufferAttribute(new Float32Array(nrm), 3));
   return geom;
 }
 
@@ -118,6 +130,25 @@ export function resetWallCorners(mesh: THREE.Mesh): void {
 }
 
 /**
+ * Recompute userData.endpoints from the mesh's current world transform.
+ * Call after a drag-move so attemptWallCornerJoins works with up-to-date positions.
+ */
+export function recomputeWallEndpoints(mesh: THREE.Mesh): void {
+  if (mesh.userData?.creator !== "wall") return;
+  const cps = mesh.userData.controlPoints as THREE.Vector3[] | undefined;
+  if (!cps || cps.length < 2) return;
+  mesh.updateMatrixWorld(true);
+  const wA = cps[0].clone().applyMatrix4(mesh.matrixWorld);
+  const wB = cps[1].clone().applyMatrix4(mesh.matrixWorld);
+  const wC = new THREE.Vector3().applyMatrix4(mesh.matrixWorld);
+  const eps = mesh.userData.endpoints as SnapVertex[] | undefined;
+  if (!eps || eps.length < 2) return;
+  eps[0].x = wA.x; eps[0].y = wA.y; eps[0].z = wA.z;
+  eps[1].x = wB.x; eps[1].y = wB.y; eps[1].z = wB.z;
+  if (eps[2]) { eps[2].x = wC.x; eps[2].y = wC.y; eps[2].z = wC.z; }
+}
+
+/**
  * Detect and solve wall-wall corner junctions for a newly placed wall.
  * Modifies geometry of newMesh AND neighboring walls in-place.
  * Call after newMesh is added to the scene, before onElementCommitted.
@@ -130,9 +161,8 @@ export function attemptWallCornerJoins(newMesh: THREE.Mesh, scene: THREE.Scene):
   const [pA, pB] = newEps;
   const t = (newMesh.userData.wallThickness as number | undefined) ?? 0.2;
 
-  // Ensure new wall has corners initialized
-  if (!newMesh.userData.corners) initWallCorners(newMesh);
-  // Rebuild with prism geometry (replaces BoxGeometry)
+  // Always reinitialize to rectangular defaults — clears stale corners from previous joins.
+  initWallCorners(newMesh);
   rebuildWallFromCorners(newMesh, newMesh.userData.corners as WallCorners);
 
   scene.traverse((obj) => {
@@ -222,20 +252,29 @@ function _solveL(
   const cornersA = meshA.userData.corners as WallCorners;
   const cornersB = meshB.userData.corners as WallCorners;
 
+  // When a junction is at the B-end (endIdx=1), the solver's outward direction is the
+  // reverse of the mesh's natural A→B direction, which inverts the solver's L/R relative
+  // to the mesh's corner convention.  Compensate by swapping solverL and solverR before
+  // writing to the corner slots.
+  function applyEnd(
+    corners: WallCorners, endIdx: 0|1,
+    solverL: THREE.Vector2, solverR: THREE.Vector2,
+  ): void {
+    const [l, r] = endIdx === 1 ? [solverR, solverL] : [solverL, solverR];
+    if (endIdx === 0) { corners.aL = l.clone(); corners.aR = r.clone(); }
+    else              { corners.bL = l.clone(); corners.bR = r.clone(); }
+  }
+
   if (cross > 0) {
-    // A: right=outside, left=inside
-    if (endIdxA === 0) { cornersA.aR = outsideCorner.clone(); cornersA.aL = insideCorner.clone(); }
-    else               { cornersA.bR = outsideCorner.clone(); cornersA.bL = insideCorner.clone(); }
-    // B: left=outside, right=inside
-    if (endIdxB === 0) { cornersB.aL = outsideCorner.clone(); cornersB.aR = insideCorner.clone(); }
-    else               { cornersB.bL = outsideCorner.clone(); cornersB.bR = insideCorner.clone(); }
+    // meshA: solver-right=outside, solver-left=inside
+    applyEnd(cornersA, endIdxA, /*solverL=*/insideCorner, /*solverR=*/outsideCorner);
+    // meshB: solver-left=outside, solver-right=inside
+    applyEnd(cornersB, endIdxB, /*solverL=*/outsideCorner, /*solverR=*/insideCorner);
   } else {
-    // A: left=outside, right=inside
-    if (endIdxA === 0) { cornersA.aL = outsideCorner.clone(); cornersA.aR = insideCorner.clone(); }
-    else               { cornersA.bL = outsideCorner.clone(); cornersA.bR = insideCorner.clone(); }
-    // B: right=outside, left=inside
-    if (endIdxB === 0) { cornersB.aR = outsideCorner.clone(); cornersB.aL = insideCorner.clone(); }
-    else               { cornersB.bR = outsideCorner.clone(); cornersB.bL = insideCorner.clone(); }
+    // meshA: solver-left=outside, solver-right=inside
+    applyEnd(cornersA, endIdxA, /*solverL=*/outsideCorner, /*solverR=*/insideCorner);
+    // meshB: solver-right=outside, solver-left=inside
+    applyEnd(cornersB, endIdxB, /*solverL=*/insideCorner, /*solverR=*/outsideCorner);
   }
 
   rebuildWallFromCorners(meshA, cornersA);
