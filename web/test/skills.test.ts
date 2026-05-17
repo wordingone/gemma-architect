@@ -8,64 +8,34 @@ import { loadSkills, findSkillsForPrompt, parseFrontmatter } from "../src/agent/
 const SKILLS_DIR = new URL("../skills/", import.meta.url).pathname.replace(/^\/([A-Za-z]):/, "$1:");
 const SCHEMA_PATH = join(SKILLS_DIR, "skills.schema.json");
 
-const EXPECTED_NAMES = [
-  "align-to-grid",
-  "dimension-chain",
-  "extrude-walls",
-  "fire-station",
-  "hospitality-cabin",
-  "mirror-across-axis",
-  "office-25desk",
-  "place-doors",
-  "replicate-from-video",
-  "research-from-prompt",
-  "research-pavilion",
-  "room-from-prompt",
-  "sf-residence-2br",
-  "stair-from-points",
-];
-
-test("all 14 skills load with valid frontmatter", async () => {
+test("no built-in skills present (synthetic fixtures removed per #838)", async () => {
   const skills = await loadSkills(SKILLS_DIR);
-  expect(skills.length).toBe(14);
-  // loadSkills sorts by name — the asserted order matches.
-  expect(skills.map((s) => s.name)).toEqual(EXPECTED_NAMES);
-  for (const s of skills) {
-    expect(s.name).toBeTruthy();
-    expect(s.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(s.description.length).toBeGreaterThan(10);
-    expect(s.keywords.length).toBeGreaterThan(0);
-    expect(s.examples.length).toBeGreaterThanOrEqual(2);
-    expect(s.eval_id.length).toBeGreaterThan(0);
-    expect(s.body.length).toBeGreaterThan(50);
-    // Body MUST contain the four section headings the agent reads at
-    // dispatch time. Keeping these guarded prevents a "skill loaded but
-    // contract drifted" silent regression.
-    expect(s.body).toContain("## When to use");
-    expect(s.body).toContain("## How it works");
-    expect(s.body).toContain("## Examples");
-    expect(s.body).toContain("## Failure modes");
-  }
+  expect(skills.length).toBe(0);
+  expect(skills.map((s) => s.name)).toEqual([]);
 });
 
-test("keyword match returns expected skill first", async () => {
-  const skills = await loadSkills(SKILLS_DIR);
-  const matches = findSkillsForPrompt(skills, "extrude this polyline into a wall");
+test("keyword match logic scores skills correctly", () => {
+  // Test the matcher with inline mock skills so it exercises the scoring
+  // algorithm without requiring built-in fixture files.
+  const mockSkills = [
+    { name: "extrude-walls", version: "1.0.0", description: "Extrudes polylines into walls", keywords: ["extrude", "wall", "polyline"], examples: ["extrude this", "wall from polyline"], eval_id: "e1", body: "## When to use\n## How it works\n## Examples\n## Failure modes" },
+    { name: "mirror-across-axis", version: "1.0.0", description: "Mirrors objects across an axis", keywords: ["mirror", "axis", "reflect"], examples: ["mirror these", "reflect across"], eval_id: "e2", body: "## When to use\n## How it works\n## Examples\n## Failure modes" },
+    { name: "place-doors", version: "1.0.0", description: "Places door objects in walls", keywords: ["door", "place", "opening"], examples: ["place a door", "add door"], eval_id: "e3", body: "## When to use\n## How it works\n## Examples\n## Failure modes" },
+  ];
+
+  const matches = findSkillsForPrompt(mockSkills, "extrude this polyline into a wall");
   expect(matches.length).toBeGreaterThan(0);
   expect(matches[0].name).toBe("extrude-walls");
 
-  // Spot-check a couple of other prompts to ensure the matcher isn't a
-  // single-skill stub.
-  const doorMatches = findSkillsForPrompt(skills, "put a door at this clicked point");
+  const doorMatches = findSkillsForPrompt(mockSkills, "put a door at this clicked point");
   expect(doorMatches[0].name).toBe("place-doors");
 
-  const stairMatches = findSkillsForPrompt(skills, "make a staircase between these two points");
-  expect(stairMatches[0].name).toBe("stair-from-points");
-
-  const mirrorMatches = findSkillsForPrompt(skills, "mirror these walls across the X axis");
-  // mirror-across-axis must outscore extrude-walls (which shares "wall")
-  // because two of mirror's keywords ("mirror", "axis") hit.
+  const mirrorMatches = findSkillsForPrompt(mockSkills, "mirror these walls across the X axis");
   expect(mirrorMatches[0].name).toBe("mirror-across-axis");
+
+  // No match for irrelevant prompt.
+  const noMatch = findSkillsForPrompt(mockSkills, "asdf qwerty zzz nothing relevant");
+  expect(noMatch.length).toBe(0);
 });
 
 test("findSkillsForPrompt returns empty for irrelevant prompts", async () => {
@@ -74,43 +44,10 @@ test("findSkillsForPrompt returns empty for irrelevant prompts", async () => {
   expect(matches.length).toBe(0);
 });
 
-test("skill.json files validate against schema", async () => {
-  // Hand-validate against the JSON schema — ajv is not in the deps tree
-  // (the constraint is "DO NOT install new dependencies for parsing").
-  const schemaText = await readFile(SCHEMA_PATH, "utf8");
-  const schema = JSON.parse(schemaText) as {
-    required: string[];
-    properties: Record<string, { type?: string; pattern?: string; minimum?: number; minItems?: number }>;
-  };
-
+test("skill.json directory is empty after synthetic fixture removal (#838)", async () => {
   const entries = await readdir(SKILLS_DIR, { withFileTypes: true });
-  const sidecars: string[] = [];
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    sidecars.push(join(SKILLS_DIR, e.name, "skill.json"));
-  }
-  expect(sidecars.length).toBe(14);
-
-  for (const sidecarPath of sidecars) {
-    const raw = await readFile(sidecarPath, "utf8");
-    const json: Record<string, unknown> = JSON.parse(raw);
-    // Required keys.
-    for (const key of schema.required) {
-      expect(json).toHaveProperty(key);
-    }
-    // Type / pattern checks for the keys we care about.
-    expect(typeof json.name).toBe("string");
-    expect(typeof json.version).toBe("string");
-    expect((json.version as string).match(/^\d+\.\d+\.\d+$/)).toBeTruthy();
-    expect(typeof json.schema_version).toBe("number");
-    expect(json.schema_version).toBeGreaterThanOrEqual(1);
-    expect(Array.isArray(json.keywords)).toBe(true);
-    expect((json.keywords as string[]).length).toBeGreaterThan(0);
-    expect(typeof json.examples_count).toBe("number");
-    expect(json.examples_count).toBeGreaterThanOrEqual(1);
-    expect(typeof json.eval_id).toBe("string");
-    expect((json.eval_id as string).length).toBeGreaterThan(0);
-  }
+  const dirs = entries.filter(e => e.isDirectory());
+  expect(dirs.length).toBe(0);
 });
 
 test("skill.json keywords match SKILL.md frontmatter keywords", async () => {
