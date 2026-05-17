@@ -572,6 +572,11 @@ registerHandler("SdWall", (args) => {
   mesh.userData.layerId = resolveLayerId("SdWall", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
+  // Local-space endpoints along wall X-axis — required by _wallMiterCutter.
+  mesh.userData.controlPoints = [
+    new THREE.Vector3(-len / 2, 0, 0),
+    new THREE.Vector3(len / 2, 0, 0),
+  ];
   viewer.addMesh(mesh, "brep");
   onElementCommitted(mesh, viewer.getScene());
   return { created: "wall", length: len, thickness: t, height: wallH };
