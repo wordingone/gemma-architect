@@ -22,7 +22,7 @@ import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, b
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
-import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H } from "./openings";
+import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./openings";
 
 // ── Append-only construction sequence ────────────────────────────────────────
 
@@ -67,6 +67,8 @@ let _lastCreateClickY = 0;
 let _previewMesh: THREE.Mesh | null = null;
 let _markerMesh: THREE.Points | null = null;
 let _roofFootprintLine: THREE.Line | null = null;
+// Ghost preview mesh for door/window before first click (#845/#846 AC3).
+let _openingPreviewMesh: THREE.Mesh | null = null;
 // Axis-constraint indicator line shown when Shift is held during sketch drawing.
 let _sketchShiftAxisLine: THREE.Line | null = null;
 // Cursor dot — CSS overlay div that tracks the pointer when a sketch tool is active.
@@ -134,6 +136,49 @@ function clearRoofFootprint(viewer: Viewer): void {
   _roofFootprintLine = null;
 }
 
+function clearOpeningPreview(viewer: Viewer): void {
+  if (!_openingPreviewMesh) return;
+  viewer.getScene().remove(_openingPreviewMesh);
+  (_openingPreviewMesh.geometry as THREE.BufferGeometry).dispose();
+  (_openingPreviewMesh.material as THREE.MeshBasicMaterial).dispose();
+  _openingPreviewMesh = null;
+}
+
+function updateOpeningPreview(
+  viewer: Viewer,
+  tool: "door" | "window",
+  snapped: { x: number; y: number; z?: number },
+  clientX: number,
+  clientY: number,
+): void {
+  const elev = levelStore.getActive().elevation;
+  const w = tool === "door" ? FZK_DOOR_W : FZK_WINDOW_W;
+  const h = tool === "door" ? FZK_DOOR_H : FZK_WINDOW_H;
+  const zOff = tool === "door" ? 0 : FZK_WINDOW_SILL;
+  const color = tool === "door" ? 0xaa6633 : 0x88c4e8;
+
+  clearOpeningPreview(viewer);
+
+  const geom = new THREE.BoxGeometry(w, 0.2, h);
+  geom.translate(0, 0, h / 2);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35 });
+  _openingPreviewMesh = new THREE.Mesh(geom, mat);
+  _openingPreviewMesh.position.set(snapped.x, snapped.y, elev + zOff);
+  _openingPreviewMesh.userData.noSnap = true;
+  _openingPreviewMesh.userData.isPreview = true;
+
+  const host = findHostMesh(viewer, clientX, clientY, ["wall"]);
+  if (host) {
+    _openingPreviewMesh.rotation.copy(host.rotation);
+    host.updateMatrixWorld(true);
+    const local = host.worldToLocal(_openingPreviewMesh.position.clone());
+    local.y = 0;
+    _openingPreviewMesh.position.copy(host.localToWorld(local));
+  }
+
+  viewer.getScene().add(_openingPreviewMesh);
+}
+
 export function clearSketchShiftLine(viewer: Viewer): void {
   if (!_sketchShiftAxisLine) return;
   viewer.getScene().remove(_sketchShiftAxisLine);
@@ -187,6 +232,7 @@ export function clearTemporary(viewer: Viewer): void {
   clearMarker(viewer);
   clearSketchShiftLine(viewer);
   clearRoofFootprint(viewer);
+  clearOpeningPreview(viewer);
 }
 
 // ── Cursor dot ────────────────────────────────────────────────────────────────
@@ -296,8 +342,8 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   circle:      { clicks: 2, handler: atZ(([a, b]) => buildCircle(a, b)) },
   line:        { clicks: 2, handler: atZ(([a, b]) => buildLine(a, b)) },
   slab:        { clicks: 2, handler: atZ(([a, b]) => buildSlab(a, b)) },
-  door:        { clicks: 1, handler: atZ(([p]) => buildDoor(p)) },
-  window:      { clicks: 1, handler: atZ(([p]) => buildWindow(p)) },
+  door:        { clicks: 1, handler: atTopOfLevel(([p]) => buildDoor(p), 0) },
+  window:      { clicks: 1, handler: atTopOfLevel(([p]) => buildWindow(p), FZK_WINDOW_SILL) },
   column:      { clicks: 1, handler: atZ(([p]) => buildColumn(p)) },
   stair:       { clicks: 2, handler: atZ(([a, b]) => buildStair(a, b)) },
   polygon:     { clicks: 2, handler: atZ(([a, b]) => buildPolygon(a, b)) },
@@ -633,6 +679,8 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
           const _snapPt = _host.worldToLocal(out.mesh.position.clone());
           _snapPt.y = 0;
           out.mesh.position.copy(_host.localToWorld(_snapPt));
+          // Match wall orientation so door/window plane is parallel to wall face (#845 AC1).
+          out.mesh.rotation.copy(_host.rotation);
 
           if (_host instanceof THREE.Mesh) {
             const _isWin = _creator === "window";
@@ -1233,6 +1281,14 @@ export function initCreateMode(viewer: Viewer): void {
     // (remaining PT live-preview phases are handled inside transforms.ts ptHandlePoint)
 
     if (!tool) return;
+
+    // Door/window ghost preview — runs before any click (#845/#846 AC3).
+    if (tool === "door" || tool === "window") {
+      updateOpeningPreview(viewer, tool as "door" | "window", snapped, ev.clientX, ev.clientY);
+    } else {
+      clearOpeningPreview(viewer);
+    }
+
     if (_pending.length === 0) return;
     const handler = TOOL_HANDLERS[tool];
     if (!handler || (handler.clicks > 0 && handler.clicks < 2)) return;
@@ -1246,6 +1302,7 @@ export function initCreateMode(viewer: Viewer): void {
   vpBody.addEventListener("pointerleave", () => {
     hideCursorDot();
     opSetHover(null);
+    clearOpeningPreview(viewer);
   });
 
   // ── pointerup ─────────────────────────────────────────────────────────────────

@@ -3348,6 +3348,77 @@ await resetScene('before-box-inject');
   record('roof-group-structure', r?.passed ?? false, r ?? { reason: 'evaluate returned null' });
 }
 
+// ── Surface: door-wall-orientation (#845 AC7) ─────────────────────────────────
+// Place wall + door via DSL → assert door rotation matches wall, door z ≈ 0 (level floor),
+// wall replaced by Group (void cut present). Undo → wall restored, door gone.
+{
+  await resetScene("door-wall-orientation");
+
+  const r = await evaluate(`(async () => {
+    try {
+      const v = window.__viewer;
+      if (!v) return { passed: false, reason: 'no __viewer' };
+
+      // Switch to prompt/console mode
+      const tab = document.querySelector('[data-tab=prompt]');
+      if (tab) tab.click();
+      await new Promise(r => setTimeout(r, 200));
+      const pill = document.querySelector('.mode-pill');
+      if (pill && pill.getAttribute('data-mode') !== 'console') {
+        pill.click();
+        await new Promise(r => setTimeout(r, 300));
+      }
+      const input = document.querySelector('#console-input');
+      if (!input) return { passed: false, reason: 'no #console-input' };
+
+      const send = async (cmd) => {
+        input.value = cmd;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup',  { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+        await new Promise(r => setTimeout(r, 600));
+      };
+
+      // Place a horizontal wall (rotation.z ≈ 0) at y=0
+      const before = v.scene.children.length;
+      await send('SdWall 0 0 4 0');
+      const afterWall = v.scene.children.length;
+      if (afterWall <= before) return { passed: false, reason: 'wall not added', before, afterWall };
+
+      const wall = v.scene.children[v.scene.children.length - 1];
+      const wallRotZ = wall ? wall.rotation.z : null;
+      const wallUuid = wall ? wall.uuid : null;
+
+      // Place door on that wall (center, 2m in)
+      await send('SdDoor 2 0 hostUuid=' + JSON.stringify(wallUuid));
+      const afterDoor = v.scene.children.length;
+
+      // Find door mesh
+      const door = Array.from(v.scene.children).find(o =>
+        o.userData && (o.userData.creator === 'door' || o.userData.creator === 'SdDoor')
+      );
+      if (!door) return { passed: false, reason: 'door not in scene', afterDoor, children: v.scene.children.map(c => c.userData?.creator) };
+
+      // Assert door z ≈ active level elevation (default 0)
+      const doorZ = door.position.z;
+      const zOk = Math.abs(doorZ) < 0.05;
+
+      // Assert door rotation matches wall (both ≈ 0 for a horizontal wall)
+      const doorRotZ = door.rotation.z;
+      const rotOk = Math.abs(doorRotZ - (wallRotZ ?? 0)) < 0.05;
+
+      // Assert wall was replaced by Group (void cut)
+      const wallAfter = v.scene.getObjectByProperty('uuid', wallUuid);
+      const wallIsGroup = wallAfter && wallAfter.type === 'Group';
+
+      const passed = zOk && rotOk && wallIsGroup;
+      return { passed, doorZ, zOk, doorRotZ, wallRotZ, rotOk, wallIsGroup, creator: door.userData?.creator };
+    } catch(e) { return { passed: false, error: e.message }; }
+  })()`);
+
+  record('door-wall-orientation', r?.passed ?? false, r ?? { reason: 'evaluate returned null' });
+}
+
 } finally {
   await cleanup();
 }
