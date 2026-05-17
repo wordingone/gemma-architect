@@ -132,13 +132,22 @@ function _wallMiterCutter(wallA: THREE.Mesh, wallB: THREE.Mesh): Brush | null {
   // Miter normal bisects outA and outB — points into the "corner space"
   // where both walls' extended geometry protrudes.
   const miterNormal = outA.clone().add(outB).normalize();
+  if (miterNormal.length() < 0.1) return null; // collinear walls — no junction to trim
 
-  // Cutter: a huge box on the NEGATIVE side of the miter plane from P.
-  // The extended portions of both walls land there; the walls' actual bodies do not.
+  // Cutter: a large box on the NEGATIVE side of the miter plane from P.
+  // IMPORTANT: the box must be ROTATED so its local X axis aligns with miterNormal.
+  // An axis-aligned box would straddle the miter plane and incorrectly remove wall bodies.
   const LARGE = 500;
+  const miterAngle = Math.atan2(miterNormal.y, miterNormal.x);
   const cutCenter = P.clone().addScaledVector(miterNormal, -LARGE / 2);
+
   const cutGeom = new THREE.BoxGeometry(LARGE, LARGE, LARGE);
-  cutGeom.translate(cutCenter.x, cutCenter.y, cutCenter.z);
+  // Bake rotation (local X → miterNormal) and translation into the geometry so the
+  // Evaluator sees a world-space brush at position (0,0,0).
+  const cutMatrix = new THREE.Matrix4().makeRotationZ(miterAngle);
+  cutMatrix.setPosition(cutCenter.x, cutCenter.y, cutCenter.z);
+  cutGeom.applyMatrix4(cutMatrix);
+
   const mat = Array.isArray(wallA.material) ? wallA.material[0] : wallA.material;
   const cutter = new Brush(cutGeom, mat);
   cutter.position.set(0, 0, 0);
