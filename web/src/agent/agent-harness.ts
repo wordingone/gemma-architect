@@ -1142,6 +1142,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   let outputs: unknown;
 
   if (drafterReady) {
+    console.debug(`[mtp] spec-decode path active — drafter loaded, text-only request, draft_k=${MTP_DRAFT_N}`);
     // ── Spec-decode loop (AC3) ─────────────────────────────────────────────
     // Pattern: draft MTP_DRAFT_N tokens with drafter → verify with target in
     // one forward pass → accept prefix to first mismatch → repeat.
@@ -1180,8 +1181,12 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         const fullV    = targetOut["shared_kv_states.full_attention.value"];
 
         if (!slidingK || !slidingV || !fullK || !fullV) {
-          // Must have target KV states to run drafter — fall through to standard generate.
-          console.warn("[agent-harness] spec-decode: target ONNX missing shared_kv_states; falling through.");
+          // Target ONNX doesn't expose shared_kv_states — spec-decode inert on this build.
+          // Fix: wire three-session pipeline (embed_tokens + decoder_model_merged + drafter).
+          console.debug("[mtp] fallthrough — target ONNX missing shared_kv_states; standard generate path.", {
+            has_hidden: !!targetOut["last_hidden_state"],
+            has_sliding_k: !!slidingK, has_full_k: !!fullK,
+          });
           break;
         }
 
