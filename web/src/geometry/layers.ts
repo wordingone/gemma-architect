@@ -21,26 +21,69 @@ const BUILTIN_LAYERS: Layer[] = [
 ];
 
 // creator-name → layer ID routing table.
+// Three alias forms per element type: IFC class, Sd* handler name, lowercase builder name.
 const CREATOR_LAYER_MAP: Record<string, string> = {
+  // Walls
   IfcWall:        "Walls",
+  IfcCurtainWall: "Walls",
+  IfcSkylight:    "Walls",
+  IfcDoor:        "Walls",
+  IfcWindow:      "Walls",
+  IfcOpening:     "Walls",
+  SdWall:         "Walls",
+  SdCurtainWall:  "Walls",
+  SdSkylight:     "Walls",
+  SdDoor:         "Walls",
+  SdWindow:       "Walls",
+  SdOpening:      "Walls",
+  wall:           "Walls",
+  curtainwall:    "Walls",
+  skylight:       "Walls",
+  door:           "Walls",
+  window:         "Walls",
+  opening:        "Walls",
+  // Slabs
   IfcSlab:        "Slabs",
-  IfcColumn:      "Columns",
-  IfcBeam:        "Columns",
   IfcFoundation:  "Slabs",
   IfcCeiling:     "Slabs",
   IfcRoof:        "Slabs",
+  SdSlab:         "Slabs",
+  SdFoundation:   "Slabs",
+  SdCeiling:      "Slabs",
+  SdRoof:         "Slabs",
+  SdPlate:        "Slabs",
+  slab:           "Slabs",
+  foundation:     "Slabs",
+  ceiling:        "Slabs",
+  roof:           "Slabs",
+  // Columns
+  IfcColumn:      "Columns",
+  IfcBeam:        "Columns",
+  SdColumn:       "Columns",
+  SdBeam:         "Columns",
+  SdMember:       "Columns",
+  column:         "Columns",
+  beam:           "Columns",
+  // Construction
   IfcStair:       "Construction",
   IfcRamp:        "Construction",
   IfcRailing:     "Construction",
-  IfcDoor:        "Walls",
-  IfcWindow:      "Walls",
-  IfcCurtainWall: "Walls",
-  IfcSkylight:    "Walls",
-  IfcOpening:     "Walls",
-  IfcSpace:       "0/Default",
+  SdStair:        "Construction",
+  SdRamp:         "Construction",
+  SdRailing:      "Construction",
+  stair:          "Construction",
+  ramp:           "Construction",
+  railing:        "Construction",
+  // Annotations
   IfcAnnotationDimension: "Annotations",
   SdLeader:       "Annotations",
   SdText:         "Annotations",
+  // Default
+  IfcSpace:       "0/Default",
+  SdSpace:        "0/Default",
+  SdFurnishing:   "0/Default",
+  space:          "0/Default",
+  furnishing:     "0/Default",
 };
 
 type LayerListener = () => void;

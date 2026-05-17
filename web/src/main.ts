@@ -1864,6 +1864,25 @@ registerHandler("SdClearScene", () => {
   return { ok: true, cleared: true };
 });
 
+// Layer → scene sync (#826): propagate color + visibility changes to scene meshes.
+// Fires on every layerStore change (color, visibility, add, remove).
+// Skips CSG join-display meshes (userData.isJoinDisplay === true).
+layerStore.subscribe(() => {
+  viewer.getScene().traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    if (obj.userData.isJoinDisplay === true) return;
+    const lid = obj.userData.layerId as string | undefined;
+    if (!lid) return;
+    const layer = layerStore.get(lid);
+    if (!layer) return;
+    const mat = obj.material;
+    if (mat && "color" in mat && (mat as THREE.MeshStandardMaterial).color) {
+      (mat as THREE.MeshStandardMaterial).color.setStyle(layer.color);
+    }
+    obj.visible = layer.visible;
+  });
+});
+
 // Isolate status bar indicator — show/hide #sb-isolate on viewer:isolate-changed.
 document.addEventListener("viewer:isolate-changed", (e) => {
   const cell = document.getElementById("sb-isolate");
