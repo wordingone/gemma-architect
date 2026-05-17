@@ -420,6 +420,11 @@ export class Viewer {
             }
           }
           if (dragging && this.pivotProxy && this.targetObject) {
+            // Dissolve the join group at drag start so the selected element
+            // can move independently (group stays intact on mere click).
+            if (this.targetObject instanceof THREE.Mesh) {
+              dissolveGroupForMesh(this.targetObject.uuid, this.scene);
+            }
             // Capture both pivot and target matrices at drag start so
             // objectChange can compute the live world-space delta.
             this.pivotMatrixBeforeDrag.copy(this.pivotProxy.matrix);
@@ -900,17 +905,14 @@ export class Viewer {
     );
     const hits = this.raycaster.intersectObjects(pickables, true);
     let hit = hits[0]?.object ?? null;
-    // CSG display mesh hit: dissolve the join group so elements can be moved
-    // independently, then redirect selection to the nearest logical member.
+    // CSG display mesh hit: redirect selection to the nearest logical member
+    // WITHOUT dissolving the group — the join stays intact until the user drags.
     if (hit?.userData?.isJoinDisplay) {
       const groupId = hit.userData.joinGroupId as string | undefined;
       if (groupId) {
         const hitPoint = hits[0]?.point ?? new THREE.Vector3();
         const nearest = nearestGroupMember(groupId, hitPoint, this.scene);
-        if (nearest) {
-          dissolveGroupForMesh(nearest.uuid, this.scene);
-          hit = nearest;
-        }
+        if (nearest) hit = nearest;
       }
     }
     // IFC-imported meshes carry expressID and represent individual elements —

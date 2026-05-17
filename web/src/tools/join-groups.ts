@@ -60,18 +60,17 @@ function _worldBrush(mesh: THREE.Mesh): Brush {
 }
 
 /**
- * Build a CSG Brush for a mesh. Wall brushes are extended by 2× their thickness
- * at each end so non-perpendicular corners (down to ~15°) still get sufficient
- * volumetric overlap for clean CSG union.
+ * Build a CSG Brush for a mesh. Wall brushes are extended by their own thickness
+ * so perpendicular corners get a t×t overlap region — essential for clean CSG union
+ * (non-overlapping touching volumes produce degenerate CSG output).
  */
 function _brushForCsg(mesh: THREE.Mesh): Brush {
   if (mesh.userData?.creator === "wall") {
     const params = (mesh.geometry as THREE.BoxGeometry).parameters;
     if (params?.width) {
       // params: { width: wallLen, height: wallThickness, depth: wallHeight }
-      // Extend 2t at each end (4t total) so acute-angle junctions still overlap.
       const extGeom = new THREE.BoxGeometry(
-        params.width + params.height * 4,
+        params.width + params.height,
         params.height,
         params.depth,
       );

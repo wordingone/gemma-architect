@@ -9,7 +9,7 @@ import type { Viewer } from "./viewer.js";
 import { createClampedUniformNurbs, createCatmullRomAsNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 import { makeSnapId } from "./snap-state.js";
 
-const HANDLE_RADIUS = 0.07;
+const HANDLE_RADIUS = 0.12;
 
 let _handles: THREE.Object3D[] = [];
 let _parentObj: THREE.Object3D | null = null;
