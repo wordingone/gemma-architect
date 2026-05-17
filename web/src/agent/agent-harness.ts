@@ -163,6 +163,11 @@ async function loadDrafter(): Promise<void> {
     const drafterBuf = await fetchDrafterCached(DRAFTER_ONNX_URL, DRAFTER_CACHE_KEY);
     _drafterSession = await ort.InferenceSession.create(drafterBuf, {
       executionProviders: ["webgpu", "wasm"],
+      // Drafter runs on WebGPU EP; output tensors are GPU-resident by default.
+      // tensor.data is null for GPU tensors — read via getData() or pin to CPU.
+      // Pinning both outputs to CPU so argmax(logits.data) and projState.data
+      // are valid synchronously without an explicit getData() call per step.
+      preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
     });
     console.info("[agent-harness] Drafter ONNX loaded — MTP spec-decode active (#738).");
   } catch (e) {
