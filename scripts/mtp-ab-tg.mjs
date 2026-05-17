@@ -244,13 +244,13 @@ async function runArm(cdp, url, armName) {
   console.log(`[mtp-ab] [${armName}] scenario build...`);
   const bBefore = await evaluate(cdp, `(window.__telemetry || []).length`);
   const buildTurn = await sendPromptAndWait(cdp, bBefore, PROMPT_TEXT);
-  console.log(`[mtp-ab] [${armName}] build: mtp_on=${buildTurn?.mtp_on}, tg=${buildTurn?.tg_tps?.toFixed(2)}, specAttempts=${buildTurn?.specAttempts}`);
+  console.log(`[mtp-ab] [${armName}] build: mtp_on=${buildTurn?.mtp_on}, tg=${buildTurn?.tg_tps?.toFixed(2)}, spec_attempts=${buildTurn?.spec_attempts}`);
 
   // Scenario 2: visual — triggers VISUAL_RE → auto-capture + multimodal
   console.log(`[mtp-ab] [${armName}] scenario visual...`);
   const vBefore = await evaluate(cdp, `(window.__telemetry || []).length`);
   const visualTurn = await sendPromptAndWait(cdp, vBefore, PROMPT_VISUAL);
-  console.log(`[mtp-ab] [${armName}] visual: mtp_on=${visualTurn?.mtp_on}, tg=${visualTurn?.tg_tps?.toFixed(2)}, specAttempts=${visualTurn?.specAttempts}`);
+  console.log(`[mtp-ab] [${armName}] visual: mtp_on=${visualTurn?.mtp_on}, tg=${visualTurn?.tg_tps?.toFixed(2)}, spec_attempts=${visualTurn?.spec_attempts}`);
 
   return { build: buildTurn, visual: visualTurn };
 }
@@ -285,7 +285,7 @@ const ratioVisual = (on.visual?.tg_tps ?? 0) / (off.visual?.tg_tps ?? 1);
 //   ratio ≥ 1.10 on ≥1 scenario
 const onBuildMtp  = on.build?.mtp_on  === true;
 const onVisualMtp = on.visual?.mtp_on === true;
-const specAttempts = (on.build?.specAttempts ?? 0) + (on.visual?.specAttempts ?? 0);
+const specAttempts = (on.build?.spec_attempts ?? 0) + (on.visual?.spec_attempts ?? 0);
 const ratioPass    = ratioBuild >= 1.10 || ratioVisual >= 1.10;
 
 const verdict =
@@ -297,8 +297,8 @@ const verdict =
 
 const summary = {
   arm_on: {
-    build:  { mtp_on: on.build?.mtp_on,  tg_tps: on.build?.tg_tps,  specAttempts: on.build?.specAttempts,  specAccepts: on.build?.specAccepts  },
-    visual: { mtp_on: on.visual?.mtp_on, tg_tps: on.visual?.tg_tps, specAttempts: on.visual?.specAttempts, specAccepts: on.visual?.specAccepts },
+    build:  { mtp_on: on.build?.mtp_on,  tg_tps: on.build?.tg_tps,  spec_attempts: on.build?.spec_attempts,  spec_accepts: on.build?.spec_accepts,  spec_accept_rate: on.build?.spec_accept_rate  },
+    visual: { mtp_on: on.visual?.mtp_on, tg_tps: on.visual?.tg_tps, spec_attempts: on.visual?.spec_attempts, spec_accepts: on.visual?.spec_accepts, spec_accept_rate: on.visual?.spec_accept_rate },
   },
   arm_off: {
     build:  { tg_tps: off.build?.tg_tps  },
@@ -312,8 +312,8 @@ const summary = {
 };
 
 console.log("\n── E4B MTP A/B Result (#788/#793) ────────────────────────────────────");
-console.log(`  ON  build:  mtp_on=${on.build?.mtp_on},  tg=${on.build?.tg_tps?.toFixed(2)} t/s, specAttempts=${on.build?.specAttempts}`);
-console.log(`  ON  visual: mtp_on=${on.visual?.mtp_on}, tg=${on.visual?.tg_tps?.toFixed(2)} t/s, specAttempts=${on.visual?.specAttempts}`);
+console.log(`  ON  build:  mtp_on=${on.build?.mtp_on},  tg=${on.build?.tg_tps?.toFixed(2)} t/s, spec_attempts=${on.build?.spec_attempts}, accept_rate=${on.build?.spec_accept_rate?.toFixed(3)}`);
+console.log(`  ON  visual: mtp_on=${on.visual?.mtp_on}, tg=${on.visual?.tg_tps?.toFixed(2)} t/s, spec_attempts=${on.visual?.spec_attempts}, accept_rate=${on.visual?.spec_accept_rate?.toFixed(3)}`);
 console.log(`  OFF build:  tg=${off.build?.tg_tps?.toFixed(2)} t/s`);
 console.log(`  OFF visual: tg=${off.visual?.tg_tps?.toFixed(2)} t/s`);
 console.log(`  Ratio build:  ${ratioBuild.toFixed(3)}`);
