@@ -36,7 +36,7 @@ function round(n: number, digits = 4): number {
   return Math.round(n * f) / f;
 }
 
-// ── Wall miter join system ───────────────────────────────────────────────────
+// ── Wall butt join system ───────────────────────────────────────────────────
 
 type V2 = { x: number; y: number };
 
@@ -44,6 +44,8 @@ interface WallRec {
   a: V2; b: V2;
   aL: V2; aR: V2; // left/right corner at A end (left = looking from A→B)
   bL: V2; bR: V2; // left/right corner at B end
+  aOpen: boolean;  // secondary at A-end: end face is hidden inside primary, omit to avoid z-fighting
+  bOpen: boolean;  // secondary at B-end
   mesh: THREE.Mesh;
 }
 
@@ -53,31 +55,13 @@ function v2Eq(a: V2, b: V2, eps = 0.02): boolean {
   return Math.abs(a.x - b.x) < eps && Math.abs(a.y - b.y) < eps;
 }
 
-function lineIsect2(p1: V2, d1: V2, p2: V2, d2: V2): V2 | null {
-  const denom = d1.x * d2.y - d1.y * d2.x;
-  if (Math.abs(denom) < 1e-9) return null;
-  const t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / denom;
-  return { x: p1.x + t * d1.x, y: p1.y + t * d1.y };
-}
-
-// Returns [leftCorner, rightCorner] at point P where two walls meet.
-// d1 = unit dir FROM P along wall1, d2 = unit dir FROM P along wall2.
-function miterAt(P: V2, d1: V2, d2: V2, t: number): [V2, V2] {
-  const n1: V2 = { x: -d1.y, y: d1.x };
-  const n2: V2 = { x: -d2.y, y: d2.x };
-  const mL = lineIsect2(
-    { x: P.x + n1.x * t / 2, y: P.y + n1.y * t / 2 }, d1,
-    { x: P.x + n2.x * t / 2, y: P.y + n2.y * t / 2 }, d2
-  ) ?? { x: P.x + n1.x * t / 2, y: P.y + n1.y * t / 2 };
-  const mR = lineIsect2(
-    { x: P.x - n1.x * t / 2, y: P.y - n1.y * t / 2 }, d1,
-    { x: P.x - n2.x * t / 2, y: P.y - n2.y * t / 2 }, d2
-  ) ?? { x: P.x - n1.x * t / 2, y: P.y - n1.y * t / 2 };
-  return [mL, mR];
+function shiftV2(v: V2, d: V2, scale: number, t: number): V2 {
+  return { x: v.x + d.x * scale * t / 2, y: v.y + d.y * scale * t / 2 };
 }
 
 // Build a wall prism from 4 world-XY base corners. Geometry in local space (offset by ox,oy).
-function wallPrism(aL: V2, aR: V2, bL: V2, bR: V2, h: number, ox: number, oy: number): THREE.BufferGeometry {
+// aOpen/bOpen: secondary wall omits its hidden end face to prevent z-fighting with primary wall.
+function wallPrism(aL: V2, aR: V2, bL: V2, bR: V2, h: number, ox: number, oy: number, aOpen = false, bOpen = false): THREE.BufferGeometry {
   const p = [
     aL.x - ox, aL.y - oy, 0,  // 0
     aR.x - ox, aR.y - oy, 0,  // 1
@@ -88,14 +72,14 @@ function wallPrism(aL: V2, aR: V2, bL: V2, bR: V2, h: number, ox: number, oy: nu
     bR.x - ox, bR.y - oy, h,  // 6
     bL.x - ox, bL.y - oy, h,  // 7
   ];
-  const idx = [
+  const idx: number[] = [
     0, 2, 1,  0, 3, 2,   // bottom (-Z)
     4, 5, 6,  4, 6, 7,   // top (+Z)
     1, 2, 6,  1, 6, 5,   // right side
     0, 4, 7,  0, 7, 3,   // left side
-    0, 1, 5,  0, 5, 4,   // start face (A end)
-    2, 3, 7,  2, 7, 6,   // end face (B end)
   ];
+  if (!aOpen) idx.push(0, 1, 5,  0, 5, 4);  // start face (A end)
+  if (!bOpen) idx.push(2, 3, 7,  2, 7, 6);  // end face (B end)
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
   g.setIndex(idx);
@@ -106,7 +90,7 @@ function wallPrism(aL: V2, aR: V2, bL: V2, bR: V2, h: number, ox: number, oy: nu
 function rebuildWallRec(rec: WallRec): void {
   const ox = rec.mesh.position.x, oy = rec.mesh.position.y;
   rec.mesh.geometry.dispose();
-  rec.mesh.geometry = wallPrism(rec.aL, rec.aR, rec.bL, rec.bR, DEFAULT_WALL_HEIGHT, ox, oy);
+  rec.mesh.geometry = wallPrism(rec.aL, rec.aR, rec.bL, rec.bR, DEFAULT_WALL_HEIGHT, ox, oy, rec.aOpen, rec.bOpen);
 }
 
 // ── Public wall API ──────────────────────────────────────────────────────────
@@ -134,44 +118,49 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
   }
 
   const dAB: V2 = { x: dx / len, y: dy / len };
-  const dBA: V2 = { x: -dAB.x, y: -dAB.y };
   const nx = -dy / len, ny = dx / len;
 
-  // Initial corners (no miter).
+  // Initial corners (rectangular, no join).
   let aL: V2 = { x: a.x + nx * t / 2, y: a.y + ny * t / 2 };
   let aR: V2 = { x: a.x - nx * t / 2, y: a.y - ny * t / 2 };
   let bL: V2 = { x: b.x + nx * t / 2, y: b.y + ny * t / 2 };
   let bR: V2 = { x: b.x - nx * t / 2, y: b.y - ny * t / 2 };
+  let aOpen = false, bOpen = false;
 
-  // Detect neighbors and compute miters.
+  // Butt join: primary (existing) extends its end outward by t/2 to own the corner patch.
+  // Secondary (new) retreats its end inward by t/2 so its end face hides inside the primary.
   for (const [, rec] of _wallRecs) {
+    const rdx = rec.b.x - rec.a.x, rdy = rec.b.y - rec.a.y;
+    const rl = Math.sqrt(rdx * rdx + rdy * rdy);
+    const dr: V2 = { x: rdx / rl, y: rdy / rl }; // rec's A→B unit direction
+
     // --- Neighbors touching A end of new wall ---
     if (v2Eq(rec.a, a)) {
-      const rdx = rec.b.x - rec.a.x, rdy = rec.b.y - rec.a.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
-      const [mL, mR] = miterAt(a, dAB, { x: rdx / rl, y: rdy / rl }, t);
-      aL = mL; aR = mR;
-      rec.aL = mL; rec.aR = mR; rebuildWallRec(rec);
+      // Primary rec extends its A-end outward (against dr).
+      rec.aL = shiftV2(rec.aL, dr, -1, t); rec.aR = shiftV2(rec.aR, dr, -1, t);
+      rebuildWallRec(rec);
+      // Secondary new retreats A-end inward (along dAB).
+      aL = shiftV2(aL, dAB, +1, t); aR = shiftV2(aR, dAB, +1, t); aOpen = true;
     } else if (v2Eq(rec.b, a)) {
-      const rdx = rec.a.x - rec.b.x, rdy = rec.a.y - rec.b.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
-      const [mL, mR] = miterAt(a, dAB, { x: rdx / rl, y: rdy / rl }, t);
-      aL = mL; aR = mR;
-      rec.bL = mR; rec.bR = mL; rebuildWallRec(rec); // B-end: swap L/R
+      // Primary rec extends its B-end outward (along dr).
+      rec.bL = shiftV2(rec.bL, dr, +1, t); rec.bR = shiftV2(rec.bR, dr, +1, t);
+      rebuildWallRec(rec);
+      aL = shiftV2(aL, dAB, +1, t); aR = shiftV2(aR, dAB, +1, t); aOpen = true;
     }
     // --- Neighbors touching B end of new wall ---
     if (v2Eq(rec.a, b)) {
-      const rdx = rec.b.x - rec.a.x, rdy = rec.b.y - rec.a.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
-      const [mL, mR] = miterAt(b, dBA, { x: rdx / rl, y: rdy / rl }, t);
-      bL = mR; bR = mL; // B-end of new wall: swap
-      rec.aL = mL; rec.aR = mR; rebuildWallRec(rec);
+      rec.aL = shiftV2(rec.aL, dr, -1, t); rec.aR = shiftV2(rec.aR, dr, -1, t);
+      rebuildWallRec(rec);
+      // Secondary retreats B-end inward (against dAB).
+      bL = shiftV2(bL, dAB, -1, t); bR = shiftV2(bR, dAB, -1, t); bOpen = true;
     } else if (v2Eq(rec.b, b)) {
-      const rdx = rec.a.x - rec.b.x, rdy = rec.a.y - rec.b.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
-      const [mL, mR] = miterAt(b, dBA, { x: rdx / rl, y: rdy / rl }, t);
-      bL = mR; bR = mL;
-      rec.bL = mR; rec.bR = mL; rebuildWallRec(rec);
+      rec.bL = shiftV2(rec.bL, dr, +1, t); rec.bR = shiftV2(rec.bR, dr, +1, t);
+      rebuildWallRec(rec);
+      bL = shiftV2(bL, dAB, -1, t); bR = shiftV2(bR, dAB, -1, t); bOpen = true;
     }
   }
 
-  const geom = wallPrism(aL, aR, bL, bR, h, cx, cy);
+  const geom = wallPrism(aL, aR, bL, bR, h, cx, cy, aOpen, bOpen);
   const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(cx, cy, 0);
@@ -184,7 +173,7 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
   ] as SnapVertex[];
   const chain = `const wall = makeBox(${round(len)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0, 0, 0], [0, 0, 1]).translate([${round(cx)}, ${round(cy)}, 0]);`;
 
-  _wallRecs.set(mesh.uuid, { a, b, aL, aR, bL, bR, mesh });
+  _wallRecs.set(mesh.uuid, { a, b, aL, aR, bL, bR, aOpen, bOpen, mesh });
   return { mesh, chain };
 }
 
