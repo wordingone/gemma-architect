@@ -8,7 +8,7 @@ import { Brush, Evaluator, ADDITION } from "three-bvh-csg";
 
 // Structural types eligible for boolean union.
 const JOIN_CREATORS = new Set([
-  "wall", "slab", "column", "beam", "stair", "roof",
+  "slab", "column", "beam", "stair", "roof",
   "foundation", "curtainwall", "ceiling",
 ]);
 

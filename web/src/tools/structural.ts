@@ -36,20 +36,145 @@ function round(n: number, digits = 4): number {
   return Math.round(n * f) / f;
 }
 
+// ── Wall miter join system ───────────────────────────────────────────────────
+
+type V2 = { x: number; y: number };
+
+interface WallRec {
+  a: V2; b: V2;
+  aL: V2; aR: V2; // left/right corner at A end (left = looking from A→B)
+  bL: V2; bR: V2; // left/right corner at B end
+  mesh: THREE.Mesh;
+}
+
+const _wallRecs = new Map<string, WallRec>();
+
+function v2Eq(a: V2, b: V2, eps = 0.02): boolean {
+  return Math.abs(a.x - b.x) < eps && Math.abs(a.y - b.y) < eps;
+}
+
+function lineIsect2(p1: V2, d1: V2, p2: V2, d2: V2): V2 | null {
+  const denom = d1.x * d2.y - d1.y * d2.x;
+  if (Math.abs(denom) < 1e-9) return null;
+  const t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / denom;
+  return { x: p1.x + t * d1.x, y: p1.y + t * d1.y };
+}
+
+// Returns [leftCorner, rightCorner] at point P where two walls meet.
+// d1 = unit dir FROM P along wall1, d2 = unit dir FROM P along wall2.
+function miterAt(P: V2, d1: V2, d2: V2, t: number): [V2, V2] {
+  const n1: V2 = { x: -d1.y, y: d1.x };
+  const n2: V2 = { x: -d2.y, y: d2.x };
+  const mL = lineIsect2(
+    { x: P.x + n1.x * t / 2, y: P.y + n1.y * t / 2 }, d1,
+    { x: P.x + n2.x * t / 2, y: P.y + n2.y * t / 2 }, d2
+  ) ?? { x: P.x + n1.x * t / 2, y: P.y + n1.y * t / 2 };
+  const mR = lineIsect2(
+    { x: P.x - n1.x * t / 2, y: P.y - n1.y * t / 2 }, d1,
+    { x: P.x - n2.x * t / 2, y: P.y - n2.y * t / 2 }, d2
+  ) ?? { x: P.x - n1.x * t / 2, y: P.y - n1.y * t / 2 };
+  return [mL, mR];
+}
+
+// Build a wall prism from 4 world-XY base corners. Geometry in local space (offset by ox,oy).
+function wallPrism(aL: V2, aR: V2, bL: V2, bR: V2, h: number, ox: number, oy: number): THREE.BufferGeometry {
+  const p = [
+    aL.x - ox, aL.y - oy, 0,  // 0
+    aR.x - ox, aR.y - oy, 0,  // 1
+    bR.x - ox, bR.y - oy, 0,  // 2
+    bL.x - ox, bL.y - oy, 0,  // 3
+    aL.x - ox, aL.y - oy, h,  // 4
+    aR.x - ox, aR.y - oy, h,  // 5
+    bR.x - ox, bR.y - oy, h,  // 6
+    bL.x - ox, bL.y - oy, h,  // 7
+  ];
+  const idx = [
+    0, 2, 1,  0, 3, 2,   // bottom (-Z)
+    4, 5, 6,  4, 6, 7,   // top (+Z)
+    1, 2, 6,  1, 6, 5,   // right side
+    0, 4, 7,  0, 7, 3,   // left side
+    0, 1, 5,  0, 5, 4,   // start face (A end)
+    2, 3, 7,  2, 7, 6,   // end face (B end)
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+function rebuildWallRec(rec: WallRec): void {
+  const ox = rec.mesh.position.x, oy = rec.mesh.position.y;
+  rec.mesh.geometry.dispose();
+  rec.mesh.geometry = wallPrism(rec.aL, rec.aR, rec.bL, rec.bR, DEFAULT_WALL_HEIGHT, ox, oy);
+}
+
 // ── Public wall API ──────────────────────────────────────────────────────────
 
 export function buildWall(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
   const t = DEFAULT_WALL_THICKNESS, h = DEFAULT_WALL_HEIGHT;
   const dx = b.x - a.x, dy = b.y - a.y;
-  const length = Math.sqrt(dx * dx + dy * dy);
+  const len = Math.sqrt(dx * dx + dy * dy);
   const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-  const geom = new THREE.BoxGeometry(length, t, h);
-  geom.translate(0, 0, h / 2);
+
+  if (len < 0.01) {
+    const geom0 = new THREE.BoxGeometry(0.01, t, h);
+    geom0.translate(0, 0, h / 2);
+    const mat0 = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
+    const m0 = new THREE.Mesh(geom0, mat0);
+    m0.position.set(a.x, a.y, 0);
+    m0.userData.kind = "brep"; m0.userData.creator = "wall";
+    return { mesh: m0, chain: "" };
+  }
+
+  // Prune stale records (walls removed from scene).
+  for (const [uid, rec] of _wallRecs) {
+    if (!rec.mesh.parent) _wallRecs.delete(uid);
+  }
+
+  const dAB: V2 = { x: dx / len, y: dy / len };
+  const dBA: V2 = { x: -dAB.x, y: -dAB.y };
+  const nx = -dy / len, ny = dx / len;
+
+  // Initial corners (no miter).
+  let aL: V2 = { x: a.x + nx * t / 2, y: a.y + ny * t / 2 };
+  let aR: V2 = { x: a.x - nx * t / 2, y: a.y - ny * t / 2 };
+  let bL: V2 = { x: b.x + nx * t / 2, y: b.y + ny * t / 2 };
+  let bR: V2 = { x: b.x - nx * t / 2, y: b.y - ny * t / 2 };
+
+  // Detect neighbors and compute miters.
+  for (const [, rec] of _wallRecs) {
+    // --- Neighbors touching A end of new wall ---
+    if (v2Eq(rec.a, a)) {
+      const rdx = rec.b.x - rec.a.x, rdy = rec.b.y - rec.a.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
+      const [mL, mR] = miterAt(a, dAB, { x: rdx / rl, y: rdy / rl }, t);
+      aL = mL; aR = mR;
+      rec.aL = mL; rec.aR = mR; rebuildWallRec(rec);
+    } else if (v2Eq(rec.b, a)) {
+      const rdx = rec.a.x - rec.b.x, rdy = rec.a.y - rec.b.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
+      const [mL, mR] = miterAt(a, dAB, { x: rdx / rl, y: rdy / rl }, t);
+      aL = mL; aR = mR;
+      rec.bL = mR; rec.bR = mL; rebuildWallRec(rec); // B-end: swap L/R
+    }
+    // --- Neighbors touching B end of new wall ---
+    if (v2Eq(rec.a, b)) {
+      const rdx = rec.b.x - rec.a.x, rdy = rec.b.y - rec.a.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
+      const [mL, mR] = miterAt(b, dBA, { x: rdx / rl, y: rdy / rl }, t);
+      bL = mR; bR = mL; // B-end of new wall: swap
+      rec.aL = mL; rec.aR = mR; rebuildWallRec(rec);
+    } else if (v2Eq(rec.b, b)) {
+      const rdx = rec.a.x - rec.b.x, rdy = rec.a.y - rec.b.y, rl = Math.sqrt(rdx * rdx + rdy * rdy);
+      const [mL, mR] = miterAt(b, dBA, { x: rdx / rl, y: rdy / rl }, t);
+      bL = mR; bR = mL;
+      rec.bL = mR; rec.bR = mL; rebuildWallRec(rec);
+    }
+  }
+
+  const geom = wallPrism(aL, aR, bL, bR, h, cx, cy);
   const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(cx, cy, 0);
-  mesh.rotation.z = (angDeg * Math.PI) / 180;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "wall";
   mesh.userData.endpoints = [
@@ -57,7 +182,9 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
     { x: cx, y: cy, z: 0, id: makeSnapId(cx, cy, 0) },
   ] as SnapVertex[];
-  const chain = `const wall = makeBox(${round(length)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0, 0, 0], [0, 0, 1]).translate([${round(cx)}, ${round(cy)}, 0]);`;
+  const chain = `const wall = makeBox(${round(len)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0, 0, 0], [0, 0, 1]).translate([${round(cx)}, ${round(cy)}, 0]);`;
+
+  _wallRecs.set(mesh.uuid, { a, b, aL, aR, bL, bR, mesh });
   return { mesh, chain };
 }
 
