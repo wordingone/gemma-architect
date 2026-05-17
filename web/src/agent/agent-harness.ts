@@ -134,7 +134,9 @@ let _drafterSession: OrtSession | null = null;
 let _drafterLoadAttempted = false;
 let _drafterLoadPromise: Promise<void> | null = null;
 
-const DRAFTER_ONNX_URL = "https://github.com/wordingone/gemma-architect/releases/download/drafter-e4b-v1/drafter.onnx";
+// Relative path — served same-origin from public/models/ (avoids CORS block on GitHub Releases).
+// For production deploy: include drafter.onnx in the deployment bundle or proxy via a CORS-enabled CDN.
+const DRAFTER_ONNX_URL = "/models/gemma-4-E4B-it-assistant/drafter.onnx";
 // Bump this key to bust the IDB cache when a new drafter export is deployed.
 const DRAFTER_CACHE_KEY = "mtp-drafter-e4b-v1";
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
