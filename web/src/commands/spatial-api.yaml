@@ -297,6 +297,18 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdBoolean
+  kernel_op: boolean
+  args:
+    - {name: op,   type: string,    required: true,  enum: [union, difference, intersection]}
+    - {name: a,    type: object_id, required: true}
+    - {name: b,    type: object_id, required: true}
+  topology_role: solid
+  kg_predicates: []
+  synonyms: [boolean, csg, "boolean op"]
+  note: "Unified boolean verb; delegates to viewer/csg.ts CSG functions. Returns created object UUID."
+  alias_source: agent_dispatch
+
 # ============================================================
 # §5 Edge / surface ops
 # ============================================================
@@ -946,12 +958,24 @@
 - canonical_name: SdSelect
   kernel_op: select
   args:
-    - {name: target, type: any, required: true}
+    - {name: id, type: object_id, required: true}
   topology_role: selection
   kg_predicates: []
   synonyms: [select, pick]
-  kernel: replicad
-  alias_source: generic_cad_vocabulary
+  note: "Select a single object by UUID. Returns selected UUID."
+  alias_source: agent_dispatch
+
+- canonical_name: SdSelectByQuery
+  kernel_op: selectByQuery
+  args:
+    - {name: creator, type: string,    required: false, note: "e.g. wall, slab, column"}
+    - {name: layerId, type: string,    required: false}
+    - {name: levelId, type: string,    required: false}
+  topology_role: selection
+  kg_predicates: []
+  synonyms: ["select by type", "select walls", "select by layer"]
+  note: "Filter-based multi-select. Returns array of UUIDs matching all supplied criteria."
+  alias_source: agent_dispatch
 
 - canonical_name: SdSelectAll
   kernel_op: selectAll

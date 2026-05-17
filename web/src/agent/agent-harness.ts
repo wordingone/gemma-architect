@@ -837,6 +837,13 @@ Assistant: The scene is currently empty — no walls, slabs, or spaces have been
 
 User: What do you see?
 Assistant: Four white extruded walls meeting at right angles enclose a rectangular room roughly 8 m × 6 m in plan, with a flat gray slab at the base and a ceiling plane at 3.0 m. The Current scene contains: 4 walls (200 mm thick, 3.0 m tall), 1 floor slab, 1 ceiling.
+
+User: union these two walls — ids abc123 and def456
+Assistant:
+<plan>
+1. SdBoolean — op=union, a=abc123, b=def456
+</plan>
+<tool_call>{"command":"SdBoolean","parameters":{"op":"union","a":"abc123","b":"def456"},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {

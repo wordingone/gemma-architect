@@ -54,7 +54,8 @@ import { onElementCommitted } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam } from "./tools/structural";
 import { initSectionHandles } from "./viewer/section-handles";
-import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory } from "./history";
+import { undo, redo, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction } from "./history";
+import { csgUnion, csgDifference, csgIntersection } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
@@ -414,6 +415,89 @@ registerHandler("SdSelectAll", () => {
   viewer.getScene().add(proxy);
   viewer.selectObject(proxy);
   window.dispatchEvent(new CustomEvent("viewer:selectAll", { detail: { count: selectable.length } }));
+});
+
+registerHandler("SdBoolean", (args) => {
+  const opArg = (args.op as string | undefined) ?? "union";
+  const aId = args.a as string | undefined;
+  const bId = args.b as string | undefined;
+  if (!aId || !bId) return { error: "SdBoolean requires a and b object_ids" };
+  const scene = viewer.getScene();
+  const objA = scene.getObjectByProperty("uuid", aId);
+  const objB = scene.getObjectByProperty("uuid", bId);
+  if (!objA || !objB) return { error: `SdBoolean — object not found: ${!objA ? aId : bId}` };
+  if (!(objA instanceof THREE.Mesh) || !(objB instanceof THREE.Mesh))
+    return { error: "SdBoolean — both targets must be solid meshes" };
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
+  let result: THREE.Mesh;
+  try {
+    if (opArg === "difference") result = csgDifference(objA, objB, mat);
+    else if (opArg === "intersection") result = csgIntersection(objA, objB, mat);
+    else result = csgUnion(objA, objB, mat);
+  } catch {
+    return { error: "SdBoolean — CSG failed (geometry may be non-manifold)" };
+  }
+  if (!result.geometry.getAttribute("position") || result.geometry.getAttribute("position").count === 0)
+    return { error: "SdBoolean — result is empty (objects may not overlap)" };
+  const creator = opArg === "difference" ? "boolean-difference" : opArg === "intersection" ? "boolean-intersection" : "boolean-union";
+  result.userData.kind = "brep";
+  result.userData.creator = creator;
+  result.userData.dispatchArgs = args;
+  scene.remove(objA);
+  scene.remove(objB);
+  viewer.addMesh(result, "brep", { noHistory: true });
+  pushReplaceAction(result, [objA, objB], creator);
+  return { created: result.uuid, op: opArg };
+});
+
+registerHandler("SdFillet", (args) => {
+  const targetId = args.target as string | undefined;
+  const radius = (args.radius as number | undefined) ?? 0.05;
+  // Fillet geometry modification is pending kernel integration — same stub as op-tool fillet flow.
+  return { acknowledged: true, target: targetId, radius, status: "fillet-pending-kernel" };
+});
+
+registerHandler("SdSelect", (args) => {
+  const id = args.id as string | undefined;
+  if (!id) return { error: "SdSelect requires id" };
+  const obj = viewer.getScene().getObjectByProperty("uuid", id);
+  if (!obj) return { error: `SdSelect — object not found: ${id}` };
+  clearMultiSelected();
+  viewer.selectObject(obj);
+  const topo = (obj.userData.kind as "mesh" | "brep" | "compound") ?? "mesh";
+  setSelected({ topology: topo, uuid: obj.uuid, object: obj, transformTarget: obj });
+  window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: obj.uuid } }));
+  return { selected: obj.uuid };
+});
+
+registerHandler("SdSelectByQuery", (args) => {
+  const creatorQ = args.creator as string | undefined;
+  const layerQ = args.layerId as string | undefined;
+  const levelQ = args.levelId as string | undefined;
+  const matches: THREE.Object3D[] = [];
+  viewer.getScene().traverse((obj) => {
+    if (!obj.userData.kind) return;
+    if (creatorQ && obj.userData.creator !== creatorQ) return;
+    if (layerQ && obj.userData.layerId !== layerQ) return;
+    if (levelQ && obj.userData.levelId !== levelQ) return;
+    matches.push(obj);
+  });
+  if (matches.length === 0) return { selected: [], count: 0 };
+  clearMultiSelected();
+  const centroid = new THREE.Vector3();
+  matches.forEach((o) => centroid.add(o.getWorldPosition(new THREE.Vector3())));
+  centroid.divideScalar(matches.length);
+  matches.forEach((o) => addToMultiSelected({
+    topology: (o.userData.kind as "mesh" | "brep" | "compound") ?? "mesh",
+    uuid: o.uuid, object: o, transformTarget: o,
+  }));
+  const proxy = new THREE.Object3D();
+  proxy.position.copy(centroid);
+  proxy.userData.kind = "_selectQuery_proxy";
+  viewer.getScene().add(proxy);
+  viewer.selectObject(proxy);
+  window.dispatchEvent(new CustomEvent("viewer:selectAll", { detail: { count: matches.length } }));
+  return { selected: matches.map((o) => o.uuid), count: matches.length };
 });
 
 // Geometry-creation handlers for agent dispatches from the CREATE tab.
