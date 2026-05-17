@@ -401,22 +401,76 @@ export function buildCeiling(a: { x: number; y: number }, b: { x: number; y: num
   return { mesh, chain };
 }
 
-export function buildCurtainWall(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+export type CurtainWallParams = {
+  mullionSpacing?: number;
+  transomSpacing?: number;
+};
+
+export function buildCurtainWall(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  params: CurtainWallParams = {},
+): { mesh: THREE.Group; chain: string } {
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.sqrt(dx * dx + dy * dy) || 1;
   const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const t = 0.02;
-  const h = DEFAULT_WALL_HEIGHT;
-  const geom = new THREE.BoxGeometry(len, t, h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xaadcff, transparent: true, opacity: 0.35 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
-  mesh.rotation.z = (angDeg * Math.PI) / 180;
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "curtainwall";
-  const chain = `const cw = makeBox(${round(len)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round((a.x + b.x) / 2)}, ${round((a.y + b.y) / 2)}, 0]);`;
-  return { mesh, chain };
+  const h    = DEFAULT_WALL_HEIGHT;
+  const fp   = 0.05;   // frame profile: 50 mm square
+  const fd   = 0.10;   // frame depth: 100 mm (Y axis)
+  const mSp  = params.mullionSpacing  ?? 1.5;
+  const tSp  = params.transomSpacing  ?? 1.0;
+  const cols = Math.max(1, Math.ceil(len / mSp));
+  const rows = Math.max(1, Math.ceil(h   / tSp));
+  const colW = len / cols;
+  const rowH = h   / rows;
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.4, metalness: 0.8 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccee, transparent: true, opacity: 0.35, roughness: 0.05 });
+
+  const group = new THREE.Group();
+
+  // Helper: add a frame bar. bx = X width, bz = Z height, x/z = local center position.
+  const bar = (bx: number, bz: number, x: number, z: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(bx, fd, bz), frameMat);
+    m.position.set(x, 0, z);
+    group.add(m);
+  };
+
+  // Perimeter rails + stiles
+  bar(len, fp, 0,             fp / 2);           // bottom rail
+  bar(len, fp, 0,             h - fp / 2);        // top rail
+  bar(fp,  h,  -len/2 + fp/2, h / 2);             // left stile
+  bar(fp,  h,   len/2 - fp/2, h / 2);             // right stile
+
+  // Interior mullions (vertical)
+  for (let c = 1; c < cols; c++) {
+    bar(fp, h - 2 * fp, c * colW - len / 2, h / 2);
+  }
+  // Interior transoms (horizontal)
+  for (let r = 1; r < rows; r++) {
+    bar(len - 2 * fp, fp, 0, r * rowH);
+  }
+
+  // Glass panels (one per cell)
+  const glassW = colW - fp;
+  const glassH = rowH - fp;
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const xPos = (c + 0.5) * colW - len / 2;
+      const zPos = (r + 0.5) * rowH;
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(glassW, fd * 0.3, glassH), glassMat);
+      panel.position.set(xPos, 0, zPos);
+      group.add(panel);
+    }
+  }
+
+  group.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
+  group.rotation.z = (angDeg * Math.PI) / 180;
+  group.userData.kind = "brep";
+  group.userData.creator = "curtainwall";
+  group.userData.curtainWallParams = { mullionSpacing: mSp, transomSpacing: tSp };
+  const chain = `// curtainwall: ${round(len)}m × ${round(h)}m, ${cols} cols × ${rows} rows (mullion ${mSp}m, transom ${tSp}m)`;
+  return { mesh: group, chain };
 }
 
 export function buildSkylight(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {

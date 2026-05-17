@@ -53,7 +53,7 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, type RoofParams } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, type RoofParams, type CurtainWallParams } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
@@ -931,14 +931,18 @@ registerHandler("SdCurtainWall", (args) => {
     a = { x: 0, y: 0 };
     b = { x: wallLen, y: 0 };
   }
-  const { mesh, chain } = buildCurtainWall(a, b);
+  const cwParams: CurtainWallParams = {
+    mullionSpacing:  (args.mullionSpacing  as number | undefined) ?? undefined,
+    transomSpacing:  (args.transomSpacing  as number | undefined) ?? undefined,
+  };
+  const { mesh, chain } = buildCurtainWall(a, b, cwParams);
   mesh.position.z = getActiveLevelElevation();
   mesh.userData.layerId = resolveLayerId("SdCurtainWall", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
-  onElementCommitted(mesh, viewer.getScene());
+  // Group not directly joinable — individual child meshes are structural but CSG join is skipped for composite geometry.
   return { created: "curtainwall", length: wallLen };
 });
 
