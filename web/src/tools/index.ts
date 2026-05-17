@@ -279,7 +279,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   "wall-polyline": { clicks: 2, chain: true, handler: atZ(([a, b]) => buildWall(a, b)) },
   "wall-curve":    {
     clicks: -1,
-    handler: atZ((pts) => pts.length >= 2 ? buildPolyline(pts) : buildPolyline([pts[0], pts[0]])),
+    handler: atZ((pts) => pts.length >= 2 ? buildSplinePreview(pts) : buildSplinePreview([pts[0], pts[0]])),
     commitMulti: (pts) => pts.length >= 2 ? [buildCurveWall(pts)] : [],
   },
   rect:        { clicks: 2, handler: atZ(([a, b]) => buildRect(a, b)) },
@@ -372,6 +372,24 @@ function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: 
 }
 
 // ── Wall sub-mode helpers ─────────────────────────────────────────────────────
+
+function buildSplinePreview(pts: Array<{x: number; y: number; z?: number}>): { mesh: THREE.Object3D; chain: string } {
+  const vecs = pts.map(p => new THREE.Vector3(p.x, p.y, 0));
+  const curve = new THREE.CatmullRomCurve3(vecs);
+  const N = Math.max((pts.length - 1) * 12, 24);
+  const sampled = curve.getPoints(N);
+  const cx = sampled.reduce((s, p) => s + p.x, 0) / sampled.length;
+  const cy = sampled.reduce((s, p) => s + p.y, 0) / sampled.length;
+  const geom = new THREE.BufferGeometry().setFromPoints(
+    sampled.map(p => new THREE.Vector3(p.x - cx, p.y - cy, 0))
+  );
+  const mat = new THREE.LineBasicMaterial({ color: 0x9ec5d8 });
+  const mesh = new THREE.Line(geom, mat);
+  mesh.position.set(cx, cy, 0);
+  mesh.renderOrder = 1;
+  mesh.userData.noSnap = true;
+  return { mesh, chain: "" };
+}
 
 function buildCurveWall(pts: Array<{x: number; y: number; z?: number}>): SingleResult {
   const t = 0.2, h = 3.0;

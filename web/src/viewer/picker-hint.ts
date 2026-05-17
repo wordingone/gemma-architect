@@ -90,7 +90,7 @@ export function readActiveTool(): string | null {
 let _opHoverObj: THREE.Object3D | null = null;
 let _opHoverSavedEmissive: number | null = null;
 const HOVER_THIN_COLOR  = 0x44aaff;
-const HOVER_MESH_EMIT   = 0x334455;
+const HOVER_MESH_EMIT   = 0x1a5f8a; // bright enough to show on grey/cream surfaces
 
 export function opSetHover(obj: THREE.Object3D | null): void {
   if (_opHoverObj === obj) return;

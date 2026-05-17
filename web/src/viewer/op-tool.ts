@@ -322,7 +322,7 @@ export function opRaycastObject(
   const rc = new THREE.Raycaster();
   rc.setFromCamera(ndc, viewer.getActiveCamera());
 
-  const hitThresh = hoverMode ? 20 : 10;
+  const hitThresh = hoverMode ? 20 : (profileOnly ? 16 : 10);
   let thinHit: { obj: THREE.Object3D; point: THREE.Vector3 } | null = null;
   let thinHitD = hitThresh;
   viewer.getScene().traverse((o) => {
@@ -356,6 +356,47 @@ export function opRaycastObject(
     }
   });
   if (thinHit) return thinHit;
+
+  // For profile-only selection: also accept clicks inside closed LineLoop shapes
+  // (circles, rects, polygons drawn on XY plane) via 2D ray-plane containment.
+  if (profileOnly) {
+    const rayOrigin = new THREE.Vector3(); const rayDir = new THREE.Vector3();
+    rc.ray.origin.clone().copy(rayOrigin); // avoid mutation
+    rc.ray.direction.clone().copy(rayDir);
+    const rayO = rc.ray.origin, rayD = rc.ray.direction;
+    // Intersect the ray with Z=0 plane
+    if (Math.abs(rayD.z) > 1e-6) {
+      const t = -rayO.z / rayD.z;
+      if (t > 0) {
+        const hitPt = new THREE.Vector3(rayO.x + t * rayD.x, rayO.y + t * rayD.y, 0);
+        let best: { obj: THREE.Object3D; dist: number } | null = null;
+        viewer.getScene().traverse((o) => {
+          if (o.userData.noSnap) return;
+          if (!EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
+          if (!(o instanceof THREE.LineLoop)) return;
+          const posAttr = o.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+          if (!posAttr) return;
+          // 2D point-in-polygon using ray-cast method
+          const n = posAttr.count;
+          let inside = false;
+          for (let i = 0, j = n - 1; i < n; j = i++) {
+            const ai = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(o.matrixWorld);
+            const aj = new THREE.Vector3().fromBufferAttribute(posAttr, j).applyMatrix4(o.matrixWorld);
+            if (((ai.y > hitPt.y) !== (aj.y > hitPt.y)) &&
+                hitPt.x < ai.x + (aj.x - ai.x) * (hitPt.y - ai.y) / (aj.y - ai.y)) {
+              inside = !inside;
+            }
+          }
+          if (inside) {
+            const ctr = new THREE.Vector3(); new THREE.Box3().setFromObject(o).getCenter(ctr);
+            const dist = hitPt.distanceTo(ctr);
+            if (!best || dist < best.dist) best = { obj: o, dist };
+          }
+        });
+        if (best) return { obj: (best as { obj: THREE.Object3D; dist: number }).obj, point: hitPt };
+      }
+    }
+  }
 
   const meshes: THREE.Mesh[] = [];
   viewer.getScene().traverse((o) => {
@@ -622,11 +663,12 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   if (phase.kind === "bool_b") {
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit || hit.obj === phase.objA) { ptPrompt("Boolean — click a different second solid"); return true; }
+    opSetHover(null); // clear hover so its saved emissive doesn't overwrite our selection color
     const objB = hit.obj;
     const mB = objB as THREE.Mesh;
-    if (mB.material && !Array.isArray(mB.material) && (mB.material as THREE.MeshStandardMaterial).emissive) {
+    if (mB instanceof THREE.Mesh && mB.material && !Array.isArray(mB.material) && (mB.material as THREE.MeshStandardMaterial).emissive) {
       mB.userData._savedEmissive = ((mB.material as THREE.MeshStandardMaterial).emissive as THREE.Color).getHex();
-      ((mB.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(0x330033);
+      ((mB.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(0x883300); // warm orange — distinct from first object's blue
     }
     _opPhase = { kind: "bool_op", objA: phase.objA, objB };
     opShowBoolChooser(viewer, phase.objA, objB);

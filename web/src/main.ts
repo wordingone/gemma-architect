@@ -13,7 +13,7 @@ assertCrossOriginIsolated();
 
 import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell/shell";
 import { formatLength, formatArea, formatVolume } from "./units";
-import { opAddLabel, opBuildAnnotLine } from "./viewer/op-tool";
+import { opAddLabel, opBuildAnnotLine, getOpPhase } from "./viewer/op-tool";
 import { buildWorkbench } from "./shell/workbench";
 import { buildModes, activateMode } from "./shell/modes";
 import { initCmdK } from "./ui/cmdk";
@@ -1991,6 +1991,7 @@ window.addEventListener("keydown", (e) => {
   const tgt = e.target as HTMLElement | null;
   if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.isContentEditable)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (getOpPhase()) return; // op-tool active — coord input takes priority
   // Numpad first; falls through to letter keys for laptops.
   switch (e.key) {
     case "1": case "Numpad1": viewer.setView("front"); break;
