@@ -695,8 +695,8 @@ export class Viewer {
     // but no longer toggle a single gizmo mode (all three modes visible at
     // all times in the Rhino-style Gumball). The activeTool subscription
     // intentionally goes nowhere on the viewer side now — palette selection
-    // still affects sketch tools (Wall/Slab/Line/etc.) via create-mode.ts.
-    subscribe("activeTool", () => { /* no-op for gumball; create-mode owns sketch tools */ });
+    // still affects sketch tools (Wall/Slab/Line/etc.) via tools/index.ts.
+    subscribe("activeTool", () => { /* no-op for gumball; tools/index.ts owns sketch tools */ });
 
     // Del / Backspace removes the selected object. Operates on
     // targetObject (the geometry) rather than gizmo.object (the pivot

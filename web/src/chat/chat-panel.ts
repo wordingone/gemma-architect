@@ -354,7 +354,7 @@ export class ChatPanel {
       // QW-3: count each dispatched verb.
       (window as unknown as _GemmaW).__gemmaSession.dispatchCount++;
     }
-    // #500: fit before next runAgentTurn screenshot; create-mode never hits this path.
+    // #500: fit before next runAgentTurn screenshot; sketch tools never hit this path.
     if (resp.dispatches.length > 0) {
       await invokeCommand({ command: "SdZoomExtents", parameters: {}, metadata: { source: "agent" } });
     }

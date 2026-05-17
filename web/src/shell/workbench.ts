@@ -486,7 +486,7 @@ function buildSnapDock(): HTMLElement {
   // Mirror the selection-filters checkbox pattern in scene-panel.ts so the
   // snap dock and the selection filter panel share one visual language —
   // two-column grid, sf-row labels, native <input type=checkbox>. Each
-  // checkbox is wired to the snap-state singleton; create-mode.ts (sketch
+  // checkbox is wired to the snap-state singleton; tools/index.ts (sketch
   // quantising) and viewer.ts (gumball drag + relocate snapping) read from
   // the singleton, so changing a box here flows everywhere automatically.
   const SNAP_KEYS: Array<{ key: keyof typeof snap; label: string }> = [
