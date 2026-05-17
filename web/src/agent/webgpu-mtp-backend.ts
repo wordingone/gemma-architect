@@ -141,28 +141,19 @@ function fp16ToFloat32(h: number): number {
   return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + m / 1024);
 }
 
-// Drafter expects float32 with 1 KV head; decoder outputs fp16 with 2 KV heads.
-// Full S version (kept for reference; spec-decode uses the tail variant below).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fp16Head0ToFp32(kvTensor: any, ort: any): any {
-  const [B, , S, H] = kvTensor.dims as number[];  // [1, 2, S, hd]
-  const src = kvTensor.data as Uint16Array;        // fp16 backing: 2*S*H elements
-  const f32 = new Float32Array(S * H);
-  for (let i = 0; i < S * H; i++) f32[i] = fp16ToFloat32(src[i]);
-  return new ort.Tensor("float32", f32, [B, 1, S, H]);
-}
-
 // Drafter KV window is fixed at W tokens (static ONNX dim, confirmed by OrtRun "Got: 936 Expected: 16").
-// Takes the last W tokens from the decoder fp16 cache, averages across all numHeads heads,
+// Takes the last W tokens from the decoder KV cache, averages across all numHeads heads,
 // and returns float32 [B, 1, W, H]. Zero-pads at front when S < W.
 //
-// Head-average, not head-0 slice: the drafter was trained on a target KV that folds numHeads=2
-// into a single-head representation. Averaging is the cheapest correct approximation.
-// If accept_rate is still poor after this, check drafter.inputMetadata.dims for sliding_k/full_k.
+// Dtype-aware: decoder KV type depends on model variant and ORT execution provider.
+//   E4B on WebGPU EP: float16 (Uint16Array backing) — fp16ToFloat32() needed.
+//   E2B on WebGPU EP: float32 (Float32Array backing) — pass through directly.
+// Reading float32 bytes as Uint16Array produces garbage bit patterns → NaN → drafter fails.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fp16HeadAvgToFp32Tail(kvTensor: any, W: number, ort: any): any {
+function headAvgToFp32Tail(kvTensor: any, W: number, ort: any): any {
   const [B, numHeads, S, H] = kvTensor.dims as number[];
-  const src = kvTensor.data as Uint16Array;  // fp16: numHeads * S * H elements, row-major per head
+  const isF16 = kvTensor.type === "float16";
+  const src = kvTensor.data as Uint16Array | Float32Array;
   const f32 = new Float32Array(W * H);       // zero-filled → zero-pad when S < W
   const copyLen   = Math.min(S, W);
   const srcTokOff = S - copyLen;             // first token to copy (tail of the sequence)
@@ -171,7 +162,8 @@ function fp16HeadAvgToFp32Tail(kvTensor: any, W: number, ort: any): any {
     for (let h = 0; h < H; h++) {
       let sum = 0;
       for (let nh = 0; nh < numHeads; nh++) {
-        sum += fp16ToFloat32(src[nh * S * H + (srcTokOff + t) * H + h]);
+        const idx = nh * S * H + (srcTokOff + t) * H + h;
+        sum += isF16 ? fp16ToFloat32((src as Uint16Array)[idx]) : (src as Float32Array)[idx];
       }
       f32[(dstTokOff + t) * H + h] = sum / numHeads;
     }
@@ -181,18 +173,26 @@ function fp16HeadAvgToFp32Tail(kvTensor: any, W: number, ort: any): any {
 
 // After each verify step, rejected draft tokens leave stale KV entries at the tail of
 // the verifyOut present tensors. Truncate to `newLen` on axis-2 before storing in kvCache.
-// verifyOut present shape: [B, numHeads, past+K2, H] (fp16 Uint16Array).
-// Returns fp16 [B, numHeads, newLen, H] with each head's last K2-accepted entries dropped.
+// Dtype-aware: preserves the original tensor dtype (float16 or float32) so the truncated
+// tensor re-enters kvCacheToPast with the same type the decoder expects.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sliceKvAxis2(kvTensor: any, newLen: number, ort: any): any {
   const [B, numHeads, , H] = kvTensor.dims as number[];
-  const src = kvTensor.data as Uint16Array;
-  const dst = new Uint16Array(B * numHeads * newLen * H);
-  for (let h = 0; h < B * numHeads; h++) {
-    // Each head lane is contiguous; copy only the first newLen token entries.
-    dst.set(src.subarray(h * (kvTensor.dims[2] as number) * H, h * (kvTensor.dims[2] as number) * H + newLen * H), h * newLen * H);
+  const isF16 = kvTensor.type === "float16";
+  const bytesPerEl = isF16 ? 2 : 4;
+  const S = kvTensor.dims[2] as number;
+  const srcBuf = kvTensor.data as Uint8Array;  // byte view for generic copy
+  const dstBuf = isF16
+    ? new Uint16Array(B * numHeads * newLen * H)
+    : new Float32Array(B * numHeads * newLen * H);
+  const srcTyped = isF16 ? (kvTensor.data as Uint16Array) : (kvTensor.data as Float32Array);
+  for (let hh = 0; hh < B * numHeads; hh++) {
+    const srcOff = hh * S * H;
+    const dstOff = hh * newLen * H;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (dstBuf as any).set(srcTyped.subarray(srcOff, srcOff + newLen * H), dstOff);
   }
-  return new ort.Tensor("float16", dst, [B, numHeads, newLen, H]);
+  return new ort.Tensor(isF16 ? "float16" : "float32", dstBuf, [B, numHeads, newLen, H]);
 }
 
 // ── Main export: spec-decode loop ────────────────────────────────────────────
@@ -266,7 +266,12 @@ export async function runMtpSpecDecode(
     ...emptyKvFeed(O, config),
   });
 
-  // Cache all KV outputs from prefill.
+  // Cache all KV outputs from prefill; probe dtype once.
+  const _kvSample = prefillOut[`present.0.key`];
+  console.info("[mtp-backend] present.0.key after prefill:", {
+    type: _kvSample?.type,
+    dims: _kvSample?.dims,
+  });
   for (let i = 0; i < config.numKvLayers; i++) {
     kvCache[`present.${i}.key`]   = prefillOut[`present.${i}.key`];
     kvCache[`present.${i}.value`] = prefillOut[`present.${i}.value`];
@@ -287,10 +292,10 @@ export async function runMtpSpecDecode(
 
     // Drafter KV window = 16 tokens (static ONNX dim). Slice tail + fp16→fp32 + head-avg.
     const { lastSliding, lastFull, drafterKvWindow } = config;
-    const slidingK = fp16HeadAvgToFp32Tail(kvCache[`present.${lastSliding}.key`],   drafterKvWindow, O);
-    const slidingV = fp16HeadAvgToFp32Tail(kvCache[`present.${lastSliding}.value`], drafterKvWindow, O);
-    const fullK    = fp16HeadAvgToFp32Tail(kvCache[`present.${lastFull}.key`],      drafterKvWindow, O);
-    const fullV    = fp16HeadAvgToFp32Tail(kvCache[`present.${lastFull}.value`],    drafterKvWindow, O);
+    const slidingK = headAvgToFp32Tail(kvCache[`present.${lastSliding}.key`],   drafterKvWindow, O);
+    const slidingV = headAvgToFp32Tail(kvCache[`present.${lastSliding}.value`], drafterKvWindow, O);
+    const fullK    = headAvgToFp32Tail(kvCache[`present.${lastFull}.key`],      drafterKvWindow, O);
+    const fullV    = headAvgToFp32Tail(kvCache[`present.${lastFull}.value`],    drafterKvWindow, O);
 
     // ── 2a. Draft K tokens with drafter ──────────────────────────────────────
     const draftTokens: number[] = [];
