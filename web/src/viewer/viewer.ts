@@ -20,6 +20,7 @@ import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../g
 import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, type TransformSnapshot } from "../history.js";
 import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted } from "../tools/join-groups.js";
 import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from "../tools/wall-corners.js";
+import { ClipFillManager } from "./clip-fill.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -181,6 +182,9 @@ export class Viewer {
   // Arbitrary named clipping planes (SdClippingPlane).
   private _clipPlanes: THREE.Plane[] = [];
   private _clipLabels: Map<string, THREE.Plane> = new Map();
+  // Stencil-buffer cut-fill for cross-section poché (#836).
+  private _clipFill = new ClipFillManager();
+  private _fillMode = "shaded";
   // Construction plane (W-1). Updated by setView(); overridden by SdSetCPlane (W-4).
   activeView:   string = "persp";
   activeCPlane: CPlane = WORLD_XY;
@@ -204,6 +208,12 @@ export class Viewer {
     this._themeObserver = new MutationObserver(() => this._applyClearColor());
     this._themeObserver.observe(document.documentElement, {
       attributes: true, attributeFilter: ["data-mode"],
+    });
+    // Track render mode for fill color (shaded→gray, technical→black, wireframe→dark-gray).
+    window.addEventListener("render-mode-changed", (e) => {
+      const detail = (e as CustomEvent).detail as { mode: string };
+      this._fillMode = detail.mode;
+      this._clipFill.updateColor(detail.mode);
     });
 
     this.scene = new THREE.Scene();
@@ -1169,6 +1179,8 @@ export class Viewer {
     emitChainFragment(`// removed: uuid=${removed.uuid}`);
     clearSelected();
     window.dispatchEvent(new CustomEvent("viewer:select", { detail: { uuid: null } }));
+    // Rebuild fill so the deleted solid's cross-section disappears.
+    if (this._sectionPlanes.length > 0 || this._clipPlanes.length > 0) this._rebuildFill();
     return true;
   }
 
@@ -2167,6 +2179,8 @@ export class Viewer {
     if (!opts?.noHistory) {
       pushAction(mesh, (mesh.userData.creator as string | undefined) ?? "object");
     }
+    // Rebuild fill when a new solid is added into an active clip zone.
+    if (this._sectionPlanes.length > 0 || this._clipPlanes.length > 0) this._rebuildFill();
   }
 
   /** Walk scene children; callback may mutate visible/material but not add/remove. */
@@ -2487,6 +2501,13 @@ export class Viewer {
     });
   }
 
+  // Rebuild stencil fill geometry for the current clip + section planes.
+  private _rebuildFill(): void {
+    const all = [...this._sectionPlanes, ...this._clipPlanes];
+    if (all.length === 0) { this._clipFill.dispose(this.scene); return; }
+    this._clipFill.update(all, this.scene, this._fillMode);
+  }
+
   // Switch to per-material local clipping so objects tagged excludeFromClip
   // (clip-plane visualization, gumball handles) are exempt from the clip set.
   private _applyClippingPlanes(): void {
@@ -2511,6 +2532,7 @@ export class Viewer {
         }
       }
     });
+    this._rebuildFill();
   }
 
   // Apply active clip planes to a newly added object's subtree without
@@ -2870,5 +2892,6 @@ export class Viewer {
     this._themeObserver = null;
     this._thumbMatWireframe?.dispose();
     this._thumbMatGhosted?.dispose();
+    this._clipFill.dispose(this.scene);
   }
 }
