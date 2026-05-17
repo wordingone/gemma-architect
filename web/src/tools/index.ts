@@ -19,7 +19,7 @@ import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPro
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
-import { onElementCommitted, peekNearestMember, clearMemberPeek } from "./join-groups";
+import { onElementCommitted } from "./join-groups";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening } from "./openings";
 
@@ -746,18 +746,8 @@ export function initCreateMode(viewer: Viewer): void {
         // meshes and regular structural elements are both detected correctly.
         const hoverObj = viewer.raycastForHover(ev.clientX, ev.clientY);
         opSetHover(hoverObj);
-        // Hover over a CSG join display mesh: show wireframe of nearest logical member.
-        if (hoverObj?.userData?.isJoinDisplay) {
-          const groupId = hoverObj.userData.joinGroupId as string | undefined;
-          const hitResult = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
-          const hitPt = hitResult?.point ?? new THREE.Vector3();
-          if (groupId) peekNearestMember(groupId, hitPt, viewer.getScene());
-        } else {
-          clearMemberPeek(viewer.getScene());
-        }
       } else {
         opSetHover(null);
-        clearMemberPeek(viewer.getScene());
       }
       hideCursorDot();
       setSnapTarget(null);
@@ -962,7 +952,6 @@ export function initCreateMode(viewer: Viewer): void {
   vpBody.addEventListener("pointerleave", () => {
     hideCursorDot();
     opSetHover(null);
-    clearMemberPeek(viewer.getScene());
   });
 
   // ── pointerup ─────────────────────────────────────────────────────────────────
