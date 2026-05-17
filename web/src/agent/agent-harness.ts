@@ -134,9 +134,14 @@ let _drafterSession: OrtSession | null = null;
 let _drafterLoadAttempted = false;
 let _drafterLoadPromise: Promise<void> | null = null;
 
-// Relative path — served same-origin from public/models/ (avoids CORS block on GitHub Releases).
-// For production deploy: include drafter.onnx in the deployment bundle or proxy via a CORS-enabled CDN.
-const DRAFTER_ONNX_URL = "/models/gemma-4-E4B-it-assistant/drafter.onnx";
+// CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#812).
+// Dev (env var unset): falls back to relative path served by Vite dev server same-origin.
+// Production: set VITE_DRAFTER_ONNX_URL to any CORS-enabled CDN URL
+//   (Cloudflare R2, HF Hub, etc.) in the deploy environment — no code change needed.
+// CDN requirements: Access-Control-Allow-Origin:* + Cross-Origin-Resource-Policy:cross-origin
+//   (both R2 and HF Hub public repos set these by default).
+const DRAFTER_ONNX_URL: string =
+  import.meta.env["VITE_DRAFTER_ONNX_URL"] ?? "/models/gemma-4-E4B-it-assistant/drafter.onnx";
 // Bump this key to bust the IDB cache when a new drafter export is deployed.
 const DRAFTER_CACHE_KEY = "mtp-drafter-e4b-v1";
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
