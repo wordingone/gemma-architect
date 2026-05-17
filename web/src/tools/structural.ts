@@ -6,6 +6,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Viewer } from "../viewer/viewer";
 import { makeSnapId } from "../viewer/snap-state";
 import type { SnapVertex } from "../viewer/snap-state";
+import { initWallCorners } from "./wall-corners";
 import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
 
@@ -70,6 +71,8 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
     new THREE.Vector3(-len / 2, 0, 0),
     new THREE.Vector3(len / 2, 0, 0),
   ];
+  // Initialize corners to rectangular defaults; attemptWallCornerJoins will update them.
+  initWallCorners(mesh);
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },

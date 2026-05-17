@@ -20,6 +20,7 @@ import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHa
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
+import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H } from "./openings";
 
@@ -411,6 +412,9 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   const out = handler.handler(_pending);
   _pending = [];
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep");
+  if (out.mesh instanceof THREE.Mesh && out.mesh.userData.creator === "wall") {
+    attemptWallCornerJoins(out.mesh, viewer.getScene());
+  }
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
   // Void cut for door/window placed interactively (#754)
   if (out.mesh instanceof THREE.Mesh) {
@@ -434,7 +438,6 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
       }
     }
   }
-  if (out.mesh.userData.creator === "wall") attemptWallJoins(out.mesh as THREE.Mesh, viewer);
   _createSequence.push(out.chain);
   pushAction(out.mesh, out.chain);
   if (out.dispatchOnCommit) {
