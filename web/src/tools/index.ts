@@ -66,6 +66,7 @@ let _lastCreateClickY = 0;
 // Temporary scene objects — removed when the tool completes or is cancelled.
 let _previewMesh: THREE.Mesh | null = null;
 let _markerMesh: THREE.Points | null = null;
+let _roofFootprintLine: THREE.Line | null = null;
 // Axis-constraint indicator line shown when Shift is held during sketch drawing.
 let _sketchShiftAxisLine: THREE.Line | null = null;
 // Cursor dot — CSS overlay div that tracks the pointer when a sketch tool is active.
@@ -125,6 +126,14 @@ export function clearPreview(viewer: Viewer): void {
   _previewMesh = null;
 }
 
+function clearRoofFootprint(viewer: Viewer): void {
+  if (!_roofFootprintLine) return;
+  viewer.getScene().remove(_roofFootprintLine);
+  _roofFootprintLine.geometry.dispose();
+  (_roofFootprintLine.material as THREE.Material).dispose();
+  _roofFootprintLine = null;
+}
+
 export function clearSketchShiftLine(viewer: Viewer): void {
   if (!_sketchShiftAxisLine) return;
   viewer.getScene().remove(_sketchShiftAxisLine);
@@ -177,6 +186,7 @@ export function clearTemporary(viewer: Viewer): void {
   clearPreview(viewer);
   clearMarker(viewer);
   clearSketchShiftLine(viewer);
+  clearRoofFootprint(viewer);
 }
 
 // ── Cursor dot ────────────────────────────────────────────────────────────────
@@ -369,6 +379,37 @@ function updateRubberBand(viewer: Viewer, handler: ToolHandler, livePoint: { x: 
   } catch {
     // Degenerate geometry — skip preview
   }
+}
+
+// ── Roof footprint preview ────────────────────────────────────────────────────
+
+function updateRoofFootprint(
+  viewer: Viewer,
+  anchor: { x: number; y: number },
+  live: { x: number; y: number },
+): void {
+  clearRoofFootprint(viewer);
+  const overhang = 0.4;  // matches buildRoof default
+  const elev = levelStore.getActive().elevation;
+  const minX = Math.min(anchor.x, live.x) - overhang;
+  const maxX = Math.max(anchor.x, live.x) + overhang;
+  const minY = Math.min(anchor.y, live.y) - overhang;
+  const maxY = Math.max(anchor.y, live.y) + overhang;
+  if (maxX - minX < 0.01 || maxY - minY < 0.01) return;
+  const pts = [
+    new THREE.Vector3(minX, minY, elev),
+    new THREE.Vector3(maxX, minY, elev),
+    new THREE.Vector3(maxX, maxY, elev),
+    new THREE.Vector3(minX, maxY, elev),
+    new THREE.Vector3(minX, minY, elev),
+  ];
+  const geom = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineDashedMaterial({ color: 0x4488ff, dashSize: 0.3, gapSize: 0.15, depthTest: false, transparent: true, opacity: 0.8 });
+  _roofFootprintLine = new THREE.Line(geom, mat);
+  _roofFootprintLine.computeLineDistances();
+  _roofFootprintLine.renderOrder = 2;
+  _roofFootprintLine.userData.noSnap = true;
+  viewer.getScene().add(_roofFootprintLine);
 }
 
 // ── Wall sub-mode helpers ─────────────────────────────────────────────────────
@@ -1188,6 +1229,9 @@ export function initCreateMode(viewer: Viewer): void {
     const handler = TOOL_HANDLERS[tool];
     if (!handler || (handler.clicks > 0 && handler.clicks < 2)) return;
     updateRubberBand(viewer, handler, snapped);
+    if (tool === "roof" && _pending.length === 1) {
+      updateRoofFootprint(viewer, _pending[0], snapped);
+    }
   });
 
   // ── pointerleave ──────────────────────────────────────────────────────────────
