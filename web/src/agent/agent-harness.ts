@@ -432,11 +432,14 @@ function buildSceneContext(): string {
   }
 
   // Fall back to top-level scene children (generic / non-IFC scenes).
-  type ViewerScene = { children?: Array<{ type: string; name?: string; position?: { x: number; y: number; z: number } }> };
+  // userData.creator is set by every dispatch handler (SdBox, SdWall, etc.) — scaffolding groups
+  // added by the viewer (grid, axes, pivot proxy, cplane gizmo) never carry this property.
+  // Filter to creator-tagged objects only so the agent's view matches what the user can select.
+  type ViewerScene = { children?: Array<{ type: string; name?: string; userData?: Record<string, unknown>; position?: { x: number; y: number; z: number } }> };
   const fallbackViewer = (window as unknown as { __viewer?: { scene?: ViewerScene } }).__viewer;
   const children = fallbackViewer?.scene?.children;
 
-  const meshes = children?.filter((c) => c.type === "Mesh" || c.type === "Group") ?? [];
+  const meshes = children?.filter((c) => (c.type === "Mesh" || c.type === "Group") && c.userData?.creator != null) ?? [];
   if (meshes.length === 0) return "empty workspace — no objects placed yet.";
 
   const lines = meshes.slice(0, 15).map((m) => {

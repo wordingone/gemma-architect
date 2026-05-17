@@ -24,7 +24,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT_CDP = parseInt(process.env.PORT_CDP ?? "9222", 10);
 const BASE_URL = process.env.APP_URL ?? "http://localhost:5175/";
-const PROMPT   = "Describe the default scene in one sentence.";
+// Must NOT match VISUAL_RE in chat-panel.ts:
+// /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i
+// A visual-query prompt triggers auto-capture → userImage set → payloadHasMultimodal=true → MTP bypassed.
+const PROMPT   = "Build a simple floor slab at the origin.";
 const TURN_TIMEOUT_MS = 180_000; // 3 min — E2B cold-start can be slow
 
 async function cdpConnect(wsUrl) {
@@ -167,6 +170,17 @@ async function runTurn(cdp, url, { warmup = true } = {}) {
   await navigate(cdp, url);
   await waitLive(cdp);
   await waitDrafter(cdp);
+
+  // Pre-turn diagnostic: verify page state before sending any turn.
+  const diag = await evaluate(cdp, `({
+    href: window.location.href,
+    mtpParam: new URLSearchParams(window.location.search).get('mtp'),
+    modelParam: new URLSearchParams(window.location.search).get('gemma_model'),
+    drafterLoaded: window.__drafterLoaded,
+    hasLoadFn: typeof window.__loadDrafter,
+    badge: document.getElementById('ai-model-badge')?.textContent?.trim() ?? null,
+  })`);
+  console.log("[mtp-ab] page state:", JSON.stringify(diag));
 
   if (warmup) {
     // Warmup turn: lets WebGPU shaders compile and drafter session initialize.
