@@ -112,6 +112,27 @@ function argmax(logits: Float32Array, offset = 0): number {
   return best;
 }
 
+// Decode one fp16 bit-pattern (Uint16) to a float32 number.
+function fp16ToFloat32(h: number): number {
+  const s = (h >> 15) & 0x1;
+  const e = (h >> 10) & 0x1f;
+  const m =  h        & 0x3ff;
+  if (e === 0)  return (s ? -1 : 1) * Math.pow(2, -14) * (m / 1024);
+  if (e === 31) return m ? NaN : (s ? -Infinity : Infinity);
+  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + m / 1024);
+}
+
+// Drafter expects float32 with 1 KV head; decoder outputs fp16 with 2 KV heads.
+// This helper slices head 0 and converts fp16 → fp32 in one pass.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function fp16Head0ToFp32(kvTensor: any, ort: any): any {
+  const [B, , S, H] = kvTensor.dims as number[];  // [1, 2, S, hd]
+  const src = kvTensor.data as Uint16Array;        // fp16 backing: 2*S*H elements
+  const f32 = new Float32Array(S * H);
+  for (let i = 0; i < S * H; i++) f32[i] = fp16ToFloat32(src[i]);
+  return new ort.Tensor("float32", f32, [B, 1, S, H]);
+}
+
 // ── Main export: spec-decode loop ────────────────────────────────────────────
 
 export interface MtpDecodeResult {
@@ -147,6 +168,10 @@ export async function runMtpSpecDecode(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const O = ort as any;
 
+  try {
+    console.info("[mtp-backend] drafter.inputNames:", JSON.stringify((drafter as any).inputNames ?? []));
+  } catch { /* ignore */ }
+
   const seqLen0 = inputIds.length;
   const tokens: number[] = [];
   let specAttempts = 0;
@@ -172,11 +197,11 @@ export async function runMtpSpecDecode(
     ...emptyKvFeed(O),
   });
 
-  // Cache all KV outputs from prefill; probe layer 0 and 4 shapes (authoritative for past_key_values input)
+  // Cache all KV outputs from prefill; probe sliding (0,4) and first full-attn (5) shapes.
   for (let i = 0; i < NUM_KV_LAYERS; i++) {
     kvCache[`present.${i}.key`]   = prefillOut[`present.${i}.key`];
     kvCache[`present.${i}.value`] = prefillOut[`present.${i}.value`];
-    if (i === 0 || i === 4) {
+    if (i === 0 || i === 4 || i === 5) {
       const t = prefillOut[`present.${i}.key`];
       console.info(`[mtp-backend] present.${i}.key after prefill: type=${t?.type} dims=${JSON.stringify(t?.dims)}`);
     }
@@ -195,10 +220,11 @@ export async function runMtpSpecDecode(
   while (tokens.length < maxNew) {
     const K = Math.min(draftK, maxNew - tokens.length);
 
-    const slidingK = kvCache[`present.${LAST_SLIDING}.key`];
-    const slidingV = kvCache[`present.${LAST_SLIDING}.value`];
-    const fullK    = kvCache[`present.${LAST_FULL}.key`];
-    const fullV    = kvCache[`present.${LAST_FULL}.value`];
+    // Drafter needs fp32 1-head KV; decoder cache holds fp16 2-head. Slice head-0, cast.
+    const slidingK = fp16Head0ToFp32(kvCache[`present.${LAST_SLIDING}.key`],   O);
+    const slidingV = fp16Head0ToFp32(kvCache[`present.${LAST_SLIDING}.value`], O);
+    const fullK    = fp16Head0ToFp32(kvCache[`present.${LAST_FULL}.key`],      O);
+    const fullV    = fp16Head0ToFp32(kvCache[`present.${LAST_FULL}.value`],    O);
 
     // ── 2a. Draft K tokens with drafter ──────────────────────────────────────
     const draftTokens: number[] = [];
