@@ -290,6 +290,17 @@ export async function runMtpSpecDecode(
     const attnLen  = kvSeqLen + K2;
     const attnMask = new BigInt64Array(attnLen).fill(BigInt(1));
 
+    // Diagnostic probe — capture verify-call shape values so the attention_mask
+    // off-by-N can be derived from the error's reported condition vs X dims.
+    console.info("[mtp-backend] verify site:", {
+      kvSeqLen,
+      K,
+      K2,
+      attnLen,
+      posIdsV: Array.from(posIdsV).map(Number),
+      pastKeyDims: (kvCache[`present.0.key`] as any)?.dims,
+    });
+
     const verifyOut = await decoder.run({
       inputs_embeds:      embedVer["inputs_embeds"],
       per_layer_inputs:   embedVer["per_layer_inputs"],
