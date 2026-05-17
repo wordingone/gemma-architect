@@ -792,6 +792,15 @@ Assistant: Assuming 10m × 8m footprint, 2 storeys at 3.0m each, 4 bedrooms uppe
 <tool_call>{"command":"SdWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[7,8]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[10,0],[10,8],[0,8]],"pitchDeg":35},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdExport","parameters":{"format":"ifc","target":"scene"},"metadata":{"source":"agent"}}</tool_call>
+
+User: Describe the default scene in one sentence.
+Assistant: The viewport shows an empty three-dimensional canvas — no geometry has been placed yet, and the Current scene contains no objects.
+
+User: What's in the scene?
+Assistant: The scene is currently empty — no walls, slabs, or spaces have been placed. The viewport shows a neutral 3D environment ready for your first command.
+
+User: What do you see?
+Assistant: Four white extruded walls meeting at right angles enclose a rectangular room roughly 8 m × 6 m in plan, with a flat gray slab at the base and a ceiling plane at 3.0 m. The Current scene contains: 4 walls (200 mm thick, 3.0 m tall), 1 floor slab, 1 ceiling.
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
@@ -807,7 +816,7 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene: ${buildSceneContext()}`,
-    "SCENE QUERY RESPONSE: when asked what is in the scene or what you see — (1) describe the viewport image visually: shapes, colors, materials, arrangement, scale (2-3 sentences); (2) narrate the object inventory from the \'Current scene:\' line above in plain English. Combine into ONE natural prose paragraph. No bullet lists. No Sd* names in prose — verb chips are shown separately in the UI.",
+    "SCENE QUERY RESPONSE: when asked to describe the scene, what you see, what is in the scene, or what the default scene looks like — respond with PLAIN TEXT ONLY. Do NOT emit <plan> or <tool_call> blocks. Instead: (1) describe the viewport image visually: shapes, colors, materials, arrangement, scale (2-3 sentences); (2) narrate the object inventory from the \'Current scene:\' line above in plain English. Combine into ONE natural prose paragraph. No bullet lists. No Sd* names in prose — verb chips are shown separately in the UI.",
     summariseSkills(skills),
     summariseClusters(),
   ].filter(Boolean).join("\n\n");
