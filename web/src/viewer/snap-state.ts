@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import type { Viewer } from "./viewer";
+import { getState, subscribe } from "../app-state";
 import { gridStore } from "../geometry/grids";
 import { projectToScreen } from "./projection";
 
@@ -24,7 +25,7 @@ export interface SnapState {
 const _state: SnapState = {
   snapOn: true, orthoOn: false, gridOn: true, polarOn: false,
   vertexSnapOn: true, edgeSnapOn: true, midpointSnapOn: false, pointSnapOn: true,
-  step: 1.0, angleStep: 90,
+  step: getState("unitSystem") === "imperial" ? 0.3048 : 1.0, angleStep: 90,
 };
 
 export function getSnap(): Readonly<SnapState> { return _state; }
@@ -55,6 +56,14 @@ export function getStep(): number { return _state.step; }
 export function setStep(m: number): void { _state.step = Math.max(0.001, m); emit(); }
 export function getAngleStep(): number { return _state.angleStep; }
 export function setAngleStep(deg: number): void { _state.angleStep = Math.max(0.1, deg); emit(); }
+
+// Reset step to unit-system default when the unit system toggles, but only if
+// the user hasn't customized it away from either default.
+subscribe("unitSystem", (sys) => {
+  if (_state.step === 0.3048 || _state.step === 1.0) {
+    setStep(sys === "imperial" ? 0.3048 : 1.0);
+  }
+});
 
 // ── Vertex snap types and runtime state ──────────────────────────────────────
 
