@@ -314,7 +314,12 @@ export async function runMtpSpecDecode(
 
       const draftOut = await drafter.run({
         inputs_embeds: new O.Tensor("float32", combined, [1, 1, HIDDEN_SIZE * 2]),
-        position_ids:  new O.Tensor("int64", [BigInt(kvSeqLen + d)], [1, 1]),
+        // Drafter operates in LOCAL position space: KV window occupies 0..drafterKvWindow-1,
+        // draft token d is at drafterKvWindow+d. Passing absolute kvSeqLen+d (e.g. 936+)
+        // is semantically incompatible with the drafter's learned RoPE associations even
+        // though 936 is within the 4096-position RoPE table — it yields NaN logits via
+        // mismatched q·k cross-frame interactions propagating to fp16 overflow.
+        position_ids:  new O.Tensor("int64", [BigInt(drafterKvWindow + d)], [1, 1]),
         sliding_k: slidingK,
         sliding_v: slidingV,
         full_k:    fullK,
