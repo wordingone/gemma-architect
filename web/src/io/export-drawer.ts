@@ -5,6 +5,7 @@
 
 import { iconSVG } from "../ui/icons";
 import { isBonsaiAvailable, validateIFC, type BonsaiValidation } from "./bonsai-client";
+import { unitLabel } from "../units";
 
 type Fmt = { ext: string; sub: string; fmt: string };
 
@@ -72,8 +73,8 @@ function build(): HTMLDivElement {
     <div class="ed-meta">
       <div><span class="k">verts</span><span class="v">${verts}</span></div>
       <div><span class="k">faces</span><span class="v">${faces}</span></div>
-      <div><span class="k">precision</span><span class="v">0.001 m</span></div>
-      <div><span class="k">units</span><span class="v">METRIC · m</span></div>
+      <div><span class="k">precision</span><span class="v">0.001 ${unitLabel()}</span></div>
+      <div><span class="k">units</span><span class="v">${unitLabel() === "ft" ? "IMPERIAL · ft" : "METRIC · m"}</span></div>
     </div>
     <div class="ed-body">
   `;
@@ -117,10 +118,10 @@ function build(): HTMLDivElement {
     const fmt = edFmt.dataset.fmt!;
     const legacy = document.querySelector<HTMLButtonElement>(`.exp-btn[data-fmt="${fmt}"]`);
     if (!legacy) {
-      // Format not yet wired; mark visually disabled.
+      // Format not yet wired — no export pipeline available in the browser.
       edFmt.classList.add("disabled");
       edFmt.disabled = true;
-      edFmt.title = "Not yet implemented";
+      edFmt.title = "Coming soon";
     } else {
       // Mirror disabled state at open-time.
       edFmt.disabled = legacy.disabled;
