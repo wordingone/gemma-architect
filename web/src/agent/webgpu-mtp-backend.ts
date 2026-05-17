@@ -5,17 +5,17 @@
 // agent-harness.ts (loaded via drafter-cache.ts, #750).
 //
 // Decoder ONNX structure (onnx-community/gemma-4-E2B-it-ONNX, q4):
-//   15 KV layers; full-attention (head_dim=512) at layers 4, 9, 14.
-//   Last sliding layer: 13 (head_dim=256) → drafter sliding_k/v input.
+//   16 KV layers (0..15); full-attention (head_dim=512) at layers 4, 9, 14.
+//   Last sliding layer: 15 (head_dim=256) → drafter sliding_k/v input.
 //   Last full layer:    14 (head_dim=512) → drafter full_k/v input.
 //   Inputs:  inputs_embeds [B,S,1536], per_layer_inputs [B,S,35,256],
 //            attention_mask [B,S+past] int64, position_ids [B,S] int64,
 //            num_logits_to_keep [] int64, past_key_values.N.key/value
 //   Outputs: logits [B,keep,262144], present.N.key/value
 
-const NUM_KV_LAYERS   = 15;
-const LAST_SLIDING    = 13;   // present.13.key/value — head_dim 256
-const LAST_FULL       = 14;   // present.14.key/value — head_dim 512
+const NUM_KV_LAYERS   = 16;
+const LAST_SLIDING    = 15;   // present.15.key/value — head_dim 256 (last layer, sliding)
+const LAST_FULL       = 14;   // present.14.key/value — head_dim 512 (last full-attn)
 const HIDDEN_SIZE     = 1536;
 const VOCAB_SIZE      = 262144;
 const FULL_ATTN: Set<number> = new Set([4, 9, 14]);  // layers with head_dim 512
@@ -61,7 +61,11 @@ export function getMtpSessions(model: unknown): MtpSessions | null {
     );
     return null;
   }
-  console.info("[mtp-backend] Sessions acquired — embed + decoder reusing VRAM allocation.");
+  // Log decoder input names once — confirms actual KV layer count at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const kvInputs = ((decoder as any).inputNames as string[] | undefined)
+    ?.filter((n: string) => n.startsWith("past_key_values"));
+  console.info("[mtp-backend] Sessions acquired. Decoder KV inputs:", kvInputs?.length ?? "?", "layers. First:", kvInputs?.[0] ?? "?", "Last:", kvInputs?.[kvInputs.length - 1] ?? "?");
   return { embed, decoder };
 }
 
