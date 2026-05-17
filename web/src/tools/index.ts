@@ -560,14 +560,22 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
           if (_host || obj === out.mesh) return;
           if (obj.uuid === _hostId || (obj.userData as Record<string, unknown>).expressID === _hostId) _host = obj;
         });
-        if (_host instanceof THREE.Mesh) {
-          const _isWin = _creator === "window";
-          const _vW = _isWin ? FZK_WINDOW_W : FZK_DOOR_W;
-          const _vH = _isWin ? FZK_WINDOW_H : FZK_DOOR_H;
-          const _vc = out.mesh.position.clone();
-          _vc.z += _vH / 2;
-          _voidCutHost  = _host;
-          _voidCutGroup = cutRectVoidFromBoxMesh(_host, _vc, _vW, _vH);
+        if (_host) {
+          // Snap to host wall centerline (local Y=0) — embeds opening in wall, not floating on surface.
+          _host.updateMatrixWorld(true);
+          const _snapPt = _host.worldToLocal(out.mesh.position.clone());
+          _snapPt.y = 0;
+          out.mesh.position.copy(_host.localToWorld(_snapPt));
+
+          if (_host instanceof THREE.Mesh) {
+            const _isWin = _creator === "window";
+            const _vW = _isWin ? FZK_WINDOW_W : FZK_DOOR_W;
+            const _vH = _isWin ? FZK_WINDOW_H : FZK_DOOR_H;
+            const _vc = out.mesh.position.clone();
+            _vc.z += _vH / 2;
+            _voidCutHost  = _host;
+            _voidCutGroup = cutRectVoidFromBoxMesh(_host, _vc, _vW, _vH);
+          }
         }
       }
     }

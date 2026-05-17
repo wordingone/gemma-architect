@@ -102,8 +102,8 @@ export function buildWindow(p: { x: number; y: number }): { mesh: THREE.Mesh; ch
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x88c4e8, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0 });
 
   const frameParts = mergeGeometries([g0, g1, g2, g3]);
-  const merged = mergeGeometries([frameParts, g4]);
-  // Store per-group material info in userData so renderer can split if needed
+  // useGroups=true creates geometry groups so the [frameMat, glassMat] array is applied per-group.
+  const merged = mergeGeometries([frameParts, g4], true);
   const mesh = new THREE.Mesh(merged, [frameMat, glassMat]);
   mesh.position.set(p.x, p.y, sill);
   mesh.userData.kind = "mesh";
