@@ -71,10 +71,14 @@ export function subscribe<K extends keyof AppState>(key: K, fn: Listener<K>): ()
 // data-tool=<id> when activeTool changes. Used by ribbon-tools + palette.
 // Selectors are filtered to elements with the data-tool attribute so we
 // don't accidentally activate unrelated nodes.
+// Wall sub-tools have no dedicated palette button; highlight the parent "wall" button instead.
+const WALL_SUB_TOOLS = new Set(["wall-polyline", "wall-curve", "wall-pick"]);
+
 export function syncToolActiveClass(): void {
   subscribe("activeTool", (id) => {
+    const activeId = WALL_SUB_TOOLS.has(id) ? "wall" : id;
     document.querySelectorAll<HTMLElement>("[data-tool]").forEach((el) => {
-      el.classList.toggle("active", el.dataset.tool === id);
+      el.classList.toggle("active", el.dataset.tool === activeId);
     });
   });
 }

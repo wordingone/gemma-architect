@@ -71,8 +71,14 @@ export function getChooserEl(): HTMLElement | null {
   return _chooserEl;
 }
 
+// Sub-tool override: set when a wall sub-tool (wall-polyline, wall-curve, wall-pick) is active.
+// These have no dedicated palette button so the DOM query below would return null without this.
+let _subToolOverride: string | null = null;
+export function setSubToolOverride(id: string | null): void { _subToolOverride = id; }
+
 // Reads the active palette tool ID, returns null for select/transform/op tools.
 export function readActiveTool(): string | null {
+  if (_subToolOverride) return _subToolOverride;
   const btn = document.querySelector<HTMLElement>(".palette-btn.active");
   const id = btn?.dataset.tool ?? null;
   if (!id || id === "select" || id === "move" || id === "rotate" || id === "scale" || id === "scale-1d" || id === "scale-2d") return null;

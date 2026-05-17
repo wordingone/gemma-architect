@@ -14,7 +14,7 @@ import type { ChoiceOption } from "../commands/dictionary";
 import { levelStore, getActiveLevelId } from "../geometry/levels";
 import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "../viewer/selection-state";
 import { projectToScreen, unprojectToXY, unprojectForClipTool, snapWorldForView, getGeometryZ, showLevelChip } from "../viewer/projection";
-import { initPickerHint, setPickerHint, setChooserHint, getChooserEl, readActiveTool, opSetHover, OP_TOOL_IDS } from "../viewer/picker-hint";
+import { initPickerHint, setPickerHint, setChooserHint, getChooserEl, readActiveTool, setSubToolOverride, opSetHover, OP_TOOL_IDS } from "../viewer/picker-hint";
 import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPrompt, ptShowCoordInput, ptHideCoordInput, ptStartTool, ptHandlePoint, ptHandleCoordSubmit as _ptHandleCoordSubmit, ptHandleEnter as _ptHandleEnter, ptCancel, ptFinish, ptPhaseIsObjectSelect, _ptPhase, _ptAxisLock, _ptCoordInputEl, ptGetAxisBase, ptEffectiveAxisDir, ptSetAxisLockLine, ptClearAxisLockLine, _ptViewer, _lastPtTool, unprojectToAxisLine } from "../viewer/transforms";
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
@@ -667,8 +667,14 @@ export function initCreateMode(viewer: Viewer): void {
     if (!isSelHLOwned()) { clearMultiSelHighlights(); clearMultiSelected(); }
   });
 
+  const WALL_SUB_TOOLS = new Set(["wall-polyline", "wall-curve", "wall-pick"]);
+
   // When activeTool changes to a PT or op tool, start the state machine.
   subscribe("activeTool", (tool) => {
+    // Wall sub-tools have no palette button; override readActiveTool() so the
+    // pointer-event pipeline sees the correct tool ID instead of null.
+    setSubToolOverride(WALL_SUB_TOOLS.has(tool) ? tool : null);
+
     if (tool === "move" || tool === "rotate" || tool === "scale" || tool === "scale-1d" || tool === "scale-2d") {
       if (_ptPhase) ptCancel(viewer);
       if (getOpPhase()) opCancel(viewer);
