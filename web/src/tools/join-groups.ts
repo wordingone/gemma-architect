@@ -153,8 +153,8 @@ function _rebuildGroupDisplay(scene: THREE.Scene, groupId: string, primaryMat: T
     return;
   }
 
-  // Apply primary material and tag the display mesh.
-  resultBrush.material = primaryMat;
+  // Clone material so display mesh doesn't share emissive state with logical members.
+  resultBrush.material = (primaryMat as THREE.Material).clone();
   resultBrush.userData.isJoinDisplay = true;
   resultBrush.userData.joinGroupId = groupId;
   resultBrush.userData.noSnap = true;
@@ -200,6 +200,41 @@ export function nearestGroupMember(groupId: string, point: THREE.Vector3, scene:
     if (d < bestDist) { bestDist = d; best = obj; }
   }
   return best;
+}
+
+// ── Hover peek: wireframe overlay for the nearest logical member ──────────────
+
+let _peekWireframe: THREE.LineSegments | null = null;
+let _peekMemberUuid: string | null = null;
+
+/** Show an edge-wireframe outline of the logical member nearest to `hitPoint`
+ *  inside `groupId`. Safe to call on every pointermove — no-ops when same member. */
+export function peekNearestMember(groupId: string, hitPoint: THREE.Vector3, scene: THREE.Scene): void {
+  const nearest = nearestGroupMember(groupId, hitPoint, scene);
+  if (nearest?.uuid === _peekMemberUuid) return; // Same member — skip rebuild
+  clearMemberPeek(scene);
+  if (!nearest) return;
+  nearest.updateMatrixWorld(true);
+  const edges = new THREE.EdgesGeometry(nearest.geometry);
+  const mat = new THREE.LineBasicMaterial({ color: 0x44aaff, depthTest: false });
+  const wf = new THREE.LineSegments(edges, mat);
+  wf.matrix.copy(nearest.matrixWorld);
+  wf.matrixAutoUpdate = false;
+  wf.renderOrder = 10;
+  wf.userData.isPeekWireframe = true;
+  scene.add(wf);
+  _peekWireframe = wf;
+  _peekMemberUuid = nearest.uuid;
+}
+
+/** Remove any active member peek wireframe. */
+export function clearMemberPeek(scene: THREE.Scene): void {
+  if (!_peekWireframe) return;
+  scene.remove(_peekWireframe);
+  (_peekWireframe.geometry as THREE.BufferGeometry).dispose();
+  (_peekWireframe.material as THREE.Material).dispose();
+  _peekWireframe = null;
+  _peekMemberUuid = null;
 }
 
 /**

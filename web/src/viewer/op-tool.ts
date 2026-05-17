@@ -316,7 +316,9 @@ export function opRaycastObject(
 
   const meshes: THREE.Mesh[] = [];
   viewer.getScene().traverse((o) => {
-    if (o.userData.noSnap) return;
+    const isDisplay = !!o.userData.isJoinDisplay;
+    if (o.userData.noSnap && !isDisplay) return;
+    if (!o.visible && !isDisplay) return;
     if (!(o instanceof THREE.Mesh)) return;
     if (!o.geometry?.getAttribute("position")) return;
     if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
