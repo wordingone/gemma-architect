@@ -43,17 +43,26 @@ function idbPut(db: IDBDatabase, key: string, value: Uint8Array): Promise<void> 
 /**
  * Fetch drafter ONNX bytes with IndexedDB caching.
  *
- * @param url       Remote URL — e.g. "/models/.../drafter-fp16.onnx"
- * @param cacheKey  IDB key — bump to bust cache, e.g. "mtp-drafter-fp16-v1"
- * @returns         ArrayBuffer suitable for ort.InferenceSession.create(buf, opts)
+ * @param url        Remote URL — e.g. "/models/.../drafter-fp16.onnx"
+ * @param cacheKey   IDB key — bump to bust cache, e.g. "mtp-drafter-fp16-v1"
+ * @param onProgress Called with (loaded, total) during network fetch. total=0 means
+ *                   Content-Length unavailable (indeterminate). On IDB hit, called
+ *                   once with (byteLength, byteLength) to signal immediate completion.
+ * @returns          ArrayBuffer suitable for ort.InferenceSession.create(buf, opts)
  */
-export async function fetchDrafterCached(url: string, cacheKey: string): Promise<ArrayBuffer> {
+export async function fetchDrafterCached(
+  url: string,
+  cacheKey: string,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<ArrayBuffer> {
   let db: IDBDatabase | null = null;
   try {
     db = await openDb();
     const cached = await idbGet(db, cacheKey);
     if (cached) {
       console.info(`[drafter-cache] IDB hit for ${cacheKey} (${(cached.byteLength / 1e6).toFixed(1)} MB)`);
+      // Signal immediate completion — IDB read takes <100ms, no incremental progress.
+      onProgress?.(cached.byteLength, cached.byteLength);
       return cached.buffer.slice(0) as ArrayBuffer;
     }
   } catch {
@@ -63,16 +72,45 @@ export async function fetchDrafterCached(url: string, cacheKey: string): Promise
   console.info(`[drafter-cache] IDB miss — fetching ${url}`);
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`drafter fetch failed: ${resp.status} ${url}`);
-  const buf = await resp.arrayBuffer();
+
+  // Stream the response body so we can report real byte progress.
+  const contentLength = Number(resp.headers.get("Content-Length") ?? 0);
+  let loaded = 0;
+  const chunks: Uint8Array[] = [];
+
+  if (resp.body) {
+    const reader = resp.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      onProgress?.(loaded, contentLength);
+    }
+  } else {
+    // Fallback: no ReadableStream (shouldn't happen in modern browsers).
+    const fallback = new Uint8Array(await resp.arrayBuffer());
+    chunks.push(fallback);
+    loaded = fallback.byteLength;
+    onProgress?.(loaded, loaded);
+  }
+
+  // Concatenate chunks into a single contiguous buffer.
+  const buf = new Uint8Array(loaded);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
 
   if (db) {
     try {
-      await idbPut(db, cacheKey, new Uint8Array(buf));
+      await idbPut(db, cacheKey, buf);
       console.info(`[drafter-cache] stored ${cacheKey} (${(buf.byteLength / 1e6).toFixed(1)} MB)`);
     } catch {
       // Non-fatal — store failure means next reload re-fetches, which is fine.
     }
   }
 
-  return buf;
+  return buf.buffer;
 }

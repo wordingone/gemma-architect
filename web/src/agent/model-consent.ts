@@ -30,9 +30,21 @@ function grantConsent(): void {
 // ---- Download progress strip ---------------------------------------------------
 
 let _progressStrip: HTMLElement | null = null;
+// Track both model and drafter completion before hiding strip (#780).
+let _modelDone = false;
+let _drafterDone = false;
+
+function injectPulseKeyframe(): void {
+  if (document.getElementById("model-dl-pulse-kf")) return;
+  const style = document.createElement("style");
+  style.id = "model-dl-pulse-kf";
+  style.textContent = "@keyframes model-dl-pulse{0%,100%{opacity:.35}50%{opacity:.9}}";
+  document.head.appendChild(style);
+}
 
 function ensureProgressStrip(): HTMLElement {
   if (_progressStrip) return _progressStrip;
+  injectPulseKeyframe();
   const strip = document.createElement("div");
   strip.id = "model-download-strip";
   strip.style.cssText = [
@@ -61,18 +73,23 @@ function ensureProgressStrip(): HTMLElement {
   return strip;
 }
 
-function updateProgress(pct: number, file: string): void {
+/** Update strip with deterministic progress (pct 0-100) or indeterminate (pct < 0). */
+function updateProgress(pct: number, label: string): void {
   const strip = ensureProgressStrip();
   strip.style.display = "flex";
   const bar = document.getElementById("model-dl-bar");
   const pctEl = document.getElementById("model-dl-pct");
   const labelEl = document.getElementById("model-dl-label");
-  if (bar) bar.style.width = `${Math.round(pct)}%`;
-  if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
-  if (labelEl) {
-    const shortFile = file ? ` · ${file.split("/").pop() ?? file}` : "";
-    labelEl.textContent = `GEMMA·4·E4B  ·  DOWNLOADING${shortFile}`;
+  if (pct >= 0) {
+    // Deterministic: real byte percentage.
+    if (bar) { bar.style.width = `${Math.round(pct)}%`; bar.style.animation = "none"; }
+    if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
+  } else {
+    // Indeterminate: ORT parse / IDB read — no byte count available.
+    if (bar) { bar.style.width = "100%"; bar.style.animation = "model-dl-pulse 1.2s ease-in-out infinite"; }
+    if (pctEl) pctEl.textContent = "—";
   }
+  if (labelEl && label) labelEl.textContent = label;
 }
 
 function hideProgressStrip(): void {
@@ -86,13 +103,27 @@ function hideProgressStrip(): void {
   }
 }
 
+function maybeHideStrip(): void {
+  if (_modelDone && _drafterDone) hideProgressStrip();
+}
+
 function wireProgressEvents(): void {
+  // Model download events (transformers.js per-file progress, 0-100 each file).
   window.addEventListener("agentmodel:loading", (e) => {
     const { progress, file } = (e as CustomEvent<{ progress: number; file?: string }>).detail;
-    updateProgress(progress ?? 0, file ?? "");
+    const shortFile = file ? file.split("/").pop() ?? file : "";
+    updateProgress(progress ?? 0, shortFile ? `GEMMA·4·E4B  ·  DOWNLOADING  ·  ${shortFile}` : "GEMMA·4·E4B  ·  DOWNLOADING");
   });
-  window.addEventListener("agentmodel:ready", () => hideProgressStrip(), { once: true });
-  window.addEventListener("agentmodel:error", () => hideProgressStrip(), { once: true });
+  window.addEventListener("agentmodel:ready", () => { _modelDone = true; maybeHideStrip(); }, { once: true });
+  window.addEventListener("agentmodel:error", () => { _modelDone = true; _drafterDone = true; hideProgressStrip(); }, { once: true });
+
+  // Drafter events (real ReadableStream byte progress + indeterminate ORT parse phase).
+  window.addEventListener("agentmodel:drafter:loading", (e) => {
+    const { progress } = (e as CustomEvent<{ progress: number; bytes: number; total: number }>).detail;
+    updateProgress(progress, progress >= 0 ? "DRAFTER  ·  DOWNLOADING" : "DRAFTER  ·  FINALIZING");
+  });
+  window.addEventListener("agentmodel:drafter:ready", () => { _drafterDone = true; maybeHideStrip(); }, { once: true });
+  window.addEventListener("agentmodel:drafter:error", () => { _drafterDone = true; maybeHideStrip(); }, { once: true });
 }
 
 // ---- Consent dialog ------------------------------------------------------------

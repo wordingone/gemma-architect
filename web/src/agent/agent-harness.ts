@@ -159,15 +159,23 @@ export function payloadHasMultimodal(req: AgentRequest): boolean {
 async function loadDrafter(): Promise<void> {
   if (_drafterLoadAttempted) return;
   _drafterLoadAttempted = true;
+  // Announce drafter download start so the loading strip can extend its lifetime.
+  window.dispatchEvent(new CustomEvent("agentmodel:drafter:loading", { detail: { progress: 0, bytes: 0, total: 0 } }));
   try {
     // onnxruntime-web is already loaded by transformers.js — access the global.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ort = (globalThis as any).ort ?? (await import("onnxruntime-web"));
-    // IDB-backed fetch: first call downloads 158 MB and caches; subsequent calls
+    // IDB-backed fetch: first call downloads 302 MB and caches; subsequent calls
     // read from IDB (~ms) skipping the network entirely. Bump DRAFTER_CACHE_KEY
     // to invalidate the cache when a new drafter export is deployed.
     const { fetchDrafterCached } = await import("./drafter-cache.js");
-    const drafterBuf = await fetchDrafterCached(DRAFTER_ONNX_URL, DRAFTER_CACHE_KEY);
+    const drafterBuf = await fetchDrafterCached(DRAFTER_ONNX_URL, DRAFTER_CACHE_KEY, (loaded, total) => {
+      window.dispatchEvent(
+        new CustomEvent("agentmodel:drafter:loading", { detail: { progress: total > 0 ? (loaded / total) * 100 : -1, bytes: loaded, total } }),
+      );
+    });
+    // ORT session.create has no progress callback — show indeterminate while parsing ONNX.
+    window.dispatchEvent(new CustomEvent("agentmodel:drafter:loading", { detail: { progress: -1, bytes: 0, total: 0 } }));
     _drafterSession = await ort.InferenceSession.create(drafterBuf, {
       executionProviders: ["webgpu", "wasm"],
       // Drafter runs on WebGPU EP; output tensors are GPU-resident by default.
@@ -179,6 +187,7 @@ async function loadDrafter(): Promise<void> {
     console.info("[agent-harness] Drafter ONNX loaded — MTP spec-decode active (#738).");
     // Signal for external tooling (A/B scripts, verify harness) that drafter is ready.
     (globalThis as any).__drafterLoaded = true;
+    window.dispatchEvent(new CustomEvent("agentmodel:drafter:ready"));
   } catch (e) {
     // AC5: graceful fallback — network error, version mismatch, model not hosted yet.
     console.warn(
@@ -187,6 +196,7 @@ async function loadDrafter(): Promise<void> {
     );
     _drafterSession = null;
     (globalThis as any).__drafterLoaded = false;
+    window.dispatchEvent(new CustomEvent("agentmodel:drafter:error", { detail: (e as Error).message?.slice(0, 120) }));
   }
 }
 
@@ -300,12 +310,15 @@ async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown 
 
 /** Fire-and-forget model prefetch + system-prompt KV warmup (#492).
  *  Safe to call early (prompt tab focus / DOMContentLoaded).
- *  Badge flow: PRIMING → READY (remote) | LOADING → LIVE → PRIMING → READY (on-device). */
+ *  Badge flow: PRIMING → READY (remote) | LOADING → LIVE → PRIMING → READY (on-device).
+ *  Also starts drafter load at boot so the loading strip covers drafter download (#780). */
 export function prefetchModel(): void {
   if (REMOTE_URL) {
     void prefillSystemPromptAsync();
     return;
   }
+  // Start drafter alongside model so boot loading strip covers both downloads (#780).
+  _drafterLoadPromise ??= loadDrafter();
   getModel()
     .then(() => prefillSystemPromptAsync())
     .catch(() => { /* errors surface on first runAgentTurn */ });
