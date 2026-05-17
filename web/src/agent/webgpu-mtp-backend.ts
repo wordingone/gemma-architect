@@ -16,14 +16,16 @@
 //            num_logits_to_keep [] int64, past_key_values.N.key/value [B,2,past,hd]
 //   Outputs: logits [B,keep,262144], present.N.key/value [B,2,S,hd]
 
-const NUM_KV_LAYERS   = 24;
-const NUM_KV_HEADS    = 2;    // confirmed: OrtRun "index 1 Got: 1 Expected: 2"; ONNX static dim
-const LAST_SLIDING    = 22;   // layer 22: last sliding-attn layer [B,2,past,256] → drafter sliding_k/v
-const LAST_FULL       = 23;   // layer 23: last full-attn layer [B,2,past,512] → drafter full_k/v
-const HIDDEN_SIZE     = 1536;
-const VOCAB_SIZE      = 262144;
+const NUM_KV_LAYERS      = 24;
+const NUM_KV_HEADS       = 2;   // confirmed: OrtRun "index 1 Got: 1 Expected: 2"; ONNX static dim
+const LAST_SLIDING       = 22;  // layer 22: last sliding-attn layer [B,2,past,256] → drafter sliding_k/v
+const LAST_FULL          = 23;  // layer 23: last full-attn layer [B,2,past,512] → drafter full_k/v
+const HIDDEN_SIZE        = 1536;
+const VOCAB_SIZE         = 262144;
 // Full-attention layers (head_dim=512): {5,11,17,23} — every 6th from layer 5. Confirmed via ONNX parse.
 const FULL_ATTN: Set<number> = new Set([5, 11, 17, 23]);
+// Drafter sliding window: input dim[2] is static 16 — confirmed by OrtRun "Got: 936 Expected: 16".
+const DRAFTER_KV_WINDOW  = 16;
 
 export interface MtpSessions {
   embed: unknown;    // embed_tokens ORT session
@@ -123,7 +125,7 @@ function fp16ToFloat32(h: number): number {
 }
 
 // Drafter expects float32 with 1 KV head; decoder outputs fp16 with 2 KV heads.
-// This helper slices head 0 and converts fp16 → fp32 in one pass.
+// Full S version (kept for reference; spec-decode uses the tail variant below).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function fp16Head0ToFp32(kvTensor: any, ort: any): any {
   const [B, , S, H] = kvTensor.dims as number[];  // [1, 2, S, hd]
@@ -131,6 +133,21 @@ function fp16Head0ToFp32(kvTensor: any, ort: any): any {
   const f32 = new Float32Array(S * H);
   for (let i = 0; i < S * H; i++) f32[i] = fp16ToFloat32(src[i]);
   return new ort.Tensor("float32", f32, [B, 1, S, H]);
+}
+
+// Drafter KV window is fixed at W tokens (static ONNX dim, confirmed by OrtRun "Got: 936 Expected: 16").
+// Slices the last W tokens from head-0 of the decoder fp16 cache and returns float32 [B, 1, W, H].
+// Zero-pads at the front when total seq_len < W (early prefill).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function fp16Head0ToFp32Tail(kvTensor: any, W: number, ort: any): any {
+  const [B, , S, H] = kvTensor.dims as number[];  // [1, 2, S, hd]
+  const src = kvTensor.data as Uint16Array;        // fp16: head-0 data occupies first S*H elements
+  const f32 = new Float32Array(W * H);             // zero-filled → implicit zero-pad when S < W
+  const copyLen = Math.min(S, W);
+  const srcOff  = (S - copyLen) * H;              // start of last `copyLen` tokens in head-0
+  const dstOff  = (W - copyLen) * H;              // write at tail of output (zero-pad at front)
+  for (let i = 0; i < copyLen * H; i++) f32[dstOff + i] = fp16ToFloat32(src[srcOff + i]);
+  return new ort.Tensor("float32", f32, [B, 1, W, H]);
 }
 
 // ── Main export: spec-decode loop ────────────────────────────────────────────
@@ -220,11 +237,11 @@ export async function runMtpSpecDecode(
   while (tokens.length < maxNew) {
     const K = Math.min(draftK, maxNew - tokens.length);
 
-    // Drafter needs fp32 1-head KV; decoder cache holds fp16 2-head. Slice head-0, cast.
-    const slidingK = fp16Head0ToFp32(kvCache[`present.${LAST_SLIDING}.key`],   O);
-    const slidingV = fp16Head0ToFp32(kvCache[`present.${LAST_SLIDING}.value`], O);
-    const fullK    = fp16Head0ToFp32(kvCache[`present.${LAST_FULL}.key`],      O);
-    const fullV    = fp16Head0ToFp32(kvCache[`present.${LAST_FULL}.value`],    O);
+    // Drafter KV window = 16 tokens (static ONNX dim). Slice tail + fp16→fp32 + head-0.
+    const slidingK = fp16Head0ToFp32Tail(kvCache[`present.${LAST_SLIDING}.key`],   DRAFTER_KV_WINDOW, O);
+    const slidingV = fp16Head0ToFp32Tail(kvCache[`present.${LAST_SLIDING}.value`], DRAFTER_KV_WINDOW, O);
+    const fullK    = fp16Head0ToFp32Tail(kvCache[`present.${LAST_FULL}.key`],      DRAFTER_KV_WINDOW, O);
+    const fullV    = fp16Head0ToFp32Tail(kvCache[`present.${LAST_FULL}.value`],    DRAFTER_KV_WINDOW, O);
 
     // ── 2a. Draft K tokens with drafter ──────────────────────────────────────
     const draftTokens: number[] = [];
