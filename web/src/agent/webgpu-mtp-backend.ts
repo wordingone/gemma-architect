@@ -4,25 +4,26 @@
 // transformers.js — no extra model download. Drafter session passed in from
 // agent-harness.ts (loaded via drafter-cache.ts, #750).
 //
-// Decoder ONNX structure (onnx-community/gemma-4-E2B-it-ONNX, q4):
-//   24 KV layers (0..23); confirmed via decoder.inputNames → 48 inputs (24×{key,value}).
-//   num_kv_heads=2 (confirmed by OrtRun index-1 error). head_dim varies per layer type:
-//     Sliding layers: head_dim=256. Full-attention layers: head_dim=512.
-//   Full-attention at {5, 10, 15, 20} — every 5th from layer 5 (confirmed empirically).
-//   LAST_SLIDING=23, LAST_FULL=20 → drafter sliding_k/v and full_k/v inputs.
+// Decoder ONNX structure (onnx-community/gemma-4-E4B-it-ONNX, q4):
+//   Authoritative: ONNX topology parse of decoder_model_merged_q4.onnx (814 KB, no weights).
+//   24 KV layers (0..23); num_kv_heads=2 (static ONNX dim, confirmed by OrtRun index-1 error).
+//   head_dim varies per layer: sliding=256, full-attention=512.
+//   Full-attention layers: {5, 11, 17, 23} — every 6th from layer 5.
+//   LAST_SLIDING=22 (layer 22: sliding, hd=256), LAST_FULL=23 (layer 23: full, hd=512).
+//   See web/src/agent/decoder-kv-shapes.json for complete per-layer table.
 //   Inputs:  inputs_embeds [B,S,1536], per_layer_inputs [B,S,35,256],
 //            attention_mask [B,S+past] int64, position_ids [B,S] int64,
 //            num_logits_to_keep [] int64, past_key_values.N.key/value [B,2,past,hd]
 //   Outputs: logits [B,keep,262144], present.N.key/value [B,2,S,hd]
 
 const NUM_KV_LAYERS   = 24;
-const NUM_KV_HEADS    = 2;    // confirmed: OrtRun "index 1 Got: 1 Expected: 2"
-const LAST_SLIDING    = 23;   // last sliding-attn layer → drafter sliding_k/v
-const LAST_FULL       = 20;   // last full-attn layer → drafter full_k/v
+const NUM_KV_HEADS    = 2;    // confirmed: OrtRun "index 1 Got: 1 Expected: 2"; ONNX static dim
+const LAST_SLIDING    = 22;   // layer 22: last sliding-attn layer [B,2,past,256] → drafter sliding_k/v
+const LAST_FULL       = 23;   // layer 23: last full-attn layer [B,2,past,512] → drafter full_k/v
 const HIDDEN_SIZE     = 1536;
 const VOCAB_SIZE      = 262144;
-// head_dim=512 at full-attn layers {5,10,15,20}; 256 elsewhere — confirmed empirically.
-const FULL_ATTN: Set<number> = new Set([5, 10, 15, 20]);
+// Full-attention layers (head_dim=512): {5,11,17,23} — every 6th from layer 5. Confirmed via ONNX parse.
+const FULL_ATTN: Set<number> = new Set([5, 11, 17, 23]);
 
 export interface MtpSessions {
   embed: unknown;    // embed_tokens ORT session
