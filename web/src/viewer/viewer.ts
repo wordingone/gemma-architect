@@ -18,7 +18,7 @@ import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
 import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, type TransformSnapshot } from "../history.js";
-import { dissolveGroupForMesh, nearestGroupMember } from "../tools/join-groups.js";
+import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted } from "../tools/join-groups.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -459,6 +459,11 @@ export class Viewer {
             if (fragment && !this.subTargetObject) emitChainFragment(fragment);
             // Re-sync proxy from new target + current offset.
             this.syncPivot();
+            // After a structural mesh is moved, re-evaluate CSG join groups so
+            // elements that now overlap other structural elements rejoin automatically.
+            if (!this.subTargetObject && this.targetObject instanceof THREE.Mesh) {
+              onElementCommitted(this.targetObject, this.scene);
+            }
             // Record transform on undo stack. Skip sub-object drags (control-point edits
             // rebuild geometry in-place and don't have a clean before/after snapshot).
             if (_dragStartSnapshot && !this.subTargetObject) {
@@ -2077,6 +2082,36 @@ export class Viewer {
   getActiveCamera(): THREE.Camera {
     const perspPane = this.panes.find(p => p.view === "persp");
     return perspPane?.camera ?? this.camera;
+  }
+
+  /** Raycast for hover highlighting — uses pane-rect NDC (same as selection picker).
+   *  Returns the hit Object3D (possibly a CSG display mesh) or null. */
+  raycastForHover(clientX: number, clientY: number): THREE.Object3D | null {
+    const hitPane = this.panes.find(p => {
+      const r = p.el.getBoundingClientRect();
+      return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+    });
+    if (!hitPane) return null;
+    const pr = hitPane.el.getBoundingClientRect();
+    const ndcX = ((clientX - pr.left) / pr.width) * 2 - 1;
+    const ndcY = -((clientY - pr.top) / pr.height) * 2 + 1;
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), hitPane.camera);
+    const gizmoSet = new Set<THREE.Object3D>(this.gizmos);
+    const pickables = this.scene.children.filter(
+      c => c !== this.grid && c !== this.axes && !(c instanceof THREE.Sprite) &&
+           !(c instanceof THREE.DirectionalLight) && !(c instanceof THREE.AmbientLight) &&
+           !gizmoSet.has(c) && c !== this.pivotProxy && c !== this._cplaneGizmo.group,
+    );
+    const hits = this.raycaster.intersectObjects(pickables, true);
+    for (const h of hits) {
+      const o = h.object;
+      // Skip invisible objects unless they're a join-display mesh.
+      const isDisplay = !!o.userData.isJoinDisplay;
+      if (!o.visible && !isDisplay) continue;
+      if (o.userData.noSnap && !isDisplay) continue;
+      return o;
+    }
+    return null;
   }
 
   // noHistory: true opts out of the automatic undo push. Use for callers that
