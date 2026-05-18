@@ -397,15 +397,17 @@ export function restoreVoidCut(
     if (uid === hostId || obj.uuid === hostId) hostGroup = obj as THREE.Group;
   });
   if (!hostGroup) return null;
+  // TS control-flow loses the narrowing after the traverse closure — re-assert.
+  const hg = hostGroup as THREE.Group;
 
   // Get stored dims — written by cutRectVoidFromBoxMesh above.
-  const dims = (hostGroup.userData as Record<string, unknown>).originalWallDims as
+  const dims = (hg.userData as Record<string, unknown>).originalWallDims as
     { w: number; d: number; h: number } | undefined;
   if (!dims) return null;
 
   // Get material from first child Mesh.
   let srcMat: THREE.Material | null = null;
-  hostGroup.traverse((child) => {
+  hg.traverse((child) => {
     if (!srcMat && child instanceof THREE.Mesh) {
       srcMat = Array.isArray(child.material) ? child.material[0] : child.material as THREE.Material;
     }
@@ -415,19 +417,19 @@ export function restoreVoidCut(
   // Rebuild solid wall.
   const geom = new THREE.BoxGeometry(dims.w, dims.d, dims.h);
   const newWall = new THREE.Mesh(geom, mat);
-  newWall.position.copy(hostGroup.position);
-  newWall.quaternion.copy(hostGroup.quaternion);
-  newWall.scale.copy(hostGroup.scale);
-  newWall.userData = { ...hostGroup.userData };
+  newWall.position.copy(hg.position);
+  newWall.quaternion.copy(hg.quaternion);
+  newWall.scale.copy(hg.scale);
+  newWall.userData = { ...hg.userData };
   delete (newWall.userData as Record<string, unknown>).originalWallDims;
   newWall.updateMatrix();
   newWall.updateMatrixWorld(true);
 
   // Swap Group → Mesh in scene.
-  const parent = hostGroup.parent;
+  const parent = hg.parent;
   if (!parent) return null;
-  parent.remove(hostGroup);
+  parent.remove(hg);
   parent.add(newWall);
 
-  return { newWall, oldGroup: hostGroup };
+  return { newWall, oldGroup: hg };
 }
