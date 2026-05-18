@@ -13,6 +13,8 @@
 .skill-canvas-palette {
   grid-row: 1;
   grid-column: 1;
+  width: 110px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -52,6 +54,8 @@
 .skill-canvas-viewport {
   grid-row: 1;
   grid-column: 2;
+  flex: 1;
+  min-width: 0;
   position: relative;
   overflow: hidden;
   background: var(--paper-2);

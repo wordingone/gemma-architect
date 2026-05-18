@@ -2280,11 +2280,6 @@ function buildSkillsTabBody(): HTMLElement {
 
   _canvasInstance.setNodeSelectHandler((nodeId) => { _renderNodeInspector(nodeId); });
 
-  window.addEventListener("record:complex-stop", () => {
-    const promptTab = document.querySelector<HTMLElement>('[data-tab="prompt"]');
-    promptTab?.click();
-  });
-
   nodesCol.appendChild(canvasPane);
 
   // ── Right: inspector sidecar (resizable 120-400px) ────────────────────────

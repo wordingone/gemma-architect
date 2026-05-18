@@ -1111,21 +1111,11 @@ export class SkillCanvas {
   // ── Recording classification & save ───────────────────────────────────────
 
   private _classifyAndSave(artifact: RecordingArtifact): void {
-    const dispatches = artifact.events.filter(e => e.kind === "dispatch").length;
-    const toolChanges = artifact.events.filter(e => e.kind === "tool").length;
-    const isSimple = artifact.duration_ms <= 30_000 && dispatches <= 8 && toolChanges <= 1;
-
-    if (isSimple && dispatches > 0) {
-      const steps: SkillStep[] = (artifact.events.filter(e => e.kind === "dispatch") as Array<{ ts: number; kind: "dispatch"; verb: string; args: Record<string, unknown>; resultUuid?: string }>)
-        .map(e => ({ verb: e.verb, args: e.args }));
-      openSaveSkillModal(steps);
-      void this.refreshPalette();
-    } else {
-      window.dispatchEvent(new CustomEvent("record:complex-stop", {
-        bubbles: true,
-        detail: { artifact },
-      }));
-    }
+    const steps: SkillStep[] = (artifact.events.filter(e => e.kind === "dispatch") as Array<{ ts: number; kind: "dispatch"; verb: string; args: Record<string, unknown>; resultUuid?: string }>)
+      .map(e => ({ verb: e.verb, args: e.args }));
+    if (steps.length === 0) return;
+    openSaveSkillModal(steps);
+    void this.refreshPalette();
   }
 
   // ── Run & Compile ──────────────────────────────────────────────────────────
