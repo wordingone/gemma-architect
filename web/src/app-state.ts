@@ -100,6 +100,15 @@ export function hydrateFromStorage(): void {
     else if (v === "day") setState("night", false);
   } catch { /* ignore */ }
   try {
+    // Version-gated unit preference: if stored version doesn't match, clear the
+    // saved unit pref so the app-state default (imperial) takes effect cleanly.
+    const UNITS_VERSION = "2026-05-18-imperial-default";
+    const storedVersion = localStorage.getItem("gemma-cad.units.version");
+    if (storedVersion !== UNITS_VERSION) {
+      localStorage.removeItem("gemma-cad.units");
+      localStorage.removeItem("gemma-architect.units");
+      localStorage.setItem("gemma-cad.units.version", UNITS_VERSION);
+    }
     const u = localStorage.getItem("gemma-cad.units") ?? localStorage.getItem("gemma-architect.units");
     if (u === "imperial" || u === "metric") setState("unitSystem", u);
   } catch { /* ignore */ }
