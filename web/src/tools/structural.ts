@@ -369,9 +369,10 @@ export function buildRoof(
       group.add(hr);
     }
 
-    // Sheathing planes for front/back slopes
+    // Sheathing planes for front/back slopes.
+    // frontRx = pitch of the front face; local Y aligns with slope → rotation.x = frontRx.
     const frontSlopeLen = Math.sqrt(hd ** 2 + hipRidgeH ** 2);
-    const frontRx = Math.PI / 2 + Math.atan2(hipRidgeH, hd);
+    const frontRx = Math.atan2(hipRidgeH, hd);  // was wrongly Math.PI/2 + atan2
     const sheathFront = new THREE.Mesh(
       new THREE.BoxGeometry(hw * 2, frontSlopeLen, 0.025), sheathMat.clone());
     sheathFront.userData.ifcClass = "IfcCovering";
@@ -384,18 +385,21 @@ export function buildRoof(
     sheathBack.position.set(0, hd / 2, hipRidgeH / 2);
     group.add(sheathBack);
 
-    // Sheathing for side slopes (if landscape: short sides)
+    // Sheathing for side slopes (left/right): slope in X-Z plane → pure rotation.y.
+    // Local X aligns with slope direction (hw, 0, hipRidgeH)/sideSlopeLen.
+    // rotation.y = -sidePitch for left (eave at x=-hw→ridge at x=0).
     const sideSlopeLen = Math.sqrt(hw ** 2 + hipRidgeH ** 2);
-    const sideRx = Math.PI / 2 + Math.atan2(hipRidgeH, hw);
+    const sidePitch = Math.atan2(hipRidgeH, hw);
     const sheathLeft = new THREE.Mesh(
-      new THREE.BoxGeometry(hd * 2, sideSlopeLen, 0.025), sheathMat.clone());
+      new THREE.BoxGeometry(sideSlopeLen, hd * 2, 0.025), sheathMat.clone());
     sheathLeft.userData.ifcClass = "IfcCovering";
-    sheathLeft.rotation.y = Math.PI / 2;
-    sheathLeft.rotation.x = sideRx;
+    sheathLeft.rotation.y = -sidePitch;
     sheathLeft.position.set(-hw / 2, 0, hipRidgeH / 2);
     group.add(sheathLeft);
-    const sheathRight = sheathLeft.clone();
-    (sheathRight.material as THREE.Material) = (sheathLeft.material as THREE.Material).clone();
+    const sheathRight = new THREE.Mesh(
+      new THREE.BoxGeometry(sideSlopeLen, hd * 2, 0.025), sheathMat.clone());
+    sheathRight.userData.ifcClass = "IfcCovering";
+    sheathRight.rotation.y = Math.PI + sidePitch;  // mirror: eave at x=+hw→ridge at x=0
     sheathRight.position.set(hw / 2, 0, hipRidgeH / 2);
     group.add(sheathRight);
 
@@ -407,22 +411,23 @@ export function buildRoof(
     const spanHalf = landscape ? hd : hw;
     // For the ridge length dimension: hw (landscape) or hd (portrait).
     const ridgeLenHalf = landscape ? hw : hd;
-    const rafterLen = Math.sqrt(spanHalf ** 2 + ridgeH ** 2);
+    // ridgeH scoped to the actual span (portrait uses hw, not hd).
+    const rH = spanHalf * Math.tan(pitchRad);
+    const rafterLen = Math.sqrt(spanHalf ** 2 + rH ** 2);
     const rafterW = 0.05, rafterD = 0.15;
     const rafterSpacing = 0.5;
     const nRafters = Math.max(4, Math.round(ridgeLenHalf * 2 / rafterSpacing) + 1);
 
-    // Rafter rotation (x-axis) for front slope:
-    // Box Z must align with direction from ridge toward eave.
-    // For landscape: direction (0, -spanHalf, -ridgeH) → Rx = π/2 + pitchRad.
-    // For portrait:  direction (-spanHalf, 0, -ridgeH) → Ry = -(π/2 + pitchRad).
-    const slopeRx = Math.PI / 2 + pitchRad;
+    // Rafter rotation: BoxGeometry local Z aligns with slope direction.
+    // For landscape front: local Z → (0, -cos(pitch), -sin(pitch)) via rotation.x = π/2+pitch.
+    // This correctly spans from ridge (0, 0, rH) to eave (0, −spanHalf, 0).
+    const slopeRx = Math.PI / 2 + pitchRad;  // rafter only — do NOT use for sheathing
 
     // Ridge beam
     const ridgeBeam = landscape
       ? member(ridgeLenHalf * 2, 0.10, 0.12, frameMat.clone())
       : member(0.10, ridgeLenHalf * 2, 0.12, frameMat.clone());
-    ridgeBeam.position.set(0, 0, ridgeH + 0.06);
+    ridgeBeam.position.set(0, 0, rH + 0.06);
     group.add(ridgeBeam);
 
     // Wall plates (at wall-top line, just inside the eaves)
@@ -475,56 +480,61 @@ export function buildRoof(
     for (let i = 0; i < nRafters; i++) {
       const axialPos = -ridgeLenHalf + i * (ridgeLenHalf * 2 / (nRafters - 1));
 
-      // Front slope rafter
+      // Front slope rafter — hidden by default; visible under section/cutaway only.
       const rfA = member(rafterW, rafterD, rafterLen, frameMat.clone());
+      rfA.visible = false;
       if (landscape) {
         rfA.rotation.x = slopeRx;
-        rfA.position.set(axialPos, -spanHalf / 2, ridgeH / 2);
+        rfA.position.set(axialPos, -spanHalf / 2, rH / 2);
       } else {
         rfA.rotation.y = -slopeRx;
-        rfA.position.set(-spanHalf / 2, axialPos, ridgeH / 2);
+        rfA.position.set(-spanHalf / 2, axialPos, rH / 2);
       }
       group.add(rfA);
 
-      // Back slope rafter (mirror)
+      // Back slope rafter (mirror) — also hidden.
       const rfB = member(rafterW, rafterD, rafterLen, frameMat.clone());
+      rfB.visible = false;
       if (landscape) {
         rfB.rotation.x = -slopeRx;
-        rfB.position.set(axialPos, spanHalf / 2, ridgeH / 2);
+        rfB.position.set(axialPos, spanHalf / 2, rH / 2);
       } else {
         rfB.rotation.y = slopeRx;
-        rfB.position.set(spanHalf / 2, axialPos, ridgeH / 2);
+        rfB.position.set(spanHalf / 2, axialPos, rH / 2);
       }
       group.add(rfB);
     }
 
-    // Sheathing (2 sloped planes, one per slope)
+    // Sheathing: local Y aligns with slope direction → rotation = pitchRad (not slopeRx).
+    // slopeRx (π/2+pitch) is correct for rafters (local Z = length) but wrong for
+    // sheathing (local Y = slope length). With rotation.x = pitchRad, local Y →
+    // (0, cos(pitch), sin(pitch)) = slope direction; eave/ridge endpoints verified.
     const sheathA = landscape
       ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, rafterLen, 0.025), sheathMat.clone())
       : new THREE.Mesh(new THREE.BoxGeometry(rafterLen, ridgeLenHalf * 2, 0.025), sheathMat.clone());
     sheathA.userData.ifcClass = "IfcCovering";
     if (landscape) {
-      sheathA.rotation.x = slopeRx;
-      sheathA.position.set(0, -spanHalf / 2, ridgeH / 2);
+      sheathA.rotation.x = pitchRad;
+      sheathA.position.set(0, -spanHalf / 2, rH / 2);
     } else {
-      sheathA.rotation.y = -slopeRx;
-      sheathA.position.set(-spanHalf / 2, 0, ridgeH / 2);
+      sheathA.rotation.y = -pitchRad;
+      sheathA.position.set(-spanHalf / 2, 0, rH / 2);
     }
     group.add(sheathA);
 
     const sheathB = sheathA.clone();
     (sheathB.material as THREE.Material) = (sheathA.material as THREE.Material).clone();
     if (landscape) {
-      sheathB.rotation.x = -slopeRx;
-      sheathB.position.set(0, spanHalf / 2, ridgeH / 2);
+      sheathB.rotation.x = -pitchRad;
+      sheathB.position.set(0, spanHalf / 2, rH / 2);
     } else {
-      sheathB.rotation.y = slopeRx;
-      sheathB.position.set(spanHalf / 2, 0, ridgeH / 2);
+      sheathB.rotation.y = pitchRad;
+      sheathB.position.set(spanHalf / 2, 0, rH / 2);
     }
     group.add(sheathB);
 
     // Gable-end fill panels (vertical face at each end)
-    const gableH = ridgeH;
+    const gableH = rH;
     const gableLen = spanHalf;
     const gableA_geom = new THREE.BufferGeometry();
     const gv = landscape
