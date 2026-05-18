@@ -185,45 +185,192 @@ export function buildColumn(p: { x: number; y: number }): { mesh: THREE.Mesh; ch
   return { mesh, chain };
 }
 
-export function buildStair(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const run = Math.sqrt(dx * dx + dy * dy);
-  const tread = DEFAULT_STAIR_TREAD;
-  const rise = DEFAULT_STAIR_RISE;
-  const width = DEFAULT_STAIR_WIDTH;
-  const steps = Math.max(2, Math.floor(run / tread));
-  const actualTread = run / steps;
-  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
-  const stepGeoms: THREE.BoxGeometry[] = [];
-  for (let i = 0; i < steps; i++) {
-    const stepH = (i + 1) * rise;
-    const g = new THREE.BoxGeometry(actualTread, width, stepH);
-    g.translate(i * actualTread + actualTread / 2, 0, stepH / 2);
-    stepGeoms.push(g);
+export interface StairParams {
+  type?: "straight" | "L" | "U";        // primary shape selector
+  shape?: "straight" | "L" | "U" | "switchback"; // legacy alias
+  count?: number;    // total tread count; takes priority over targetHeight/riserHeight
+  rise?: number;     // total storey rise in m; alias for targetHeight
+  width?: number;
+  riserHeight?: number;
+  treadDepth?: number;
+  targetHeight?: number;
+  landingDepth?: number;
+}
+
+// Plan-view footprint bbox (in world XY) — returned so the handler can cut a slab void.
+export interface StairFootprint { minX: number; minY: number; maxX: number; maxY: number }
+
+function _flightGeoms(nRisers: number, riser: number, tread: number, stairW: number, zBase: number): THREE.BufferGeometry[] {
+  const geoms: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < nRisers; i++) {
+    const cumH = zBase + (i + 1) * riser;
+    const g = new THREE.BoxGeometry(tread, stairW, cumH);
+    g.translate(i * tread + tread / 2, stairW / 2, cumH / 2);
+    geoms.push(g);
   }
-  const merged = mergeGeometries(stepGeoms, false);
-  stepGeoms.forEach((g) => g.dispose());
+  return geoms;
+}
+
+function _mergeFlight(geoms: THREE.BufferGeometry[]): THREE.Mesh {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc8b8a2, roughness: 0.7, metalness: 0.0 });
+  const merged = mergeGeometries(geoms, false);
+  geoms.forEach((g) => g.dispose());
   if (!merged) {
-    const fallback = new THREE.BoxGeometry(run, width, steps * rise);
-    fallback.translate(run / 2, 0, (steps * rise) / 2);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xb89968, roughness: 0.6, metalness: 0.05 });
-    const mesh = new THREE.Mesh(fallback, mat);
-    mesh.position.set(a.x, a.y, 0);
-    mesh.rotation.z = (angDeg * Math.PI) / 180;
-    mesh.userData.kind = "compound";
-    mesh.userData.creator = "stair";
-    const chain = `// stair: ${steps} steps, fallback bbox — compound([...risers,...treads])`;
-    return { mesh, chain };
+    const fb = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    return new THREE.Mesh(fb, mat);
   }
-  const mat = new THREE.MeshStandardMaterial({ color: 0xb89968, roughness: 0.6, metalness: 0.05 });
-  const mesh = new THREE.Mesh(merged, mat);
-  mesh.position.set(a.x, a.y, 0);
-  mesh.rotation.z = (angDeg * Math.PI) / 180;
-  mesh.userData.kind = "compound";
-  mesh.userData.creator = "stair";
-  const chain = `const stair = compound([/* ${steps} risers + ${steps} treads — TODO kernel mapping */]).rotate(${round(angDeg)}, [0, 0, 0], [0, 0, 1]).translate([${round(a.x)}, ${round(a.y)}, 0]);`;
-  return { mesh, chain };
+  return new THREE.Mesh(merged, mat);
+}
+
+export function buildStair(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  params?: StairParams,
+): { group: THREE.Group; chain: string; footprint: StairFootprint } {
+  const shape       = params?.type ?? params?.shape ?? "straight";
+  const stairW      = params?.width        ?? DEFAULT_STAIR_WIDTH;
+  const tread       = params?.treadDepth   ?? DEFAULT_STAIR_TREAD;
+  const landingD    = params?.landingDepth ?? 1.0;
+  const targetH     = params?.rise ?? params?.targetHeight ?? 3.0;
+  const nRisers     = params?.count != null ? Math.max(2, params.count) : Math.max(2, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
+  const actualRiser = targetH / nRisers;
+
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc8b8a2, roughness: 0.7, metalness: 0.0 });
+  const group = new THREE.Group();
+  group.position.set(a.x, a.y, 0);
+  group.rotation.z = (angDeg * Math.PI) / 180;
+  group.userData.kind = "compound";
+  group.userData.creator = "stair";
+
+  let footLocal: { minX: number; minY: number; maxX: number; maxY: number };
+  let chainDesc: string;
+
+  if (shape === "U" || shape === "switchback") {
+    // 3-flight U-stair with 2 quarter-landings (common case):
+    //   Flight 1: +Y direction (y=0 → y=f1Run), x=0..stairW
+    //   Landing 1: square platform at corner
+    //   Flight 2: +X direction (x=0 → x=f2Run), y=f1Run..f1Run+stairW
+    //   Landing 2: square platform at far corner
+    //   Flight 3: -Y direction (y=f1Run → y=0), x=f2Run..f2Run+stairW
+    // Plan view: open U shape with legs at x=0 and x=f2Run+stairW, closed at y=f1Run.
+    const n1 = Math.floor(nRisers / 3);
+    const n2 = Math.floor(nRisers / 3);
+    const n3 = nRisers - n1 - n2;
+    const f1Run = n1 * tread;   // leg 1 depth (in Y)
+    const f2Run = n2 * tread;   // bridge width (in X)
+
+    // Flight 1: steps going in +Y, centred at x=stairW/2
+    const addFlight1 = () => {
+      const geoms: THREE.BufferGeometry[] = [];
+      for (let i = 0; i < n1; i++) {
+        const cumH = (i + 1) * actualRiser;
+        const g = new THREE.BoxGeometry(stairW, tread, cumH);
+        g.translate(stairW / 2, i * tread + tread / 2, cumH / 2);
+        geoms.push(g);
+      }
+      group.add(_mergeFlight(geoms));
+    };
+    addFlight1();
+
+    // Landing 1 at corner (y=f1Run, x=0)
+    const ldg1Geo = new THREE.BoxGeometry(stairW, landingD, DEFAULT_SLAB_THICKNESS);
+    ldg1Geo.translate(stairW / 2, f1Run + landingD / 2, n1 * actualRiser + DEFAULT_SLAB_THICKNESS / 2);
+    group.add(new THREE.Mesh(ldg1Geo, mat));
+
+    // Flight 2: steps going in +X, at y=f1Run+landingD
+    const addFlight2 = () => {
+      const geoms: THREE.BufferGeometry[] = [];
+      for (let i = 0; i < n2; i++) {
+        const cumH = n1 * actualRiser + (i + 1) * actualRiser;
+        const g = new THREE.BoxGeometry(tread, stairW, cumH);
+        g.translate(i * tread + tread / 2, f1Run + landingD + stairW / 2, cumH / 2);
+        geoms.push(g);
+      }
+      group.add(_mergeFlight(geoms));
+    };
+    addFlight2();
+
+    // Landing 2 at far corner (x=f2Run, y=f1Run+landingD)
+    const ldg2Geo = new THREE.BoxGeometry(landingD, stairW, DEFAULT_SLAB_THICKNESS);
+    ldg2Geo.translate(f2Run + landingD / 2, f1Run + landingD + stairW / 2, (n1 + n2) * actualRiser + DEFAULT_SLAB_THICKNESS / 2);
+    group.add(new THREE.Mesh(ldg2Geo, mat));
+
+    // Flight 3: steps going in -Y (back toward y=0), at x=f2Run+landingD
+    const addFlight3 = () => {
+      const geoms: THREE.BufferGeometry[] = [];
+      for (let i = 0; i < n3; i++) {
+        const cumH = (n1 + n2) * actualRiser + (i + 1) * actualRiser;
+        const g = new THREE.BoxGeometry(stairW, tread, cumH);
+        g.translate(f2Run + landingD + stairW / 2, f1Run + landingD - i * tread - tread / 2, cumH / 2);
+        geoms.push(g);
+      }
+      group.add(_mergeFlight(geoms));
+    };
+    addFlight3();
+    const totalX = f2Run + landingD + stairW;
+    const totalY = f1Run + landingD + stairW;
+    footLocal = { minX: 0, minY: 0, maxX: totalX, maxY: totalY };
+    chainDesc = `U(flights:${n1}+${n2}+${n3},tread:${round(tread)},riser:${round(actualRiser)},w:${round(stairW)})`;
+
+  } else if (shape === "L") {
+    // L-shape: flight 1 goes +X, landing, flight 2 goes +Y (perpendicular).
+    const n1 = Math.floor(nRisers / 2);
+    const n2 = nRisers - n1;
+    const f1Run = n1 * tread;
+    const f2Run = n2 * tread;
+
+    const f1Geoms = _flightGeoms(n1, actualRiser, tread, stairW, 0);
+    group.add(_mergeFlight(f1Geoms));
+
+    const landingGeo = new THREE.BoxGeometry(stairW, stairW, DEFAULT_SLAB_THICKNESS);
+    landingGeo.translate(f1Run + stairW / 2, stairW / 2, n1 * actualRiser + DEFAULT_SLAB_THICKNESS / 2);
+    group.add(new THREE.Mesh(landingGeo, mat));
+
+    // Flight 2: perpendicular (+Y direction from landing). Steps go in Y instead of X.
+    const f2Geoms: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < n2; i++) {
+      const cumH = n1 * actualRiser + (i + 1) * actualRiser;
+      const g = new THREE.BoxGeometry(stairW, tread, cumH);
+      g.translate(f1Run + stairW / 2, i * tread + tread / 2, cumH / 2);
+      f2Geoms.push(g);
+    }
+    group.add(_mergeFlight(f2Geoms));
+
+    footLocal = { minX: 0, minY: 0, maxX: f1Run + stairW, maxY: f2Run };
+    chainDesc = `L(flights:${n1}+${n2},tread:${round(tread)},riser:${round(actualRiser)},w:${round(stairW)})`;
+
+  } else {
+    // Straight: N steps going in +X direction.
+    const run = nRisers * tread;
+    const geoms = _flightGeoms(nRisers, actualRiser, tread, stairW, 0);
+    group.add(_mergeFlight(geoms));
+    footLocal = { minX: 0, minY: 0, maxX: run, maxY: stairW };
+    chainDesc = `straight(n:${nRisers},tread:${round(tread)},riser:${round(actualRiser)},w:${round(stairW)})`;
+  }
+
+  // World-space footprint (for slab void cut). Approximated from local bbox + group position/rotation.
+  // For now, use axis-aligned bbox of the local footprint rotated by angDeg.
+  const rad = (angDeg * Math.PI) / 180;
+  const corners = [
+    [footLocal.minX, footLocal.minY],
+    [footLocal.maxX, footLocal.minY],
+    [footLocal.maxX, footLocal.maxY],
+    [footLocal.minX, footLocal.maxY],
+  ].map(([lx, ly]) => ({
+    x: a.x + lx * Math.cos(rad) - ly * Math.sin(rad),
+    y: a.y + lx * Math.sin(rad) + ly * Math.cos(rad),
+  }));
+  const xs = corners.map((c) => c.x), ys = corners.map((c) => c.y);
+  const footprint: StairFootprint = {
+    minX: Math.min(...xs), minY: Math.min(...ys),
+    maxX: Math.max(...xs), maxY: Math.max(...ys),
+  };
+
+  const chain = `IfcStair({shape:"${shape}",start:[${round(a.x)},${round(a.y)}],targetHeight:${round(targetH)},width:${round(stairW)},riserHeight:${round(actualRiser)},treadDepth:${round(tread)}})`;
+  return { group, chain, footprint };
 }
 
 export function buildBeam(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {

@@ -620,11 +620,16 @@
   ifc4_class: IfcStair
   kernel_op: makeStair
   args:
-    - {name: start,      type: point3,  required: true}
-    - {name: end,        type: point3,  required: true}
-    - {name: width,      type: number,  required: true, unit: m, default: 1.0}
-    - {name: riser,      type: number,  required: false, unit: m, default: 0.18}
-    - {name: tread,      type: number,  required: false, unit: m, default: 0.27}
+    - {name: start,        type: point3,  required: false, description: "Start point [x, y] of stair run."}
+    - {name: end,          type: point3,  required: false, description: "End point [x, y] of stair run."}
+    - {name: type,         type: string,  required: false, default: straight, enum: [straight, L, U], description: "Stair plan shape."}
+    - {name: count,        type: number,  required: false, description: "Total number of risers (overrides targetHeight)."}
+    - {name: rise,         type: number,  required: false, unit: m, description: "Total vertical rise in metres (used when count is absent)."}
+    - {name: width,        type: number,  required: false, unit: m, default: 1.0, description: "Stair width perpendicular to run."}
+    - {name: riser,        type: number,  required: false, unit: m, default: 0.18, description: "Individual riser height."}
+    - {name: tread,        type: number,  required: false, unit: m, default: 0.27, description: "Individual tread depth."}
+    - {name: landingDepth, type: number,  required: false, unit: m, default: 1.0, description: "Depth of intermediate landings (L and U only)."}
+    - {name: targetHeight, type: number,  required: false, unit: m, default: 3.0, description: "Target floor-to-floor height (used when count is absent)."}
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host
   kg_predicates: [containedIn, connectedTo]

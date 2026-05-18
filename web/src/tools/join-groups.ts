@@ -378,6 +378,77 @@ export function cutRectVoidFromBoxMesh(
   return group;
 }
 
+// ── Stair void cut for slabs (#900) ──────────────────────────────────────────
+// Cuts a rectangular opening in a horizontal slab mesh (XY cut, opposite of
+// cutRectVoidFromBoxMesh which cuts in XZ). Returns a Group in place of the slab,
+// or null if the slab cannot be cut (not a box, or void doesn't overlap).
+export function cutSlabVoidFromBoxMesh(
+  slab: THREE.Mesh,
+  voidMinX: number, voidMinY: number,
+  voidMaxX: number, voidMaxY: number,
+): THREE.Group | null {
+  slab.updateMatrixWorld(true);
+  const geom = slab.geometry as THREE.BufferGeometry;
+  geom.computeBoundingBox();
+  const bb = geom.boundingBox;
+  if (!bb) return null;
+
+  // Convert void world XY to slab local space
+  const toLocal = (wx: number, wy: number) => {
+    const local = slab.worldToLocal(new THREE.Vector3(wx, wy, 0));
+    return { x: local.x, y: local.y };
+  };
+  const lMin = toLocal(voidMinX, voidMinY);
+  const lMax = toLocal(voidMaxX, voidMaxY);
+  const vxMin = Math.min(lMin.x, lMax.x), vxMax = Math.max(lMin.x, lMax.x);
+  const vyMin = Math.min(lMin.y, lMax.y), vyMax = Math.max(lMin.y, lMax.y);
+
+  // No overlap
+  if (vxMax <= bb.min.x || vxMin >= bb.max.x || vyMax <= bb.min.y || vyMin >= bb.max.y) return null;
+
+  const slabZ = bb.min.z, slabH = bb.max.z - bb.min.z;
+  const slabXMin = bb.min.x, slabXMax = bb.max.x;
+  const slabYMin = bb.min.y, slabYMax = bb.max.y;
+  const mat = (Array.isArray(slab.material) ? slab.material[0] : slab.material) as THREE.Material;
+
+  const clampedVxMin = Math.max(vxMin, slabXMin);
+  const clampedVxMax = Math.min(vxMax, slabXMax);
+  const clampedVyMin = Math.max(vyMin, slabYMin);
+  const clampedVyMax = Math.min(vyMax, slabYMax);
+
+  const group = new THREE.Group();
+
+  const seg = (x0: number, x1: number, y0: number, y1: number) => {
+    const w = x1 - x0, d = y1 - y0;
+    if (w <= 0.001 || d <= 0.001) return;
+    const g = new THREE.BoxGeometry(w, d, slabH);
+    const m = new THREE.Mesh(g, mat);
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, slabZ + slabH / 2);
+    group.add(m);
+  };
+
+  // Left strip
+  seg(slabXMin, clampedVxMin, slabYMin, slabYMax);
+  // Right strip
+  seg(clampedVxMax, slabXMax, slabYMin, slabYMax);
+  // Bottom strip (between void x-extents)
+  seg(clampedVxMin, clampedVxMax, slabYMin, clampedVyMin);
+  // Top strip
+  seg(clampedVxMin, clampedVxMax, clampedVyMax, slabYMax);
+
+  group.position.copy(slab.position);
+  group.rotation.copy(slab.rotation);
+  group.scale.copy(slab.scale);
+  group.userData = { ...slab.userData, stairVoidCut: true };
+
+  const parent = slab.parent;
+  if (!parent) return null;
+  parent.remove(slab);
+  geom.dispose();
+  parent.add(group);
+  return group;
+}
+
 // ── Void restore for door/window delete (#875) ────────────────────────────────
 // Call before removing a door or window from the scene. Finds the host wall
 // Group (created by cutRectVoidFromBoxMesh) and replaces it with a solid Mesh.
