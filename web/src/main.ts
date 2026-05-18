@@ -797,8 +797,15 @@ registerHandler("SdSlab", (args) => {
   const w = (args.width as number | undefined) ?? (args.length as number | undefined) ?? 4;
   const d = (args.depth as number | undefined) ?? (args.width as number | undefined) ?? 4;
   const elev = (args.elevation as number | undefined) ?? getActiveLevelElevation();
-  const a = { x: -w / 2, y: -d / 2 };
-  const b = { x: w / 2, y: d / 2 };
+  let a = { x: -w / 2, y: -d / 2 };
+  let b = { x: w / 2, y: d / 2 };
+  const slabProf = args.profile as number[][] | undefined;
+  if (slabProf && slabProf.length >= 2) {
+    const xs = slabProf.map((p) => p[0]);
+    const ys = slabProf.map((p) => p[1]);
+    a = { x: Math.min(...xs), y: Math.min(...ys) };
+    b = { x: Math.max(...xs), y: Math.max(...ys) };
+  }
   const { mesh, chain } = buildSlab(a, b);
   // Architectural convention: slab top face = level plane.
   // buildSlab geometry has bottom at z=0, top at z=thickness. Offset so top = elev.
@@ -879,8 +886,32 @@ registerHandler("SdMember", (args) => {
 registerHandler("SdStair", (args) => {
   const s = (args.start as number[] | undefined) ?? [0, 0];
   const e = (args.end   as number[] | undefined) ?? [4, 0];
-  const a = { x: s[0], y: s[1] };
-  const b = { x: e[0], y: e[1] };
+  let a = { x: s[0], y: s[1] };
+  let b = { x: e[0], y: e[1] };
+  // Bounds-snap: if both start and end fall outside existing wall/slab extents,
+  // translate the segment midpoint onto the scene bbox midpoint.
+  const stairBbox = new THREE.Box3();
+  let hasBounds = false;
+  viewer.forEachSceneChild((child) => {
+    const c = child.userData?.creator;
+    if (c === "SdWall" || c === "wall" || c === "SdSlab" || c === "slab") {
+      stairBbox.expandByObject(child);
+      hasBounds = true;
+    }
+  });
+  if (hasBounds && !stairBbox.isEmpty()) {
+    const inBbox = (p: { x: number; y: number }) =>
+      p.x >= stairBbox.min.x && p.x <= stairBbox.max.x &&
+      p.y >= stairBbox.min.y && p.y <= stairBbox.max.y;
+    if (!inBbox(a) && !inBbox(b)) {
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const bx = (stairBbox.min.x + stairBbox.max.x) / 2;
+      const by = (stairBbox.min.y + stairBbox.max.y) / 2;
+      a = { x: a.x + (bx - mx), y: a.y + (by - my) };
+      b = { x: b.x + (bx - mx), y: b.y + (by - my) };
+    }
+  }
   const stairParams: StairParams = {
     type:        (args.type  as StairParams["type"]  | undefined) ?? "straight",
     count:       args.count       as number | undefined,
@@ -964,9 +995,22 @@ registerHandler("SdDoor", (args) => {
 
 registerHandler("SdWindow", (args) => {
   const hostUuidWin = args.hostUuid as string | undefined;
-  const hostObjWin = hostUuidWin
+  let hostObjWin: THREE.Object3D | undefined = hostUuidWin
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidWin) ?? undefined
     : undefined;
+  // Auto-find nearest wall within 3 m when hostUuid absent
+  if (!hostObjWin) {
+    const posArr = args.position as number[] | undefined;
+    const winXY = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, 0);
+    let minDist = 3;
+    viewer.forEachSceneChild((child) => {
+      const c = child.userData?.creator;
+      if (c !== "SdWall" && c !== "wall") return;
+      const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
+      const dist = winXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
+      if (dist < minDist) { minDist = dist; hostObjWin = child; }
+    });
+  }
   const cplane = resolveCPlane("SdWindow", args as Record<string, unknown>, viewer, hostObjWin);
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
@@ -988,19 +1032,16 @@ registerHandler("SdWindow", (args) => {
   viewer.addMesh(mesh, "brep", { noHistory: true });
   let voidCut = false;
   beginTransaction("SdWindow");
-  if (hostUuidWin) {
-    const host = viewer.getScene().getObjectByProperty("uuid", hostUuidWin);
-    if (host instanceof THREE.Mesh) {
-      // Window mesh is positioned at sill height; voidCenter is mid-height of opening
-      const voidCenter = new THREE.Vector3(
-        mesh.position.x,
-        mesh.position.y,
-        mesh.position.z + FZK_WINDOW_H / 2,
-      );
-      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
-      if (voidGroup) pushReplaceAction(voidGroup, [host], "wall-void-cut");
-      voidCut = true;
-    }
+  if (hostObjWin instanceof THREE.Mesh) {
+    // Window mesh is positioned at sill height; voidCenter is mid-height of opening
+    const voidCenter = new THREE.Vector3(
+      mesh.position.x,
+      mesh.position.y,
+      mesh.position.z + FZK_WINDOW_H / 2,
+    );
+    const voidGroup = cutRectVoidFromBoxMesh(hostObjWin, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
+    if (voidGroup) pushReplaceAction(voidGroup, [hostObjWin], "wall-void-cut");
+    voidCut = true;
   }
   pushAction(mesh, chain);
   endTransaction();
@@ -1183,8 +1224,15 @@ registerHandler("SdFoundation", (args) => {
 registerHandler("SdCeiling", (args) => {
   const w = (args.width as number | undefined) ?? 5;
   const d = (args.depth as number | undefined) ?? 4;
-  const a = { x: -w / 2, y: -d / 2 };
-  const b = { x: w / 2, y: d / 2 };
+  let a = { x: -w / 2, y: -d / 2 };
+  let b = { x: w / 2, y: d / 2 };
+  const ceilProf = args.profile as number[][] | undefined;
+  if (ceilProf && ceilProf.length >= 2) {
+    const xs = ceilProf.map((p) => p[0]);
+    const ys = ceilProf.map((p) => p[1]);
+    a = { x: Math.min(...xs), y: Math.min(...ys) };
+    b = { x: Math.max(...xs), y: Math.max(...ys) };
+  }
   const { mesh, chain } = buildCeiling(a, b);
   mesh.position.z = getActiveLevelElevation() + DEFAULT_CEILING_OFFSET;
   mesh.userData.layerId = resolveLayerId("SdCeiling", args);
