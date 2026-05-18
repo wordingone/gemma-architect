@@ -605,7 +605,7 @@ Assistant: 20m wide, 12m deep, 2 floors × 3.5m = 7m total. Ground Floor at 0m, 
 User: design a two-story residential house, 8m × 6m
 Assistant: 8m wide, 6m deep, 2 floors × 2.74m walls, 3.0m floor-to-floor. Door on south face (y=0); stair at NE corner cuts void in upper slab.
 <plan>
-1. SdRectangle — footprint, width=8, depth=6, center=[4,3]
+1. SdRectangle — footprint, width=8, length=6, center=[4,3]
 2. SdLevel — Ground, elevation=0, height=3.0, extent=8
 3. SdLevel — Floor 2, elevation=3.0, height=3.0, extent=8
 4. setActiveLevel — id=level/0 (ground)
@@ -631,7 +631,7 @@ Assistant: 8m wide, 6m deep, 2 floors × 2.74m walls, 3.0m floor-to-floor. Door 
 24. SdWindow — south wall, position=[1.5,0,0], width=1.2, height=1.2, sillH=0.9
 25. SdWindow — east wall, position=[8,3,0], width=1.2, height=1.2, sillH=0.9
 </plan>
-<tool_call>{"command":"SdRectangle","parameters":{"width":8,"depth":6,"center":[4,3]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdRectangle","parameters":{"width":8,"length":6,"center":[4,3]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Ground","elevation":0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Floor 2","elevation":3.0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
