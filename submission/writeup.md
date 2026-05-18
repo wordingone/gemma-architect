@@ -61,7 +61,7 @@ For single-element prompts that don't match a skill:
 
 3. The PROMPT tab also accepts one-liner prompts. A chip strip lists
    canned demos. They click `"Wall · 5.5×0.2×2.8m"`. An F1-weighted
-   fuzzy match against 60 cached LoRA eval rows returns the closest
+   fuzzy match against 60 cached prompt-to-JS rows (DSL corpus + Schultz gold + archived Gemma 3 LoRA eval) returns the closest
    replicad source. The PROMPT tab's inline console logs
    `[ai-generate] cache · X.XX match · ~50ms`.
 4. They click **GENERATE** (or hit `⌘⏎`). A web worker boots

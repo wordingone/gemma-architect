@@ -38,6 +38,7 @@ import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selectio
 import { getCreateSequence } from "../tools/index";
 import { prefetchModel, MODEL_ID, setClusterCatalog } from "../agent/agent-harness";
 import { checkConsentAndLoad } from "../agent/model-consent";
+import { initLoadingAnim } from "../agent/loading-anim";
 import { listSavedSkills, deleteSkill, listClusters, saveCluster, deleteCluster, type SavedSkill, type SkillStep, type SkillCluster, type SkillClusterStep } from "../skills/skill-store";
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
@@ -3138,6 +3139,7 @@ function wirePanelToggles() {
 }
 
 export function buildWorkbench() {
+  initLoadingAnim();
   const paletteHost = document.getElementById("palette-host");
   const dockTabsHost = document.getElementById("dock-tabs-host");
   const dockBodyHost = document.getElementById("dock-body-host");

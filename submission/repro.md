@@ -1,7 +1,9 @@
 # Reproduction guide — gemma-architect
 
-Step-by-step reproduction of every number in the submission. A single
-RTX 4090 + ~1h wall-clock is enough; the bulk of the time is LoRA training.
+Step-by-step reproduction of every number in the submission. The deployed
+demo runs in-browser on stock Gemma 4 E4B-it — no GPU, no training required
+for the submission. The optional precursor Gemma 3 LoRA training (archived)
+reproduces in ~1h on an RTX 4090.
 
 ## Prerequisites
 

@@ -82,7 +82,7 @@ title-block "GEMMA·ARCHITECT — UNTITLED.001 / SCALE 1:50 · IFC4 · METRIC".
 > "Now type your own prompt. _Build a square column, thirty centimeters
 > by thirty centimeters, three meters tall._ Cmd-Enter. The page hits
 > the inference cache — sixty round-trip-verified prompt-to-JS pairs
-> covering both the LoRA eval set and the DSL corpus. Forty milliseconds.
+> from the bundled gold corpus. Forty milliseconds.
 > No GPU spun up, no network call, no waiting. **The cache is the
 > default; live inference is one toggle away** for users who want the
 > real model in the loop."
