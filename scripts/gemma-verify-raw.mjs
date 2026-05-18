@@ -4708,6 +4708,29 @@ await resetScene('before-box-inject');
   record('unit-display', !!(s108?.passed), s108 ?? { reason: 'evaluate returned null' });
 }
 
+// ── S109 — IBC defaults: stair riser 0.1778m, tread 0.2794m, door 0.914×2.032m ──
+{
+  const s109 = await evaluate(`(async () => {
+    window.__dispatch && window.__dispatch('SdStair', { start: [0, 0], end: [3, 0], rise: 3, riser: undefined, tread: undefined });
+    await new Promise(r => setTimeout(r, 200));
+    const scene = window.__viewer?.scene;
+    let stair = null;
+    scene?.traverse(o => { if (o.userData?.creator === 'stair' && o.userData?.stairParams) stair = o; });
+    const sp = stair?.userData?.stairParams;
+    const riserOk = sp && Math.abs(sp.actualRiser - 0.1778) < 0.002;
+    const treadOk = sp && Math.abs(sp.actualTread - 0.2794) < 0.002;
+    window.__dispatch && window.__dispatch('SdDoor', { position: [10, 0, 0] });
+    await new Promise(r => setTimeout(r, 200));
+    let door = null;
+    scene?.traverse(o => { if ((o.userData?.creator === 'door' || o.userData?.creator === 'SdDoor') && o.userData?.voidW) door = o; });
+    const doorWOk = door && Math.abs(door.userData.voidW - 0.914) < 0.01;
+    const doorHOk = door && Math.abs(door.userData.voidH - 2.032) < 0.01;
+    const passed = !!(riserOk && treadOk && doorWOk && doorHOk);
+    return { passed, evidence: { actualRiser: sp?.actualRiser, actualTread: sp?.actualTread, doorW: door?.userData?.voidW, doorH: door?.userData?.voidH, riserOk, treadOk, doorWOk, doorHOk } };
+  })()`);
+  record('ibc-defaults', !!(s109?.passed), s109 ?? { reason: 'evaluate returned null' });
+}
+
 } finally {
   await cleanup();
 }

@@ -6,12 +6,16 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { getPendingHostId } from "../viewer/snap-state";
 
-// FZK-Haus sourced dimensions (via scripts/extract-fzk-templates.ts)
+// FZK-Haus sourced dimensions (via scripts/extract-fzk-templates.ts) — for FZK fixture load path only
 export const FZK_DOOR_W    = 0.885;
 export const FZK_DOOR_H    = 2.01;
 export const FZK_WINDOW_W  = 2.0;
 export const FZK_WINDOW_H  = 1.2;
-export const FZK_WINDOW_SILL = 0.9;  // typical residential sill height
+export const FZK_WINDOW_SILL = 0.9;
+
+// IBC / California residential defaults for new user-placed elements
+export const DEFAULT_DOOR_W   = 0.914;   // IBC R311.2: 36" exterior residential
+export const DEFAULT_DOOR_H   = 2.032;   // IBC R311.2: 80" / 6'-8"
 
 const DEFAULT_WALL_THICKNESS = 0.2;
 
@@ -198,10 +202,10 @@ function _syntheticWindow(w: number, t: number, h: number): { geom: THREE.Buffer
 
 // ── Public builders ────────────────────────────────────────────────────────────
 
-export function buildDoor(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
-  const w = FZK_DOOR_W;
+export function buildDoor(p: { x: number; y: number }, dims?: { w?: number; h?: number }): { mesh: THREE.Mesh; chain: string } {
+  const w = dims?.w ?? DEFAULT_DOOR_W;
   const t = DEFAULT_WALL_THICKNESS;
-  const h = FZK_DOOR_H;
+  const h = dims?.h ?? DEFAULT_DOOR_H;
 
   const fzk = _doorData ? _buildFromFzkData(_doorData, w, t, h) : null;
   const { geom, mat } = fzk ?? _syntheticDoor(w, t, h);

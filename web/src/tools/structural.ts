@@ -14,14 +14,14 @@ import { refLineStore } from "../geometry/ref-lines";
 let _viewer: Viewer | null = null;
 export function setStructuralViewer(v: Viewer | null): void { _viewer = v; }
 
-// Default heights / sizes from tier1-conventions.
+// Default heights / sizes — IBC residential compliance (R311, R305).
 export const DEFAULT_WALL_HEIGHT = 3;
 const DEFAULT_WALL_THICKNESS = 0.2;
-const DEFAULT_SLAB_THICKNESS = 0.2;
+const DEFAULT_SLAB_THICKNESS = 0.1;   // IBC 4" residential floor (was 0.2 = 7.87")
 const DEFAULT_COLUMN_HEIGHT = 4;
 const DEFAULT_RECT_HEIGHT = 2.8;
-const DEFAULT_STAIR_RISE = 0.18;
-const DEFAULT_STAIR_TREAD = 0.28;
+const DEFAULT_STAIR_RISE = 0.1778;    // IBC R311.7.5.1: 7" per user directive
+const DEFAULT_STAIR_TREAD = 0.2794;   // IBC R311.7.5.2: 11" per user directive
 const DEFAULT_STAIR_WIDTH = 1.0;
 const DEFAULT_EXTRUDE_HEIGHT = 2.5;
 const DEFAULT_BEAM_SIZE = 0.2;
@@ -260,13 +260,20 @@ const _stepMat = (): THREE.MeshStandardMaterial =>
 function _buildFlightSolid(
   n: number, riser: number, tread: number, stairW: number, zBase: number,
 ): THREE.Mesh {
+  // stringerD: vertical depth below nosing line (shape +Y = world -Z = below stair).
+  // riser*2 gives a stringer ~14" deep for 7" risers — visually solid, IBC-plausible.
+  const stringerD = riser * 2;
   const shape = new THREE.Shape();
   shape.moveTo(0, -zBase);
   for (let i = 0; i < n; i++) {
     shape.lineTo(i * tread, -(zBase + (i + 1) * riser));
     shape.lineTo((i + 1) * tread, -(zBase + (i + 1) * riser));
   }
-  shape.closePath(); // diagonal back to (0, -zBase) = sloped stringer underside
+  // Stringer bottom: two points parallel to nosing line but offset +stringerD in shape-Y
+  // (= stringerD lower in world-Z). Creates solid material below the step nosings.
+  shape.lineTo(n * tread, -(zBase + n * riser) + stringerD);
+  shape.lineTo(0, -zBase + stringerD);
+  shape.closePath(); // short left vertical face back to start
   const geom = new THREE.ExtrudeGeometry(shape, { depth: stairW, bevelEnabled: false });
   geom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
   const mesh = new THREE.Mesh(geom, _stepMat());

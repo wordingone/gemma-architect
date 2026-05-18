@@ -58,9 +58,9 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
-import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
+import { buildDoor, buildWindow, buildOpening, DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
 import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
@@ -927,15 +927,17 @@ registerHandler("SdDoor", (args) => {
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
   const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
-  const { mesh, chain } = buildDoor(p);
+  const doorW = (args.width as number | undefined) ?? DEFAULT_DOOR_W;
+  const doorH = (args.height as number | undefined) ?? DEFAULT_DOOR_H;
+  const { mesh, chain } = buildDoor(p, { w: doorW, h: doorH });
   mesh.position.z = elevation;
   if (cplane.kind === "host-derived") {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
   mesh.userData.creator = "SdDoor";
-  mesh.userData.voidW = FZK_DOOR_W;
-  mesh.userData.voidH = FZK_DOOR_H;
+  mesh.userData.voidW = doorW;
+  mesh.userData.voidH = doorH;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdDoor", args);
   mesh.userData.levelId = getActiveLevelId();
@@ -948,8 +950,8 @@ registerHandler("SdDoor", (args) => {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidDoor);
     if (host instanceof THREE.Mesh) {
       const voidCenter = mesh.position.clone();
-      voidCenter.z = elevation + FZK_DOOR_H / 2;
-      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, FZK_DOOR_W, FZK_DOOR_H);
+      voidCenter.z = elevation + doorH / 2;
+      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, doorW, doorH);
       if (voidGroup) pushReplaceAction(voidGroup, [host], "wall-void-cut");
       voidCut = true;
     }
@@ -2293,16 +2295,149 @@ function _showRoofInspector(mesh: THREE.Mesh): void {
   _roofInspectorEl.style.display = "";
 }
 
+// ── Shared inspector helpers ──────────────────────────────────────────────────
+
+function _mkInspectorSlider(
+  label: string, minM: number, maxM: number, stepM: number, curM: number, unit: string,
+  onChange: (metersVal: number) => void,
+): HTMLElement {
+  const isLength = unit === "m";
+  const isImperial = isLength && unitLabel() === "ft";
+  const FT = 3.28084;
+  const toDisp = (m: number) => isImperial ? Math.round(m * FT * 100) / 100 : m;
+  const toMeters = (d: number) => isImperial ? d / FT : d;
+  const dispUnit = isLength ? unitLabel() : unit;
+  const min = toDisp(minM), max = toDisp(maxM), step = Math.round(toDisp(stepM) * 1000) / 1000;
+  const cur = toDisp(curM);
+
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;align-items:center;gap:6px;margin:4px 0;";
+  const lbl = document.createElement("span");
+  lbl.style.cssText = "min-width:70px;font-size:11px;color:#aaa;";
+  lbl.textContent = label;
+  const val = document.createElement("span");
+  val.style.cssText = "min-width:36px;text-align:right;font-size:11px;";
+  val.textContent = `${cur}${dispUnit}`;
+  const inp = document.createElement("input");
+  inp.type = "range"; inp.min = String(min); inp.max = String(max); inp.step = String(step);
+  inp.value = String(cur); inp.style.cssText = "flex:1;";
+  inp.addEventListener("input", () => { val.textContent = `${parseFloat(inp.value)}${dispUnit}`; });
+  inp.addEventListener("change", () => { onChange(isLength ? toMeters(parseFloat(inp.value)) : parseFloat(inp.value)); });
+  row.appendChild(lbl); row.appendChild(val); row.appendChild(inp);
+  return row;
+}
+
+function _inspectorTitle(text: string): HTMLElement {
+  const el = document.createElement("div");
+  el.style.cssText = "font-size:12px;font-weight:600;margin-bottom:6px;color:#fff;";
+  el.textContent = text;
+  return el;
+}
+
+// ── Stair inspector ───────────────────────────────────────────────────────────
+
+let _stairInspectorGroupUuid: string | null = null;
+
+function _showStairInspector(group: THREE.Object3D): void {
+  const sp = group.userData.stairParams as { actualRiser: number; actualTread: number } | undefined;
+  _stairInspectorGroupUuid = group.uuid;
+  _roofInspectorMeshUuid = null;
+
+  _roofInspectorEl.innerHTML = "";
+  _roofInspectorEl.appendChild(_inspectorTitle("Stair"));
+  _roofInspectorEl.appendChild(_mkInspectorSlider("Riser", 0.10, 0.20, 0.005, sp?.actualRiser ?? 0.1778, "m", (v) => {
+    const cur = viewer.getScene().getObjectByProperty("uuid", _stairInspectorGroupUuid ?? "");
+    if (!cur) return;
+    const da = (cur.userData.dispatchArgs as Record<string, unknown>) ?? {};
+    const params = cur.userData.stairParams as { actualRiser: number; actualTread: number } | undefined;
+    dispatchSync("SdStair", { ...da, riser: v, tread: params?.actualTread ?? 0.2794 });
+    viewer.removeObject(cur);
+  }));
+  _roofInspectorEl.appendChild(_mkInspectorSlider("Tread", 0.254, 0.356, 0.005, sp?.actualTread ?? 0.2794, "m", (v) => {
+    const cur = viewer.getScene().getObjectByProperty("uuid", _stairInspectorGroupUuid ?? "");
+    if (!cur) return;
+    const da = (cur.userData.dispatchArgs as Record<string, unknown>) ?? {};
+    const params = cur.userData.stairParams as { actualRiser: number; actualTread: number } | undefined;
+    dispatchSync("SdStair", { ...da, riser: params?.actualRiser ?? 0.1778, tread: v });
+    viewer.removeObject(cur);
+  }));
+  _roofInspectorEl.style.display = "";
+}
+
+// ── Door inspector ────────────────────────────────────────────────────────────
+
+let _doorInspectorMeshUuid: string | null = null;
+
+function _showDoorInspector(mesh: THREE.Mesh): void {
+  _doorInspectorMeshUuid = mesh.uuid;
+  _roofInspectorMeshUuid = null;
+  _stairInspectorGroupUuid = null;
+  const curW = (mesh.userData.voidW as number | undefined) ?? DEFAULT_DOOR_W;
+  const curH = (mesh.userData.voidH as number | undefined) ?? DEFAULT_DOOR_H;
+
+  _roofInspectorEl.innerHTML = "";
+  _roofInspectorEl.appendChild(_inspectorTitle("Door"));
+
+  const redispatch = (w: number, h: number) => {
+    const cur = viewer.getScene().getObjectByProperty("uuid", _doorInspectorMeshUuid ?? "");
+    if (!cur) return;
+    const da = (cur.userData.dispatchArgs as Record<string, unknown>) ?? {};
+    dispatchSync("SdDoor", { ...da, width: w, height: h });
+    viewer.removeObject(cur);
+  };
+
+  let liveW = curW, liveH = curH;
+  _roofInspectorEl.appendChild(_mkInspectorSlider("Width",  0.61, 1.22, 0.025, curW, "m", (v) => { liveW = v; redispatch(liveW, liveH); }));
+  _roofInspectorEl.appendChild(_mkInspectorSlider("Height", 0.61, 2.44, 0.025, curH, "m", (v) => { liveH = v; redispatch(liveW, liveH); }));
+  _roofInspectorEl.style.display = "";
+}
+
+// ── Wall height inspector ─────────────────────────────────────────────────────
+
+let _wallInspectorMeshUuid: string | null = null;
+
+function _showWallInspector(mesh: THREE.Mesh): void {
+  _wallInspectorMeshUuid = mesh.uuid;
+  _roofInspectorMeshUuid = null;
+  _stairInspectorGroupUuid = null;
+  _doorInspectorMeshUuid = null;
+  const curH = (mesh.userData.wallHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
+
+  _roofInspectorEl.innerHTML = "";
+  _roofInspectorEl.appendChild(_inspectorTitle("Wall"));
+  _roofInspectorEl.appendChild(_mkInspectorSlider("Height", 2.13, 4.27, 0.05, curH, "m", (v) => {
+    const cur = viewer.getScene().getObjectByProperty("uuid", _wallInspectorMeshUuid ?? "");
+    if (cur instanceof THREE.Mesh) rebuildWallParams(cur, { height: v });
+  }));
+  _roofInspectorEl.style.display = "";
+}
+
+// ── Shared hide helper ────────────────────────────────────────────────────────
+
+function _hideInspector(): void {
+  _roofInspectorEl.style.display = "none";
+  _roofInspectorMeshUuid = null;
+  _stairInspectorGroupUuid = null;
+  _doorInspectorMeshUuid = null;
+  _wallInspectorMeshUuid = null;
+}
+
 window.addEventListener("viewer:select", (e) => {
   const uuid = (e as CustomEvent<{ uuid: string | null }>).detail?.uuid;
-  if (!uuid) { _roofInspectorEl.style.display = "none"; _roofInspectorMeshUuid = null; return; }
+  if (!uuid) { _hideInspector(); return; }
   const obj = viewer.getScene().getObjectByProperty("uuid", uuid);
   const creator = obj?.userData?.creator as string | undefined;
   if (creator === "roof" && obj instanceof THREE.Mesh) {
+    _stairInspectorGroupUuid = null; _doorInspectorMeshUuid = null; _wallInspectorMeshUuid = null;
     _showRoofInspector(obj);
+  } else if (creator === "stair" && obj?.userData?.stairParams) {
+    _showStairInspector(obj);
+  } else if ((creator === "door" || creator === "SdDoor") && obj instanceof THREE.Mesh) {
+    _showDoorInspector(obj);
+  } else if (creator === "wall" && obj instanceof THREE.Mesh) {
+    _showWallInspector(obj);
   } else {
-    _roofInspectorEl.style.display = "none";
-    _roofInspectorMeshUuid = null;
+    _hideInspector();
   }
 });
 
