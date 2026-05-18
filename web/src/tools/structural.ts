@@ -255,59 +255,25 @@ export interface StairFootprint { minX: number; minY: number; maxX: number; maxY
 const _stepMat = (): THREE.MeshStandardMaterial =>
   new THREE.MeshStandardMaterial({ color: 0xc8b8a2, roughness: 0.7, metalness: 0.0 });
 
-// Add individually-tagged step meshes into group, in local-space coordinates.
-// localOffX/Y: starting corner of this flight in group-local space.
-// angRad: rotation of flight direction relative to group +X.
-function _addSteps(
-  group: THREE.Group,
-  n: number, riser: number, tread: number, stairW: number,
-  zBase: number, stairId: string, startIdx: number,
-  localOffX: number, localOffY: number, angRad: number,
-): void {
-  const cosA = Math.cos(angRad), sinA = Math.sin(angRad);
-  for (let i = 0; i < n; i++) {
-    const stepH = zBase + (i + 1) * riser;
-    const step = new THREE.Mesh(new THREE.BoxGeometry(tread, stairW, stepH), _stepMat());
-    // Center of step along flight axis at i*tread + tread/2, lateral at stairW/2
-    const lx = i * tread + tread / 2;
-    const ly = stairW / 2;
-    step.position.set(
-      localOffX + lx * cosA - ly * sinA,
-      localOffY + lx * sinA + ly * cosA,
-      stepH / 2,
-    );
-    step.rotation.z = angRad;
-    step.userData.kind = "brep";
-    step.userData.creator = "stair";
-    step.userData.ifcClass = "IfcStairFlight";
-    step.userData.parentId = stairId;
-    step.userData.stepIndex = startIdx + i;
-    group.add(step);
-  }
-}
-
-// Stringer: triangular prism along flight, forming the sloped underside.
-function _addStringer(
-  group: THREE.Group, run: number, rise: number, stairW: number,
-  localOffX: number, localOffY: number, angRad: number,
-): void {
+// Single-solid stair flight: stepped top + diagonal underside (stringer) as one ExtrudeGeometry.
+// Shape in XY with Y negative = height, so makeRotationX(-PI/2) maps: shape-X→world-X, shape-Y→world-Z.
+function _buildFlightSolid(
+  n: number, riser: number, tread: number, stairW: number, zBase: number,
+): THREE.Mesh {
   const shape = new THREE.Shape();
-  shape.moveTo(0, 0);
-  shape.lineTo(run, 0);
-  shape.lineTo(run, rise);
-  shape.closePath();
+  shape.moveTo(0, -zBase);
+  for (let i = 0; i < n; i++) {
+    shape.lineTo(i * tread, -(zBase + (i + 1) * riser));
+    shape.lineTo((i + 1) * tread, -(zBase + (i + 1) * riser));
+  }
+  shape.closePath(); // diagonal back to (0, -zBase) = sloped stringer underside
   const geom = new THREE.ExtrudeGeometry(shape, { depth: stairW, bevelEnabled: false });
-  // Shape is in XY; rotate +90° around X so Y→Z (height up).
-  geom.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+  geom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
   const mesh = new THREE.Mesh(geom, _stepMat());
-  const cosA = Math.cos(angRad), sinA = Math.sin(angRad);
-  mesh.position.set(localOffX, localOffY, 0);
-  mesh.rotation.z = angRad;
   mesh.userData.kind = "brep";
-  mesh.userData.ifcClass = "IfcMember";
   mesh.userData.creator = "stair";
-  void cosA; void sinA;
-  group.add(mesh);
+  mesh.userData.ifcClass = "IfcStairFlight";
+  return mesh;
 }
 
 function _flightGeoms(nRisers: number, riser: number, tread: number, stairW: number, zBase: number): THREE.BufferGeometry[] {
@@ -480,10 +446,11 @@ export function buildStair(
     chainDesc = `L(flights:${n1}+${n2},tread:${round(tread)},riser:${round(actualRiser)},w:${round(stairW)})`;
 
   } else {
-    // Straight: N individually-tagged steps going in +X direction, with stringer.
+    // Straight: single solid with stepped top + diagonal stringer underside.
     const run = nRisers * actualTread;
-    _addSteps(group, nRisers, actualRiser, actualTread, stairW, 0, stairId, 0, 0, 0, 0);
-    _addStringer(group, run, totalRise, stairW, 0, 0, 0);
+    const flight = _buildFlightSolid(nRisers, actualRiser, actualTread, stairW, 0);
+    flight.userData.parentId = stairId;
+    group.add(flight);
     footLocal = { minX: 0, minY: 0, maxX: run, maxY: stairW };
     chainDesc = `straight(n:${nRisers},tread:${round(actualTread)},riser:${round(actualRiser)},w:${round(stairW)})`;
   }

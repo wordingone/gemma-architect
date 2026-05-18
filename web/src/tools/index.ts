@@ -904,13 +904,13 @@ export function initCreateMode(viewer: Viewer): void {
     if (!isSelHLOwned()) { clearMultiSelHighlights(); clearMultiSelected(); }
   });
 
-  const WALL_SUB_TOOLS = new Set(["wall-polyline", "wall-curve", "wall-pick"]);
+  const WALL_SUB_TOOLS = new Set(["wall-polyline", "wall-curve", "wall-pick", "stair-polyline", "stair-curve"]);
 
   // When activeTool changes to a PT or op tool, start the state machine.
   subscribe("activeTool", (tool) => {
     // #951: record last non-select tool for spacebar repeat.
     if (tool && tool !== "select") _lastActivatedTool = tool;
-    // Wall sub-tools have no palette button; override readActiveTool() so the
+    // Sub-tools with no palette button; override readActiveTool() so the
     // pointer-event pipeline sees the correct tool ID instead of null.
     setSubToolOverride(WALL_SUB_TOOLS.has(tool) ? tool : null);
 
@@ -929,6 +929,10 @@ export function initCreateMode(viewer: Viewer): void {
       if (h?.clicks === -1) {
         const label = tool === "wall-curve"
           ? "wall-curve — click control points  [Enter] build spline walls  [Esc] cancel"
+          : tool === "stair-curve"
+          ? "stair-curve — click control points  [Enter] build curved stair  [Esc] cancel"
+          : tool === "stair-polyline"
+          ? "stair-polyline — click points  [Enter] build polyline stair  [Esc] cancel"
           : `${tool} — click points  [double-click or Enter] commit  [Esc] cancel`;
         setPickerHint(label);
       } else if (h?.chain) {

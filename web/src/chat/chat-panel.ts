@@ -303,7 +303,6 @@ export class ChatPanel {
     const text = this._inputEl.value.trim();
     if (!text || this._sendBtn.disabled) return;
     this._inputEl.value = "";
-    this._startersEl.style.display = "none";
     // QW-3: count all user turns (including skill-direct and testMode paths).
     (window as unknown as _GemmaW).__gemmaSession.turnCount++;
 
