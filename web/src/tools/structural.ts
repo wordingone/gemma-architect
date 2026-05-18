@@ -39,6 +39,50 @@ function round(n: number, digits = 4): number {
 
 // ── Public wall API ──────────────────────────────────────────────────────────
 
+/** Re-build a wall mesh in-place with new thickness/height/bottom-elevation.
+ *  Reads existing controlPoints (local space) to determine wall axis.
+ *  Safe to call from inspect-panel onChange or height-handle drag-end. */
+export function rebuildWallParams(
+  mesh: THREE.Mesh,
+  params: { thickness?: number; height?: number; bottomElevation?: number },
+): void {
+  const t = params.thickness ?? (mesh.userData.wallThickness as number | undefined) ?? DEFAULT_WALL_THICKNESS;
+  const h = params.height ?? (mesh.userData.wallHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
+
+  const cps = mesh.userData.controlPoints as THREE.Vector3[] | undefined;
+  if (!cps || cps.length < 2) return;
+
+  mesh.updateMatrixWorld(true);
+  const wA = cps[0].clone().applyMatrix4(mesh.matrixWorld);
+  const wB = cps[1].clone().applyMatrix4(mesh.matrixWorld);
+  const len = wA.distanceTo(wB);
+  if (len < 0.01) return;
+
+  const cx = (wA.x + wB.x) / 2;
+  const cy = (wA.y + wB.y) / 2;
+  const zOff = params.bottomElevation ?? mesh.position.z;
+  const angRad = Math.atan2(wB.y - wA.y, wB.x - wA.x);
+
+  mesh.geometry.dispose();
+  const geom = new THREE.BoxGeometry(len, t, h);
+  geom.translate(0, 0, h / 2);
+  mesh.geometry = geom;
+  mesh.position.set(cx, cy, zOff);
+  mesh.rotation.z = angRad;
+  mesh.updateMatrixWorld(true);
+
+  cps[0].set(-len / 2, 0, 0);
+  cps[1].set(len / 2, 0, 0);
+
+  mesh.userData.wallThickness = t;
+  mesh.userData.wallHeight = h;
+  mesh.userData.endpoints = [
+    { x: wA.x, y: wA.y, z: zOff, id: makeSnapId(wA.x, wA.y, zOff) },
+    { x: wB.x, y: wB.y, z: zOff, id: makeSnapId(wB.x, wB.y, zOff) },
+    { x: cx, y: cy, z: zOff, id: makeSnapId(cx, cy, zOff) },
+  ];
+}
+
 export function buildWall(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
   const t = DEFAULT_WALL_THICKNESS, h = DEFAULT_WALL_HEIGHT;
   const dx = b.x - a.x, dy = b.y - a.y;

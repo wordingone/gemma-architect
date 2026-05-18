@@ -57,6 +57,7 @@ import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, 
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
+import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction } from "./history";
 import { csgUnion, csgDifference, csgIntersection, filletMesh } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
@@ -185,6 +186,7 @@ syncToolActiveClass();
 syncUnitsToStorage();
 initCreateMode(viewer);
 initSectionHandles(viewer, viewportAreaEl);
+initWallHeightHandle(viewer, viewportAreaEl);
 
 // Undo/Redo handlers (#55): route SdUndo and SdRedo to the history module.
 registerHandler("SdUndo", () => { undo(viewer); });

@@ -42,6 +42,8 @@ import { listSavedSkills, deleteSkill, listClusters, saveCluster, deleteCluster,
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { SkillCanvas } from "../skills/skill-canvas";
+import { rebuildWallParams } from "../tools/structural";
+import { initWallHeightHandle, showWallHeightHandle, hideWallHeightHandle } from "../viewer/wall-height-handle";
 
 // Eager-load all build-time skill.json files so the chat fastpath has steps at runtime.
 // Only the 5 schema_version-2 skills have a "steps" array; others have undefined steps.
@@ -984,6 +986,33 @@ function buildInspectTab(): HTMLElement {
         <span class="axis" data-axis="dZ">—</span>
       </div>
     </div>
+    <div class="prop-section" id="wall-params-section" style="display:none">
+      <div class="prop-section-title">WALL PARAMETERS</div>
+      <div class="prop-row">
+        <span class="k">Thickness</span>
+        <span class="v">
+          <input type="number" data-wall-field="thickness" min="0.05" max="1.0" step="0.01" style="width:54px"/>
+          <span class="unit">m</span>
+          <input type="range" data-wall-slider="thickness" min="0.05" max="1.0" step="0.01" style="width:60px;accent-color:var(--sanguine)"/>
+        </span>
+      </div>
+      <div class="prop-row">
+        <span class="k">Bottom elev.</span>
+        <span class="v">
+          <input type="number" data-wall-field="bottom" step="0.05" style="width:54px"/>
+          <span class="unit">m</span>
+          <select data-wall-level-select="bottom" style="font-size:9.5px;background:var(--paper-2);border:1px solid var(--hairline);color:var(--ink);border-radius:var(--r-sm);padding:1px 2px"></select>
+        </span>
+      </div>
+      <div class="prop-row">
+        <span class="k">Height</span>
+        <span class="v">
+          <input type="number" data-wall-field="height" min="0.1" max="30" step="0.05" style="width:54px"/>
+          <span class="unit">m</span>
+          <input type="range" data-wall-slider="height" min="0.1" max="30" step="0.05" style="width:60px;accent-color:var(--sanguine)"/>
+        </span>
+      </div>
+    </div>
   `;
 
   function updateInspect(sel: Selection | null): void {
@@ -1012,6 +1041,13 @@ function buildInspectTab(): HTMLElement {
         if (sizeAxes[1]) sizeAxes[1].textContent = sz.y.toFixed(3);
         if (sizeAxes[2]) sizeAxes[2].textContent = sz.z.toFixed(3);
       }
+      // Wall params: batch multi-select (all walls → pre-populate if same value)
+      const wallMeshes = multi
+        .map((s) => s.object as THREE.Mesh)
+        .filter((o) => o.userData?.creator === "wall");
+      updateWallSection(wallMeshes);
+      if (wallMeshes.length === 1) showWallHeightHandle(wallMeshes[0]);
+      else hideWallHeightHandle();
       return;
     }
 
@@ -1020,6 +1056,8 @@ function buildInspectTab(): HTMLElement {
       if (subtitle) subtitle.textContent = "no selection";
       wrap.querySelectorAll<HTMLElement>("[data-field]").forEach((v) => (v.textContent = "—"));
       wrap.querySelectorAll<HTMLElement>(".axis").forEach((a) => (a.textContent = "—"));
+      updateWallSection([]);
+      hideWallHeightHandle();
       return;
     }
     const obj = sel.object as THREE.Object3D;
@@ -1070,7 +1108,106 @@ function buildInspectTab(): HTMLElement {
     } else {
       sizeAxes.forEach((a) => (a.textContent = "—"));
     }
+
+    // Wall params section
+    if (obj.userData?.creator === "wall") {
+      updateWallSection([obj as THREE.Mesh]);
+      showWallHeightHandle(obj as THREE.Mesh);
+    } else {
+      updateWallSection([]);
+      hideWallHeightHandle();
+    }
   }
+
+  // ── Wall parameters section ────────────────────────────────────────────────
+  let _activeWalls: THREE.Mesh[] = [];
+
+  function updateWallSection(walls: THREE.Mesh[]): void {
+    const sec = wrap.querySelector<HTMLElement>("#wall-params-section");
+    if (!sec) return;
+    _activeWalls = walls;
+    if (walls.length === 0) {
+      sec.style.display = "none";
+      return;
+    }
+    sec.style.display = "";
+
+    const thicknessInput = sec.querySelector<HTMLInputElement>('[data-wall-field="thickness"]');
+    const thicknessSlider = sec.querySelector<HTMLInputElement>('[data-wall-slider="thickness"]');
+    const heightInput = sec.querySelector<HTMLInputElement>('[data-wall-field="height"]');
+    const heightSlider = sec.querySelector<HTMLInputElement>('[data-wall-slider="height"]');
+    const bottomInput = sec.querySelector<HTMLInputElement>('[data-wall-field="bottom"]');
+    const levelSelect = sec.querySelector<HTMLSelectElement>('[data-wall-level-select="bottom"]');
+
+    const allT = walls.map((m) => (m.userData.wallThickness as number | undefined) ?? 0.2);
+    const allH = walls.map((m) => (m.userData.wallHeight as number | undefined) ?? 3);
+    const allZ = walls.map((m) => m.position.z);
+
+    const sameT = allT.every((v) => v === allT[0]);
+    const sameH = allH.every((v) => v === allH[0]);
+    const sameZ = allZ.every((v) => v === allZ[0]);
+
+    const tVal = sameT ? String(allT[0].toFixed(3)) : "";
+    const hVal = sameH ? String(allH[0].toFixed(3)) : "";
+    const zVal = sameZ ? String(allZ[0].toFixed(3)) : "";
+
+    if (thicknessInput) thicknessInput.value = tVal;
+    if (thicknessSlider) thicknessSlider.value = tVal;
+    if (heightInput) heightInput.value = hVal;
+    if (heightSlider) heightSlider.value = hVal;
+    if (bottomInput) bottomInput.value = zVal;
+
+    // Populate level dropdown
+    if (levelSelect) {
+      const levels = levelStore.all();
+      levelSelect.innerHTML = '<option value="">manual</option>' +
+        levels.map((lv) => `<option value="${lv.elevation}">${lv.name} (${lv.elevation.toFixed(2)}m)</option>`).join("");
+      levelSelect.value = sameZ ? String(allZ[0]) : "";
+    }
+  }
+
+  function applyWallParam(field: "thickness" | "height" | "bottom", rawVal: string): void {
+    const val = parseFloat(rawVal);
+    if (!isFinite(val) || _activeWalls.length === 0) return;
+    for (const m of _activeWalls) {
+      if (field === "thickness") rebuildWallParams(m, { thickness: Math.max(0.01, val) });
+      else if (field === "height") rebuildWallParams(m, { height: Math.max(0.01, val) });
+      else if (field === "bottom") rebuildWallParams(m, { bottomElevation: val });
+    }
+    // Refresh display values to reflect clamping
+    updateWallSection(_activeWalls);
+  }
+
+  // Wire input↔slider sync and live apply — set up once after HTML exists.
+  const wallSec = wrap.querySelector<HTMLElement>("#wall-params-section");
+  if (wallSec) {
+    for (const field of ["thickness", "height"] as const) {
+      const inp = wallSec.querySelector<HTMLInputElement>(`[data-wall-field="${field}"]`);
+      const sld = wallSec.querySelector<HTMLInputElement>(`[data-wall-slider="${field}"]`);
+      inp?.addEventListener("change", (e) => {
+        const v = (e.target as HTMLInputElement).value;
+        if (sld) sld.value = v;
+        applyWallParam(field, v);
+      });
+      sld?.addEventListener("input", (e) => {
+        const v = (e.target as HTMLInputElement).value;
+        if (inp) inp.value = v;
+        applyWallParam(field, v);
+      });
+    }
+    const bottomInp = wallSec.querySelector<HTMLInputElement>('[data-wall-field="bottom"]');
+    bottomInp?.addEventListener("change", (e) => applyWallParam("bottom", (e.target as HTMLInputElement).value));
+    const levelSel = wallSec.querySelector<HTMLSelectElement>('[data-wall-level-select="bottom"]');
+    levelSel?.addEventListener("change", (e) => {
+      const v = (e.target as HTMLSelectElement).value;
+      if (!v) return;
+      if (bottomInp) bottomInp.value = v;
+      applyWallParam("bottom", v);
+    });
+  }
+
+  // Refresh wall-params fields when height-handle drag updates userData.
+  window.addEventListener("wall:params-changed", () => updateWallSection(_activeWalls));
 
   subscribe(updateInspect);
   subscribeMulti(() => updateInspect(getSelected()));
