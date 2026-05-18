@@ -367,6 +367,9 @@ export async function runMtpSpecDecode(
         full_k:    fullK,
         full_v:    fullV,
       });
+      // Yield after each drafter forward-pass (#925 v2): a single session.run() holds
+      // the main thread for ~100-500 ms; yielding here keeps CDP + UI responsive per draft step.
+      await new Promise<void>(r => setTimeout(r, 0));
 
       const draftLogit = argmax(draftOut["logits"].data as Float32Array);
       draftTokens.push(draftLogit);
@@ -421,6 +424,8 @@ export async function runMtpSpecDecode(
       num_logits_to_keep: new O.Tensor("int64", [BigInt(K2)], []),
       ...kvCacheToPast(kvCache, config),
     });
+    // Yield after decoder verify — completes the K+1 yields-per-iteration pattern (#925 v2).
+    await new Promise<void>(r => setTimeout(r, 0));
 
     // ── 2c. Greedy acceptance — take target tokens (correct by construction) ──
     const verifyLogitsAll = verifyOut["logits"].data as Float32Array; // [K2 * VOCAB_SIZE]
@@ -453,13 +458,6 @@ export async function runMtpSpecDecode(
     kvSeqLen = newCacheLen;
 
     if (eos) break;
-
-    // Yield to the browser macrotask queue between spec-decode iterations (#925).
-    // Each outer iteration already spends ~100–500 ms in GPU (drafter×K + decoder×1
-    // forward passes). The 4 ms setTimeout overhead is negligible, but the macrotask
-    // boundary is essential: `await gpuSession.run()` resolves as a microtask and
-    // never yields to the event loop, so CDP + UI events are starved without this.
-    await new Promise<void>(r => setTimeout(r, 0));
   }
 
   return { tokens, specAttempts, specAccepts };
