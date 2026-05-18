@@ -299,6 +299,47 @@ export class ChatPanel {
     this._previewEl.style.display = "none";
   }
 
+  // §D-pre (#988): estimate total history tokens using 4-char/token approximation.
+  private _estimateHistoryTokens(): number {
+    return Math.ceil(
+      this._history.reduce((sum, m) => sum + m.content.length, 0) / 4,
+    );
+  }
+
+  // §D-pre (#988): compact conversation when approaching context limit.
+  // Preserves all Sd* dispatches verbatim + goal + last 4 turns.
+  private _compactHistory(): void {
+    const preTokens = this._estimateHistoryTokens();
+
+    // Extract all dispatches from message history verbatim.
+    const allDispatches: AgentDispatch[] = [];
+    for (const msg of this._messages) {
+      if (msg.dispatches) allDispatches.push(...msg.dispatches);
+    }
+    const firstUser = this._history.find((m) => m.role === "user");
+    const goal = firstUser?.content ?? "";
+
+    const dispatchBlock = allDispatches.length > 0
+      ? allDispatches
+          .map((d) => `<tool_call>${JSON.stringify({ command: d.verb, parameters: d.args, metadata: { source: "agent" } })}</tool_call>`)
+          .join("\n")
+      : "(no dispatches yet)";
+
+    const compact = `[Compacted. Goal: "${goal.slice(0, 300)}". Dispatches so far:\n${dispatchBlock}]`;
+    const lastTurns = this._history.slice(-4);
+    this._history = [{ role: "assistant", content: compact }, ...lastTurns];
+
+    // UI boundary marker.
+    const marker = document.createElement("div");
+    marker.className = "chat-compact-boundary";
+    marker.textContent = "✻ Conversation compacted";
+    this._listEl.appendChild(marker);
+    this._listEl.scrollTop = this._listEl.scrollHeight;
+
+    const postTokens = this._estimateHistoryTokens();
+    console.info("[compact] §D-pre fired:", { preTokens, postTokens, triggerReason: "13K threshold" });
+  }
+
   private async _send(): Promise<void> {
     const text = this._inputEl.value.trim();
     if (!text || this._sendBtn.disabled) return;
@@ -312,6 +353,11 @@ export class ChatPanel {
 
     this._pushMsg({ role: "user", content: text });
     this._history.push({ role: "user", content: text });
+
+    // §D-pre (#988): compact before calling the model if history is large.
+    if (this._estimateHistoryTokens() > 13000) {
+      this._compactHistory();
+    }
 
     this._sendBtn.disabled = true;
     this._sendBtn.textContent = "…";

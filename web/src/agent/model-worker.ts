@@ -35,7 +35,7 @@ let _processor: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _drafterSession: any = null;
 
-const WEBGPU_CONTEXT_LIMIT = 2048;
+const WEBGPU_CONTEXT_LIMIT = 16384;
 
 // Boot-completion tracking — boot-complete fires when all three phases done.
 let _bootModelReady = false;
