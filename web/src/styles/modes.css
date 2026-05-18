@@ -174,6 +174,10 @@ html[data-mode="night"] .paper-stage {
   inset: 0;
   overflow: hidden;
 }
+/* Detail panels: tighter content inset (~6mm ≈ 23px at 96dpi) */
+.paper-cell.detail-panel .paper-cell-render {
+  inset: 23px;
+}
 .paper-cell-render canvas,
 .paper-cell-render svg { display: block; width: 100%; height: 100%; }
 /* Header overlay: label + dropdowns, always visible above the canvas.

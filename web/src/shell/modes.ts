@@ -42,7 +42,7 @@ function buildPaperMode(boundsProvider?: () => SceneBounds | null): HTMLElement 
   // .paper-stage > .paper-sheet, and the editable title block. Seed with
   // four panels so the first paint mirrors the original 4-cell mockup.
   buildLayoutMode(el, {
-    size: "A1",
+    size: "Tabloid",
     orientation: "landscape",
     showTitleBlock: false,
     bounds: boundsProvider
