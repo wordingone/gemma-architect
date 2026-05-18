@@ -121,10 +121,14 @@ export function clearMarker(viewer: Viewer): void {
 export function clearPreview(viewer: Viewer): void {
   if (!_previewMesh) return;
   viewer.getScene().remove(_previewMesh);
-  _previewMesh.geometry.dispose();
-  const mat = _previewMesh.material;
-  if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-  else (mat as THREE.Material).dispose();
+  // Traverse handles both THREE.Mesh (2D tools) and THREE.Group (roof, curtain wall)
+  // so this never throws on missing .geometry.
+  (_previewMesh as THREE.Object3D).traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    child.geometry.dispose();
+    if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+    else (child.material as THREE.Material).dispose();
+  });
   _previewMesh = null;
 }
 
