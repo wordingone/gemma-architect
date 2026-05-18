@@ -4572,6 +4572,50 @@ await resetScene('before-box-inject');
   }
 }
 
+// ── S97: roof-hover-grouping (#953) ──────────────────────────────────────────
+// Verifies that roof children are properly parented under a Group with
+// userData.creator === "roof" — the structural invariant that raycastForHover
+// relies on to resolve child mesh → parent group for whole-roof highlighting.
+{
+  // Dispatch a pitched roof into the scene.
+  await evaluate(`(function(){
+    window.__dispatch && window.__dispatch('IfcRoof', {
+      roofType: 'pitched',
+      footprint: [[0,0],[6,0],[6,5],[0,5]],
+      pitchDeg: 30
+    });
+    return true;
+  })()`);
+  await delay(400);
+
+  const result = await evaluate(`(function(){
+    const scene = window.__viewer && window.__viewer.scene;
+    if (!scene) return { ok: false, reason: 'no scene' };
+    // Find the roof group.
+    let roofGroup = null;
+    scene.traverse((o) => {
+      if (!roofGroup && o.isGroup && o.userData && o.userData.creator === 'roof') roofGroup = o;
+    });
+    if (!roofGroup) return { ok: false, reason: 'no roof group found in scene' };
+    // Collect child meshes.
+    const childMeshes = [];
+    roofGroup.children.forEach(c => { if (c.isMesh) childMeshes.push(c.uuid); });
+    if (childMeshes.length === 0) return { ok: false, reason: 'roof group has no child meshes' };
+    // Verify each child mesh satisfies the raycastForHover resolution condition.
+    let allParented = true;
+    roofGroup.children.forEach(c => {
+      if (c.isMesh) {
+        const ok = c.parent && c.parent.isGroup && c.parent.userData.creator === 'roof';
+        if (!ok) allParented = false;
+      }
+    });
+    if (!allParented) return { ok: false, reason: 'some child meshes lack parent-group resolver condition' };
+    return { ok: true, childCount: childMeshes.length, groupUuid: roofGroup.uuid };
+  })()`);
+
+  record('S97', !!(result?.ok), result ?? { reason: 'evaluate returned null' });
+}
+
 } finally {
   await cleanup();
 }
