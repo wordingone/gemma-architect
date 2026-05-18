@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import type { Viewer } from "./viewer.js";
 import { rebuildWallParams } from "../tools/structural.js";
+import { attemptWallCornerJoins } from "../tools/wall-corners.js";
 
 let _viewer: Viewer | null = null;
 let _vpEl: HTMLElement | null = null;
@@ -67,7 +68,14 @@ export function initWallHeightHandle(viewer: Viewer, vpEl: HTMLElement): void {
     window.dispatchEvent(new CustomEvent("wall:params-changed", { detail: { mesh: _targetMesh } }));
   });
 
-  div.addEventListener("pointerup", () => { _drag = null; });
+  div.addEventListener("pointerup", () => {
+    _drag = null;
+    // Re-apply corner joins after height drag — rebuildWallParams resets geometry
+    // to BoxGeometry which drops mitre cuts from the original join.
+    if (_targetMesh && _viewer) {
+      attemptWallCornerJoins(_targetMesh, _viewer.getScene());
+    }
+  });
 
   container.appendChild(div);
   _handleEl = div;

@@ -4572,6 +4572,62 @@ await resetScene('before-box-inject');
   }
 }
 
+// ── S101 — wall-corner-rejoin after thickness mutation (#949) ─────────────────
+// Place 2 walls at a 90° junction via SdWall dispatch (geometry starts as BoxGeometry,
+// indexed). Select one wall. Trigger thickness slider input event. After the fix,
+// applyWallParam calls attemptWallCornerJoins → rebuildWallFromCorners → wallPrism
+// (non-indexed). Assert geometry.index === null after the slider event.
+{
+  await evaluate(`(window.__testMode = false, true)`); // disable testMode so SdWall runs normally
+
+  // Place 2 walls sharing endpoint at (4, 0)
+  await evaluate(`(function(){
+    window.__dispatch && window.__dispatch('SdWall', { start: {x:0,y:0}, end: {x:4,y:0} });
+    window.__dispatch && window.__dispatch('SdWall', { start: {x:4,y:0}, end: {x:4,y:4} });
+    return true;
+  })()`);
+  await delay(400);
+
+  const s101 = await evaluate(`(async function() {
+    const walls = [];
+    window.__viewer.scene.traverse(obj => {
+      if (obj.userData && obj.userData.creator === 'wall' && obj.isMesh && !obj.userData.isJoinDisplay) {
+        walls.push(obj);
+      }
+    });
+    if (walls.length < 2) return { passed: false, evidence: { reason: 'need >=2 walls, got ' + walls.length } };
+
+    // Use last 2 placed walls (most recently added pair)
+    const wallA = walls[walls.length - 2];
+    const initialIndexed = wallA.geometry.index !== null; // BoxGeometry from SdWall = indexed
+
+    // Select wallA so inspect-tab wall-params section activates
+    window.__dispatch && window.__dispatch('SdSelect', { id: wallA.uuid });
+    await new Promise(r => setTimeout(r, 200));
+
+    // Trigger thickness slider input with a new value
+    const slider = document.querySelector('[data-wall-slider="thickness"]');
+    if (!slider) return { passed: false, evidence: { reason: 'no [data-wall-slider=thickness] found' } };
+    const origT = wallA.userData.wallThickness ?? 0.2;
+    const newT = parseFloat((origT + 0.05).toFixed(3));
+    slider.value = String(newT);
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 300));
+
+    // After fix: applyWallParam → rebuildWallParams → attemptWallCornerJoins → wallPrism (non-indexed)
+    const afterIndexed = wallA.geometry.index !== null;
+    const thicknessUpdated = Math.abs((wallA.userData.wallThickness ?? 0) - newT) < 0.001;
+
+    return {
+      passed: thicknessUpdated && !afterIndexed,
+      evidence: { initialIndexed, afterIndexed, origT, newT, thicknessUpdated, wallCount: walls.length }
+    };
+  })()`);
+
+  record('wall-corner-rejoin', !!(s101?.passed), s101 ?? { reason: 'evaluate returned null' });
+  await evaluate(`(window.__testMode = true, true)`); // restore testMode
+}
+
 } finally {
   await cleanup();
 }

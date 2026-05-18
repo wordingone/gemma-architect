@@ -43,6 +43,7 @@ import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { SkillCanvas } from "../skills/skill-canvas";
 import { rebuildWallParams } from "../tools/structural";
+import { attemptWallCornerJoins } from "../tools/wall-corners";
 import { initWallHeightHandle, showWallHeightHandle, hideWallHeightHandle } from "../viewer/wall-height-handle";
 
 // Eager-load all build-time skill.json files so the chat fastpath has steps at runtime.
@@ -1201,6 +1202,12 @@ function buildInspectTab(): HTMLElement {
       if (field === "thickness") rebuildWallParams(m, { thickness: Math.max(0.01, val) });
       else if (field === "height") rebuildWallParams(m, { height: Math.max(0.01, val) });
       else if (field === "bottom") rebuildWallParams(m, { bottomElevation: val });
+    }
+    // Re-apply corner joins after geometry rebuild — rebuildWallParams creates a fresh
+    // BoxGeometry which drops the mitre/butt cuts from the original join.
+    const scene = (window as unknown as { __viewer?: { getScene(): THREE.Scene } }).__viewer?.getScene();
+    if (scene) {
+      for (const m of _activeWalls) attemptWallCornerJoins(m, scene);
     }
     // Refresh display values to reflect clamping
     updateWallSection(_activeWalls);
