@@ -3536,6 +3536,47 @@ await resetScene('before-box-inject');
   else record('agent-skill-invocation', r66.passed, r66.evidence ?? { error: r66.error });
 }
 
+// ── S67: starter-library (#428) ───────────────────────────────────────────────
+// Verifies that seedStarterClusters() seeds all 6 starters to IndexedDB.
+// Clears the localStorage sentinel first so seeding always runs, then reads
+// back the clusters and checks for the Room starter.
+{
+  const r67 = await evaluate(`(async function() {
+    try {
+      if (!window.__skillStore) return { passed: false, evidence: { reason: '__skillStore shim not available' } };
+
+      // Force re-seed by clearing the sentinel.
+      localStorage.removeItem('gemma-starter-seeded-v1');
+
+      // Import and run seedStarterClusters.
+      const mod = await import('/src/skills/starter-clusters.ts').catch(e => ({ error: e.message }));
+      if (mod.error) return { passed: false, evidence: { importError: mod.error } };
+      await mod.seedStarterClusters();
+
+      // Read back clusters from IndexedDB via the shim.
+      const clusters = await window.__skillStore.listCanvasClusters();
+      const ids = clusters.map(c => c.id);
+      const hasRoom   = ids.includes('__starter__room');
+      const hasAll6   = ['__starter__wall-row','__starter__window-array','__starter__room',
+                         '__starter__roof-walls','__starter__stair-flight','__starter__skylight-grid']
+                        .every(id => ids.includes(id));
+
+      // Verify Room cluster has 5 steps (4 walls + 1 door).
+      const roomCluster = clusters.find(c => c.id === '__starter__room');
+      const roomGraph = roomCluster ? JSON.parse(roomCluster.graphJson) : null;
+      const roomStepCount = roomGraph?.nodes?.[0]?.skillSteps?.length ?? 0;
+
+      return {
+        passed: hasRoom && hasAll6 && roomStepCount === 5,
+        evidence: { hasRoom, hasAll6, roomStepCount, clusterCount: clusters.length }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r67) record('starter-library', false, { reason: 'evaluate returned null' });
+  else record('starter-library', r67.passed, r67.evidence ?? { error: r67.error });
+}
+
 } finally {
   await cleanup();
 }

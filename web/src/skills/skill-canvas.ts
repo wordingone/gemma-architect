@@ -11,6 +11,7 @@ import { compileDsl } from "../commands/dsl-eval";
 import { saveSkill, listSavedSkills, listCanvasClusters, type SkillStep, type SavedSkill, type CanvasCluster } from "./skill-store";
 import { openSaveSkillModal, openSaveClusterModal } from "./skill-modal";
 import { subscribe as subscribeAppState, getState } from "../app-state";
+import { seedStarterClusters, STARTER_IDS } from "./starter-clusters";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -529,10 +530,14 @@ export class SkillCanvas {
   // ── Palette ────────────────────────────────────────────────────────────────
 
   private async _buildPalette(): Promise<void> {
+    await seedStarterClusters();
     const [saved, clusters] = await Promise.all([
       listSavedSkills().catch(() => [] as SavedSkill[]),
       listCanvasClusters().catch(() => [] as CanvasCluster[]),
     ]);
+
+    const starterClusters = clusters.filter(c => STARTER_IDS.has(c.id));
+    const userClusters    = clusters.filter(c => !STARTER_IDS.has(c.id));
 
     this._paletteEl.innerHTML = "";
 
@@ -569,6 +574,18 @@ export class SkillCanvas {
     scriptItem.addEventListener("dblclick", () => this._addScriptAtCenter());
     this._paletteEl.appendChild(scriptItem);
 
+    // ── Starter Library section ───────────────────────────────────────────────
+    if (starterClusters.length > 0) {
+      const starterTitle = document.createElement("div");
+      starterTitle.className = "skill-canvas-palette-title";
+      starterTitle.style.marginTop = "10px";
+      starterTitle.textContent = "Starter Library";
+      this._paletteEl.appendChild(starterTitle);
+      for (const cluster of starterClusters) {
+        this._paletteEl.appendChild(this._makeClusterItem(cluster));
+      }
+    }
+
     // Saved skills
     if (saved.length > 0) {
       const title = document.createElement("div");
@@ -588,35 +605,40 @@ export class SkillCanvas {
       this._paletteEl.appendChild(hint);
     }
 
-    // ── Clusters section ──────────────────────────────────────────────────────
-    if (clusters.length > 0) {
+    // ── User clusters section ─────────────────────────────────────────────────
+    if (userClusters.length > 0) {
       const clusterTitle = document.createElement("div");
       clusterTitle.className = "skill-canvas-palette-title";
       clusterTitle.style.marginTop = "10px";
       clusterTitle.textContent = "Clusters";
       this._paletteEl.appendChild(clusterTitle);
-      for (const cluster of clusters) {
-        const item = document.createElement("div");
-        item.className = "skill-canvas-palette-item";
-        item.style.cssText = "display:flex; justify-content:space-between; align-items:center; gap:4px;";
-        item.innerHTML = `
-          <span class="sc-pal-name" style="overflow:hidden;text-overflow:ellipsis;">${escHtml(cluster.name)}</span>
-          <span style="display:flex;gap:3px;flex-shrink:0;">
-            <span class="sc-cluster-load-btn" title="Load cluster onto canvas" style="cursor:pointer;padding:1px 4px;border-radius:2px;font-size:9px;background:var(--paper-3,#2a2a2a);">load</span>
-            <span class="sc-cluster-export-btn" title="Export as .skill file" style="cursor:pointer;padding:1px 4px;border-radius:2px;font-size:9px;background:var(--paper-3,#2a2a2a);">↓</span>
-          </span>
-        `;
-        item.querySelector(".sc-cluster-load-btn")!.addEventListener("click", (e) => {
-          e.stopPropagation();
-          this.loadCanvasCluster(cluster);
-        });
-        item.querySelector(".sc-cluster-export-btn")!.addEventListener("click", (e) => {
-          e.stopPropagation();
-          SkillCanvas.exportClusterFile(cluster);
-        });
-        this._paletteEl.appendChild(item);
+      for (const cluster of userClusters) {
+        this._paletteEl.appendChild(this._makeClusterItem(cluster));
       }
     }
+  }
+
+  private _makeClusterItem(cluster: CanvasCluster): HTMLElement {
+    const item = document.createElement("div");
+    item.className = "skill-canvas-palette-item";
+    item.style.cssText = "display:flex; justify-content:space-between; align-items:center; gap:4px;";
+    item.title = cluster.description ?? cluster.name;
+    item.innerHTML = `
+      <span class="sc-pal-name" style="overflow:hidden;text-overflow:ellipsis;">${escHtml(cluster.name)}</span>
+      <span style="display:flex;gap:3px;flex-shrink:0;">
+        <span class="sc-cluster-load-btn" title="Load cluster onto canvas" style="cursor:pointer;padding:1px 4px;border-radius:2px;font-size:9px;background:var(--paper-3,#2a2a2a);">load</span>
+        <span class="sc-cluster-export-btn" title="Export as .skill file" style="cursor:pointer;padding:1px 4px;border-radius:2px;font-size:9px;background:var(--paper-3,#2a2a2a);">↓</span>
+      </span>
+    `;
+    item.querySelector(".sc-cluster-load-btn")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.loadCanvasCluster(cluster);
+    });
+    item.querySelector(".sc-cluster-export-btn")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      SkillCanvas.exportClusterFile(cluster);
+    });
+    return item;
   }
 
   private _makePaletteItem(

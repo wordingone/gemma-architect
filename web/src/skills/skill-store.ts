@@ -187,6 +187,16 @@ export async function saveCanvasCluster(cluster: Omit<CanvasCluster, "id" | "cre
   });
 }
 
+export async function putCanvasCluster(cluster: CanvasCluster): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CANVAS_CLUSTER_STORE, "readwrite");
+    const req = tx.objectStore(CANVAS_CLUSTER_STORE).put(cluster);
+    req.onsuccess = () => resolve();
+    req.onerror   = () => reject(req.error);
+  });
+}
+
 export async function deleteCanvasCluster(id: string): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -206,6 +216,7 @@ if (typeof window !== "undefined") {
       deleteCluster: typeof deleteCluster;
       listCanvasClusters: typeof listCanvasClusters;
       saveCanvasCluster: typeof saveCanvasCluster;
+      putCanvasCluster: typeof putCanvasCluster;
     };
-  }).__skillStore = { saveCluster, getClusterByName, deleteCluster, listCanvasClusters, saveCanvasCluster };
+  }).__skillStore = { saveCluster, getClusterByName, deleteCluster, listCanvasClusters, saveCanvasCluster, putCanvasCluster };
 }
