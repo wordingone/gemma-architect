@@ -19,6 +19,7 @@
 
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
+import { getState } from "../app-state";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -812,10 +813,16 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     ? `Available verbs (use ONLY these exact names): ${verbNames}`
     : "No verbs currently available. Do not emit function calls.";
 
+  const unitSystem = getState("unitSystem");
+  const unitHint = unitSystem === "imperial"
+    ? "Active unit: imperial. In NL responses express lengths in feet (e.g. 16ft, 9ft). Dispatch args stay in meters internally."
+    : "Active unit: metric. In NL responses express lengths in metres (e.g. 5m, 3m). Dispatch args are in meters.";
+
   return [
     "You are Gemma, a parametric CAD assistant. Be direct — no preamble.",
     "PLAN BEFORE DISPATCH: emit <plan> block first, then <tool_call> blocks.\nExample:\n<plan>\n1. SdWall — profile=[[0,0],[5,0]], height=2.8\n</plan>\n<tool_call>{\"command\":\"SdWall\",\"parameters\":{\"profile\":[[0,0],[5,0]],\"height\":2.8},\"metadata\":{\"source\":\"agent\"}}</tool_call>",
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
+    unitHint,
     DIMENSION_RULES,
     verbList,
     `Current scene: ${buildSceneContext()}`,
