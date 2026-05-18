@@ -53,7 +53,7 @@ class LevelStore {
   }
 
   add(opts: { name: string; elevation: number; height?: number }): Level {
-    const id = `level/${Date.now()}`;
+    const id = `level/${this._levels.size}`;
     const entry: Level = {
       id,
       name: opts.name,
