@@ -4685,6 +4685,29 @@ await resetScene('before-box-inject');
   await evaluate(`(window.__testMode = true, true)`);
 }
 
+// ── S108 — unit display: default imperial, toggle metric, toggle back ─────────
+{
+  const s108 = await evaluate(`(async () => {
+    const initialUnit = window.__appState?.unitSystem;
+    if (initialUnit !== 'imperial') return { passed: false, evidence: { reason: 'expected default imperial, got ' + initialUnit } };
+
+    // Toggle to metric
+    window.__dispatch && window.__dispatch('SdSetUnits', { system: 'metric' });
+    await new Promise(r => setTimeout(r, 100));
+    const metricUnit = window.__appState?.unitSystem;
+
+    // Toggle back to imperial
+    window.__dispatch && window.__dispatch('SdSetUnits', { system: 'imperial' });
+    await new Promise(r => setTimeout(r, 100));
+    const backUnit = window.__appState?.unitSystem;
+
+    const passed = initialUnit === 'imperial' && metricUnit === 'metric' && backUnit === 'imperial';
+    return { passed, evidence: { initialUnit, metricUnit, backUnit } };
+  })()`);
+
+  record('unit-display', !!(s108?.passed), s108 ?? { reason: 'evaluate returned null' });
+}
+
 } finally {
   await cleanup();
 }

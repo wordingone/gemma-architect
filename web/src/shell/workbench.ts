@@ -1051,7 +1051,7 @@ function buildInspectTab(): HTMLElement {
     if (levelSelect) {
       const levels = levelStore.all();
       levelSelect.innerHTML = '<option value="">manual</option>' +
-        levels.map((lv) => `<option value="${lv.elevation}">${lv.name} (${lv.elevation.toFixed(2)}m)</option>`).join("");
+        levels.map((lv) => `<option value="${lv.elevation}">${lv.name} (${formatLength(lv.elevation)})</option>`).join("");
       levelSelect.value = sameZ ? String(allZ[0]) : "";
     }
   }
@@ -1768,7 +1768,7 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
 // demoId is matched against the option label prefix ("1. ", "6. ", etc.)
 // because main.ts populates the dropdown with `value=index, text="N. Label"`.
 const PROMPT_CHIPS: { label: string; demoId: string }[] = [
-  { label: "Wall · 5.5 × 0.2 × 2.8 m",         demoId: "wall" },
+  { label: "Wall",                               demoId: "wall" },
   { label: "Circular column",                   demoId: "column" },
   { label: "Raised slab",                       demoId: "raised-slab" },
   { label: "Slab w/ stair hole",                demoId: "slab-with-hole" },

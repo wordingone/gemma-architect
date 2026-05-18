@@ -8,6 +8,7 @@ import { saveProjectJson } from "../shell/shell";
 import { runAgentTurn } from "../agent/agent-harness";
 import { dispatch, dispatchSync } from "../commands/dispatch";
 import { setConsoleMode } from "../shell/workbench";
+import { getState } from "../app-state";
 import { startCommandSession } from "../commands/command-session";
 import { setPickerHint, setChooserHint } from "../viewer/picker-hint";
 
@@ -89,6 +90,7 @@ const ALL_CMDS: Cmd[] = [
   { group: "VIEW", icon: "graph", label: "View → Bottom",      kbd: "", run: () => { dispatchSync("SdSetViewOrtho", { view: "bottom" }); } },
   { group: "VIEW", icon: "graph", label: "View → Isometric",   kbd: "", run: () => { dispatchSync("SdSetViewOrtho", { view: "iso" }); } },
   { group: "VIEW", icon: "graph", label: "View → Perspective", kbd: "", run: () => { dispatchSync("SdSetViewPerspective", {}); } },
+  { group: "VIEW",     icon: "graph",        label: "Toggle units (metric / imperial)", kbd: "", run: () => { dispatchSync("SdSetUnits", { system: getState("unitSystem") === "metric" ? "imperial" : "metric" }); } },
   { group: "VIEW",     icon: "graph",        label: "Toggle drafting style", kbd: "D",   run: () => (window as unknown as { __toggleDrafting?: () => void }).__toggleDrafting?.() },
   { group: "VIEW",     icon: "split-single", label: "Mode → MODEL",         kbd: "⌥1",  run: () => activateModeKey("model") },
   { group: "VIEW",     icon: "split-quad",   label: "Mode → LAYOUT (paper)", kbd: "⌥2",  run: () => activateModeKey("layout") },

@@ -12,7 +12,7 @@ import { assertCrossOriginIsolated } from "./agent/wasm-backend";
 assertCrossOriginIsolated();
 
 import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonElementTypes } from "./shell/shell";
-import { formatLength, formatArea, formatVolume } from "./units";
+import { formatLength, formatArea, formatVolume, unitLabel } from "./units";
 import { opAddLabel, opBuildAnnotLine, getOpPhase } from "./viewer/op-tool";
 import { ptIsCoordInputActive } from "./viewer/transforms";
 import { buildWorkbench } from "./shell/workbench";
@@ -2213,7 +2213,15 @@ function _showRoofInspector(mesh: THREE.Mesh): void {
   const p: RoofParams = (mesh.userData.roofParams as RoofParams) ?? { type: "pitched", pitchDeg: 30, overhang: 0.4, thickness: 0.15 };
   _roofInspectorMeshUuid = mesh.uuid;
 
-  const mkSlider = (label: string, key: keyof RoofParams, min: number, max: number, step: number, unit: string) => {
+  const mkSlider = (label: string, key: keyof RoofParams, minM: number, maxM: number, stepM: number, unit: string) => {
+    const isLength = unit === "m";
+    const isImperial = isLength && unitLabel() === "ft";
+    const FT = 3.28084;
+    const toDisp = (m: number) => isImperial ? Math.round(m * FT * 100) / 100 : m;
+    const toMeters = (d: number) => isImperial ? d / FT : d;
+    const dispUnit = isLength ? unitLabel() : unit;
+    const min = toDisp(minM), max = toDisp(maxM), step = Math.round(toDisp(stepM) * 1000) / 1000;
+
     const row = document.createElement("div");
     row.style.cssText = "display:flex;align-items:center;gap:6px;margin:4px 0;";
     const lbl = document.createElement("span");
@@ -2221,16 +2229,19 @@ function _showRoofInspector(mesh: THREE.Mesh): void {
     lbl.textContent = label;
     const val = document.createElement("span");
     val.style.cssText = "min-width:32px;text-align:right;font-size:11px;";
-    const cur = (p[key] as number) ?? (key === "pitchDeg" ? 30 : key === "overhang" ? 0.4 : 0.15);
-    val.textContent = `${cur}${unit}`;
+    const curM = (p[key] as number) ?? (key === "pitchDeg" ? 30 : key === "overhang" ? 0.4 : 0.15);
+    const cur = toDisp(curM);
+    val.textContent = `${cur}${dispUnit}`;
     const inp = document.createElement("input");
     inp.type = "range"; inp.min = String(min); inp.max = String(max); inp.step = String(step);
     inp.value = String(cur); inp.style.cssText = "flex:1;";
     inp.addEventListener("input", () => {
-      val.textContent = `${parseFloat(inp.value)}${unit}`;
+      val.textContent = `${parseFloat(inp.value)}${dispUnit}`;
     });
     inp.addEventListener("change", () => {
-      const updated: Record<string, unknown> = { ...p, [key]: parseFloat(inp.value) };
+      const dispVal = parseFloat(inp.value);
+      const metersVal = isLength ? toMeters(dispVal) : dispVal;
+      const updated: Record<string, unknown> = { ...p, [key]: metersVal };
       const existing = viewer.getScene().getObjectByProperty("uuid", _roofInspectorMeshUuid ?? "");
       if (!existing) return;
       const dispArgs = (existing.userData.dispatchArgs as Record<string, unknown>) ?? {};
