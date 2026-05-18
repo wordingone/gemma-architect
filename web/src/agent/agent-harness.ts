@@ -863,24 +863,24 @@ Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan
 
 User: design a two-story residential house, 26' × 20'
 Assistant: 26 feet wide, 20 feet deep, 2 floors × 10ft walls, pitched roof. Window on south face; stair at NE corner.
-<tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":3.0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":10,"extent":26},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":10,"height":10,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[8,0],[8,6],[0,6]],"thickness":0.10},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[8,0]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[8,0],[8,6]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[8,6],[0,6]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,6],[0,0]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[4,0,0],"width":1.2,"height":1.2,"sillH":0.9},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[13,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[8,0],[8,6],[0,6]],"thickness":0.10},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[8,0]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[8,0],[8,6]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[8,6],[0,6]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,6],[0,0]],"thickness":0.20,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[8,0],[8,6],[0,6]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":10},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdStair","parameters":{"start":[7,5],"end":[7,2.5],"type":"straight","riser":0.1778,"tread":0.2794,"width":0.914,"targetHeight":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":10},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
@@ -917,8 +917,8 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
 
   const unitSystem = getState("unitSystem");
   const unitHint = unitSystem === "imperial"
-    ? "Active unit: imperial. In NL responses express lengths in feet (e.g. 16ft, 9ft). Dispatch args stay in meters internally."
-    : "Active unit: metric. In NL responses express lengths in metres (e.g. 5m, 3m). Dispatch args are in meters.";
+    ? "Active unit: imperial. In NL responses express lengths in feet (e.g. 16ft, 9ft). Dispatch args use the active unit's numbers directly — emit feet for imperial mode."
+    : "Active unit: metric. In NL responses express lengths in metres (e.g. 5m, 3m). Dispatch args use the active unit's numbers directly — emit metres for metric mode.";
 
   return [
     "You are Gemma, a parametric CAD assistant. Be direct — no preamble.",
