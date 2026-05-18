@@ -211,6 +211,7 @@ export class ChatPanel {
       chip.addEventListener("click", () => {
         this._inputEl.value = s.prompt;
         this._inputEl.focus();
+        void this._send();
       });
       this._startersEl.appendChild(chip);
     }
