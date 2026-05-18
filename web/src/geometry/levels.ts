@@ -67,10 +67,10 @@ class LevelStore {
     return entry;
   }
 
-  /** Find or create a level by name (for IfcLevel dispatch handler). */
+  /** Find or create a level, matching by elevation first (avoids duplicating built-in ground level). */
   findOrCreate(name: string, elevation: number, height?: number): Level {
     for (const l of this._levels.values()) {
-      if (l.name.toLowerCase() === name.toLowerCase()) return l;
+      if (Math.abs(l.elevation - elevation) < 0.01) return l;
     }
     return this.add({ name, elevation, height });
   }
