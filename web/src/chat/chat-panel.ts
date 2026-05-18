@@ -155,6 +155,23 @@ function estimateMaxTokens(prompt: string): number {
   return 512;
 }
 
+// Keys whose values are angles (degrees) — must not be divided by ft2m.
+const _ANGLE_KEYS = new Set(["pitchDeg", "angleDeg", "angle", "rotation", "tilt"]);
+const _FT_TO_M = 1 / 3.28084;
+
+function _convertVal(key: string, val: unknown): unknown {
+  if (_ANGLE_KEYS.has(key)) return val;
+  if (typeof val === "number") return val * _FT_TO_M;
+  if (Array.isArray(val)) return val.map((v) => _convertVal(key, v));
+  return val;
+}
+
+function imperialArgsToMetric(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args)) out[k] = _convertVal(k, v);
+  return out;
+}
+
 export class ChatPanel {
   private _messages: Message[] = [];
   private _history: Array<{ role: "user" | "assistant"; content: string }> = [];
@@ -541,6 +558,7 @@ export class ChatPanel {
   private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; userSummary: string; fired: string[] }> {
     const fired: string[] = [];
     const errors: string[] = [];
+    const isImperial = getState("unitSystem") === "imperial";
     // QW-1: read pre-dispatch hooks once per batch (fault-isolated — hook errors are silenced).
     const preHooks = (window as unknown as _GemmaW).__gemma_dispatch_hooks.pre.slice();
     for (const d of resp.dispatches) {
@@ -548,7 +566,7 @@ export class ChatPanel {
       for (const hook of preHooks) { try { hook(d); } catch { /* silenced */ } }
       const out = await invokeCommand({
         command: d.verb,
-        parameters: d.args,
+        parameters: isImperial ? imperialArgsToMetric(d.args) : d.args,
         metadata: { source: "agent" },
       });
       const cls = classifyDispatchResult(d.verb, out);

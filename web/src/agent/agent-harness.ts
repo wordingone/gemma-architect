@@ -861,8 +861,8 @@ Assistant:
 const WEBGPU_HOUSE_FEW_SHOT = `
 Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan> block):
 
-User: design a two-story residential house, 26' × 20'
-Assistant: 26 feet wide, 20 feet deep, 2 floors × 9.6ft walls, pitched roof. Window on south face; stair at NE corner.
+User: build a two-story residential house, 26 feet wide by 20 feet deep
+Assistant: 26 feet wide, 20 feet deep, 2 floors × 9.6ft walls, pitched roof. Door on south face; window on south face; stair at NE corner.
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":9.6,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":9.6,"height":9.6,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
@@ -871,6 +871,7 @@ Assistant: 26 feet wide, 20 feet deep, 2 floors × 9.6ft walls, pitched roof. Wi
 <tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.6},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.6},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.6},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdDoor","parameters":{"position":[2,0,0],"width":3.0,"height":7.0,"sillH":0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdWindow","parameters":{"position":[13,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
@@ -917,7 +918,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
 
   const unitSystem = getState("unitSystem");
   const unitHint = unitSystem === "imperial"
-    ? "Active unit: imperial. In NL responses express lengths in feet (e.g. 16ft, 9ft). Dispatch args use the active unit's numbers directly — emit feet for imperial mode."
+    ? "Active unit: imperial. Express all lengths in feet (e.g. 26ft, 20ft, 9.6ft). Emit foot values directly in coordinates — 26 feet wide → x-max 26, 20 feet deep → y-max 20."
     : "Active unit: metric. In NL responses express lengths in metres (e.g. 5m, 3m). Dispatch args use the active unit's numbers directly — emit metres for metric mode.";
 
   return [

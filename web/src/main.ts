@@ -966,8 +966,8 @@ registerHandler("SdDoor", (args) => {
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
   const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
-  const doorW = (args.width as number | undefined) ?? DEFAULT_DOOR_W;
-  const doorH = (args.height as number | undefined) ?? DEFAULT_DOOR_H;
+  const doorW = Math.min((args.width as number | undefined) ?? DEFAULT_DOOR_W, 1.83);  // cap 6ft max
+  const doorH = Math.min((args.height as number | undefined) ?? DEFAULT_DOOR_H, 2.44);  // cap 8ft max
   const { mesh, chain } = buildDoor(p, { w: doorW, h: doorH });
   mesh.position.z = elevation;
   if (cplane.kind === "host-derived") {
