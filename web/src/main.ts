@@ -2065,6 +2065,18 @@ window.addEventListener("viewer:select", (e) => {
   }
 });
 
+// Enable export buttons once the agent completes a turn with dispatches.
+// The dispatch path (IfcWall, SdBox, etc.) doesn't go through the replicad worker,
+// so currentSource is never set to "prompt" — all export buttons stay disabled.
+// Fix: listen for turn-complete and promote source when verbs were dispatched.
+window.addEventListener("agent:turn-complete", (e) => {
+  const verbs = (e as CustomEvent<{ verbs: string[] }>).detail?.verbs;
+  if (verbs && verbs.length > 0 && currentSource.kind === "none") {
+    currentSource = { kind: "prompt", demoId: currentDemo.id };
+    refreshExportButtons();
+  }
+});
+
 // Isolate status bar indicator — show/hide #sb-isolate on viewer:isolate-changed.
 document.addEventListener("viewer:isolate-changed", (e) => {
   const cell = document.getElementById("sb-isolate");
