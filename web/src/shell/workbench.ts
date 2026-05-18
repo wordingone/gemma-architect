@@ -191,6 +191,32 @@ export function setConsoleMode(m: ConsoleMode): void {
   _setConsoleModeFn?.(m);
 }
 
+// Module-level chat-panel ref so skillstore:saved can push saved skills into fastpath.
+let _chatPanel: InstanceType<typeof ChatPanel> | null = null;
+
+function _savedSkillsAsSkills(saved: SavedSkill[]): Skill[] {
+  return saved.map((s) => ({
+    name: s.name,
+    version: "0",
+    description: s.description ?? s.name,
+    // Keywords: split name on spaces/hyphens/underscores; also include the full name.
+    keywords: [...new Set([
+      s.name.toLowerCase(),
+      ...s.name.toLowerCase().split(/[\s\-_]+/).filter((t) => t.length > 1),
+    ])],
+    examples: [],
+    eval_id: "",
+    body: "",
+    steps: s.steps,
+  }));
+}
+
+async function _refreshChatSkills(): Promise<void> {
+  if (!_chatPanel) return;
+  const saved = await listSavedSkills().catch(() => [] as SavedSkill[]);
+  _chatPanel.setSkills([..._buildTimeSkills(), ..._savedSkillsAsSkills(saved)]);
+}
+
 type SidebarTab = { id: string; label: string };
 const SIDEBAR_TABS: SidebarTab[] = [
   { id: "scene",   label: "SCENE" },
@@ -1884,7 +1910,8 @@ function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
   // Build both inner panes upfront; swap visibility on mode change.
   const chatRoot = el("div", "chat-panel-root");
   const chatPanel = new ChatPanel(chatRoot);
-  chatPanel.setSkills(_buildTimeSkills());
+  _chatPanel = chatPanel;
+  void _refreshChatSkills();
 
   const consolePane = buildConsoleInner();
 
@@ -2498,8 +2525,10 @@ function initLiveTabSubscriptions(): void {
   });
 
   // Refresh skill nodes after a skill is saved (modal dispatches this event).
+  // Also push the newly-saved skill into the chat-panel fastpath.
   window.addEventListener("skillstore:saved", () => {
     void renderSkillNodes();
+    void _refreshChatSkills();
   });
 
   window.addEventListener("viewer:select", (rawEv) => {
