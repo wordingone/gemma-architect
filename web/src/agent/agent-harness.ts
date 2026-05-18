@@ -983,8 +983,9 @@ function parseDispatches(raw: string): { dispatches: AgentDispatch[]; text: stri
     } catch { return false; }
   }
 
-  // Pass 1: FunctionGemma-style <tool_call>{...}</tool_call> blocks.
-  let text = raw.replace(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/gi, (_, inner) => {
+  // Pass 1: <tool_call>{...}</tool_call> blocks. >? handles Gemma omitting the closing >
+  // of the opening tag (outputs "<tool_call{" instead of "<tool_call>{").
+  let text = raw.replace(/<tool_call>?\s*([\s\S]*?)\s*<\/tool_call>/gi, (_, inner) => {
     tryExtract(inner.trim());
     return "";
   });
