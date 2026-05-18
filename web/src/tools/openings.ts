@@ -27,6 +27,7 @@ interface FzkGeomData {
   normals: number[];
   indices: number[];
   colors: number[];
+  groups?: { start: number; count: number; material: "frame" | "glass" }[];
 }
 
 let _doorData: FzkGeomData | null = null;
@@ -98,6 +99,73 @@ function _buildFromFzkData(
   }
 }
 
+// Window-specific FZK builder: applies frame/glass groups from extracted JSON (#885).
+// Frame → MeshStandardMaterial (tan, opaque).
+// Glass → MeshPhysicalMaterial (transparent, transmission-based).
+function _buildWindowFromFzkData(
+  data: FzkGeomData,
+  targetW: number,
+  targetThick: number,
+  targetH: number,
+): { geom: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null {
+  try {
+    const positions = new Float32Array(data.positions);
+    const normals   = new Float32Array(data.normals);
+    const colors    = new Float32Array(data.colors);
+    const indices   = new Uint32Array(data.indices);
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geom.setAttribute("normal",   new THREE.BufferAttribute(normals, 3));
+    geom.setAttribute("color",    new THREE.BufferAttribute(colors, 3));
+    geom.setIndex(new THREE.BufferAttribute(indices, 1));
+
+    geom.applyMatrix4(new THREE.Matrix4().set(
+      0, 0, 1, 0,
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 0, 1,
+    ));
+
+    geom.computeBoundingBox();
+    const bb = geom.boundingBox;
+    if (!bb) return null;
+    const cx = (bb.min.x + bb.max.x) / 2;
+    const cy = (bb.min.y + bb.max.y) / 2;
+    const swRange = bb.max.x - bb.min.x;
+    const stRange = bb.max.y - bb.min.y;
+    const shRange = bb.max.z - bb.min.z;
+    if (swRange < 0.001 || stRange < 0.001 || shRange < 0.001) return null;
+
+    geom.applyMatrix4(new THREE.Matrix4().makeTranslation(-cx, -cy, -bb.min.z));
+    geom.scale(targetW / swRange, targetThick / stRange, targetH / shRange);
+
+    if (data.groups && data.groups.length > 0) {
+      for (const grp of data.groups) {
+        geom.addGroup(grp.start, grp.count, grp.material === "glass" ? 1 : 0);
+      }
+      return {
+        geom,
+        mat: [
+          new THREE.MeshStandardMaterial({ color: 0xc8b89a, roughness: 0.55, metalness: 0.05 }),
+          new THREE.MeshPhysicalMaterial({
+            color: 0x88aacc, transparent: true, opacity: 0.30,
+            transmission: 0.85, roughness: 0.05, metalness: 0.0,
+          }),
+        ],
+      };
+    }
+
+    // Fallback: old JSON without groups — single vertex-colored material
+    return {
+      geom,
+      mat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 }),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Synthetic fallbacks (used when FZK template not yet loaded) ───────────────
 
 function _syntheticDoor(w: number, t: number, h: number): { geom: THREE.BufferGeometry; mat: THREE.MeshStandardMaterial } {
@@ -155,7 +223,7 @@ export function buildWindow(p: { x: number; y: number }): { mesh: THREE.Mesh; ch
   const h    = FZK_WINDOW_H;
   const sill = FZK_WINDOW_SILL;
 
-  const fzk = _windowData ? _buildFromFzkData(_windowData, w, t, h) : null;
+  const fzk = _windowData ? _buildWindowFromFzkData(_windowData, w, t, h) : null;
   const { geom, mat } = fzk ?? _syntheticWindow(w, t, h);
 
   const mesh = new THREE.Mesh(geom, mat as THREE.Material | THREE.Material[]);
