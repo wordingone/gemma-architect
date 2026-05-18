@@ -15,7 +15,7 @@ let _viewer: Viewer | null = null;
 export function setStructuralViewer(v: Viewer | null): void { _viewer = v; }
 
 // Default heights / sizes from tier1-conventions.
-const DEFAULT_WALL_HEIGHT = 3;
+export const DEFAULT_WALL_HEIGHT = 3;
 const DEFAULT_WALL_THICKNESS = 0.2;
 const DEFAULT_SLAB_THICKNESS = 0.2;
 const DEFAULT_COLUMN_HEIGHT = 4;
@@ -146,6 +146,63 @@ export function rebuildWallInPlace(mesh: THREE.Mesh, a: { x: number; y: number }
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
     { x: midX, y: midY, z: 0, id: makeSnapId(midX, midY, 0) },
   ] as SnapVertex[];
+}
+
+// Gable-top wall: pentagon profile (level bottom, angled apex).
+// Caller supplies world-space endpoints; eaveH is the height to the eave (same as
+// a level wall's height); ridgeH is the ADDITIONAL height from eave to ridge apex.
+export function buildWallPitchedTop(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  eaveH: number,
+  ridgeH: number,
+  thickness: number = DEFAULT_WALL_THICKNESS,
+): { mesh: THREE.Mesh; chain: string } {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 0.01;
+  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const t = thickness;
+
+  // Pentagon in XY plane (X = wall length, Y = height). Extrude by t in Z.
+  const shape = new THREE.Shape();
+  shape.moveTo(-len / 2, 0);
+  shape.lineTo( len / 2, 0);
+  shape.lineTo( len / 2, eaveH);
+  shape.lineTo( 0,       eaveH + ridgeH);
+  shape.lineTo(-len / 2, eaveH);
+  shape.closePath();
+
+  const geom = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false });
+  // ExtrudeGeometry: shape in XY, extrudes +Z by t.
+  // Rotate -90° around X so that old Y (height) → new Z (up), old Z (t) → new -Y.
+  geom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+  // Center Y so wall face is at y = ±t/2 (same convention as BoxGeometry wall).
+  geom.translate(0, t / 2, 0);
+
+  const mat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, 0);
+  mesh.rotation.z = (angDeg * Math.PI) / 180;
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "wall";
+  mesh.userData.wallThickness = t;
+  mesh.userData.wallHeight = eaveH;
+  mesh.userData.topProfile = "pitched";
+  mesh.userData.eaveHeight = eaveH;
+  mesh.userData.ridgeHeight = ridgeH;
+  mesh.userData.controlPoints = [
+    new THREE.Vector3(-len / 2, 0, 0),
+    new THREE.Vector3( len / 2, 0, 0),
+  ];
+  initWallCorners(mesh);
+  mesh.userData.endpoints = [
+    { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
+    { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
+    { x: cx, y: cy, z: 0, id: makeSnapId(cx, cy, 0) },
+  ] as SnapVertex[];
+  const chain = `// gable wall len=${round(len)} eave=${round(eaveH)} ridge=${round(eaveH + ridgeH)}`;
+  return { mesh, chain };
 }
 
 // No-op: universal CSG join (join-groups.ts) handles all structural element joining.

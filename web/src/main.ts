@@ -54,7 +54,7 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, type RoofParams, type CurtainWallParams, type StairParams } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
@@ -765,7 +765,12 @@ registerHandler("SdWall", (args) => {
     a = { x: 0, y: 0 };
     b = { x: wallLen, y: 0 };
   }
-  const { mesh, chain } = buildWall(a, b);
+  const topProfile = (args.topProfile as string | undefined) ?? "level";
+  const eaveH = (args.eaveHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
+  const ridgeH = (args.ridgeHeight as number | undefined) ?? 1.5;
+  const { mesh, chain } = topProfile === "pitched"
+    ? buildWallPitchedTop(a, b, eaveH, ridgeH)
+    : buildWall(a, b);
   mesh.position.z = getActiveLevelElevation();
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWall", args);
@@ -1028,6 +1033,65 @@ registerHandler("SdRoof", (args) => {
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
   if (mesh instanceof THREE.Mesh) onElementCommitted(mesh, viewer.getScene());
+
+  // Auto-trim gable walls: for a pitched roof, reshape the two short-end walls into
+  // a gable triangle. Eave walls (long sides) are left as-is.
+  if (roofType === "pitched") {
+    const pitchRad2 = (pitchDeg * Math.PI) / 180;
+    const landscape = w >= d;
+    // Span half: the dimension over which the roof pitches (shorter plan axis).
+    const spanHalf = (landscape ? d : w) / 2;
+    const rH = spanHalf * Math.tan(pitchRad2);
+    const activeLevelElev = getActiveLevelElevation();
+    const TOL = 0.8; // metres — endpoint must be within TOL of the gable edge
+
+    viewer.forEachSceneChild((child) => {
+      if (child.userData?.creator !== "wall") return;
+      if (child.userData?.topProfile === "pitched") return;
+      if (Math.abs((child.position.z as number) - activeLevelElev) > 0.5) return;
+
+      const eps = child.userData.endpoints as Array<{ x: number; y: number }> | undefined;
+      if (!eps || eps.length < 2) return;
+      const wx0 = eps[0].x, wy0 = eps[0].y;
+      const wx1 = eps[1].x, wy1 = eps[1].y;
+
+      // Gable walls: both endpoints lie on the same short edge of the roof bbox.
+      const isGable = landscape
+        ? (Math.abs(wy0 + d / 2) < TOL && Math.abs(wy1 + d / 2) < TOL) ||
+          (Math.abs(wy0 - d / 2) < TOL && Math.abs(wy1 - d / 2) < TOL)
+        : (Math.abs(wx0 + w / 2) < TOL && Math.abs(wx1 + w / 2) < TOL) ||
+          (Math.abs(wx0 - w / 2) < TOL && Math.abs(wx1 - w / 2) < TOL);
+      if (!isGable) return;
+
+      const wallMesh = child as THREE.Mesh;
+      const wallEaveH = (wallMesh.userData.wallHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
+      const cps = wallMesh.userData.controlPoints as THREE.Vector3[] | undefined;
+      const len = cps && cps.length >= 2 ? cps[0].distanceTo(cps[1]) : (() => {
+        const ddx = wx1 - wx0, ddy = wy1 - wy0;
+        return Math.sqrt(ddx * ddx + ddy * ddy);
+      })();
+      const wt = (wallMesh.userData.wallThickness as number | undefined) ?? 0.2;
+
+      // Build gable pentagon in the same local space as the existing wall geometry.
+      const shape = new THREE.Shape();
+      shape.moveTo(-len / 2, 0);
+      shape.lineTo( len / 2, 0);
+      shape.lineTo( len / 2, wallEaveH);
+      shape.lineTo( 0,       wallEaveH + rH);
+      shape.lineTo(-len / 2, wallEaveH);
+      shape.closePath();
+      const pitchedGeom = new THREE.ExtrudeGeometry(shape, { depth: wt, bevelEnabled: false });
+      pitchedGeom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+      pitchedGeom.translate(0, wt / 2, 0);
+
+      wallMesh.geometry.dispose();
+      wallMesh.geometry = pitchedGeom;
+      wallMesh.userData.topProfile = "pitched";
+      wallMesh.userData.eaveHeight = wallEaveH;
+      wallMesh.userData.ridgeHeight = rH;
+    });
+  }
+
   return { created: "roof", roofType, width: w, depth: d, ifcPredefinedType: mesh.userData.ifcPredefinedType };
 });
 
