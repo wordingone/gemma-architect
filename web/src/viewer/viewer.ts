@@ -18,7 +18,7 @@ import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
 import { pushAction, pushDeleteAction, pushReplaceAction, pushTransformAction, captureTransform, beginTransaction, endTransaction, type TransformSnapshot } from "../history.js";
-import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted, restoreVoidCut } from "../tools/join-groups.js";
+import { dissolveGroupForMesh, isOpening, nearestGroupMember, onElementCommitted, rerecutVoid, restoreVoidCut } from "../tools/join-groups.js";
 import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from "../tools/wall-corners.js";
 import { ClipFillManager } from "./clip-fill.js";
 import { getLayerForCreator } from "../geometry/layers.js";
@@ -524,7 +524,8 @@ export class Viewer {
             this.syncPivot();
             // After a structural mesh is moved, re-evaluate join state.
             if (!this.subTargetObject && this.targetObject instanceof THREE.Mesh) {
-              if (this.targetObject.userData?.creator === "wall") {
+              const _movedCreator = this.targetObject.userData?.creator as string | undefined;
+              if (_movedCreator === "wall") {
                 // Update stale world endpoints, then re-attempt parametric corner joins.
                 recomputeWallEndpoints(this.targetObject);
                 attemptWallCornerJoins(this.targetObject, this.scene);
@@ -538,6 +539,16 @@ export class Viewer {
                   }
                 }
                 _dragResetNeighborIds = [];
+              } else if (isOpening(_movedCreator) && _dragStartSnapshot) {
+                // AC3 (#875): restore old void, cut new void at current position.
+                const _rerect = rerecutVoid(this.targetObject, this.scene);
+                if (_rerect) {
+                  beginTransaction("move-opening");
+                  pushTransformAction(this.targetObject, _dragStartSnapshot);
+                  pushReplaceAction(_rerect.newGroup, [_rerect.oldGroup], "wall-void-recut");
+                  endTransaction();
+                  _dragStartSnapshot = null;  // consumed by transaction — skip default push below
+                }
               }
               onElementCommitted(this.targetObject, this.scene);
             }
@@ -1212,7 +1223,7 @@ export class Viewer {
       // Geometry is NOT disposed here — pushDeleteAction keeps it alive so undo
       // can re-add the object. Disposal happens in clearHistory() on scene wipe.
       const _creator = (removed.userData as Record<string, unknown>).creator as string | undefined;
-      const _voidRestore = (_creator === "door" || _creator === "window")
+      const _voidRestore = isOpening(_creator)
         ? restoreVoidCut(removed, this.scene) : null;
       // Wrap delete + void-restore in one atomic undo group (#875).
       if (_voidRestore) beginTransaction("delete-opening");

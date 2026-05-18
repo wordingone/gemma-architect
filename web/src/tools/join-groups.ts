@@ -433,3 +433,38 @@ export function restoreVoidCut(
 
   return { newWall, oldGroup: hg };
 }
+
+// ── Opening helpers (#875 AC3) ─────────────────────────────────────────────────
+
+// All creator values that identify a placed door or window.
+export function isOpening(creator: string | undefined): boolean {
+  return creator === "door" || creator === "window" ||
+         creator === "SdDoor" || creator === "SdWindow";
+}
+
+// Move-restore: restore old void, then cut a new void at opening's current world position.
+// Requires opening.userData.voidW / voidH (set at placement by SdDoor/SdWindow handlers
+// and by the tool-click path). Falls back to FZK defaults if missing.
+// Returns { newGroup, oldGroup } for undo recording, or null if no host wall found.
+export function rerecutVoid(
+  opening: THREE.Object3D,
+  scene: THREE.Scene,
+): { newGroup: THREE.Group; oldGroup: THREE.Group } | null {
+  const restore = restoreVoidCut(opening, scene);
+  if (!restore) return null;
+
+  const ud = opening.userData as Record<string, unknown>;
+  const voidW = (ud.voidW as number | undefined) ?? 0.885;  // FZK_DOOR_W fallback
+  const voidH = (ud.voidH as number | undefined) ?? 2.01;   // FZK_DOOR_H fallback
+
+  // Void center: opening world position is at the bottom of the opening, so center is +voidH/2.
+  opening.updateMatrixWorld(true);
+  const voidCenter = new THREE.Vector3();
+  opening.getWorldPosition(voidCenter);
+  voidCenter.z += voidH / 2;
+
+  const newGroup = cutRectVoidFromBoxMesh(restore.newWall, voidCenter, voidW, voidH);
+  if (!newGroup) return null;
+
+  return { newGroup, oldGroup: restore.oldGroup };
+}

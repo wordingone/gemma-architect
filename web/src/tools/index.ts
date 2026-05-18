@@ -731,6 +731,9 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
             const _isWin = _creator === "window";
             const _vW = _isWin ? FZK_WINDOW_W : FZK_DOOR_W;
             const _vH = _isWin ? FZK_WINDOW_H : FZK_DOOR_H;
+            // Store void dims so rerecutVoid can use them on move (#875 AC3).
+            out.mesh.userData.voidW = _vW;
+            out.mesh.userData.voidH = _vH;
             const _vc = out.mesh.position.clone();
             _vc.z += _vH / 2;
             _voidCutHost  = _host;

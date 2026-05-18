@@ -790,6 +790,8 @@ registerHandler("SdDoor", (args) => {
     mesh.quaternion.copy(q);
   }
   mesh.userData.creator = "SdDoor";
+  mesh.userData.voidW = FZK_DOOR_W;
+  mesh.userData.voidH = FZK_DOOR_H;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdDoor", args);
   mesh.userData.levelId = getActiveLevelId();
@@ -830,6 +832,8 @@ registerHandler("SdWindow", (args) => {
     mesh.quaternion.copy(q);
   }
   mesh.userData.creator = "SdWindow";
+  mesh.userData.voidW = FZK_WINDOW_W;
+  mesh.userData.voidH = FZK_WINDOW_H;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWindow", args);
   mesh.userData.levelId = getActiveLevelId();
