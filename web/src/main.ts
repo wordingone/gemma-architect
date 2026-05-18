@@ -799,7 +799,10 @@ registerHandler("SdSlab", (args) => {
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
   const { mesh, chain } = buildSlab(a, b);
-  mesh.position.z = elev;
+  // Architectural convention: slab top face = level plane.
+  // buildSlab geometry has bottom at z=0, top at z=thickness. Offset so top = elev.
+  const DEFAULT_SLAB_T = 0.2;
+  mesh.position.z = elev - DEFAULT_SLAB_T;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdSlab", args);
   mesh.userData.levelId = getActiveLevelId();
@@ -1025,7 +1028,7 @@ registerHandler("SdRoof", (args) => {
   }
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
-  const roofParams: RoofParams = { type: roofType, pitchDeg, overhang, thickness };
+  const roofParams: RoofParams = { type: roofType, pitchDeg, overhang, thickness, showStructure: true };
   const { mesh, chain } = buildRoof(a, b, roofParams);
   mesh.position.z = getActiveLevelElevation() + DEFAULT_CEILING_OFFSET;
   mesh.userData.roofType = roofType;
@@ -1057,10 +1060,14 @@ registerHandler("SdRoof", (args) => {
     const activeLevelElev = getActiveLevelElevation();
     const TOL = 0.8; // metres — endpoint must be within TOL of the gable edge
 
-    viewer.forEachSceneChild((child) => {
+    viewer.getScene().traverse((child) => {
       if (child.userData?.creator !== "wall") return;
       if (child.userData?.topProfile === "pitched") return;
-      if (Math.abs((child.position.z as number) - activeLevelElev) > 0.5) return;
+      // Check world-space z against active level elevation.
+      // Use world position so joined walls inside JoinGroup containers are correctly located.
+      const worldPos = new THREE.Vector3();
+      child.getWorldPosition(worldPos);
+      if (Math.abs(worldPos.z - activeLevelElev) > 0.5) return;
 
       const eps = child.userData.endpoints as Array<{ x: number; y: number }> | undefined;
       if (!eps || eps.length < 2) return;

@@ -452,6 +452,7 @@ export type RoofParams = {
   pitchDeg?: number;
   overhang?: number;
   thickness?: number;
+  showStructure?: boolean; // default true — shows rafters, ridge beam, wall plates
 };
 
 // Section-drawing-quality roof (#847). Returns a Group of named sub-elements:
@@ -586,7 +587,7 @@ export function buildRoof(
       ? member(ridgeHL * 2, 0.10, 0.12, frameMat.clone())
       : member(0.10, ridgeHL * 2, 0.12, frameMat.clone());
     ridgeBeam.position.set(0, 0, hipRidgeH + 0.06);
-    ridgeBeam.visible = false;
+    ridgeBeam.visible = params.showStructure !== false;
     group.add(ridgeBeam);
 
     // Perimeter fascia (4 sides) — hidden; part of wall envelope, not roof silhouette
@@ -679,7 +680,7 @@ export function buildRoof(
       ? member(ridgeLenHalf * 2, 0.10, 0.12, frameMat.clone())
       : member(0.10, ridgeLenHalf * 2, 0.12, frameMat.clone());
     ridgeBeam.position.set(0, 0, rH + 0.06);
-    ridgeBeam.visible = false;
+    ridgeBeam.visible = params.showStructure !== false;
     group.add(ridgeBeam);
 
     // Wall plates (at wall-top line, just inside the eaves)
@@ -688,12 +689,12 @@ export function buildRoof(
       ? member(wallPlateLen, 0.10, 0.10, frameMat.clone())
       : member(0.10, wallPlateLen, 0.10, frameMat.clone());
     wp1.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, 0.05);
-    wp1.visible = false;
+    wp1.visible = params.showStructure !== false;
     group.add(wp1);
     const wp2 = wp1.clone();
     (wp2.material as THREE.Material) = (wp1.material as THREE.Material).clone();
     wp2.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, 0.05);
-    wp2.visible = false;
+    wp2.visible = params.showStructure !== false;
     group.add(wp2);
 
     // Fascia boards at eaves (outside face of rafter ends)
@@ -722,6 +723,7 @@ export function buildRoof(
       landscape ? -(spanHalf - overhang / 2) : 0,
       -0.01,
     );
+    soffitA.visible = false;
     group.add(soffitA);
     const soffitB = soffitA.clone();
     (soffitB.material as THREE.Material) = (soffitA.material as THREE.Material).clone();
@@ -730,15 +732,16 @@ export function buildRoof(
       landscape ? (spanHalf - overhang / 2) : 0,
       -0.01,
     );
+    soffitB.visible = false;
     group.add(soffitB);
 
     // Rafters — two slopes
     for (let i = 0; i < nRafters; i++) {
       const axialPos = -ridgeLenHalf + i * (ridgeLenHalf * 2 / (nRafters - 1));
 
-      // Front slope rafter — hidden by default; visible under section/cutaway only.
+      // Front slope rafter.
       const rfA = member(rafterW, rafterD, rafterLen, frameMat.clone());
-      rfA.visible = false;
+      rfA.visible = params.showStructure !== false;
       if (landscape) {
         rfA.rotation.x = slopeRx;
         rfA.position.set(axialPos, -spanHalf / 2, rH / 2);
@@ -748,9 +751,9 @@ export function buildRoof(
       }
       group.add(rfA);
 
-      // Back slope rafter (mirror) — also hidden.
+      // Back slope rafter (mirror).
       const rfB = member(rafterW, rafterD, rafterLen, frameMat.clone());
-      rfB.visible = false;
+      rfB.visible = params.showStructure !== false;
       if (landscape) {
         rfB.rotation.x = -slopeRx;
         rfB.position.set(axialPos, spanHalf / 2, rH / 2);
