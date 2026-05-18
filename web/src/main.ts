@@ -1072,17 +1072,20 @@ registerHandler("SdRoof", (args) => {
 
   const fp = args.footprint as number[][] | undefined;
   let w = 8, d = 10;
+  let centerX = 0, centerY = 0;
   if (fp && fp.length >= 2) {
     const xs = fp.map((p) => p[0]);
     const ys = fp.map((p) => p[1]);
     w = (Math.max(...xs) - Math.min(...xs)) || 8;
     d = (Math.max(...ys) - Math.min(...ys)) || 10;
+    centerX = (Math.max(...xs) + Math.min(...xs)) / 2;
+    centerY = (Math.max(...ys) + Math.min(...ys)) / 2;
   }
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
   const roofParams: RoofParams = { type: roofType, pitchDeg, overhang, thickness, showStructure: true };
   const { mesh, chain } = buildRoof(a, b, roofParams);
-  mesh.position.z = getActiveLevelElevation() + DEFAULT_CEILING_OFFSET;
+  mesh.position.set(centerX, centerY, getActiveLevelElevation() + DEFAULT_CEILING_OFFSET);
   mesh.userData.roofType = roofType;
   mesh.userData.ifcPredefinedType = ({
     pitched: "GABLE_ROOF",
@@ -1126,12 +1129,15 @@ registerHandler("SdRoof", (args) => {
       const wx0 = eps[0].x, wy0 = eps[0].y;
       const wx1 = eps[1].x, wy1 = eps[1].y;
 
-      // Gable walls: both endpoints lie on the same short edge of the roof bbox.
+      // Gable walls: both endpoints at the same gable-end X (landscape) or Y (portrait).
+      // Compare against world-space gable edges using the footprint centroid.
+      const gx1 = centerX - w / 2, gx2 = centerX + w / 2;
+      const gy1 = centerY - d / 2, gy2 = centerY + d / 2;
       const isGable = landscape
-        ? (Math.abs(wy0 + d / 2) < TOL && Math.abs(wy1 + d / 2) < TOL) ||
-          (Math.abs(wy0 - d / 2) < TOL && Math.abs(wy1 - d / 2) < TOL)
-        : (Math.abs(wx0 + w / 2) < TOL && Math.abs(wx1 + w / 2) < TOL) ||
-          (Math.abs(wx0 - w / 2) < TOL && Math.abs(wx1 - w / 2) < TOL);
+        ? (Math.abs(wx0 - gx1) < TOL && Math.abs(wx1 - gx1) < TOL) ||
+          (Math.abs(wx0 - gx2) < TOL && Math.abs(wx1 - gx2) < TOL)
+        : (Math.abs(wy0 - gy1) < TOL && Math.abs(wy1 - gy1) < TOL) ||
+          (Math.abs(wy0 - gy2) < TOL && Math.abs(wy1 - gy2) < TOL);
       if (!isGable) return;
 
       const wallMesh = child as THREE.Mesh;
