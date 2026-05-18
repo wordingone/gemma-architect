@@ -323,8 +323,10 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
   let specAttempts = 0;
   let specAccepts  = 0;
 
-  // MTP spec-decode (same path as before, now running inside worker)
-  if (useMtp && _drafterSession) {
+  // MTP spec-decode — disabled for long contexts: drafter produces degenerate output
+  // (argmax over NaN verifier logits → token ID 0) when kvSeqLen approaches 2048.
+  // Threshold 900: two-story-house prompt is ~997 tok; standard path handles it correctly.
+  if (useMtp && _drafterSession && inputLength < 900) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ort = (globalThis as any).ort ?? await import("onnxruntime-web");
