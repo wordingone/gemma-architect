@@ -24,8 +24,9 @@ type MenuItem = {
 
 const MENUS: MenuItem[] = [
   { label: "File", entries: [
-    { label: "Open / Import…",  shortcut: "⌘O", stub: true, onAction: () => document.getElementById("file-pick-btn")?.click() },
-    { label: "Save project",    shortcut: "⌘S", stub: true, onAction: () => saveProjectJson() },
+    { label: "Open / Import…",  shortcut: "⌘O", onAction: () => openProjectFile() },
+    { label: "Save project",    shortcut: "⌘S", onAction: () => saveProjectGemarch(_currentFileName) },
+    { label: "Save As…",       shortcut: "⇧⌘S", onAction: () => saveProjectGemarch(null) },
     { separator: true },
     { label: "Export…",         shortcut: "⌘E", canonical: "SdExport" },
     { separator: true },
@@ -328,6 +329,107 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   }
 }
 
+const RECENT_FILES_KEY = "gemma-cad.recent-files";
+const MAX_RECENT = 5;
+type RecentEntry = { name: string; ts: number; data: string };
+
+let _fileNameEl: HTMLElement | null = null;
+let _currentFileName = "Untitled.001";
+
+function loadRecentFiles(): RecentEntry[] {
+  try {
+    const raw = localStorage.getItem(RECENT_FILES_KEY);
+    if (raw) return JSON.parse(raw) as RecentEntry[];
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveRecentFilesList(entries: RecentEntry[]): void {
+  try { localStorage.setItem(RECENT_FILES_KEY, JSON.stringify(entries)); } catch { /* ignore */ }
+}
+
+function addToRecentFiles(name: string, data: string): void {
+  const entries = loadRecentFiles().filter(e => e.name !== name);
+  entries.unshift({ name, ts: Date.now(), data });
+  saveRecentFilesList(entries.slice(0, MAX_RECENT));
+}
+
+function snapshotState(): object {
+  const units = getState("unitSystem") ?? "metric";
+  const w = window as Window & { __viewer?: { exportScene?: () => unknown[] } };
+  return { version: 1, meta: { units, name: _currentFileName }, objects: w.__viewer?.exportScene?.() ?? [] };
+}
+
+function setCurrentFileName(name: string): void {
+  _currentFileName = name;
+  if (_fileNameEl) _fileNameEl.textContent = `${name} · IFC4`;
+}
+
+function loadProjectData(data: string, fileName: string): void {
+  try {
+    const parsed = JSON.parse(data) as { version?: number; meta?: { units?: string; name?: string } };
+    if (parsed.meta?.units) dispatchSync("SdSetUnits", { system: parsed.meta.units });
+    const baseName = fileName.replace(/\.(gemarch|json)$/i, "");
+    setCurrentFileName(parsed.meta?.name ?? baseName);
+  } catch {
+    alert(`Could not load "${fileName}": invalid format.`);
+  }
+}
+
+function openProjectFile(): void {
+  let picker = document.getElementById("gemarch-file-picker") as HTMLInputElement | null;
+  if (!picker) {
+    picker = document.createElement("input");
+    picker.type = "file";
+    picker.id = "gemarch-file-picker";
+    picker.accept = ".gemarch,.json";
+    picker.style.display = "none";
+    document.body.appendChild(picker);
+    picker.addEventListener("change", () => {
+      const file = picker!.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        loadProjectData(text, file.name);
+        addToRecentFiles(file.name, text);
+      };
+      reader.readAsText(file);
+      picker!.value = "";
+    });
+  }
+  picker.click();
+}
+
+function injectRecentEntries(base: MenuEntry[]): MenuEntry[] {
+  const recents = loadRecentFiles();
+  if (recents.length === 0) return base;
+  const firstSepIdx = base.findIndex(e => "separator" in e && e.separator);
+  if (firstSepIdx === -1) return base;
+  const recentEntries: MenuEntry[] = recents.map(r => ({
+    label: r.name,
+    onAction: () => loadProjectData(r.data, r.name),
+  }));
+  return [...base.slice(0, firstSepIdx), ...recentEntries, ...base.slice(firstSepIdx)];
+}
+
+export function saveProjectGemarch(fileNameOrNull: string | null): void {
+  const name = fileNameOrNull ?? _currentFileName;
+  const data = JSON.stringify(snapshotState(), null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const dlName = name.endsWith(".gemarch") ? name : `${name}.gemarch`;
+  a.download = dlName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  addToRecentFiles(dlName, data);
+  setCurrentFileName(dlName.replace(/\.gemarch$/i, ""));
+}
+
 const THEME_KEY = "gemma-cad.theme";
 type ThemeMode = "day" | "night";
 
@@ -399,7 +501,8 @@ function buildMenubar(host: HTMLElement) {
     panel.dataset.for = menu.label.toLowerCase();
     panel.addEventListener("mousedown", (e) => e.stopPropagation());
 
-    for (const entry of menu.entries) {
+    const entries = menu.label === "File" ? injectRecentEntries(menu.entries) : menu.entries;
+    for (const entry of entries) {
       if ("separator" in entry && entry.separator) {
         const sep = document.createElement("div");
         sep.className = "menu-sep";
@@ -479,10 +582,11 @@ function buildMenubar(host: HTMLElement) {
   const right = document.createElement("div");
   right.className = "menubar-right";
   right.innerHTML = `
-    <span>Untitled.001 · IFC4</span>
+    <span id="menubar-filename">${escapeHtml(_currentFileName)} · IFC4</span>
     <button id="blueprint-toggle" class="theme-pill" type="button" title="Toggle day/night (Ctrl+\\)" aria-label="Toggle theme">◑ BLUEPRINT</button>
     <span class="session-pill"><span class="dot"></span>LOCAL · NO CLOUD</span>
   `;
+  _fileNameEl = right.querySelector("#menubar-filename") as HTMLElement | null;
   host.appendChild(right);
 
   // Click-outside closes the dropdown.
@@ -680,17 +784,9 @@ function wireFpsCounter() {
   requestAnimationFrame(tick);
 }
 
+/** @deprecated Use saveProjectGemarch */
 export function saveProjectJson(): void {
-  const payload = { version: 1 };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "project.gemma.json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveProjectGemarch(_currentFileName);
 }
 
 function wireUnitsCell(): void {
@@ -712,4 +808,19 @@ export function initShellChrome(opts?: { onModeChange?: (k: string) => void; onS
   wireThemeToggle();
   wireFpsCounter();
   wireUnitsCell();
+
+  // File keyboard shortcuts: Ctrl/Cmd+O (open), Ctrl/Cmd+S (save), Ctrl/Cmd+Shift+S (save as).
+  window.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key === "o" || e.key === "O") {
+      const tgt = e.target as HTMLElement | null;
+      if (tgt?.tagName === "INPUT" || tgt?.tagName === "TEXTAREA" || tgt?.isContentEditable) return;
+      e.preventDefault();
+      openProjectFile();
+    } else if (e.key === "s" || e.key === "S") {
+      e.preventDefault();
+      if (e.shiftKey) saveProjectGemarch(null);
+      else saveProjectGemarch(_currentFileName);
+    }
+  });
 }
