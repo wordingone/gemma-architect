@@ -139,6 +139,7 @@ export function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THR
   mesh.userData.kind = "polyline";
   mesh.userData.creator = "polyline";
   mesh.userData.controlPoints = corePts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
+  mesh.userData.endpoints = corePts.map((p) => ({ x: p.x, y: p.y, z: 0, id: makeSnapId(p.x, p.y, 0) })) as SnapVertex[];
   const worldVerts = corePts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const poly = drawPolyline([${worldVerts}]${isClosed ? ", { close: true }" : ""}).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };
@@ -169,6 +170,7 @@ export function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.
   mesh.userData.nurbsKind = "catmull-rom";
   mesh.userData.controlPoints = localVecs;
   mesh.userData.nurbsCVs = crNurbs.cvs;
+  mesh.userData.endpoints = curvePts.map((p) => ({ x: p.x, y: p.y, z: 0, id: makeSnapId(p.x, p.y, 0) })) as SnapVertex[];
   const worldPts = curvePts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const curv = drawCurve([${worldPts}]${isClosed ? ", { close: true }" : ""}).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };

@@ -18,10 +18,18 @@ import { dispatchSync } from "../commands/dispatch";
 import { formatLength, formatArea, formatVolume } from "../units";
 import { createCatmullRomAsNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 
-// Creators that are valid extrude profiles.
+// Creators that are valid extrude profiles (click-select in extrude_select phase).
 export const EXTRUDABLE_CREATORS = new Set([
   "rect", "circle", "polygon", "polyline", "curve", "line",
   "wall", "slab", "column", "box", "beam", "roof", "space",
+  "extrude", "boolean-union", "boolean-difference", "boolean-split",
+]);
+
+// 2D sketch creators for auto-selection at tool-activation time.
+// Narrower than EXTRUDABLE_CREATORS — avoids auto-selecting large 3D solids
+// (slabs, roofs, walls) as profiles when the user activates extrude.
+const SKETCH_PROFILE_CREATORS = new Set([
+  "rect", "circle", "polygon", "polyline", "curve", "line",
 ]);
 
 // ── Late-binding hooks ────────────────────────────────────────────────────────
@@ -125,6 +133,7 @@ export function opFinish(viewer: Viewer): void {
   _hooks.removeSelOverlay();
   _rawChooserDefault = null;
   _selDragging = false;
+  viewer.deselectCurrent();
   viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
@@ -133,11 +142,12 @@ export function opCancel(viewer: Viewer): void {
   opSetHover(null);
   const restoreEmissive = (obj: THREE.Object3D) => {
     const m = obj as THREE.Mesh;
-    if (m.userData._savedEmissive !== undefined) {
-      ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color)
-        .setHex(m.userData._savedEmissive as number);
-      delete m.userData._savedEmissive;
-    }
+    if (m.userData._savedEmissive === undefined) return;
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    const firstStd = mats.find((mat): mat is THREE.MeshStandardMaterial =>
+      !!(mat as THREE.MeshStandardMaterial).emissive);
+    if (firstStd) firstStd.emissive.setHex(m.userData._savedEmissive as number);
+    delete m.userData._savedEmissive;
   };
   if (_opPhase?.kind === "bool_b") restoreEmissive(_opPhase.objA);
   if (_opPhase?.kind === "bool_op") { restoreEmissive(_opPhase.objA); restoreEmissive(_opPhase.objB); }
@@ -538,10 +548,12 @@ export function opUpdateExtrudePreview(viewer: Viewer, clientX: number, clientY:
 function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D, op: "union" | "difference" | "split"): void {
   const restoreEmissive = (obj: THREE.Object3D) => {
     const m = obj as THREE.Mesh;
-    if (m.userData._savedEmissive !== undefined) {
-      ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(m.userData._savedEmissive as number);
-      delete m.userData._savedEmissive;
-    }
+    if (m.userData._savedEmissive === undefined) return;
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    const std = mats.find((mat): mat is THREE.MeshStandardMaterial =>
+      !!(mat as THREE.MeshStandardMaterial).emissive);
+    if (std) std.emissive.setHex(m.userData._savedEmissive as number);
+    delete m.userData._savedEmissive;
   };
   restoreEmissive(objA); restoreEmissive(objB);
 
@@ -639,7 +651,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     const mesh = opBuildExtrudeMesh(phase.profile, h2);
     mesh.userData.kind = "brep";
     mesh.userData.creator = "extrude";
-    viewer.addMesh(mesh, "brep");
+    viewer.addMesh(mesh, "brep", { noHistory: true });
     _hooks.appendToCreateSequence(`// extrude h=${round(h2)} from profile creator=${phase.profile.userData.creator ?? "unknown"}`);
     pushAction(mesh, "extrude");
     opFinish(viewer);
@@ -666,9 +678,14 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     opSetHover(null); // clear hover so its saved emissive doesn't overwrite our selection color
     const objB = hit.obj;
     const mB = objB as THREE.Mesh;
-    if (mB instanceof THREE.Mesh && mB.material && !Array.isArray(mB.material) && (mB.material as THREE.MeshStandardMaterial).emissive) {
-      mB.userData._savedEmissive = ((mB.material as THREE.MeshStandardMaterial).emissive as THREE.Color).getHex();
-      ((mB.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(0x883300); // warm orange — distinct from first object's blue
+    const mats = mB instanceof THREE.Mesh
+      ? (Array.isArray(mB.material) ? mB.material : [mB.material])
+      : [];
+    const firstStd = mats.find((m): m is THREE.MeshStandardMaterial =>
+      !!(m as THREE.MeshStandardMaterial).emissive);
+    if (firstStd) {
+      mB.userData._savedEmissive = firstStd.emissive.getHex();
+      firstStd.emissive.setHex(0x883300); // warm orange — distinct from first object's blue
     }
     _opPhase = { kind: "bool_op", objA: phase.objA, objB };
     opShowBoolChooser(viewer, phase.objA, objB);
@@ -902,7 +919,7 @@ export function opStartTool(viewer: Viewer, tool: string): void {
 
   if (tool === "extrude") {
     const sel = ptGetTarget();
-    const selIsProfile = sel && EXTRUDABLE_CREATORS.has(sel.userData.creator ?? "");
+    const selIsProfile = sel && SKETCH_PROFILE_CREATORS.has(sel.userData.creator ?? "");
     if (selIsProfile) {
       const box = new THREE.Box3().setFromObject(sel!);
       const size = new THREE.Vector3(); box.getSize(size);

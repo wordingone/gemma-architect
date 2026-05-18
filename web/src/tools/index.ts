@@ -929,6 +929,12 @@ export function initCreateMode(viewer: Viewer): void {
             clickPt = new THREE.Vector3(snapped.x, snapped.y, snapped.z);
           }
         }
+        // Apply shift-axis constraint at click commit for rotate_axis_b.
+        if (ev.shiftKey && !_ptAxisLock && _ptPhase?.kind === "rotate_axis_b" && _shiftAxisChoice) {
+          const base = _ptPhase.axisA;
+          const constrained = shiftAxisSnap(base, { x: clickPt.x, y: clickPt.y }, getSnap().step);
+          clickPt = new THREE.Vector3(constrained.x, constrained.y, clickPt.z);
+        }
         ev.stopImmediatePropagation();
         ptHandlePoint(viewer, clickPt);
         return;
@@ -1210,6 +1216,22 @@ export function initCreateMode(viewer: Viewer): void {
         }
       } else if (!ev.shiftKey) {
         if (_smartTrackTimer) { clearTimeout(_smartTrackTimer); _smartTrackTimer = null; _smartTrackCandidate = null; }
+      }
+    }
+
+    // Shift-hold axis constraint for rotate_axis_b — constrain axis direction to X/Y/Z from axisA.
+    if (ev.shiftKey && !ev.altKey && _ptPhase?.kind === "rotate_axis_b") {
+      const base = _ptPhase.axisA;
+      const dx = snapped.x - base.x;
+      const dy = snapped.y - base.y;
+      if (!_shiftAxisChoice) {
+        const moved = Math.abs(dx) > 1e-4 || Math.abs(dy) > 1e-4;
+        if (moved) _shiftAxisChoice = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+      }
+      if (_shiftAxisChoice) {
+        const axisSnapped = shiftAxisSnap(base, snapped, getSnap().step);
+        snapped = { x: axisSnapped.x, y: axisSnapped.y, z: snapped.z };
+        updateSketchShiftLine(viewer, base, _shiftAxisChoice);
       }
     }
 
