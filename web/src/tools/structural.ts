@@ -382,13 +382,15 @@ export function buildRoof(
       ? member(ridgeHL * 2, 0.10, 0.12, frameMat.clone())
       : member(0.10, ridgeHL * 2, 0.12, frameMat.clone());
     ridgeBeam.position.set(0, 0, hipRidgeH + 0.06);
+    ridgeBeam.visible = false;
     group.add(ridgeBeam);
 
-    // Perimeter fascia (4 sides)
+    // Perimeter fascia (4 sides) — hidden; part of wall envelope, not roof silhouette
     const fW = 0.03, fH = 0.15;
     const fasciaFront = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, fW, fH), soffitMat.clone());
     fasciaFront.userData.ifcClass = "IfcCovering";
     fasciaFront.position.set(0, -hd, -fH / 2);
+    fasciaFront.visible = false;
     group.add(fasciaFront);
     const fasciaBack = fasciaFront.clone();
     fasciaBack.position.set(0, hd, -fH / 2);
@@ -396,6 +398,7 @@ export function buildRoof(
     const fasciaLeft = new THREE.Mesh(new THREE.BoxGeometry(fW, hd * 2, fH), soffitMat.clone());
     fasciaLeft.userData.ifcClass = "IfcCovering";
     fasciaLeft.position.set(-hw, 0, -fH / 2);
+    fasciaLeft.visible = false;
     group.add(fasciaLeft);
     const fasciaRight = fasciaLeft.clone();
     fasciaRight.position.set(hw, 0, -fH / 2);
@@ -472,6 +475,7 @@ export function buildRoof(
       ? member(ridgeLenHalf * 2, 0.10, 0.12, frameMat.clone())
       : member(0.10, ridgeLenHalf * 2, 0.12, frameMat.clone());
     ridgeBeam.position.set(0, 0, rH + 0.06);
+    ridgeBeam.visible = false;
     group.add(ridgeBeam);
 
     // Wall plates (at wall-top line, just inside the eaves)
@@ -480,10 +484,12 @@ export function buildRoof(
       ? member(wallPlateLen, 0.10, 0.10, frameMat.clone())
       : member(0.10, wallPlateLen, 0.10, frameMat.clone());
     wp1.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, 0.05);
+    wp1.visible = false;
     group.add(wp1);
     const wp2 = wp1.clone();
     (wp2.material as THREE.Material) = (wp1.material as THREE.Material).clone();
     wp2.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, 0.05);
+    wp2.visible = false;
     group.add(wp2);
 
     // Fascia boards at eaves (outside face of rafter ends)
@@ -493,10 +499,12 @@ export function buildRoof(
       : new THREE.Mesh(new THREE.BoxGeometry(fW, ridgeLenHalf * 2, fH), soffitMat.clone());
     fasciaA.userData.ifcClass = "IfcCovering";
     fasciaA.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, -fH / 2);
+    fasciaA.visible = false;
     group.add(fasciaA);
     const fasciaB = fasciaA.clone();
     (fasciaB.material as THREE.Material) = (fasciaA.material as THREE.Material).clone();
     fasciaB.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, -fH / 2);
+    fasciaB.visible = false;
     group.add(fasciaB);
 
     // Soffit under eave overhang (2 sides)
@@ -577,46 +585,6 @@ export function buildRoof(
     }
     group.add(sheathB);
 
-    // Gable-end fill panels (vertical face at each end)
-    const gableH = rH;
-    const gableLen = spanHalf;
-    const gableA_geom = new THREE.BufferGeometry();
-    const gv = landscape
-      ? new Float32Array([
-          -ridgeLenHalf, -gableLen, 0,
-          -ridgeLenHalf,  gableLen, 0,
-          -ridgeLenHalf,  0,       gableH,
-        ])
-      : new Float32Array([
-          -gableLen, -ridgeLenHalf, 0,
-           gableLen, -ridgeLenHalf, 0,
-           0,        -ridgeLenHalf, gableH,
-        ]);
-    gableA_geom.setAttribute("position", new THREE.BufferAttribute(gv, 3));
-    gableA_geom.setIndex([0, 1, 2]);
-    gableA_geom.computeVertexNormals();
-    const gableA = new THREE.Mesh(gableA_geom, frameMat.clone());
-    gableA.userData.ifcClass = "IfcCovering";
-    group.add(gableA);
-
-    const gableB_geom = new THREE.BufferGeometry();
-    const gvB = landscape
-      ? new Float32Array([
-          ridgeLenHalf, -gableLen, 0,
-          ridgeLenHalf,  0,       gableH,
-          ridgeLenHalf,  gableLen, 0,
-        ])
-      : new Float32Array([
-          -gableLen, ridgeLenHalf, 0,
-           0,        ridgeLenHalf, gableH,
-           gableLen, ridgeLenHalf, 0,
-        ]);
-    gableB_geom.setAttribute("position", new THREE.BufferAttribute(gvB, 3));
-    gableB_geom.setIndex([0, 1, 2]);
-    gableB_geom.computeVertexNormals();
-    const gableB = new THREE.Mesh(gableB_geom, frameMat.clone());
-    gableB.userData.ifcClass = "IfcCovering";
-    group.add(gableB);
   }
 
   const chain = `const roof = buildSectionRoof(${round(w)}, ${round(d)}, { type:"${roofType}", pitchDeg:${round(pitchDeg)}, overhang:${round(overhang)} }).translate([${round(cx)}, ${round(cy)}, 0]);`;
