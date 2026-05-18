@@ -17,10 +17,8 @@
 // Function-call format: model emits ```json {"verb":"Name","args":{...}} ``` blocks.
 // parseDispatches() extracts these; remaining text becomes the response text.
 
-import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, PreTrainedModel } from "@huggingface/transformers";
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
-import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -61,19 +59,15 @@ export type AgentResponse = {
 
 const REMOTE_URL: string = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
 
-// P10-2: session-level flag; set on first OrtRun failure during inference.
-// When true, all subsequent runAgentTurn() calls route to remote regardless of
-// whether the model loaded successfully in-browser.
+// P10-2: session-level flag; set on first worker error.
+// When true, all subsequent runAgentTurn() calls route to remote.
 let _webgpuFallbackEngaged = false;
-let _deviceLabel = "GPU"; // updated after model load to reflect actual backend
+let _deviceLabel = "GPU"; // updated from worker model-ready message
 
-// On-device WebGPU context size limit (#424). Shared with prefill warmup (#492).
-const WEBGPU_CONTEXT_LIMIT = 2048;
-
-// System-prompt prefill deduplication guard (#492).
+// Warmup deduplication guard — set to true when worker sends warmup-done.
 let _prefillDone = false;
 
-// ---- Model loading (in-browser path) ---------------------------------------
+// ---- Model loading (in-browser path via Web Worker #936) -------------------
 
 // Model candidates — E4B is default; switch to E2B via ?gemma_model=e2b URL param.
 export const MODEL_ID_CANDIDATES = {
@@ -96,59 +90,23 @@ const _MTP_OFF =
 
 const BADGE_ID = "ai-model-badge";
 
-let _model: PreTrainedModel | null = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _processor: any = null;
-let _loadPromise: Promise<{ model: PreTrainedModel; processor: unknown }> | null = null;
-
-// ── MTP drafter (#674 AC3-AC5) ───────────────────────────────────────────────
-//
-// Gemma 4 MTP uses a 78M drafter (gemma-4-E2B-it-assistant) that operates on
-// the TARGET model's hidden states and KV cache, not on token embeddings alone.
-// The drafter is exported to ONNX and loaded as a second InferenceSession.
-//
-// spec-decode loop prerequisites (ALL THREE must be true for _mtpActive = true):
-//   1. Drafter ONNX loaded successfully (_drafterSession !== null)
-//   2. Target ONNX exposes "last_hidden_state" output node
-//   3. MTP_VERIFICATION_WIRED === true (real per-token target verification implemented)
-//
-// transformers.js 4.2.0 does NOT expose target hidden states (condition 2 false),
-// AND verification is not yet wired (condition 3 false) — the spec-decode branch is
-// structurally dormant today. Fallback (AC5): standard model.generate() is always used
-// when any prerequisite fails. (#679 added condition 3 to prevent drafter-only unverified
-// output from silently activating when conditions 1+2 become true upstream.)
-//
-// Drafter ONNX input interface (E4B — see scripts/export-drafter-e4b-onnx.py):
-//   inputs_embeds [B, seq, 5120] = cat([target_token_embed, target_hidden_state], dim=-1)
-//   position_ids  [B, seq]       = constant at last-seen-token position for all draft steps
-//   sliding_k     [B, 2, kv, 256] = target last sliding_attention layer K (2 KV heads)
-//   sliding_v     [B, 2, kv, 256] = target last sliding_attention layer V
-//   full_k        [B, 2, kv, 512] = target last full_attention layer K (2 KV heads)
-//   full_v        [B, 2, kv, 512] = target last full_attention layer V
-// Outputs: logits [B, seq, 262144], projected_state [B, seq, 2560]
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type OrtSession = any; // onnxruntime-web InferenceSession (loaded dynamically)
-
-let _drafterSession: OrtSession | null = null;
-let _drafterLoadAttempted = false;
-let _drafterLoadPromise: Promise<void> | null = null;
+// ── Worker state (#936) ──────────────────────────────────────────────────────
+let _inferenceWorker: Worker | null = null;
+let _workerReady = false;
+type WorkerGenResult = {
+  text: string; specAttempts: number; specAccepts: number;
+  prefillMs: number; decodeMs: number; inputLength: number; tokensOut: number;
+};
+const _generateCallbacks = new Map<string, {
+  resolve: (r: WorkerGenResult) => void;
+  reject: (e: Error) => void;
+}>();
 
 // CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#812).
-// Dev (env var unset): falls back to relative path served by Vite dev server same-origin.
-// Production: set VITE_DRAFTER_ONNX_URL to any CORS-enabled CDN URL
-//   (Cloudflare R2, HF Hub, etc.) in the deploy environment — no code change needed.
-// CDN requirements: Access-Control-Allow-Origin:* + Cross-Origin-Resource-Policy:cross-origin
-//   (both R2 and HF Hub public repos set these by default).
 const DRAFTER_ONNX_URL: string =
   import.meta.env["VITE_DRAFTER_ONNX_URL"] ?? "/models/gemma-4-E4B-it-assistant/drafter.onnx";
-// Bump this key to bust the IDB cache when a new drafter export is deployed.
 const DRAFTER_CACHE_KEY = "mtp-drafter-e4b-v1";
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
-// Flip to true when drafter ONNX is deployed and output names are confirmed (#738).
-// Two-gate design: drafter loaded + verification wired. Target hidden-state exposure
-// is best-effort (approximated by token embedding when unavailable).
-const MTP_VERIFICATION_WIRED = true;
 
 /**
  * Returns true when the request includes image/audio/viewport content.
@@ -161,58 +119,10 @@ export function payloadHasMultimodal(req: AgentRequest): boolean {
   return false;
 }
 
-async function loadDrafter(): Promise<void> {
-  if (_drafterLoadAttempted) return;
-  _drafterLoadAttempted = true;
-  // Announce drafter download start so the loading strip can extend its lifetime.
-  window.dispatchEvent(new CustomEvent("agentmodel:drafter:loading", { detail: { progress: 0, bytes: 0, total: 0 } }));
-  try {
-    // onnxruntime-web is already loaded by transformers.js — access the global.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ort = (globalThis as any).ort ?? (await import("onnxruntime-web"));
-    // IDB-backed fetch: first call downloads 302 MB and caches; subsequent calls
-    // read from IDB (~ms) skipping the network entirely. Bump DRAFTER_CACHE_KEY
-    // to invalidate the cache when a new drafter export is deployed.
-    const { fetchDrafterCached } = await import("./drafter-cache.js");
-    const drafterBuf = await fetchDrafterCached(DRAFTER_ONNX_URL, DRAFTER_CACHE_KEY, (loaded, total) => {
-      window.dispatchEvent(
-        new CustomEvent("agentmodel:drafter:loading", { detail: { progress: total > 0 ? (loaded / total) * 100 : -1, bytes: loaded, total } }),
-      );
-    });
-    // ORT session.create has no progress callback — show indeterminate while parsing ONNX.
-    window.dispatchEvent(new CustomEvent("agentmodel:drafter:loading", { detail: { progress: -1, bytes: 0, total: 0 } }));
-    _drafterSession = await ort.InferenceSession.create(drafterBuf, {
-      executionProviders: ["webgpu", "wasm"],
-      // Drafter runs on WebGPU EP; output tensors are GPU-resident by default.
-      // tensor.data is null for GPU tensors — read via getData() or pin to CPU.
-      // Pinning both outputs to CPU so argmax(logits.data) and projState.data
-      // are valid synchronously without an explicit getData() call per step.
-      preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
-    });
-    console.info("[agent-harness] Drafter ONNX loaded — MTP spec-decode active (#738).");
-    // Signal for external tooling (A/B scripts, verify harness) that drafter is ready.
-    (globalThis as any).__drafterLoaded = true;
-    window.dispatchEvent(new CustomEvent("agentmodel:drafter:ready"));
-  } catch (e) {
-    // AC5: graceful fallback — network error, version mismatch, model not hosted yet.
-    console.warn(
-      "[agent-harness] Drafter ONNX load failed (AC5 fallback, standard generate active):",
-      (e as Error).message?.slice(0, 120),
-    );
-    _drafterSession = null;
-    (globalThis as any).__drafterLoaded = false;
-    window.dispatchEvent(new CustomEvent("agentmodel:drafter:error", { detail: (e as Error).message?.slice(0, 120) }));
-  }
-}
-
-// Expose drafter load trigger and ready flag for external tooling (A/B scripts, verify).
-// __loadDrafter() returns a Promise that resolves when drafter is done loading (or failed).
-// __drafterLoaded is true on success, false on failure, undefined if load not yet triggered.
+// Drafter load trigger shim — kept for external tooling (A/B scripts, verify harness).
+// Worker handles actual load; this is a no-op that resolves immediately.
 if (typeof globalThis !== "undefined") {
-  (globalThis as any).__loadDrafter = (): Promise<void> => {
-    _drafterLoadPromise ??= loadDrafter();
-    return _drafterLoadPromise;
-  };
+  (globalThis as any).__loadDrafter = (): Promise<void> => Promise.resolve();
 }
 
 function updateBadge(inner: string): void {
@@ -220,166 +130,145 @@ function updateBadge(inner: string): void {
   if (el) el.innerHTML = inner;
 }
 
-type ProgressInfo = {
-  status: string;
-  name?: string;
-  progress?: number;
-};
+// ── Worker lifecycle (#936) ──────────────────────────────────────────────────
 
-// Try WebGPU first (q4f16 quantization); fall back through device:"auto"
-// (onnxruntime-web selects WebGL then WASM-SIMD automatically). Model files
-// are cached in browser storage after first download — subsequent visits skip
-// the network transfer entirely.
-async function getModel(): Promise<{ model: PreTrainedModel; processor: unknown }> {
-  if (_model && _processor) return { model: _model, processor: _processor };
-  if (_loadPromise) return _loadPromise;
+/** Create the inference worker (if not already created), wire its message handler,
+ *  and post {type:"init"} to start model load + warmup + drafter load in the worker. */
+function initWorkerIfNeeded(): Worker {
+  if (_inferenceWorker) return _inferenceWorker;
 
-  _loadPromise = (async () => {
-    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LOADING…`);
-    window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
+  _inferenceWorker = new Worker(
+    new URL("./model-worker.ts", import.meta.url),
+    { type: "module" },
+  );
 
-    const progressCb = (info: ProgressInfo) => {
-      if (info.status === "downloading") {
-        const pct = info.progress != null ? `${Math.round(info.progress)}%` : "";
-        const file = info.name?.split("/").pop() ?? "";
-        const label = [pct, file].filter(Boolean).join(" ");
-        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ${label}`);
-        window.dispatchEvent(
-          new CustomEvent("agentmodel:loading", { detail: { progress: info.progress ?? 0, file } }),
-        );
-      } else if (info.status === "loading") {
-        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  INITIALIZING`);
-      }
-    };
-
-    type DeviceSpec = { device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string };
-    const backends: DeviceSpec[] = [
-      { device: "webgpu", dtype: "q4f16", label: "GPU" },
-      { device: "auto",   dtype: "q4",    label: "CPU" },
-    ];
-
-    let lastErr: Error = new Error("No backend available");
-    for (const { device, dtype, label } of backends) {
-      try {
-        const model = await Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
-          dtype,
-          device,
-          progress_callback: progressCb,
-        });
-        const processor = await AutoProcessor.from_pretrained(MODEL_ID);
-
-        // Probe WebGPU for silent OrtRun buffer corruption (#128/#133).
-        // onnxruntime-web 1.26.0-dev + Chrome 147 regression: from_pretrained
-        // succeeds but GPU buffers can be invalid; error only surfaces mid-decode
-        // (buffer download path not exercised on a 1-token run). Use 20 tokens
-        // to force the iterative decode path that triggers the failure.
-        if (device === "webgpu") {
-          try {
-            const probeText = (processor as any).tokenizer.apply_chat_template(
-              [{ role: "user", content: "test" }],
-              { tokenize: false, add_generation_prompt: true },
-            ) as string;
-            const probeIn = await (processor as any)(probeText);
-            await (model as any).generate({ ...probeIn, max_new_tokens: 20 });
-          } catch (probeErr) {
-            console.warn(
-              "[agent-harness] WebGPU probe failed — OrtRun buffer invalid (#128); falling back to CPU.",
-              (probeErr as Error).message.slice(0, 120),
-            );
-            continue; // skip assignment; next backend (CPU) will be tried
-          }
+  _inferenceWorker.onmessage = (ev: MessageEvent<Record<string, unknown>>) => {
+    const msg = ev.data;
+    switch (msg.type) {
+      case "progress": {
+        const phase = msg.phase as string;
+        if (phase === "drafter") {
+          window.dispatchEvent(new CustomEvent("agentmodel:drafter:loading", {
+            detail: { progress: msg.progress ?? 0, bytes: msg.bytes ?? 0 },
+          }));
+        } else {
+          const pct = msg.progress != null ? `${Math.round(msg.progress as number)}%` : "";
+          const file = (msg.file as string | undefined) ?? "";
+          const label = [pct, file].filter(Boolean).join(" ");
+          if (label) updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ${label}`);
+          window.dispatchEvent(new CustomEvent("agentmodel:loading", {
+            detail: { progress: msg.progress ?? 0, file },
+          }));
         }
-
-        _model = model;
-        _processor = processor;
-        _deviceLabel = label;
-        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${label}`);
-        window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device, label } }));
-        return { model, processor };
-      } catch (e) {
-        lastErr = e as Error;
-        if (device === "webgpu") {
-          console.warn("[agent-harness] WebGPU unavailable, trying CPU fallback:", (e as Error).message);
-          updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LOADING CPU…`);
-        }
+        break;
       }
+      case "model-ready":
+        _deviceLabel = (msg.device as string) === "GPU" ? "GPU" : "CPU";
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel}`);
+        window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device: _deviceLabel } }));
+        break;
+      case "warmup-done":
+        _prefillDone = true;
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · READY`);
+        break;
+      case "drafter-ready":
+        (globalThis as any).__drafterLoaded = true;
+        window.dispatchEvent(new CustomEvent("agentmodel:drafter:ready"));
+        break;
+      case "drafter-error":
+        (globalThis as any).__drafterLoaded = false;
+        window.dispatchEvent(new CustomEvent("agentmodel:drafter:error", { detail: msg.error }));
+        break;
+      case "ready":
+        _workerReady = true;
+        break;
+      case "generate-done": {
+        const cb = _generateCallbacks.get(msg.turnId as string);
+        if (cb) {
+          _generateCallbacks.delete(msg.turnId as string);
+          cb.resolve({
+            text:         msg.text as string,
+            specAttempts: msg.specAttempts as number,
+            specAccepts:  msg.specAccepts as number,
+            prefillMs:    msg.prefillMs as number,
+            decodeMs:     msg.decodeMs as number,
+            inputLength:  msg.inputLength as number,
+            tokensOut:    msg.tokensOut as number,
+          });
+        }
+        break;
+      }
+      case "generate-error": {
+        const cb = _generateCallbacks.get(msg.turnId as string);
+        if (cb) {
+          _generateCallbacks.delete(msg.turnId as string);
+          cb.reject(new Error(msg.error as string));
+        }
+        break;
+      }
+      case "error":
+        _webgpuFallbackEngaged = true;
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
+        window.dispatchEvent(new CustomEvent("agentmodel:error", { detail: msg.error }));
+        for (const [, cb] of _generateCallbacks) cb.reject(new Error(msg.error as string));
+        _generateCallbacks.clear();
+        break;
     }
+  };
 
-    window.dispatchEvent(new CustomEvent("agentmodel:error", { detail: lastErr.message }));
-    throw lastErr;
-  })();
+  _inferenceWorker.onerror = (e) => {
+    _webgpuFallbackEngaged = true;
+    const errMsg = e.message ?? "worker error";
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
+    for (const [, cb] of _generateCallbacks) cb.reject(new Error(errMsg));
+    _generateCallbacks.clear();
+  };
 
-  // _loadPromise was assigned on the line above — non-null is guaranteed here.
-  return _loadPromise!;
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LOADING…`);
+  window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
+
+  _inferenceWorker.postMessage({
+    type:             "init",
+    modelId:          MODEL_ID,
+    drafterUrl:       DRAFTER_ONNX_URL,
+    drafterCacheKey:  DRAFTER_CACHE_KEY,
+  });
+
+  return _inferenceWorker;
 }
 
-/** Fire-and-forget model prefetch + system-prompt KV warmup (#492).
+/** Fire-and-forget model prefetch (#936).
  *  Safe to call early (prompt tab focus / DOMContentLoaded).
- *  Badge flow: PRIMING → READY (remote) | LOADING → LIVE → PRIMING → READY (on-device).
- *  Also starts drafter load at boot so the loading strip covers drafter download (#780). */
+ *  On-device: creates worker, which handles load + warmup + drafter in background.
+ *  Remote: primes llama-server KV prefix cache. */
 export function prefetchModel(): void {
   if (REMOTE_URL) {
     void prefillSystemPromptAsync();
     return;
   }
-  // Start drafter alongside model so boot loading strip covers both downloads (#780).
-  _drafterLoadPromise ??= loadDrafter();
-  getModel()
-    .then(() => prefillSystemPromptAsync())
-    .catch(() => { /* errors surface on first runAgentTurn */ });
+  initWorkerIfNeeded();
 }
 
-/** System-prompt KV warmup (#492). Fires once per session.
- *  Remote: primes llama-server KV prefix cache so subsequent prompts skip system-prompt re-prefill.
- *  On-device: warms GPU shader pipeline and ONNX execution context. */
+/** Remote KV warmup (#492). On-device warmup is handled by the worker. */
 async function prefillSystemPromptAsync(): Promise<void> {
   if (_prefillDone) return;
   _prefillDone = true;
 
-  if (REMOTE_URL) {
-    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · ⟳ PRIMING`);
-    try {
-      const messages = [
-        { role: "system" as const, content: buildSystemPrompt() },
-        { role: "user" as const, content: "." },
-      ];
-      await fetch(`${REMOTE_URL}/v1/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages, max_tokens: 1, temperature: 0.1 }),
-      });
-      updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · READY`);
-    } catch {
-      _prefillDone = false;
-      updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
-    }
-    return;
-  }
-
-  // On-device path: warm GPU shader pipeline with a 1-token probe generation.
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · ⟳ PRIMING`);
   try {
-    const { model, processor } = await getModel();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const proc = processor as any;
-    const label = document.getElementById(BADGE_ID)?.innerHTML?.includes("CPU") ? "CPU" : "GPU";
-    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${label} · ⟳ PRIMING`);
-    const chatText: string = proc.apply_chat_template(
-      [
-        { role: "system", content: buildWebGPUSystemPrompt() },
-        { role: "user", content: "." },
-      ],
-      { add_generation_prompt: true, tokenize: false },
-    ) as string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const inputs: any = await proc(chatText, null);
-    const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
-    if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (model as any).generate({ ...inputs, max_new_tokens: 1, do_sample: false });
-    }
-    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${label} · READY`);
+    const messages = [
+      { role: "system" as const, content: buildSystemPrompt() },
+      { role: "user" as const, content: "." },
+    ];
+    await fetch(`${REMOTE_URL}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, max_tokens: 1, temperature: 0.1 }),
+    });
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · READY`);
   } catch {
-    _prefillDone = false; // allow retry on first real prompt
+    _prefillDone = false;
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
   }
 }
 
@@ -1121,236 +1010,83 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 // ---- Public entry point --------------------------------------------------
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
-  // P10-2: if a prior OrtRun failure engaged the session-level fallback, route remote.
+  // P10-2: if a prior worker error engaged the session-level fallback, route remote.
   if (REMOTE_URL && _webgpuFallbackEngaged) return runRemoteAgentTurn(req);
   if (REMOTE_URL) return runRemoteAgentTurn(req);
-  const { model, processor } = await getModel();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const proc = processor as any;
 
-  type TextPart = { type: "text"; text: string };
-  type ImagePart = { type: "image"; image: RawImage };
-  type ContentPart = TextPart | ImagePart;
-  type UserContent = string | ContentPart[];
+  // ── On-device path via Web Worker (#936) ─────────────────────────────────
+  // Worker owns: from_pretrained, WebGPU probe, warmup, drafter load, tokenization,
+  // generate, decode. Main thread never blocks during model load or inference.
+  const worker = initWorkerIfNeeded();
 
-  // Only attach viewport image when the caller explicitly requests it via
-  // req.frames (e.g. user clicked "look at scene" or typed "what do you see?").
-  // Proactive capture caused the model to narrate and act on scene state without
-  // being asked — Jun directive 2026-05-06.
-  const imageList: RawImage[] = [];
-  let userContent: UserContent;
+  // Get imageUrl for vision turns (worker loads RawImage internally — no transfer needed).
+  let imageUrl: string | undefined;
   if (req.userImage) {
-    // User-attached image (D1 multimodal) — use directly without viewport capture.
-    const rawImage = await RawImage.fromURL(req.userImage);
-    imageList.push(rawImage);
-    userContent = [
-      { type: "image", image: rawImage } satisfies ImagePart,
-      { type: "text", text: req.prompt } satisfies TextPart,
-    ];
+    imageUrl = req.userImage;
   } else if (req.frames && req.frames.length > 0) {
-    const snapshotUrl = captureViewport();
-    if (snapshotUrl) {
-      const rawImage = await RawImage.fromURL(snapshotUrl);
-      imageList.push(rawImage);
-    }
-    userContent = imageList.length > 0
-      ? [
-          { type: "image", image: imageList[0] } satisfies ImagePart,
-          { type: "text", text: req.prompt } satisfies TextPart,
-        ]
-      : req.prompt;
-  } else {
-    userContent = req.prompt;
+    imageUrl = captureViewport() ?? undefined;
   }
 
-  // Keep at most the last 10 turns (20 messages) to bound prefill length.
-  // Beyond ~10 turns, older context hurts latency more than it helps accuracy.
+  // Plain-text messages: worker splices image into last user message if imageUrl is set.
   const MAX_HISTORY_MSGS = 20;
   const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
-
   const messages = [
     { role: "system" as const, content: buildWebGPUSystemPrompt(req.skills) },
     ...trimmedHistory,
-    { role: "user" as const, content: userContent },
+    { role: "user" as const, content: req.prompt },
   ];
 
-  // Gemma4Processor._call(text, images, audio, options) — passing options as the
-  // second argument incorrectly routes it to `images`, causing image.rgb() errors.
-  // Correct approach: apply chat template to get a string, then call proc(text, images).
-  const chatText: string = proc.apply_chat_template(messages, {
-    add_generation_prompt: true,
-    tokenize: false,
-  }) as string;
+  const useMtp = !_MTP_OFF;
+  const turnId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-  // Encode: processor tokenizes text and encodes images (null when text-only).
-  console.log("[vision] proc: images=", imageList.length, "userImage=", req.userImage ? req.userImage.length : 0);
-  const t0 = performance.now();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
-  const tProc = performance.now();
-  console.log("[vision] tokens=", inputs.input_ids?.dims?.[1]);
-
-  // Guard: WebGPU ONNX model compiled context limit ~2048 tokens (#424).
-  // Long system prompts (summariseDictionary + BUILDING_DEFAULTS + FEW_SHOT) reach
-  // 2000-3000 tokens, pushing input + max_new_tokens past the limit and triggering
-  // SafeIntOnOverflow in OrtRun buffer shape computation.
-  // Route to REMOTE for long inputs without permanently engaging _webgpuFallbackEngaged —
-  // WebGPU remains available for shorter prompts within the same session.
-  // WEBGPU_CONTEXT_LIMIT is now at module level (shared with prefill warmup #492).
-  const preCheckLen: number = inputs.input_ids?.dims?.[1] ?? 0;
-  const safeMaxNewTokens = Math.min(req.maxNewTokens ?? 512, WEBGPU_CONTEXT_LIMIT - preCheckLen);
-  if (preCheckLen + 64 > WEBGPU_CONTEXT_LIMIT || safeMaxNewTokens <= 0) {
-    window.dispatchEvent(new CustomEvent("agent:telemetry", {
-      detail: { event: "webgpu_input_too_long", inputTokens: preCheckLen, safeMaxNewTokens },
-    }));
-    if (REMOTE_URL) return runRemoteAgentTurn(req);
-    throw new Error(`Prompt too long for on-device inference (${preCheckLen} tokens > ${WEBGPU_CONTEXT_LIMIT - 64} safe limit). Configure VITE_GEMMA_AGENT_URL for complex prompts.`);
-  }
-
-  // Generate — greedy decoding for deterministic function-call JSON.
-  // P10-2: catch OrtRun failures that slip past the load-time probe (#128/#133).
-  //
-  // MTP spec-decode (#674 AC3):
-  // Fire-and-forget drafter load on first generate call so it's ready by turn 2.
-  // The spec-decode branch activates only when BOTH conditions hold:
-  //   (a) drafter ONNX loaded (_drafterSession !== null)
-  //   (b) target ONNX exposes "last_hidden_state" output node
-  // Condition (b) is false in transformers.js 4.2.0 — the branch is structurally
-  // dormant today but will fire automatically once the target ONNX is updated.
-  // AC5: any drafter load failure is silently swallowed in loadDrafter(); no crash.
-  // Store promise so turn-1 can await it (fixes drafter-race: gate evaluated before
-  // session.create completes even on IDB hit — #754 Finding #1).
-  _drafterLoadPromise ??= loadDrafter();
-  await _drafterLoadPromise;
-
-  // Two-gate (#793) + E2B model guard:
-  //   drafter loaded + verification wired + E2B model active.
-  // E4B drafter (#793): exported from google/gemma-4-E4B-it-assistant (302 MB fp32).
-  // KV shapes match E4B target: 24 layers, 2 KV heads, hidden_size=2560.
-  // Visual turns included — drafter is unconditioned on the image; accept_rate is
-  // lower on visual turns but >0, which beats the prior 0% bypass on all-E4B sessions.
-  const drafterReady =
-    _drafterSession !== null &&
-    MTP_VERIFICATION_WIRED &&
-    MODEL_ID === MODEL_ID_CANDIDATES.e4b &&
-    !_MTP_OFF;
-
-  let specAttempts = 0;
-  let specAccepts = 0;
-  let outputs: unknown;
-
-  if (drafterReady) {
-    // ── Three-session MTP spec-decode (#751) ──────────────────────────────────
-    // embed_tokens + decoder_model_merged sessions reused from already-loaded
-    // transformers.js model — no extra VRAM cost. Drafter session loaded via
-    // drafter-cache.ts. Full greedy verification with KV cache accumulation.
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ort = (globalThis as any).ort ?? (await import("onnxruntime-web"));
-      const mtpSessions = getMtpSessions(model);
-
-      if (!mtpSessions) {
-        // Session keys don't match (model variant or transformers.js version).
-        console.warn("[mtp] getMtpSessions() returned null — standard generate path.");
-      } else {
-        const inputIdsTensor = (inputs as any).input_ids as { data: BigInt64Array; dims: number[] };
-        const eosId: number = (model as any).config?.eos_token_id ?? 1;
-
-        const result = await runMtpSpecDecode(
-          mtpSessions,
-          _drafterSession!,
-          ort,
-          inputIdsTensor.data,
-          safeMaxNewTokens,
-          MTP_DRAFT_N,
-          eosId,
-          MTP_CONFIG_E4B,
-        );
-
-        specAttempts = result.specAttempts;
-        specAccepts  = result.specAccepts;
-
-        // Build a duck-typed tensor compatible with transformers.js batch_decode().
-        // batch_decode calls .tolist() → [[n, n, ...]] (number[], not BigInt).
-        const promptLen = inputIdsTensor.dims[1];
-        const newToks   = result.tokens; // number[] — generated tokens only
-        const allNums   = [...Array.from(inputIdsTensor.data, Number), ...newToks];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const makeTensor = (nums: number[]): any => ({
-          data: new BigInt64Array(nums.map(BigInt)),
-          dims: [1, nums.length],
-          tolist: () => [nums.slice()],
-          slice: (_ax: null, range: [number, null | undefined]) => makeTensor(nums.slice(range[0])),
-        });
-        outputs = makeTensor(allNums);
-      }
-    } catch (specErr) {
-      console.warn(`[agent-harness] MTP spec-decode error — falling back to standard generate: ${(specErr as Error)?.message ?? specErr}`);
-      specAttempts = 0;
-      specAccepts  = 0;
-      outputs = undefined;
-    }
-  }
-
-  // Standard generate — used when spec-decode is inactive or falls through.
-  if (!outputs) {
-    try {
-      outputs = await model.generate({
-        ...inputs,
-        max_new_tokens: safeMaxNewTokens,
-        do_sample: false,
+  let result: WorkerGenResult;
+  try {
+    result = await new Promise<WorkerGenResult>((resolve, reject) => {
+      _generateCallbacks.set(turnId, { resolve, reject });
+      worker.postMessage({
+        type:          "generate",
+        turnId,
+        messages,
+        imageUrl,
+        maxNewTokens:  req.maxNewTokens ?? 512,
+        eosId:         1, // Gemma 4 EOS; worker also reads model.config as fallback
+        draftK:        MTP_DRAFT_N,
+        useMtp,
       });
-    } catch (ortErr) {
-      const msg = (ortErr as Error).message ?? "";
-      console.warn("[agent-harness] OrtRun failure during generation — engaging remote fallback.", msg.slice(0, 120));
-      _webgpuFallbackEngaged = true;
-      window.dispatchEvent(new CustomEvent("agent:telemetry", { detail: { event: "webgpu_fallback_engaged", reason: msg.slice(0, 120) } }));
-      updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE (fallback)`);
-      if (REMOTE_URL) return runRemoteAgentTurn(req);
-      throw new Error(`WebGPU OrtRun failed and no REMOTE_URL configured: ${msg.slice(0, 200)}`);
-    }
+    });
+  } catch (err) {
+    const msg = (err as Error).message ?? String(err);
+    if (msg.includes("input too long") && REMOTE_URL) return runRemoteAgentTurn(req);
+    if (_webgpuFallbackEngaged && REMOTE_URL) return runRemoteAgentTurn(req);
+    throw err;
   }
 
-  const _mtpActive = drafterReady && specAttempts > 0;
-  const tGen = performance.now();
-  const _specAcceptRate = specAttempts > 0 ? specAccepts / specAttempts : 0;
-
-  // Decode only the newly generated tokens (strip the prompt prefix).
-  const inputLength: number = inputs.input_ids?.dims?.[1] ?? 0;
-  const generated = inputLength > 0 ? (outputs as any).slice(null, [inputLength, null]) : outputs;
-  const tokensOut: number = (generated as any)?.dims?.[1] ?? 0;
-  const prefillMs = tProc - t0;
-  const decodeMs = tGen - tProc;
+  const { text: responseText, specAttempts, specAccepts, prefillMs, decodeMs, inputLength, tokensOut } = result;
+  const _mtpActive = useMtp && specAttempts > 0;
   const tgTps = decodeMs > 0 ? tokensOut / (decodeMs / 1000) : 0;
   const ppTps = prefillMs > 0 ? inputLength / (prefillMs / 1000) : 0;
+  const _specAcceptRate = specAttempts > 0 ? specAccepts / specAttempts : 0;
   console.debug(`[agent] prefill=${Math.round(prefillMs)}ms decode=${Math.round(decodeMs)}ms in=${inputLength} out=${tokensOut} tg=${tgTps.toFixed(1)}t/s mtp=${_mtpActive}`);
   const _mtpSuffix = _mtpActive ? " · MTP" : "";
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ${tgTps.toFixed(0)} t/s${_mtpSuffix}`);
   recordTurn({
-    ts: Date.now(),
-    prefill_ms: prefillMs,
-    decode_ms: decodeMs,
-    tokens_in: inputLength,
-    tokens_out: tokensOut,
+    ts:                  Date.now(),
+    prefill_ms:          prefillMs,
+    decode_ms:           decodeMs,
+    tokens_in:           inputLength,
+    tokens_out:          tokensOut,
     system_prompt_chars: buildSystemPrompt(req.skills).length,
-    skills_total: req.skillsTotal ?? req.skills?.length ?? 0,
-    skills_matched: req.skills?.length ?? 0,
-    tg_tps: tgTps,
-    pp_tps: ppTps,
-    mtp_on: _mtpActive,
-    spec_attempts: specAttempts,
-    spec_accepts: specAccepts,
-    spec_accept_rate: _specAcceptRate,
-    path: "webgpu",
+    skills_total:        req.skillsTotal ?? req.skills?.length ?? 0,
+    skills_matched:      req.skills?.length ?? 0,
+    tg_tps:              tgTps,
+    pp_tps:              ppTps,
+    mtp_on:              _mtpActive,
+    spec_attempts:       specAttempts,
+    spec_accepts:        specAccepts,
+    spec_accept_rate:    _specAcceptRate,
+    path:                "webgpu",
   });
 
-  const decoded: string[] = proc.batch_decode(
-    typeof (generated as any).tolist === "function" ? (generated as any).tolist() : generated,
-    { skip_special_tokens: true },
-  );
-  const responseText = decoded[0] ?? "";
-
-  // Extract <plan> block before dispatch parsing.
   let plan: string | undefined;
   const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
     plan = inner.trim();
@@ -1358,5 +1094,5 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   });
 
   const { dispatches, text } = parseDispatches(afterPlan);
-  return { dispatches, text: text.trim() || responseText, plan, raw: outputs };
+  return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
 }

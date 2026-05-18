@@ -4310,6 +4310,35 @@ await resetScene('before-box-inject');
   else record('fzk-haus-perception-rehearsal', r78.passed, r78.evidence ?? { error: r78.error });
 }
 
+// ── S79 — main-thread liveness (worker boot #936) ─────────────────────────
+// Polls Runtime.evaluate('1+1') at 1s intervals.
+// A poll that doesn't return 2 within 2000ms = main thread wedged by model ops.
+{
+  const POLLS = 10;
+  const INTERVAL_MS = 1000;
+  const DEADLINE_MS = 2000;
+  const results = [];
+
+  for (let i = 0; i < POLLS; i++) {
+    const t0 = Date.now();
+    const val = await Promise.race([
+      evaluate('1+1'),
+      new Promise(r => setTimeout(() => r(null), DEADLINE_MS)),
+    ]);
+    const elapsedMs = Date.now() - t0;
+    results.push({ poll: i, value: val, elapsedMs, hung: val !== 2 });
+    if (i < POLLS - 1) await delay(INTERVAL_MS);
+  }
+
+  const hangs = results.filter(r => r.hung);
+  record('main-thread-liveness', hangs.length === 0, {
+    polls: POLLS,
+    hangs: hangs.length,
+    maxElapsedMs: Math.max(...results.map(r => r.elapsedMs)),
+    firstFive: results.slice(0, 5),
+  });
+}
+
 } finally {
   await cleanup();
 }
