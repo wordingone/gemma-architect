@@ -17,7 +17,7 @@ const BUILTIN_LAYERS: Layer[] = [
   { id: "Slabs",         name: "Slabs",         visible: true, locked: false, color: "#a8a097" },
   { id: "Columns",       name: "Columns",       visible: true, locked: false, color: "#d1c5b0" },
   { id: "Annotations",   name: "Annotations",   visible: true, locked: false, color: "#f0d070" },
-  { id: "Construction",  name: "Construction",  visible: true, locked: false, color: "#80c080" },
+  { id: "Elements",      name: "Elements",      visible: true, locked: false, color: "#b8a0cc" },
 ];
 
 // creator-name → layer ID routing table.
@@ -27,20 +27,14 @@ const CREATOR_LAYER_MAP: Record<string, string> = {
   IfcWall:        "Walls",
   IfcCurtainWall: "Walls",
   IfcSkylight:    "Walls",
-  IfcDoor:        "Walls",
-  IfcWindow:      "Walls",
   IfcOpening:     "Walls",
   SdWall:         "Walls",
   SdCurtainWall:  "Walls",
   SdSkylight:     "Walls",
-  SdDoor:         "Walls",
-  SdWindow:       "Walls",
   SdOpening:      "Walls",
   wall:           "Walls",
   curtainwall:    "Walls",
   skylight:       "Walls",
-  door:           "Walls",
-  window:         "Walls",
   opening:        "Walls",
   // Slabs
   IfcSlab:        "Slabs",
@@ -64,16 +58,24 @@ const CREATOR_LAYER_MAP: Record<string, string> = {
   SdMember:       "Columns",
   column:         "Columns",
   beam:           "Columns",
-  // Construction
-  IfcStair:       "Construction",
-  IfcRamp:        "Construction",
-  IfcRailing:     "Construction",
-  SdStair:        "Construction",
-  SdRamp:         "Construction",
-  SdRailing:      "Construction",
-  stair:          "Construction",
-  ramp:           "Construction",
-  railing:        "Construction",
+  // Elements
+  IfcDoor:        "Elements",
+  IfcWindow:      "Elements",
+  SdDoor:         "Elements",
+  SdWindow:       "Elements",
+  SdExtrude:      "Elements",
+  IfcStair:       "Elements",
+  IfcRamp:        "Elements",
+  IfcRailing:     "Elements",
+  SdStair:        "Elements",
+  SdRamp:         "Elements",
+  SdRailing:      "Elements",
+  door:           "Elements",
+  window:         "Elements",
+  extrude:        "Elements",
+  stair:          "Elements",
+  ramp:           "Elements",
+  railing:        "Elements",
   // Annotations
   IfcAnnotationDimension: "Annotations",
   SdLeader:       "Annotations",
@@ -110,6 +112,7 @@ class LayerStore {
   }
 
   get(id: string): Layer | undefined {
+    if (id === "Construction") id = "Elements"; // migration alias
     return this._layers.get(id);
   }
 

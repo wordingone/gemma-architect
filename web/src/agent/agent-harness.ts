@@ -484,12 +484,12 @@ Assistant: Assuming 3.0m ground-floor height, 3.0m upper-floor height, concrete 
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
 
-User: put this wall on the Construction layer instead
-Assistant: Assuming the wall profile and dimensions from context; overriding layer to Construction.
+User: put this wall on the Elements layer instead
+Assistant: Assuming the wall profile and dimensions from context; overriding layer to Elements.
 <plan>
-1. SdWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8, layer=Construction
+1. SdWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8, layer=Elements
 </plan>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8,"layer":"Construction"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8,"layer":"Elements"},"metadata":{"source":"agent"}}</tool_call>
 
 User: add a slab but put it on the Annotations layer for now
 Assistant: Overriding auto-routing; placing slab on Annotations layer as requested.
