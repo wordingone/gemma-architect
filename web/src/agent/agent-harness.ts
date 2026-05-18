@@ -862,7 +862,7 @@ const WEBGPU_HOUSE_FEW_SHOT = `
 Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan> block):
 
 User: design a two-story residential house, 26' × 20'
-Assistant: 26 feet wide, 20 feet deep, 2 floors × 10ft walls, pitched roof. Window on south face; stair at NE corner.
+Assistant: 26 feet wide, 20 feet deep, 2 floors × 9.6ft walls, pitched roof. Window on south face; stair at NE corner.
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":9.6,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":9.6,"height":9.6,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
