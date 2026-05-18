@@ -178,6 +178,10 @@ export class SkillCanvas {
   // Inspector callback (set by workbench)
   private _onNodeSelect: ((nodeId: string | null) => void) | null = null;
 
+  // Live re-dispatch state (#425)
+  private _nodeHasResult = new Set<string>();
+  private _paramTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   constructor(private _root: HTMLElement) {
     this._graph = loadGraph();
     this._build();
@@ -196,6 +200,38 @@ export class SkillCanvas {
   updateNodeScript(id: string, src: string): void {
     const node = this._graph.nodes.find(n => n.id === id);
     if (node) { node.scriptSource = src; saveGraph(this._graph); }
+  }
+
+  // Live re-dispatch: called by workbench inspector on slider/input change (#425).
+  // Debounces 150ms, undoes prior result, re-dispatches with updated args.
+  updateNodeArg(nodeId: string, stepIdx: number, key: string, value: unknown): void {
+    const node = this._graph.nodes.find(n => n.id === nodeId);
+    if (!node || !node.skillSteps) return;
+    const step = node.skillSteps[stepIdx];
+    if (!step) return;
+    step.args = { ...step.args, [key]: value };
+    saveGraph(this._graph);
+
+    const prev = this._paramTimers.get(nodeId);
+    if (prev !== undefined) clearTimeout(prev);
+    this._paramTimers.set(nodeId, setTimeout(() => {
+      this._paramTimers.delete(nodeId);
+      void this._redispatchNode(nodeId);
+    }, 150));
+  }
+
+  private async _redispatchNode(nodeId: string): Promise<void> {
+    const node = this._graph.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    if (this._nodeHasResult.has(nodeId)) {
+      dispatchSync("SdUndo", {});
+      this._nodeHasResult.delete(nodeId);
+    }
+    const el = this._nodesEl.querySelector<HTMLElement>(`[data-id="${nodeId}"]`);
+    el?.classList.add("node-running");
+    await this._runNode(node);
+    el?.classList.remove("node-running");
+    (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
   }
 
   async refreshPalette(): Promise<void> {
@@ -600,6 +636,14 @@ export class SkillCanvas {
   }
 
   private _removeNode(id: string): void {
+    // Undo this node's last dispatch result before removing (#425)
+    if (this._nodeHasResult.has(id)) {
+      dispatchSync("SdUndo", {});
+      this._nodeHasResult.delete(id);
+    }
+    const timer = this._paramTimers.get(id);
+    if (timer !== undefined) { clearTimeout(timer); this._paramTimers.delete(id); }
+
     this._graph.nodes = this._graph.nodes.filter(n => n.id !== id);
     this._graph.edges = this._graph.edges.filter(e => e.from !== id && e.to !== id);
     this._graph.groups = this._graph.groups.map(g => ({
@@ -611,6 +655,9 @@ export class SkillCanvas {
   }
 
   private _clear(): void {
+    for (const timer of this._paramTimers.values()) clearTimeout(timer);
+    this._paramTimers.clear();
+    this._nodeHasResult.clear();
     this._graph = { nodes: [], edges: [], groups: [] };
     this._selected.clear();
     saveGraph(this._graph);
@@ -1094,6 +1141,7 @@ export class SkillCanvas {
   }
 
   private async _runNode(node: CanvasNode): Promise<void> {
+    let dispatched = false;
     if (node.kind === "script") {
       const src = node.scriptSource?.trim() ?? "";
       if (!src) return;
@@ -1101,17 +1149,21 @@ export class SkillCanvas {
       if (!result.ok) return;
       for (const d of result.dispatches ?? []) {
         dispatchSync(d.verb, d.args as DispatchArgs);
+        dispatched = true;
         await new Promise(r => setTimeout(r, 80));
       }
     } else if (node.skillSteps && node.skillSteps.length > 0) {
       for (const step of node.skillSteps) {
         dispatchSync(step.verb, step.args as DispatchArgs);
+        dispatched = true;
         await new Promise(r => setTimeout(r, 80));
       }
     } else if (node.verb) {
       dispatchSync(node.verb, (node.args ?? {}) as DispatchArgs);
+      dispatched = true;
       await new Promise(r => setTimeout(r, 80));
     }
+    if (dispatched) this._nodeHasResult.add(node.id);
   }
 
   private _compile(): void {

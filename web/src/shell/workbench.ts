@@ -2355,13 +2355,68 @@ function _renderNodeInspector(nodeId: string | null): void {
     countEl.textContent = `${steps.length} step${steps.length === 1 ? "" : "s"}`;
     _paramsWrap.appendChild(countEl);
 
-    for (const step of steps.slice(0, 12)) {
-      const row = document.createElement("div");
-      row.className = "params-row";
-      row.style.fontSize = "11px";
-      row.innerHTML = `<span class="params-label" style="font-weight:600">${escHtml(step.verb)}</span>`;
-      _paramsWrap.appendChild(row);
-    }
+    steps.slice(0, 12).forEach((step, stepIdx) => {
+      const verbRow = document.createElement("div");
+      verbRow.className = "params-row";
+      verbRow.style.cssText = "font-size:11px; font-weight:600; margin-top:8px; padding-bottom:2px; border-bottom:1px solid var(--border,#333);";
+      verbRow.textContent = step.verb;
+      _paramsWrap!.appendChild(verbRow);
+
+      const numericArgs = Object.entries(step.args ?? {}).filter(([, v]) => typeof v === "number");
+      for (const [key, rawVal] of numericArgs) {
+        const val = rawVal as number;
+        const absVal = Math.abs(val);
+        const rangeMax = absVal < 0.5 ? 10 : Math.max(absVal * 4, 10);
+        const rangeMin = -rangeMax;
+        const stepSize = rangeMax <= 1 ? 0.01 : rangeMax <= 10 ? 0.1 : 0.5;
+
+        const argRow = document.createElement("div");
+        argRow.className = "params-row";
+        argRow.style.cssText = "display:grid; grid-template-columns:70px 1fr 50px; align-items:center; gap:4px; margin:3px 0;";
+
+        const label = document.createElement("span");
+        label.className = "params-label";
+        label.style.cssText = "font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+        label.textContent = key;
+        label.title = key;
+
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = String(rangeMin);
+        slider.max = String(rangeMax);
+        slider.step = String(stepSize);
+        slider.value = String(val);
+        slider.style.cssText = "width:100%; cursor:pointer;";
+
+        const numIn = document.createElement("input");
+        numIn.type = "number";
+        numIn.value = String(val);
+        numIn.step = String(stepSize);
+        numIn.style.cssText = "width:100%; font-size:10px; padding:1px 3px; box-sizing:border-box; background:var(--surface2,#1e1e1e); color:var(--fg,#ccc); border:1px solid var(--border,#444);";
+
+        slider.addEventListener("input", () => {
+          const v = parseFloat(slider.value);
+          numIn.value = String(v);
+          _canvasInstance?.updateNodeArg(nodeId, stepIdx, key, v);
+        });
+        numIn.addEventListener("change", () => {
+          const v = parseFloat(numIn.value);
+          if (isNaN(v)) return;
+          slider.value = String(Math.min(rangeMax, Math.max(rangeMin, v)));
+          _canvasInstance?.updateNodeArg(nodeId, stepIdx, key, v);
+        });
+
+        argRow.append(label, slider, numIn);
+        _paramsWrap!.appendChild(argRow);
+      }
+      if (numericArgs.length === 0) {
+        const noArgs = document.createElement("div");
+        noArgs.style.cssText = "font-size:10px; color:var(--muted); margin:2px 0 2px 4px;";
+        noArgs.textContent = "(no numeric params)";
+        _paramsWrap!.appendChild(noArgs);
+      }
+    });
+
     if (steps.length > 12) {
       const more = document.createElement("div");
       more.style.cssText = "font-size:10px; color:var(--muted); margin-top:4px;";
