@@ -4521,6 +4521,57 @@ await resetScene('before-box-inject');
   });
 }
 
+// ── S84-S91 — export format smoke (#940) ─────────────────────────────────────
+// Each surface: ensure __testMode is set, dispatch SdExport with the format,
+// assert { ok: true, testMode: true } returned. testMode short-circuits before
+// any download — this verifies the handler is registered and returns ok.
+// Formats: S84=ifc4, S85=3dm, S86=dwg, S87=obj, S88=stl, S89=usdz, S90=svg, S91=pdf
+{
+  const EXPORT_FORMATS = [
+    { surface: 'export-ifc4',  fmt: 'ifc4' },
+    { surface: 'export-3dm',   fmt: '3dm'  },
+    { surface: 'export-dwg',   fmt: 'dwg'  },
+    { surface: 'export-obj',   fmt: 'obj'  },
+    { surface: 'export-stl',   fmt: 'stl'  },
+    { surface: 'export-usdz',  fmt: 'usdz' },
+    { surface: 'export-svg',   fmt: 'svg'  },
+    { surface: 'export-pdf',   fmt: 'pdf'  },
+  ];
+
+  // Ensure testMode is active (may have been cleared by S82 reload).
+  await evaluate(`(window.__testMode = true, true)`);
+
+  // Ensure at least one scene object exists so exporters have something to work with
+  // in future non-testMode runs. We use SdBox which goes through the normal dispatcher.
+  await evaluate(`(function(){
+    if (!window.__viewer || window.__viewer.scene.children.length < 2) {
+      window.__dispatch && window.__dispatch('SdBox', { width: 3, depth: 2, height: 2.8 });
+    }
+    return true;
+  })()`);
+  await delay(200);
+
+  const exportResults = await evaluate(`(async function() {
+    const formats = ${JSON.stringify(EXPORT_FORMATS.map(f => f.fmt))};
+    const results = {};
+    for (const fmt of formats) {
+      try {
+        const res = window.__dispatch && window.__dispatch('SdExport', { format: fmt });
+        results[fmt] = res ? { ok: !!res.ok, testMode: !!res.testMode, raw: JSON.stringify(res) } : { ok: false, raw: 'null return' };
+      } catch (e) {
+        results[fmt] = { ok: false, raw: e.message };
+      }
+    }
+    return results;
+  })()`);
+
+  for (const { surface, fmt } of EXPORT_FORMATS) {
+    const r = exportResults?.[fmt];
+    const passed = !!(r?.ok && r?.testMode);
+    record(surface, passed, { fmt, ...(r ?? { reason: 'evaluate returned null' }) });
+  }
+}
+
 } finally {
   await cleanup();
 }

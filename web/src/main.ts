@@ -45,6 +45,8 @@ import {
   exportGltfJson,
   exportGlb,
   exportUsdz,
+  exportStl,
+  export3dm,
   exportSvg,
   exportDxf,
   exportPdf,
@@ -325,7 +327,7 @@ registerHandler("SdClippingPlaneRemove", (args) => {
 
 registerHandler("SdExport", (args) => {
   const fmt = args.format as string | undefined;
-  if (!fmt) return { error: "format required (ifc|glb|gltf|obj|stl|step|svg|dxf|pdf|usdz)" };
+  if (!fmt) return { error: "format required (ifc|ifc4|glb|gltf|obj|stl|3dm|dwg|step|svg|dxf|pdf|usdz)" };
   // Skip real download in test mode to prevent file pollution in Downloads.
   if ((window as unknown as { __testMode?: boolean }).__testMode) return { ok: true, format: fmt, testMode: true };
   handleExport(fmt).catch((e) => console.warn("[SdExport]", e));
@@ -2757,11 +2759,7 @@ function refreshExportButtons(disabledOverride: boolean = false): void {
       btn.disabled = true;
       continue;
     }
-    // STL is only available when the prompt path produced a binary STL blob.
-    if (fmt === "stl") {
-      btn.disabled = !pendingStl;
-      continue;
-    }
+    // STL enabled always — falls back to Three.js STLExporter when pendingStl absent.
     if (fmt === "step") {
       btn.disabled = !pendingStep;
       continue;
@@ -2800,7 +2798,7 @@ async function handleExport(fmt: string): Promise<void> {
       ? sanitizeStem(currentSource.filename)
       : "export";
   try {
-    if (fmt === "ifc") {
+    if (fmt === "ifc" || fmt === "ifc4") {
       await exportIfc(stem);
       return;
     }
@@ -2809,7 +2807,12 @@ async function handleExport(fmt: string): Promise<void> {
         downloadBlob(new Blob([pendingStl], { type: "model/stl" }), `${stem}.stl`);
         setStatus(`STL · ${(pendingStl.byteLength / 1024).toFixed(1)} KB`, "ok");
       } else {
-        setStatus("STL only available for replicad-generated geometry.", "warn");
+        // General Three.js STL export when no replicad geometry is available.
+        const obj = viewer.getActiveObject();
+        if (!obj) { setStatus("No geometry loaded.", "warn"); return; }
+        const buf = exportStl(obj);
+        downloadBlob(new Blob([buf], { type: "model/stl" }), `${stem}.stl`);
+        setStatus(`STL · ${(buf.byteLength / 1024).toFixed(1)} KB`, "ok");
       }
       return;
     }
@@ -2823,6 +2826,17 @@ async function handleExport(fmt: string): Promise<void> {
       const text = exportObj(obj);
       downloadBlob(new Blob([text], { type: "model/obj" }), `${stem}.obj`);
       setStatus(`OBJ · ${(text.length / 1024).toFixed(1)} KB`, "ok");
+    } else if (fmt === "3dm") {
+      setStatus("Exporting 3DM (loading Rhino runtime)…", "info");
+      const buf = await export3dm(obj);
+      downloadBlob(new Blob([buf.buffer as ArrayBuffer], { type: "application/octet-stream" }), `${stem}.3dm`);
+      setStatus(`3DM · ${(buf.byteLength / 1024).toFixed(1)} KB`, "ok");
+    } else if (fmt === "dwg") {
+      // DWG is a proprietary binary format with no pure-JS writer. We export
+      // AC1009 DXF text which AutoCAD and every major CAD tool reads natively.
+      const text = exportDxf(obj);
+      downloadBlob(new Blob([text], { type: "image/vnd.dxf" }), `${stem}.dxf`);
+      setStatus(`DXF (AutoCAD-compatible; true DWG binary not available in browser) · ${(text.length / 1024).toFixed(1)} KB`, "ok");
     } else if (fmt === "glb") {
       const buf = await exportGlb(obj);
       downloadBlob(new Blob([buf], { type: "model/gltf-binary" }), `${stem}.glb`);

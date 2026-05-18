@@ -4,22 +4,24 @@
 // a label / id and return either a Blob (for binary) or a string (for text).
 // The caller (main.ts) wires up the download.
 //
-// Tier 1 covered here:
+// Covered here:
 //   - OBJ          three OBJExporter
 //   - glTF / GLB   three GLTFExporter
 //   - USDZ         three USDZExporter
+//   - STL          three STLExporter (binary)
+//   - 3DM          rhino3dm.js mesh round-trip
 //   - SVG          custom top-view projection of EdgesGeometry
 //   - DXF          hand-rolled minimal AC1009 DXF, AcDbLine entities only
-// Tier 2 / verify-only:
-//   - STL          existing replicad pipeline (handled outside this module)
-//   - IFC          existing buildIfc pipeline (handled outside this module)
-//   - STEP         not implemented in this pass — needs OCCT writer + a real
-//                  TopoDS_Shape, only available when the source is replicad.
+//   - PDF          hand-rolled PDF 1.4, vector lines
+// Handled externally:
+//   - IFC          existing buildIfc pipeline (handled in main.ts)
+//   - STEP         OCCT-only, replicad source required
 
 import * as THREE from "three";
 import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { USDZExporter } from "three/examples/jsm/exporters/USDZExporter.js";
+import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
 
 // --- OBJ ---
 
@@ -77,6 +79,78 @@ export async function exportUsdz(object: THREE.Object3D): Promise<Uint8Array> {
   const fn = exporter.parse ?? exporter.parseAsync;
   if (!fn) throw new Error("USDZExporter has no parse method");
   return fn.call(exporter, object);
+}
+
+// --- STL (binary) ---
+
+export function exportStl(object: THREE.Object3D): ArrayBuffer {
+  const exporter = new STLExporter();
+  const result = exporter.parse(object, { binary: true });
+  if (result instanceof ArrayBuffer) return result;
+  // STLExporter binary mode always returns DataView in some three versions.
+  if (result && typeof (result as unknown as DataView).buffer !== "undefined") {
+    return (result as unknown as DataView).buffer as ArrayBuffer;
+  }
+  // ASCII fallback: encode to bytes
+  return new TextEncoder().encode(result as unknown as string).buffer as ArrayBuffer;
+}
+
+// --- 3DM (Rhino) ---
+
+// Hot-loads rhino3dm.js (WASM) on first call. Traverses the scene, converts
+// each mesh to a rhino3dm.Mesh, adds to a File3dm, serializes to bytes.
+export async function export3dm(object: THREE.Object3D): Promise<Uint8Array> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rhino3dmInit = ((await import("rhino3dm")) as any).default;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rh: any = await rhino3dmInit();
+
+  const file = new rh.File3dm();
+  const tmpA = new THREE.Vector3();
+
+  object.updateMatrixWorld(true);
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const geom = mesh.geometry as THREE.BufferGeometry;
+    const posAttr = geom.attributes.position;
+    if (!posAttr) return;
+
+    const pos = posAttr.array as Float32Array;
+    const idx = geom.index?.array as Uint32Array | Uint16Array | undefined;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rhinoMesh: any = new rh.Mesh();
+    const verts = rhinoMesh.vertices();
+    const faces = rhinoMesh.faces();
+
+    // Add world-space vertices.
+    const baseCount = verts.count;
+    for (let i = 0; i < pos.length; i += 3) {
+      tmpA.set(pos[i], pos[i + 1], pos[i + 2]).applyMatrix4(mesh.matrixWorld);
+      verts.add(tmpA.x, tmpA.y, tmpA.z);
+    }
+
+    // Add faces.
+    if (idx) {
+      for (let i = 0; i + 2 < idx.length; i += 3) {
+        faces.addFace(baseCount + idx[i], baseCount + idx[i + 1], baseCount + idx[i + 2]);
+      }
+    } else {
+      const count = pos.length / 3;
+      for (let i = 0; i + 2 < count; i += 3) {
+        faces.addFace(baseCount + i, baseCount + i + 1, baseCount + i + 2);
+      }
+    }
+
+    rhinoMesh.compact();
+    file.objects().add(rhinoMesh);
+    rhinoMesh.delete();
+  });
+
+  const bytes: Uint8Array = file.toByteArray();
+  file.delete();
+  return bytes;
 }
 
 // --- SVG (top-view edge projection) ---
