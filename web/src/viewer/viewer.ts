@@ -304,6 +304,7 @@ export class Viewer {
       const controls = new OrbitControls(camera, body);
       controls.enableDamping = true;
       controls.dampingFactor = 0.1;
+      if (camera instanceof THREE.OrthographicCamera) controls.screenSpacePanning = true;
       this.panes.push({ id: el.id, view, el, body, camera, controls, lastRenderedW: 0, lastRenderedH: 0 });
 
       const axesDiv = document.getElementById(`vp-axes-${idx + 1}`);
@@ -2790,7 +2791,7 @@ export class Viewer {
       perspPane.camera = oc;
       perspPane.controls.object = oc;
       perspPane.controls.enableRotate = true;
-      perspPane.controls.screenSpacePanning = false;
+      perspPane.controls.screenSpacePanning = true;
       perspPane.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
       perspPane.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
       perspPane.controls.zoomSpeed = 1;
