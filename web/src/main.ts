@@ -52,9 +52,9 @@ import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
-import { onElementCommitted, cutRectVoidFromBoxMesh } from "./tools/join-groups";
+import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, type RoofParams, type CurtainWallParams } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, type RoofParams, type CurtainWallParams, type StairParams } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
@@ -861,18 +861,44 @@ registerHandler("SdMember", (args) => {
 
 registerHandler("SdStair", (args) => {
   const s = (args.start as number[] | undefined) ?? [0, 0];
-  const e = (args.end   as number[] | undefined) ?? [3, 0];
+  const e = (args.end   as number[] | undefined) ?? [4, 0];
   const a = { x: s[0], y: s[1] };
   const b = { x: e[0], y: e[1] };
-  const { mesh, chain } = buildStair(a, b);
-  mesh.position.z = getActiveLevelElevation();
-  mesh.userData.layerId = resolveLayerId("SdStair", args);
-  mesh.userData.levelId = getActiveLevelId();
-  mesh.userData.dispatchArgs = args;
-  mesh.userData.chain = chain;
-  viewer.addMesh(mesh, "brep");
-  onElementCommitted(mesh, viewer.getScene());
-  return { created: "stair" };
+  const stairParams: StairParams = {
+    type:        (args.type  as StairParams["type"]  | undefined) ?? "straight",
+    count:       args.count       as number | undefined,
+    rise:        args.rise        as number | undefined,
+    width:       args.width       as number | undefined,
+    treadDepth:  args.tread       as number | undefined,
+    riserHeight: args.riser       as number | undefined,
+    targetHeight: args.targetHeight as number | undefined,
+    landingDepth: args.landingDepth as number | undefined,
+  };
+  const { group, chain, footprint } = buildStair(a, b, stairParams);
+  const elev = getActiveLevelElevation();
+  group.position.z = elev;
+  group.userData.layerId = resolveLayerId("SdStair", args);
+  group.userData.levelId = getActiveLevelId();
+  group.userData.dispatchArgs = args;
+  group.userData.chain = chain;
+  viewer.addMesh(group, "brep");
+
+  // Cut a void in the slab above (at elev + stair rise) matching the stair footprint.
+  const targetH = stairParams.rise ?? stairParams.targetHeight ?? 3.0;
+  const voidElev = elev + targetH;
+  const clearance = 0.1;
+  viewer.forEachSceneChild((child) => {
+    if (child.userData?.creator !== "slab") return;
+    const slabZ = child.position.z;
+    if (Math.abs(slabZ - voidElev) > 0.5) return;
+    cutSlabVoidFromBoxMesh(
+      child as THREE.Mesh,
+      footprint.minX - clearance, footprint.minY - clearance,
+      footprint.maxX + clearance, footprint.maxY + clearance,
+    );
+  });
+
+  return { created: "stair", type: stairParams.type };
 });
 
 registerHandler("SdDoor", (args) => {

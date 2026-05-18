@@ -349,7 +349,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   door:        { clicks: 1, handler: atTopOfLevel(([p]) => buildDoor(p), 0) },
   window:      { clicks: 1, handler: atTopOfLevel(([p]) => buildWindow(p), FZK_WINDOW_SILL) },
   column:      { clicks: 1, handler: atZ(([p]) => buildColumn(p)) },
-  stair:       { clicks: 2, handler: atZ(([a, b]) => buildStair(a, b)) },
+  stair:       { clicks: 2, handler: atZ(([a, b]) => { const { group, chain } = buildStair(a, b); return { mesh: group, chain }; }) },
   polygon:     { clicks: 2, handler: atZ(([a, b]) => buildPolygon(a, b)) },
   polyline:    { clicks: -1, handler: atZ((pts) => buildPolyline(pts)) },
   curve:       { clicks: -1, handler: atZ((pts) => buildCurve(pts)) },
