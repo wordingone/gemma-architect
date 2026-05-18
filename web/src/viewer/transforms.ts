@@ -347,6 +347,10 @@ export function ptHideCoordInput(): void {
   if (_ptCoordInputEl) _ptCoordInputEl.value = "";
 }
 
+export function ptIsCoordInputActive(): boolean {
+  return !!(_ptCoordWrapEl?.classList.contains("visible"));
+}
+
 function ptClearPreviewLine(viewer: Viewer): void {
   if (_ptPreviewLine) {
     viewer.getScene().remove(_ptPreviewLine);

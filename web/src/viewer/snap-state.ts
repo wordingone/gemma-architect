@@ -349,26 +349,10 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
     if (candidate) return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
   }
 
-  if (snap.edgeSnapOn) {
-    let edgeCandidateDir: THREE.Vector3 | null = null;
-    for (let i = 0; i < 3; i++) {
-      const A = facePts[i], B = facePts[(i + 1) % 3];
-      const ep = closestPtOnSegToRay(viewer, clientX, clientY, A, B);
-      if (!ep) continue;
-      const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
-      if (!sc) continue;
-      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-      if (d < candidateD) {
-        candidateD = d;
-        candidate = ep;
-        edgeCandidateDir = B.clone().sub(A).normalize();
-      }
-    }
-    if (candidate) {
-      _lastSnapEdgeDir = edgeCandidateDir;
-      return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z, edgeDir: edgeCandidateDir ?? undefined };
-    }
-  }
+  // Face-edge snap intentionally omitted here: mesh faces contain internal
+  // triangulation diagonals that are not visible to the user, so snapping to
+  // arbitrary face-edge midpoints produces confusing "snaps to unknown location"
+  // behaviour. Visible edge snap on Line/curve geometry is handled in section 2.
 
   return null;
 }

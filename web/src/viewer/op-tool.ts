@@ -32,6 +32,15 @@ const SKETCH_PROFILE_CREATORS = new Set([
   "rect", "circle", "polygon", "polyline", "curve", "line",
 ]);
 
+// Creators valid for click-selection as extrude profile.
+// Excludes raw 3D primitives (wall, slab, column, box, beam, roof, space)
+// to prevent accidentally extruding large solids as a profile.
+// Includes previous extrude/boolean results so re-extrusion works.
+const CLICK_PROFILE_CREATORS = new Set([
+  "rect", "circle", "polygon", "polyline", "curve", "line",
+  "extrude", "boolean-union", "boolean-difference", "boolean-split",
+]);
+
 // ── Late-binding hooks ────────────────────────────────────────────────────────
 // tools/index.ts registers these during initCreateMode to avoid circular imports.
 
@@ -383,12 +392,12 @@ export function opRaycastObject(
   const rc = new THREE.Raycaster();
   rc.setFromCamera(ndc, viewer.getActiveCamera());
 
-  const hitThresh = hoverMode ? 20 : (profileOnly ? 16 : 10);
+  const hitThresh = hoverMode ? 20 : (profileOnly ? 28 : 10);
   let thinHit: { obj: THREE.Object3D; point: THREE.Vector3 } | null = null;
   let thinHitD = hitThresh;
   viewer.getScene().traverse((o) => {
     if (o.userData.noSnap) return;
-    if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
+    if (profileOnly && !CLICK_PROFILE_CREATORS.has(o.userData.creator ?? "")) return;
     const isLine = o instanceof THREE.Line;
     const isPts = o instanceof THREE.Points;
     if (!isLine && !isPts) return;
@@ -433,8 +442,11 @@ export function opRaycastObject(
         let best: { obj: THREE.Object3D; dist: number } | null = null;
         viewer.getScene().traverse((o) => {
           if (o.userData.noSnap) return;
-          if (!EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
-          if (!(o instanceof THREE.LineLoop)) return;
+          if (!CLICK_PROFILE_CREATORS.has(o.userData.creator ?? "")) return;
+          // Accept LineLoop (circles, rects) and closed Line curves (isClosed=true).
+          const isLooped = o instanceof THREE.LineLoop;
+          const isClosedLine = o instanceof THREE.Line && !!(o.userData.isClosed as boolean | undefined);
+          if (!isLooped && !isClosedLine) return;
           const posAttr = o.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
           if (!posAttr) return;
           // 2D point-in-polygon using ray-cast method
@@ -466,7 +478,7 @@ export function opRaycastObject(
     if (!o.visible && !isDisplay) return;
     if (!(o instanceof THREE.Mesh)) return;
     if (!o.geometry?.getAttribute("position")) return;
-    if (profileOnly && !EXTRUDABLE_CREATORS.has(o.userData.creator ?? "")) return;
+    if (profileOnly && !CLICK_PROFILE_CREATORS.has(o.userData.creator ?? "")) return;
     meshes.push(o);
   });
   const hits = rc.intersectObjects(meshes, false);
@@ -714,6 +726,10 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   if (phase.kind === "bool_a") {
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit) { ptPrompt("Boolean — click the first solid"); return true; }
+    if (!(hit.obj instanceof THREE.Mesh)) {
+      ptPrompt("Boolean requires solid meshes — extrude your curves first to create a solid");
+      return true;
+    }
     opSetHover(null);
     const m = hit.obj as THREE.Mesh;
     if (m.material && !Array.isArray(m.material) && (m.material as THREE.MeshStandardMaterial).emissive) {
@@ -728,6 +744,10 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   if (phase.kind === "bool_b") {
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit || hit.obj === phase.objA) { ptPrompt("Boolean — click a different second solid"); return true; }
+    if (!(hit.obj instanceof THREE.Mesh)) {
+      ptPrompt("Boolean requires solid meshes — extrude your curves first to create a solid");
+      return true;
+    }
     opSetHover(null); // clear hover so its saved emissive doesn't overwrite our selection color
     const objB = hit.obj;
     const mB = objB as THREE.Mesh;
@@ -752,7 +772,11 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
 
   if (phase.kind === "fillet_select") {
     const hit = opRaycastObject(viewer, clientX, clientY);
-    if (!hit) { ptPrompt("Fillet — click an edge, corner, or object"); return true; }
+    if (!hit) { ptPrompt("Fillet — click a solid mesh to fillet"); return true; }
+    if (!(hit.obj instanceof THREE.Mesh)) {
+      ptPrompt("Fillet requires a solid mesh — extrude your curves first to create a solid");
+      return true;
+    }
     _opPhase = { kind: "fillet_radius", target: hit.obj };
     ptPrompt("Fillet radius — type a value and press Enter");
     ptShowCoordInput("radius");
