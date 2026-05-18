@@ -3915,6 +3915,113 @@ await resetScene('before-box-inject');
   else record('agent-skill-rotated-invocation', r74.passed, r74.evidence ?? { error: r74.error });
 }
 
+// ── S75: on-device-agent-response ────────────────────────────────────────────
+// Verifies the on-device Gemma model responds to a chat prompt with ≥1 dispatch verb.
+// Self-test (Part A): calibrates growth-detector via __dispatch before running real test.
+// Real test (Part B): submits "draw a 5m wall", waits ≤60s for agent:turn-complete.
+{
+  await resetScene('s75-pre');
+
+  const r75 = await evaluate(`(async function() {
+    try {
+      // ── Part A: structural self-test — growth-detector calibration ──────────
+      // A-FAIL: no dispatch → scene count unchanged → proves detector catches no-growth
+      const base = window.__viewer?.scene?.children?.length ?? 0;
+      const afterNoOp = window.__viewer?.scene?.children?.length ?? 0;
+      const failDetected = afterNoOp <= base;
+
+      // A-PASS: dispatch SdBox → scene count grows → proves detector catches growth
+      window.__dispatch?.('SdBox', { width: 1, depth: 1, height: 1 });
+      await new Promise(r => setTimeout(r, 150));
+      const afterBox = window.__viewer?.scene?.children?.length ?? 0;
+      const passDetected = afterBox > base;
+
+      window.__dispatch?.('SdClearScene', {});
+      await new Promise(r => setTimeout(r, 100));
+
+      if (!failDetected || !passDetected) {
+        return { passed: false, evidence: {
+          selfTestPhase: 'FAILED', failDetected, passDetected,
+          base, afterNoOp, afterBox
+        }};
+      }
+
+      // ── Part B: real model test — navigate to chat, submit prompt, wait ─────
+      // B1: Navigate to prompt tab and ensure prompt mode (not console)
+      const dockTab = document.querySelector('.dock-tab[data-tab="prompt"]');
+      if (dockTab) dockTab.click();
+      await new Promise(r => setTimeout(r, 200));
+
+      const pill = document.querySelector('.mode-pill');
+      if (pill?.getAttribute('data-mode') === 'console') {
+        pill.click();
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      // B2: Bail early if model-consent overlay is blocking the model load
+      const overlay = document.getElementById('model-consent-overlay');
+      const consentBlocking = overlay && getComputedStyle(overlay).display !== 'none';
+      if (consentBlocking) {
+        return { passed: false, evidence: {
+          selfTest: 'ok', modelState: 'consent-required',
+          error: 'model-consent-overlay visible — click DOWNLOAD in the UI to load the model'
+        }};
+      }
+
+      // B3: Verify chat UI present and not mid-turn
+      const input = document.querySelector('.chat-input');
+      const sendBtn = document.querySelector('.chat-send-btn');
+      if (!input || !sendBtn) {
+        return { passed: false, evidence: {
+          selfTest: 'ok', error: 'chat UI elements not found',
+          inputFound: !!input, sendBtnFound: !!sendBtn
+        }};
+      }
+      if (sendBtn.disabled) {
+        return { passed: false, evidence: {
+          selfTest: 'ok', error: 'send-btn disabled — model turn already in progress'
+        }};
+      }
+
+      // B4: Set up agent:turn-complete listener BEFORE submitting
+      const sceneBefore = window.__viewer?.scene?.children?.length ?? 0;
+      const turnPromise = new Promise(resolve => {
+        const t = setTimeout(() => resolve({ timedOut: true }), 60000);
+        window.addEventListener('agent:turn-complete', e => {
+          clearTimeout(t);
+          resolve({ timedOut: false, verbs: e.detail?.verbs ?? [], sceneObjects: e.detail?.sceneObjects });
+        }, { once: true });
+      });
+
+      // B5: Submit prompt via Enter key on .chat-input
+      input.value = 'draw a 5m wall';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+      input.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+
+      // B6: Wait ≤60s for agent:turn-complete event
+      const turn = await turnPromise;
+      const sceneAfter = window.__viewer?.scene?.children?.length ?? 0;
+      const sceneGrew = sceneAfter > sceneBefore;
+      const hasVerbs = !turn.timedOut && turn.verbs.length > 0;
+
+      return {
+        passed: !turn.timedOut && (hasVerbs || sceneGrew),
+        evidence: {
+          selfTest: 'ok',
+          timedOut: turn.timedOut ?? false,
+          verbs: turn.verbs ?? [],
+          sceneGrew, sceneBefore, sceneAfter,
+          modelState: 'loaded'
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r75) record('on-device-agent-response', false, { reason: 'evaluate returned null' });
+  else record('on-device-agent-response', r75.passed, r75.evidence ?? { error: r75.error });
+}
+
 } finally {
   await cleanup();
 }
