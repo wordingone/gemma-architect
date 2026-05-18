@@ -253,6 +253,30 @@ function findMissingEnumChoice(
 }
 
 // ============================================================
+// Arg-level synonym normalization
+// ============================================================
+
+// Maps canonical verb → { old_arg_name: new_arg_name }.
+// Applied before validation so both old and new names reach handlers as the canonical name.
+const ARG_SYNONYMS: Partial<Record<string, Record<string, string>>> = {
+  SdRectangle: { depth: "length" },
+};
+
+function normalizeArgSynonyms(canonical: string, args: DispatchArgs): DispatchArgs {
+  const map = ARG_SYNONYMS[canonical];
+  if (!map) return args;
+  let normalized: DispatchArgs | null = null;
+  for (const [old, neo] of Object.entries(map)) {
+    if (old in args && !(neo in args)) {
+      if (!normalized) normalized = { ...args };
+      normalized[neo] = normalized[old];
+      delete normalized[old];
+    }
+  }
+  return normalized ?? args;
+}
+
+// ============================================================
 // Dispatch
 // ============================================================
 
@@ -275,6 +299,8 @@ export async function dispatch(
     // Should be unreachable since resolveVerb confirmed it, but defensive.
     return { ok: false, canonical, error: "UnknownVerb", detail: `entry=null` };
   }
+
+  args = normalizeArgSynonyms(canonical, args);
 
   const missingChoice = findMissingEnumChoice(args, entry.args);
   if (missingChoice) {
@@ -327,6 +353,7 @@ export function dispatchSync(verb: string, args: DispatchArgs = {}): DispatchRes
   }
   const entry = getEntry(canonical);
   if (!entry) return { ok: false, canonical, error: "UnknownVerb" };
+  args = normalizeArgSynonyms(canonical, args);
   const missingChoiceSync = findMissingEnumChoice(args, entry.args);
   if (missingChoiceSync) {
     return { ok: false, canonical, error: "NeedsChoiceError", choice: missingChoiceSync };

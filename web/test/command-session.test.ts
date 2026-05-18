@@ -54,13 +54,13 @@ describe("command session", () => {
     });
     const s = await startCommandSession({
       command: "SdRectangle",
-      parameters: { width: "120cm", depth: "2000mm", center: "(1,2)" },
+      parameters: { width: "120cm", length: "2000mm", center: "(1,2)" },
       metadata: { source: "agent" },
     });
     expect(s.status).toBe("success");
     const r2 = called as unknown as Record<string, unknown>;
     expect(r2.width).toBe(1.2);
-    expect(r2.depth).toBe(2);
+    expect(r2.length).toBe(2);
     expect(r2.center).toEqual([1, 2]);
   });
 });

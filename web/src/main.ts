@@ -1584,7 +1584,7 @@ registerHandler("SdLine", (args) => {
 
 registerHandler("SdRectangle", (args) => {
   const w = (args.width  as number | undefined) ?? 1;
-  const d = (args.depth  as number | undefined) ?? (args.height as number | undefined) ?? 1;
+  const d = (args.length as number | undefined) ?? (args.height as number | undefined) ?? 1;
   const c = (args.center as number[] | undefined) ?? [0, 0];
   const cx = c[0] ?? 0, cy = c[1] ?? 0;
   const a = { x: cx - w / 2, y: cy - d / 2 };

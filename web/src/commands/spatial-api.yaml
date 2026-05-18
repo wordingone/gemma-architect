@@ -103,7 +103,7 @@
   kernel_op: drawRectangle
   args:
     - {name: width,  type: number, required: true, unit: m}
-    - {name: depth,  type: number, required: true, unit: m}
+    - {name: length, type: number, required: true, unit: m, synonyms: [depth]}
     - {name: center, type: point2, required: false, default: [0, 0]}
   topology_role: edge
   kg_predicates: []
