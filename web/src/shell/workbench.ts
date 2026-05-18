@@ -1487,37 +1487,22 @@ function build2DLayersTab(): HTMLElement {
   const wrap = el("div", "tab-body drawing-layers-tab");
   wrap.style.cssText = "padding:0 2px 4px;";
 
-  // Header row: label + add (+) / delete (−) buttons
-  const hdr = el("div");
-  hdr.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 4px;";
+  // Header — matches Building Layers exactly: title + single + button
+  const header = el("div", "layers-header");
+  header.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 6px;";
   const title = el("div");
   title.style.cssText = "font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
   title.textContent = "2D LAYERS";
-  const btnWrap = el("div");
-  btnWrap.style.cssText = "display:flex; gap:2px;";
-  const btnStyle = "background:none; border:1px solid var(--hairline-soft); border-radius:3px; cursor:pointer; font-size:12px; color:var(--ink-dim); padding:0 5px; line-height:1.4;";
-
   const addBtn = el("button") as HTMLButtonElement;
+  addBtn.style.cssText = "font-size:11px; background:none; border:1px solid var(--hairline); border-radius:3px; color:var(--ink); cursor:pointer; padding:1px 6px; line-height:16px;";
   addBtn.textContent = "+";
-  addBtn.title = "Add 2D layer";
-  addBtn.style.cssText = btnStyle;
+  addBtn.title = "New 2D layer";
   addBtn.addEventListener("click", () => {
     drawingLayerStore.add(`Layer ${drawingLayerStore.all().length + 1}`);
   });
-
-  const delBtn = el("button") as HTMLButtonElement;
-  delBtn.textContent = "−";
-  delBtn.title = "Delete active layer";
-  delBtn.style.cssText = btnStyle;
-  delBtn.addEventListener("click", () => {
-    drawingLayerStore.remove(drawingLayerStore.getActiveId());
-  });
-
-  btnWrap.appendChild(addBtn);
-  btnWrap.appendChild(delBtn);
-  hdr.appendChild(title);
-  hdr.appendChild(btnWrap);
-  wrap.appendChild(hdr);
+  header.appendChild(title);
+  header.appendChild(addBtn);
+  wrap.appendChild(header);
 
   const list = el("div", "drawing-layer-list");
   wrap.appendChild(list);
@@ -1534,60 +1519,60 @@ function build2DLayersTab(): HTMLElement {
     list.innerHTML = "";
     const activeId = drawingLayerStore.getActiveId();
     for (const layer of drawingLayerStore.all()) {
-      const row = el("div");
+      const row = el("div", "layer-row", { "data-layer-id": layer.id });
       row.style.cssText =
-        "display:flex; align-items:center; gap:5px; padding:3px 4px;" +
-        " border-bottom:1px solid var(--hairline);" +
-        (layer.id === activeId ? " background:var(--bg-hover);" : " cursor:pointer;");
+        "display:flex; align-items:center; gap:4px; padding:3px 2px; border-bottom:1px solid var(--hairline); min-height:26px;" +
+        (layer.id === activeId ? " background:var(--bg-hover);" : "");
 
-      // Eye — toggle visibility
+      // Eye toggle — SVG eye icon matching Building Layers
       const eyeBtn = el("button") as HTMLButtonElement;
-      eyeBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink); padding:0 1px; flex-shrink:0;";
-      eyeBtn.textContent = layer.visible ? "●" : "○";
+      eyeBtn.style.cssText = "background:none; border:none; cursor:pointer; color:var(--ink); opacity:" + (layer.visible ? "1" : "0.35") + "; padding:0 2px; flex-shrink:0;";
       eyeBtn.title = layer.visible ? "Hide layer" : "Show layer";
+      eyeBtn.innerHTML = layer.visible
+        ? `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor"/><circle cx="6.5" cy="4.5" r="1.5" fill="currentColor"/></svg>`
+        : `<svg width="13" height="9" viewBox="0 0 13 9" fill="none"><ellipse cx="6.5" cy="4.5" rx="5.5" ry="3.5" stroke="currentColor" stroke-dasharray="2 1"/></svg>`;
       eyeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         drawingLayerStore.setVisible(layer.id, !layer.visible);
         syncSceneVisibility(drawingLayerStore.get(layer.id)!);
       });
 
-      // Lock — toggle locked
+      // Lock toggle — SVG lock icon matching Building Layers
       const lockBtn = el("button") as HTMLButtonElement;
-      lockBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:10px; color:var(--ink-dim); padding:0 1px; flex-shrink:0;";
-      lockBtn.textContent = layer.locked ? "🔒" : "🔓";
+      lockBtn.style.cssText = "background:none; border:none; cursor:pointer; color:var(--ink); opacity:" + (layer.locked ? "1" : "0.35") + "; padding:0 2px; flex-shrink:0;";
       lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
+      lockBtn.innerHTML = layer.locked
+        ? `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`
+        : `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor" stroke-dasharray="2 1"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`;
       lockBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         drawingLayerStore.setLocked(layer.id, !layer.locked);
       });
 
-      // Color swatch
-      const swatchWrap = el("div");
-      swatchWrap.style.cssText = "position:relative; width:14px; height:14px; border-radius:2px; flex-shrink:0; cursor:pointer; border:1px solid var(--hairline);";
-      swatchWrap.style.background = layer.color;
-      const colorInput = el("input") as HTMLInputElement;
+      // Color — bare <input type="color"> matching Building Layers
+      const colorInput = document.createElement("input");
       colorInput.type = "color";
       colorInput.value = layer.color;
-      colorInput.style.cssText = "position:absolute; opacity:0; inset:0; width:100%; height:100%; cursor:pointer; padding:0; border:none;";
-      colorInput.addEventListener("input", (e) => {
+      colorInput.style.cssText = "width:14px; height:14px; border:none; padding:0; cursor:pointer; flex-shrink:0; border-radius:2px;";
+      colorInput.title = "Layer color";
+      colorInput.addEventListener("change", (e) => {
         e.stopPropagation();
         const newColor = (e.target as HTMLInputElement).value;
         drawingLayerStore.setColor(layer.id, newColor);
-        // Update all scene objects on this layer
-        const viewer = (window as unknown as { __viewer?: { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; material?: { color?: { set: (c: string) => void } } }) => void) => void } }).__viewer;
+        const viewer = (window as unknown as { __viewer?: { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; material?: { color?: { set: (c: string) => void }; needsUpdate: boolean } }) => void) => void } }).__viewer;
         if (viewer) {
           viewer.forEachSceneChild((obj) => {
             if (obj.userData.drawingLayerId === layer.id && obj.material?.color) {
               obj.material.color.set(newColor);
+              obj.material.needsUpdate = true;
             }
           });
         }
       });
-      swatchWrap.appendChild(colorInput);
 
       // Name — double-click to rename inline
       const nameEl = el("span");
-      nameEl.style.cssText = "flex:1; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" + (layer.id === activeId ? " font-weight:600;" : "");
+      nameEl.style.cssText = "flex:1; font-size:11px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;";
       nameEl.textContent = layer.name;
       nameEl.addEventListener("dblclick", (e) => {
         e.stopPropagation();
@@ -1597,9 +1582,7 @@ function build2DLayersTab(): HTMLElement {
         nameEl.replaceWith(input);
         input.focus();
         input.select();
-        const commit = (): void => {
-          drawingLayerStore.rename(layer.id, input.value);
-        };
+        const commit = (): void => { drawingLayerStore.rename(layer.id, input.value); };
         input.addEventListener("blur", commit);
         input.addEventListener("keydown", (ke) => {
           if (ke.key === "Enter") { commit(); input.blur(); }
@@ -1607,10 +1590,23 @@ function build2DLayersTab(): HTMLElement {
         });
       });
 
+      // Delete × per row — disabled for built-in 'default' layer
+      const isDefault = layer.id === "default";
+      const delBtn = el("button") as HTMLButtonElement;
+      delBtn.style.cssText = "background:none; border:none; cursor:" + (isDefault ? "default" : "pointer") + "; color:var(--ink-dim); opacity:" + (isDefault ? "0.2" : "0.6") + "; padding:0 2px; flex-shrink:0; font-size:13px;";
+      delBtn.textContent = "×";
+      delBtn.title = isDefault ? "Default layer cannot be deleted" : "Delete layer";
+      delBtn.disabled = isDefault;
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!isDefault) drawingLayerStore.remove(layer.id);
+      });
+
       row.appendChild(eyeBtn);
       row.appendChild(lockBtn);
-      row.appendChild(swatchWrap);
+      row.appendChild(colorInput);
       row.appendChild(nameEl);
+      row.appendChild(delBtn);
       row.addEventListener("click", () => { drawingLayerStore.setActive(layer.id); });
       list.appendChild(row);
     }
