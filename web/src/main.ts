@@ -2339,12 +2339,20 @@ function _inspectorTitle(text: string): HTMLElement {
 let _stairInspectorGroupUuid: string | null = null;
 
 function _showStairInspector(group: THREE.Object3D): void {
-  const sp = group.userData.stairParams as { actualRiser: number; actualTread: number } | undefined;
+  const sp = group.userData.stairParams as { actualRiser: number; actualTread: number; nRisers: number; totalRise: number } | undefined;
   _stairInspectorGroupUuid = group.uuid;
   _roofInspectorMeshUuid = null;
 
   _roofInspectorEl.innerHTML = "";
   _roofInspectorEl.appendChild(_inspectorTitle("Stair"));
+
+  if (sp) {
+    const info = document.createElement("div");
+    info.style.cssText = "padding:2px 8px 4px; font-size:10px; color:var(--ink-dim);";
+    info.textContent = `${sp.nRisers} steps · rise ${(sp.totalRise * 1000 | 0) / 1000}m`;
+    _roofInspectorEl.appendChild(info);
+  }
+
   _roofInspectorEl.appendChild(_mkInspectorSlider("Riser", 0.10, 0.20, 0.005, sp?.actualRiser ?? 0.1778, "m", (v) => {
     const cur = viewer.getScene().getObjectByProperty("uuid", _stairInspectorGroupUuid ?? "");
     if (!cur) return;
