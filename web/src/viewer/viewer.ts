@@ -306,6 +306,7 @@ export class Viewer {
       controls.enableDamping = true;
       controls.dampingFactor = 0.1;
       if (camera instanceof THREE.OrthographicCamera) controls.screenSpacePanning = true;
+      body.addEventListener("contextmenu", (e) => e.preventDefault());
       this.panes.push({ id: el.id, view, el, body, camera, controls, lastRenderedW: 0, lastRenderedH: 0 });
 
       const axesDiv = document.getElementById(`vp-axes-${idx + 1}`);
