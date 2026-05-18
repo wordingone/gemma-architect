@@ -3860,6 +3860,61 @@ await resetScene('before-box-inject');
   else record('canvas-visible-width-layout-detail', r73.passed, r73.evidence ?? { error: r73.error });
 }
 
+// ── S74: agent-skill-rotated-invocation (#915 follow-up) ─────────────────────
+// Verifies the "rotated <deg>" clause in agent-skill invocation:
+//   _extractRotationFromPrompt parses correctly,
+//   _rotateSkillSteps rotates scalar x/y positions around pivot,
+//   existing "at X, Y" rebinding still works without rotation clause.
+{
+  const r74 = await evaluate(`(async function() {
+    try {
+      const mod = await import('/src/chat/chat-panel.ts').catch(e => ({ error: e.message }));
+      if (mod.error) return { passed: false, evidence: { importError: mod.error } };
+
+      const { _extractRotationFromPrompt, _rotateSkillSteps } = mod;
+      if (!_extractRotationFromPrompt || !_rotateSkillSteps)
+        return { passed: false, evidence: { reason: 'exports missing from chat-panel.ts' } };
+
+      // 1. Parser: "at 5, 0 rotated 90" → 90
+      const deg1 = _extractRotationFromPrompt('use small-room skill at 5, 0 rotated 90');
+      const deg2 = _extractRotationFromPrompt('use skill at 3, 2');       // → null
+      const deg3 = _extractRotationFromPrompt('apply skill rotate 45');   // → 45
+
+      // 2. Rotation math: one SdWall step at x=5, y=0 rotated 90° around (5,0).
+      //    x stays at 5, y stays at 0 (pivot == step position → no displacement).
+      const stepsAtPivot = [{ verb: 'SdWall', args: { x: 5, y: 0 } }];
+      const rotPivot = _rotateSkillSteps(stepsAtPivot, 5, 0, 90);
+      const px = rotPivot[0].args.x;
+      const py = rotPivot[0].args.y;
+      const pivotOk = Math.abs(px - 5) < 0.01 && Math.abs(py - 0) < 0.01;
+
+      // 3. Rotation math: step at x=7, y=0 rotated 90° around (5,0) → expect (5, 2).
+      //    After 90° CCW: dx=2,dy=0 → new dx=0,dy=2 → x=5, y=2.
+      const stepsOffset = [{ verb: 'SdWall', args: { x: 7, y: 0 } }];
+      const rotOffset = _rotateSkillSteps(stepsOffset, 5, 0, 90);
+      const ox = rotOffset[0].args.x;
+      const oy = rotOffset[0].args.y;
+      const offsetOk = Math.abs(ox - 5) < 0.01 && Math.abs(oy - 2) < 0.01;
+
+      // 4. No rotation when clause absent — rebind unchanged path.
+      const noRotOk = deg2 === null;
+
+      return {
+        passed: deg1 === 90 && noRotOk && deg3 === 45 && pivotOk && offsetOk,
+        evidence: {
+          deg1, deg2, deg3,
+          pivotX: px, pivotY: py, pivotOk,
+          offsetX: ox, offsetY: oy, offsetOk,
+          noRotOk,
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r74) record('agent-skill-rotated-invocation', false, { reason: 'evaluate returned null' });
+  else record('agent-skill-rotated-invocation', r74.passed, r74.evidence ?? { error: r74.error });
+}
+
 } finally {
   await cleanup();
 }

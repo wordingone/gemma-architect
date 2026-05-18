@@ -84,6 +84,51 @@ function _rebindSkillSteps(steps: SkillStep[], dx: number, dy: number, dz: numbe
   }));
 }
 
+export function _extractRotationFromPrompt(prompt: string): number | null {
+  const m = prompt.match(/\brotate[d]?\s+(-?\d+\.?\d*)/i);
+  return m ? parseFloat(m[1]) : null;
+}
+
+function _rotatePoint2D(v: unknown, cx: number, cy: number, cos: number, sin: number): unknown {
+  if (!v || typeof v !== "object") return v;
+  if (Array.isArray(v) && v.length >= 2 && typeof v[0] === "number") {
+    const rx = cx + (v[0] - cx) * cos - (v[1] - cy) * sin;
+    const ry = cy + (v[0] - cx) * sin + (v[1] - cy) * cos;
+    return v.length >= 3 ? [rx, ry, v[2]] : [rx, ry];
+  }
+  const obj = v as Record<string, unknown>;
+  if (typeof obj.x === "number" && typeof obj.y === "number") {
+    return {
+      ...obj,
+      x: cx + (obj.x - cx) * cos - ((obj.y as number) - cy) * sin,
+      y: cy + (obj.x - cx) * sin + ((obj.y as number) - cy) * cos,
+    };
+  }
+  return v;
+}
+
+export function _rotateSkillSteps(steps: SkillStep[], cx: number, cy: number, deg: number): SkillStep[] {
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return steps.map((step) => ({
+    verb: step.verb,
+    args: Object.fromEntries(Object.entries(step.args).map(([k, v]) => {
+      if (k === "x" && typeof v === "number") {
+        const y0 = (step.args.y as number | undefined) ?? cy;
+        return [k, cx + (v - cx) * cos - (y0 - cy) * sin];
+      }
+      if (k === "y" && typeof v === "number") {
+        const x0 = (step.args.x as number | undefined) ?? cx;
+        return [k, cy + (x0 - cx) * sin + (v - cy) * cos];
+      }
+      if (["start", "end", "center", "position", "origin"].includes(k)) return [k, _rotatePoint2D(v, cx, cy, cos, sin)];
+      if (k === "points" && Array.isArray(v)) return [k, (v as unknown[]).map((pt) => _rotatePoint2D(pt, cx, cy, cos, sin))];
+      return [k, v];
+    })),
+  }));
+}
+
 function estimateMaxTokens(prompt: string): number {
   const p = prompt.toLowerCase();
   // Short informational queries rarely need more than 256 tokens.
@@ -392,6 +437,13 @@ export class ChatPanel {
             steps = _rebindSkillSteps(steps, dx, dy, dz);
           }
         }
+      }
+
+      // Apply rotation around the target position if "rotated <deg>" present.
+      const deg = _extractRotationFromPrompt(promptText);
+      if (deg != null && Math.abs(deg) > 0.001) {
+        const pivot = _extractPositionFromPrompt(promptText) ?? _getStepAnchor(steps) ?? { x: 0, y: 0, z: 0 };
+        steps = _rotateSkillSteps(steps, pivot.x, pivot.y, deg);
       }
     }
 
