@@ -552,11 +552,52 @@ function commitMultiWalls(viewer: Viewer, results: SingleResult[]): void {
 }
 
 function commitWallPick(viewer: Viewer, obj: THREE.Object3D): void {
-  const cps = obj.userData.controlPoints as Array<{x: number; y: number; z?: number}> | undefined;
+  const creator = obj.userData.creator as string | undefined;
   const z0 = obj instanceof THREE.Mesh ? (obj as THREE.Mesh).position.z : 0;
+  const pos = obj.position;
+
+  // Circle reference → smooth cylindrical wall ring (32-segment arc).
+  if (creator === "circle") {
+    const box = new THREE.Box3().setFromObject(obj);
+    const r = (box.max.x - box.min.x) / 2;
+    const cx = (box.min.x + box.max.x) / 2;
+    const cy = (box.min.y + box.max.y) / 2;
+    const N = 32;
+    const arcPts: Array<{x: number; y: number; z?: number}> = [];
+    for (let i = 0; i <= N; i++) {
+      const ang = (i / N) * Math.PI * 2;
+      arcPts.push({ x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang), z: z0 });
+    }
+    const result = buildCurveWall(arcPts);
+    commitMultiWalls(viewer, [result]);
+    hideCursorDot();
+    setPickerHint(null);
+    dispatchSync("setActiveTool", { toolId: "select" });
+    return;
+  }
+
+  // Curve reference → smooth spline wall; controlPoints are mesh-local, convert to world.
+  if (creator === "curve") {
+    const cps = obj.userData.controlPoints as Array<{x: number; y: number; z?: number}> | undefined;
+    if (cps && cps.length >= 2) {
+      const isClosed = obj.userData.isClosed as boolean ?? false;
+      const worldPts = cps.map(p => ({ x: p.x + pos.x, y: p.y + pos.y, z: z0 }));
+      if (isClosed) worldPts.push({ x: worldPts[0].x, y: worldPts[0].y, z: z0 });
+      const result = buildCurveWall(worldPts);
+      commitMultiWalls(viewer, [result]);
+      hideCursorDot();
+      setPickerHint(null);
+      dispatchSync("setActiveTool", { toolId: "select" });
+      return;
+    }
+  }
+
+  // Polyline/line and all other types: controlPoints are local-space, convert to world;
+  // straight wall segments between consecutive points.
+  const cps = obj.userData.controlPoints as Array<{x: number; y: number; z?: number}> | undefined;
   let pts: Array<{x: number; y: number; z?: number}>;
   if (cps && cps.length >= 2) {
-    pts = cps.map(p => ({ x: p.x, y: p.y, z: p.z ?? z0 }));
+    pts = cps.map(p => ({ x: p.x + pos.x, y: p.y + pos.y, z: z0 }));
   } else {
     const box = new THREE.Box3().setFromObject(obj);
     const mn = box.min, mx = box.max;

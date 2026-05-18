@@ -358,6 +358,7 @@ export class Viewer {
         // Snapshots captured at drag-start so drag-end can push to undo stack.
         let _dragStartSnapshot: TransformSnapshot | null = null;
         let _dragStartMultiSnapshots: TransformSnapshot[] = [];
+        let _dragResetNeighborIds: string[] = [];
         g.setMode(mode);
         g.setSpace("local");
         if (mode === "translate") g.size = 1.0;
@@ -457,6 +458,30 @@ export class Viewer {
             if (this.targetObject instanceof THREE.Mesh) {
               dissolveGroupForMesh(this.targetObject.uuid, this.scene);
               resetWallCorners(this.targetObject);
+              // Reset corners of walls that share an endpoint with the moved wall.
+              // They keep miter-cut geometry otherwise, visible after separation.
+              _dragResetNeighborIds = [];
+              if (this.targetObject.userData?.creator === "wall") {
+                const movedEps = this.targetObject.userData.endpoints as Array<{x: number; y: number}> | undefined;
+                if (movedEps) {
+                  const NEIGHBOR_EPS = 0.05;
+                  this.scene.traverse((obj) => {
+                    if (!(obj instanceof THREE.Mesh) || obj === this.targetObject) return;
+                    if (obj.userData?.creator !== "wall") return;
+                    const otherEps = obj.userData.endpoints as Array<{x: number; y: number}> | undefined;
+                    if (!otherEps) return;
+                    for (const ep of movedEps) {
+                      for (const oep of otherEps) {
+                        if (Math.hypot(ep.x - oep.x, ep.y - oep.y) < NEIGHBOR_EPS) {
+                          resetWallCorners(obj);
+                          _dragResetNeighborIds.push(obj.uuid);
+                          return;
+                        }
+                      }
+                    }
+                  });
+                }
+              }
             }
             // Capture both pivot and target matrices at drag start so
             // objectChange can compute the live world-space delta.
@@ -503,6 +528,16 @@ export class Viewer {
                 // Update stale world endpoints, then re-attempt parametric corner joins.
                 recomputeWallEndpoints(this.targetObject);
                 attemptWallCornerJoins(this.targetObject, this.scene);
+                // Re-attempt joins for neighbors that were reset at drag-start,
+                // so they reconnect to any remaining adjacent walls.
+                for (const uuid of _dragResetNeighborIds) {
+                  const neighbor = this.scene.getObjectByProperty("uuid", uuid);
+                  if (neighbor instanceof THREE.Mesh) {
+                    recomputeWallEndpoints(neighbor);
+                    attemptWallCornerJoins(neighbor, this.scene);
+                  }
+                }
+                _dragResetNeighborIds = [];
               }
               onElementCommitted(this.targetObject, this.scene);
             }
