@@ -60,7 +60,7 @@ import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDO
 import { initSectionHandles } from "./viewer/section-handles";
 import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
-import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction } from "./history";
+import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection, filletMesh } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
@@ -1036,6 +1036,10 @@ registerHandler("SdRoof", (args) => {
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
+
+  // Group roof creation + gable-trim geometry swaps into one undoable action.
+  // Ctrl+Z removes the roof AND restores gable walls to their flat-top BoxGeometry.
+  beginTransaction("SdRoof+gable-trim");
   viewer.addMesh(mesh, "brep");
   if (mesh instanceof THREE.Mesh) onElementCommitted(mesh, viewer.getScene());
 
@@ -1089,14 +1093,35 @@ registerHandler("SdRoof", (args) => {
       pitchedGeom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
       pitchedGeom.translate(0, wt / 2, 0);
 
-      wallMesh.geometry.dispose();
+      // Capture old geometry BEFORE swap so undo can restore it.
+      // Old geometry is kept alive (not disposed) so undo can re-assign it;
+      // disposal follows the DeleteAction convention — deferred to clearHistory().
+      const oldGeom = wallMesh.geometry;
       wallMesh.geometry = pitchedGeom;
       wallMesh.userData.topProfile = "pitched";
       wallMesh.userData.eaveHeight = wallEaveH;
       wallMesh.userData.ridgeHeight = rH;
+
+      pushCustomAction(
+        () => {
+          // Undo: restore flat-top BoxGeometry and clear pitched metadata.
+          wallMesh.geometry = oldGeom;
+          delete (wallMesh.userData as Record<string, unknown>).topProfile;
+          delete (wallMesh.userData as Record<string, unknown>).eaveHeight;
+          delete (wallMesh.userData as Record<string, unknown>).ridgeHeight;
+        },
+        () => {
+          // Redo: re-apply gable pentagon geometry.
+          wallMesh.geometry = pitchedGeom;
+          wallMesh.userData.topProfile = "pitched";
+          wallMesh.userData.eaveHeight = wallEaveH;
+          wallMesh.userData.ridgeHeight = rH;
+        },
+      );
     });
   }
 
+  endTransaction();
   return { created: "roof", roofType, width: w, depth: d, ifcPredefinedType: mesh.userData.ifcPredefinedType };
 });
 

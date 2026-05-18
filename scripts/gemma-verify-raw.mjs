@@ -4022,6 +4022,107 @@ await resetScene('before-box-inject');
   else record('on-device-agent-response', r75.passed, r75.evidence ?? { error: r75.error });
 }
 
+// ── S76: gable-trim undo round-trip (#916) ───────────────────────────────────
+// AC: Place 4 walls + SdRoof(pitched) → gable walls trimmed.
+// Ctrl+Z → roof removed AND gable walls restored to flat-top BoxGeometry.
+// Ctrl+Y → roof restored AND gable walls re-trimmed.
+{
+  await resetScene('s76-pre');
+
+  const r76 = await evaluate(`(async function() {
+    try {
+      const d = window.__dispatch;
+      if (!d) return { passed: false, evidence: { reason: '__dispatch not found' } };
+
+      // ── Step 1: place 4 walls forming a 6m×8m footprint ──────────────────
+      // Two long walls (Z-axis, 8m) and two short walls (X-axis, 6m).
+      d('SdWall', { x: 0,   y: 0, length: 8, direction: [0,1,0], height: 3 });
+      d('SdWall', { x: 6,   y: 0, length: 8, direction: [0,1,0], height: 3 });
+      d('SdWall', { x: 0,   y: 0, length: 6, direction: [1,0,0], height: 3 });
+      d('SdWall', { x: 0,   y: 8, length: 6, direction: [1,0,0], height: 3 });
+      await new Promise(r => setTimeout(r, 200));
+
+      const scene = window.__viewer?.scene;
+      if (!scene) return { passed: false, evidence: { reason: 'no scene' } };
+
+      const wallsBefore = scene.children.filter(c => c.userData?.kind === 'wall');
+      if (wallsBefore.length < 4) return {
+        passed: false,
+        evidence: { reason: 'fewer than 4 walls placed', wallCount: wallsBefore.length }
+      };
+      const sceneCountBeforeRoof = scene.children.length;
+
+      // ── Step 2: dispatch SdRoof(pitched, 6m×8m) ───────────────────────────
+      d('SdRoof', { roofType: 'pitched', width: 6, depth: 8, height: 2 });
+      await new Promise(r => setTimeout(r, 300));
+
+      const sceneCountAfterRoof = scene.children.length;
+      const roofAdded = sceneCountAfterRoof > sceneCountBeforeRoof;
+
+      // Check that at least one wall was gable-trimmed (has topProfile = "pitched")
+      const wallsAfterRoof = scene.children.filter(c => c.userData?.kind === 'wall');
+      const trimmedWalls = wallsAfterRoof.filter(w => w.userData?.topProfile === 'pitched');
+      const gableTrimOk = trimmedWalls.length > 0;
+
+      if (!roofAdded || !gableTrimOk) return {
+        passed: false,
+        evidence: {
+          phase: 'after-roof',
+          roofAdded, gableTrimOk,
+          trimmedCount: trimmedWalls.length,
+          sceneCountBeforeRoof, sceneCountAfterRoof
+        }
+      };
+
+      // ── Step 3: Undo → roof removed AND gable walls restored ──────────────
+      d('SdUndo', {});
+      await new Promise(r => setTimeout(r, 300));
+
+      const sceneCountAfterUndo = scene.children.length;
+      const roofRemoved = sceneCountAfterUndo < sceneCountAfterRoof;
+
+      const wallsAfterUndo = scene.children.filter(c => c.userData?.kind === 'wall');
+      const stillTrimmed = wallsAfterUndo.filter(w => w.userData?.topProfile === 'pitched');
+      const wallsRestored = stillTrimmed.length === 0;
+
+      if (!roofRemoved || !wallsRestored) return {
+        passed: false,
+        evidence: {
+          phase: 'after-undo',
+          roofRemoved, wallsRestored,
+          stillTrimmedCount: stillTrimmed.length,
+          sceneCountAfterRoof, sceneCountAfterUndo
+        }
+      };
+
+      // ── Step 4: Redo → roof restored AND gable walls re-trimmed ──────────
+      d('SdRedo', {});
+      await new Promise(r => setTimeout(r, 300));
+
+      const sceneCountAfterRedo = scene.children.length;
+      const roofRestored = sceneCountAfterRedo > sceneCountAfterUndo;
+
+      const wallsAfterRedo = scene.children.filter(c => c.userData?.kind === 'wall');
+      const reTrimmed = wallsAfterRedo.filter(w => w.userData?.topProfile === 'pitched');
+      const gableReTrimOk = reTrimmed.length > 0;
+
+      return {
+        passed: roofRemoved && wallsRestored && roofRestored && gableReTrimOk,
+        evidence: {
+          trimmedAfterRoof: trimmedWalls.length,
+          roofRemoved, wallsRestored,
+          roofRestored, gableReTrimOk,
+          reTrimmedCount: reTrimmed.length,
+          sceneCountAfterRoof, sceneCountAfterUndo, sceneCountAfterRedo
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r76) record('gable-trim-undo-roundtrip', false, { reason: 'evaluate returned null' });
+  else record('gable-trim-undo-roundtrip', r76.passed, r76.evidence ?? { error: r76.error });
+}
+
 } finally {
   await cleanup();
 }
