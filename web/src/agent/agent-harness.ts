@@ -20,6 +20,7 @@
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
 import { getState } from "../app-state";
+import { StandardBackend } from "./standard-backend";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -67,6 +68,27 @@ let _deviceLabel = "GPU"; // updated from worker model-ready message
 
 // Warmup deduplication guard — set to true when worker sends warmup-done.
 let _prefillDone = false;
+
+// Standard backend (#929): dedicated Web Worker for the standard fallback path.
+// Activated when the drafter ONNX fails to load so subsequent turns don't go
+// through model-worker.ts's inline model.generate() call.
+let _standardBackend: StandardBackend | null = null;
+let _standardBackendActivating = false;
+
+function activateStandardBackend(): void {
+  if (_standardBackend || _standardBackendActivating) return;
+  _standardBackendActivating = true;
+  const sb = new StandardBackend({ modelId: MODEL_ID, dtype: "q4f16" });
+  sb.init()
+    .then(() => {
+      _standardBackend = sb;
+      window.dispatchEvent(new CustomEvent("agentmodel:standard-backend:ready"));
+    })
+    .catch((e) => {
+      _standardBackendActivating = false;
+      console.warn("[agent-harness] standard backend init failed:", (e as Error).message);
+    });
+}
 
 // ---- Model loading (in-browser path via Web Worker #936) -------------------
 
@@ -190,6 +212,7 @@ function initWorkerIfNeeded(): Worker {
       case "drafter-error":
         (globalThis as any).__drafterLoaded = false;
         window.dispatchEvent(new CustomEvent("agentmodel:drafter:error", { detail: msg.error }));
+        activateStandardBackend(); // spawn dedicated standard-path worker (#929)
         break;
       case "boot-complete":
         window.dispatchEvent(new CustomEvent("agentmodel:boot-complete"));
@@ -1152,12 +1175,56 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   return { dispatches, text: text || content, raw: json };
 }
 
+// ---- Standard backend turn (#929) ----------------------------------------
+
+/** Route a turn through the dedicated standard-backend worker.
+ *  Used when drafter failed to load and _standardBackend is ready. */
+async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse> {
+  const sb = _standardBackend!;
+  const MAX_HISTORY_MSGS = 60;
+  const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+  const _sysPrompt = buildWebGPUSystemPrompt(req.skills);
+  const messages = [
+    { role: "system" as const, content: _sysPrompt },
+    ...trimmedHistory,
+    { role: "user" as const, content: req.prompt },
+  ];
+
+  const t0 = Date.now();
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
+
+  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 512 });
+  // Drain the token stream (satisfies AC: tokens stream back via postMessage inside worker)
+  for await (const _tok of stream) { /* tokens flow via postMessage internally */ }
+
+  const { text: responseText, tokensOut } = await stream.resultPromise;
+  const decodeMs = Date.now() - t0;
+  const tgTps = decodeMs > 0 ? tokensOut / (decodeMs / 1000) : 0;
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ${tgTps.toFixed(0)} t/s`);
+
+  let plan: string | undefined;
+  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
+    plan = inner.trim();
+    return "";
+  });
+  const { dispatches, text } = parseDispatches(afterPlan);
+  return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
+}
+
 // ---- Public entry point --------------------------------------------------
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // P10-2: if a prior worker error engaged the session-level fallback, route remote.
   if (REMOTE_URL && _webgpuFallbackEngaged) return runRemoteAgentTurn(req);
   if (REMOTE_URL) return runRemoteAgentTurn(req);
+
+  // #929: if drafter failed and dedicated standard backend is ready, use it.
+  // Standard backend runs model.generate() in its own isolated worker so the
+  // MTP worker thread is not contended during standard-path inference.
+  const drafterLoaded = (globalThis as unknown as { __drafterLoaded?: boolean }).__drafterLoaded;
+  if (_standardBackend && drafterLoaded === false && !payloadHasMultimodal(req)) {
+    return runStandardBackendTurn(req);
+  }
 
   // ── On-device path via Web Worker (#936) ─────────────────────────────────
   // Worker owns: from_pretrained, WebGPU probe, warmup, drafter load, tokenization,
