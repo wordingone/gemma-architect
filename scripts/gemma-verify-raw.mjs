@@ -4123,6 +4123,81 @@ await resetScene('before-box-inject');
   else record('gable-trim-undo-roundtrip', r76.passed, r76.evidence ?? { error: r76.error });
 }
 
+// ── S77: export-dropdown-renders (#927) ──────────────────────────────────────
+// Verifies the export drawer opens and surfaces ≥ 10 format buttons in MODEL
+// mode. Self-test proves the assertion is not dormant-green. Same drawer is
+// present in LAYOUT mode (same #ribbon-export-btn trigger).
+{
+  await resetScene('s77-pre');
+
+  const r77 = await evaluate(`(async function() {
+    try {
+      // ── Part A: structural self-test — prove assertion is not dormant-green ──
+      // Inject display:none on any .export-drawer that exists; assert count = 0.
+      // (Drawer may not be open yet — this tests the CSS-override path only.)
+      const selfTestStyle = document.createElement('style');
+      selfTestStyle.id = '__s77-override';
+      selfTestStyle.textContent = '.export-drawer { display: none !important; }';
+      document.head.appendChild(selfTestStyle);
+      await new Promise(r => setTimeout(r, 50));
+
+      const hiddenCount = document.querySelectorAll('.export-drawer .ed-fmt[data-fmt]').length;
+      const selfTestOk = hiddenCount === 0;
+
+      selfTestStyle.remove();
+      await new Promise(r => setTimeout(r, 50));
+
+      // ── Part B: open export drawer in MODEL mode ──────────────────────────
+      const exportBtn = document.getElementById('ribbon-export-btn');
+      if (!exportBtn) return {
+        passed: false,
+        evidence: { reason: '#ribbon-export-btn not found', selfTestOk }
+      };
+
+      exportBtn.click();
+      await new Promise(r => setTimeout(r, 400));
+
+      const drawer = document.querySelector('.export-drawer');
+      const drawerOpen = !!drawer && drawer.classList.contains('open');
+      if (!drawerOpen) return {
+        passed: false,
+        evidence: { reason: '.export-drawer.open not present after click', selfTestOk }
+      };
+
+      // ── Part C: count format buttons ──────────────────────────────────────
+      const fmtButtons = drawer.querySelectorAll('.ed-fmt[data-fmt]');
+      const fmtCount = fmtButtons.length;
+
+      // Spot-check key format data-fmt values are present.
+      const fmtSet = new Set([...fmtButtons].map(b => b.dataset.fmt));
+      const hasIfc   = fmtSet.has('ifc');
+      const hasGlb   = fmtSet.has('glb');
+      const hasPdf   = fmtSet.has('pdf');
+      const hasDxf   = fmtSet.has('dxf');
+
+      // ── Part D: close the drawer ──────────────────────────────────────────
+      const closeBtn = drawer.querySelector('.ed-close');
+      if (closeBtn) closeBtn.click();
+      await new Promise(r => setTimeout(r, 400));
+      const drawerClosed = !document.querySelector('.export-drawer.open');
+
+      return {
+        passed: selfTestOk && fmtCount >= 10 && hasIfc && hasGlb && hasPdf && hasDxf && drawerClosed,
+        evidence: {
+          selfTestOk, hiddenCount,
+          drawerOpen, fmtCount,
+          hasIfc, hasGlb, hasPdf, hasDxf,
+          drawerClosed,
+          fmtsFound: [...fmtSet].sort(),
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r77) record('export-dropdown-renders', false, { reason: 'evaluate returned null' });
+  else record('export-dropdown-renders', r77.passed, r77.evidence ?? { error: r77.error });
+}
+
 } finally {
   await cleanup();
 }
