@@ -481,11 +481,8 @@ export class ChatPanel {
       this._removeThinking(thinking);
       this._updatePerfStrip();
 
-      if (resp.dispatches.length === 0 || isSimplePlan(resp.dispatches)) {
-        await this._executeAndPush(resp, _turnStart);
-      } else {
-        this._pushPlanMsg(resp);
-      }
+      // #980: goal-mode default — always auto-execute, no plan-pending UI.
+      await this._executeAndPush(resp, _turnStart);
     } catch (e) {
       this._removeThinking(thinking);
       const err = e as Error;
