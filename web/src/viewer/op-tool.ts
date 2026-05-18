@@ -124,6 +124,7 @@ function opClearLabels(): void {
 export function opFinish(viewer: Viewer): void {
   opClearPreview(viewer);
   opSetHover(null);
+  const _finishedKind = _opPhase?.kind;
   _opPhase = null;
   ptClearPrompt();
   ptHideCoordInput();
@@ -133,7 +134,11 @@ export function opFinish(viewer: Viewer): void {
   _hooks.removeSelOverlay();
   _rawChooserDefault = null;
   _selDragging = false;
-  viewer.deselectCurrent();
+  // sel_window / sel_lasso / sel_boundary commit multi-select into state — don't deselect.
+  // All other op tools (extrude, boolean, fillet, dim) should clear the active target on finish.
+  if (_finishedKind !== "sel_window" && _finishedKind !== "sel_lasso" && _finishedKind !== "sel_boundary") {
+    viewer.deselectCurrent();
+  }
   viewer.setGumballEnabled(true);
   dispatchSync("setActiveTool", { toolId: "select" });
 }
