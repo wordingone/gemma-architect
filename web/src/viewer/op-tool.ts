@@ -104,8 +104,13 @@ export type OpPhase =
   | { kind: "copy_place"; source: THREE.Object3D; srcPt: THREE.Vector3 }
   | { kind: "array_select" }
   | { kind: "array_linear_params"; source: THREE.Object3D }
+  | { kind: "array_linear_base";   source: THREE.Object3D }
+  | { kind: "array_linear_dir";    source: THREE.Object3D; basePt: THREE.Vector3 }
+  | { kind: "array_linear_count";  source: THREE.Object3D; dx: number; dy: number; dz: number }
   | { kind: "array_grid_params";   source: THREE.Object3D }
-  | { kind: "array_polar_params";  source: THREE.Object3D };
+  | { kind: "array_polar_params";  source: THREE.Object3D }
+  | { kind: "array_curve_pick";    source: THREE.Object3D }
+  | { kind: "array_curve_count";   source: THREE.Object3D; curvePts: THREE.Vector3[] };
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
@@ -951,6 +956,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit) { ptPrompt("Copy — click an object to copy"); return true; }
     opSetHover(null);
+    viewer.selectObject(hit.obj);
     const ctr = new THREE.Vector3(); new THREE.Box3().setFromObject(hit.obj).getCenter(ctr);
     _opPhase = { kind: "copy_place", source: hit.obj, srcPt: ctr };
     ptPrompt("Copy — click destination point  or type  dx dy [dz]  [Esc] cancel");
@@ -975,6 +981,40 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     opSetHover(null);
     viewer.selectObject(hit.obj);
     _opPhaseStartArray(hit.obj);
+    return true;
+  }
+
+  if (phase.kind === "array_linear_base") {
+    if (!snapped3) return true;
+    _opPhase = { kind: "array_linear_dir", source: phase.source, basePt: snapped3.clone() };
+    ptPrompt("Linear Array — click direction + distance endpoint  [Esc] cancel");
+    return true;
+  }
+
+  if (phase.kind === "array_linear_dir") {
+    if (!snapped3) return true;
+    const dx = round(snapped3.x - phase.basePt.x);
+    const dy = round(snapped3.y - phase.basePt.y);
+    const dz = round(snapped3.z - phase.basePt.z);
+    if (dx === 0 && dy === 0 && dz === 0) { ptPrompt("Linear Array — endpoint must differ from base point"); return true; }
+    _opPhase = { kind: "array_linear_count", source: phase.source, dx, dy, dz };
+    ptPrompt(`Linear Array — step (${dx}, ${dy}${dz !== 0 ? `, ${dz}` : ""})  —  type count  [Esc] cancel`);
+    ptShowCoordInput("count");
+    return true;
+  }
+
+  if (phase.kind === "array_curve_pick") {
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    if (!hit) { ptPrompt("Along Curve — click a curve or polyline  [Esc] cancel"); return true; }
+    const curvePts = _extractCurvePoints(hit.obj);
+    if (!curvePts) {
+      ptPrompt("Along Curve — click a line, polyline, or curve object  [Esc] cancel");
+      return true;
+    }
+    _opPhase = { kind: "array_curve_count", source: phase.source, curvePts };
+    const len = round(_curveLength(curvePts));
+    ptPrompt(`Along Curve — path ${len}m — type count  [Esc] cancel`);
+    ptShowCoordInput("count");
     return true;
   }
 
@@ -1092,6 +1132,31 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
     dispatchSync("SdArrayPolar", { target: phase.source.uuid, count: Math.max(2, Math.round(count)), cx: round(cx), cy: round(cy) });
     opFinish(viewer);
   }
+
+  if (phase.kind === "array_linear_count") {
+    const n = Math.round(Number(raw.trim()));
+    if (isNaN(n) || n < 1) { ptPrompt("Linear Array — type a positive count number"); return; }
+    dispatchSync("SdArrayLinear", { target: phase.source.uuid, count: n, dx: phase.dx, dy: phase.dy, dz: phase.dz });
+    opFinish(viewer);
+  }
+
+  if (phase.kind === "array_curve_count") {
+    const n = Math.round(Number(raw.trim()));
+    if (isNaN(n) || n < 2) { ptPrompt("Along Curve — type count (min 2)"); return; }
+    const src = phase.source;
+    const srcCtr = new THREE.Vector3();
+    new THREE.Box3().setFromObject(src).getCenter(srcCtr);
+    const positions = _sampleAlongCurve(phase.curvePts, n);
+    for (const pos of positions) {
+      dispatchSync("SdCopy", {
+        target: src.uuid,
+        x: round(pos.x - srcCtr.x),
+        y: round(pos.y - srcCtr.y),
+        z: round(pos.z - srcCtr.z),
+      });
+    }
+    opFinish(viewer);
+  }
 }
 
 // ── Start tool ────────────────────────────────────────────────────────────────
@@ -1200,27 +1265,67 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   }
 }
 
+function _extractCurvePoints(obj: THREE.Object3D): THREE.Vector3[] | null {
+  if (!(obj instanceof THREE.Line)) return null;
+  const pos = obj.geometry.attributes["position"] as THREE.BufferAttribute | undefined;
+  if (!pos) return null;
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i < pos.count; i++) {
+    pts.push(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(obj.matrixWorld));
+  }
+  return pts.length >= 2 ? pts : null;
+}
+
+function _curveLength(pts: THREE.Vector3[]): number {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += pts[i].distanceTo(pts[i - 1]);
+  return len;
+}
+
+function _sampleAlongCurve(pts: THREE.Vector3[], count: number): THREE.Vector3[] {
+  const segs: number[] = [0];
+  for (let i = 1; i < pts.length; i++) segs.push(segs[i - 1] + pts[i].distanceTo(pts[i - 1]));
+  const total = segs[segs.length - 1];
+  const result: THREE.Vector3[] = [];
+  const n = Math.max(2, count);
+  for (let i = 0; i < n; i++) {
+    const t = (i / (n - 1)) * total;
+    let si = 0;
+    while (si < segs.length - 2 && segs[si + 1] < t) si++;
+    const segLen = segs[si + 1] - segs[si];
+    const alpha = segLen > 0 ? (t - segs[si]) / segLen : 0;
+    result.push(pts[si].clone().lerp(pts[Math.min(si + 1, pts.length - 1)], Math.min(1, alpha)));
+  }
+  return result;
+}
+
 function _opPhaseStartArray(source: THREE.Object3D): void {
   showRawChooser("Array mode:", [
-    { label: "Linear",  description: "Repeat along an axis — type count dx dy [dz]",   onSelect: () => {
-      _opPhase = { kind: "array_linear_params", source };
-      ptPrompt("Linear Array — type: count  dx  dy  [dz]  then Enter  [Esc] cancel");
-      ptShowCoordInput("count dx dy");
-    }},
-    { label: "Grid",    description: "Rows × columns — type rows cols dx dy",          onSelect: () => {
-      _opPhase = { kind: "array_grid_params", source };
-      ptPrompt("Grid Array — type: rows  cols  dx  dy  then Enter  [Esc] cancel");
-      ptShowCoordInput("rows cols dx dy");
-    }},
-    { label: "Polar",   description: "Circular pattern — type count [cx cy]",          onSelect: () => {
-      _opPhase = { kind: "array_polar_params", source };
-      ptPrompt("Polar Array — type: count  [cx  cy]  then Enter  [Esc] cancel");
-      ptShowCoordInput("count  or  count cx cy");
-    }},
+    { label: "Linear",       description: "Repeat along direction — pick base + endpoint + count",
+      onSelect: () => {
+        _opPhase = { kind: "array_linear_base", source };
+        ptPrompt("Linear Array — click base point  [Esc] cancel");
+      }},
+    { label: "Rectangular",  description: "Rows × columns — type rows cols dx dy",
+      onSelect: () => {
+        _opPhase = { kind: "array_grid_params", source };
+        ptPrompt("Rectangular Array — type: rows  cols  dx  dy  then Enter  [Esc] cancel");
+        ptShowCoordInput("rows cols dx dy");
+      }},
+    { label: "Polar",        description: "Circular pattern — type count [cx cy]",
+      onSelect: () => {
+        _opPhase = { kind: "array_polar_params", source };
+        ptPrompt("Polar Array — type: count  [cx  cy]  then Enter  [Esc] cancel");
+        ptShowCoordInput("count  or  count cx cy");
+      }},
+    { label: "Along Curve",  description: "Distribute along an existing curve — click curve + count",
+      onSelect: () => {
+        _opPhase = { kind: "array_curve_pick", source };
+        ptPrompt("Along Curve — click a curve or polyline  [Esc] cancel");
+      }},
   ], () => {
-    _opPhase = { kind: "array_linear_params", source };
-    ptPrompt("Linear Array — type: count  dx  dy  [dz]  then Enter  [Esc] cancel");
-    ptShowCoordInput("count dx dy");
+    _opPhase = { kind: "array_linear_base", source };
+    ptPrompt("Linear Array — click base point  [Esc] cancel");
   });
-  ptPrompt("Array — choose mode above  [Enter=Linear]");
+  ptPrompt("Array — choose mode  [Enter = Linear]");
 }
