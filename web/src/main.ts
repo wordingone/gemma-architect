@@ -25,6 +25,7 @@ import { ScenePanel, type SceneSummary } from "./scene/scene-panel";
 import { applyDrafting, removeDrafting, isDrafting } from "./geometry/drafting";
 import { DEMOS, applyParams, type DemoPrompt, type Param } from "./agent/demo-prompts";
 import { getLayerForCreator, layerStore } from "./geometry/layers";
+import { drawingLayerStore } from "./geometry/drawing-layers";
 import { levelStore, getActiveLevelId } from "./geometry/levels";
 import { gridStore } from "./geometry/grids";
 import { snapPoint, setStep as snapSetStep, getStep as snapGetStep } from "./viewer/snap-state";
@@ -2174,6 +2175,21 @@ layerStore.subscribe(() => {
       (mat as THREE.MeshStandardMaterial).color.setStyle(layer.color);
     }
     obj.visible = layer.visible;
+  });
+});
+
+// Drawing layer → scene sync (#964): propagate visibility + color to sketch objects.
+drawingLayerStore.subscribe(() => {
+  viewer.getScene().traverse((obj) => {
+    const dlId = obj.userData.drawingLayerId as string | undefined;
+    if (!dlId) return;
+    const layer = drawingLayerStore.get(dlId);
+    if (!layer) return;
+    obj.visible = layer.visible;
+    const mat = (obj as THREE.Mesh).material;
+    if (mat && "color" in mat && (mat as THREE.LineBasicMaterial).color) {
+      (mat as THREE.LineBasicMaterial).color.setStyle(layer.color);
+    }
   });
 });
 

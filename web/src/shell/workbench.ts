@@ -13,6 +13,7 @@
 // keeps working without changes.
 
 import { layerStore, type Layer, DEFAULT_LAYER_ID } from "../geometry/layers";
+import { drawingLayerStore, type DrawingLayer } from "../geometry/drawing-layers";
 import { pushCustomAction } from "../history";
 import { Viewer } from "../viewer/viewer";
 import { iconSVG, axesGizmoSVG } from "../ui/icons";
@@ -31,7 +32,6 @@ import { formatLength } from "../units";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setMidpointSnapOn, setStep, setAngleStep, getSnap } from "../viewer/snap-state";
 import { buildSelectionFiltersPanel } from "../scene/scene-panel";
 import { levelStore, type Level } from "../geometry/levels";
-import { gridStore, type Grid } from "../geometry/grids";
 import { refLineStore } from "../geometry/ref-lines";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "../viewer/selection-state";
@@ -754,7 +754,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   addSubsection("BUILDING LAYERS", buildLayersTab());
   const refBody = el("div");
   refBody.appendChild(buildLevelsTab());
-  refBody.appendChild(buildGridsTab());
+  refBody.appendChild(build2DLayersTab());
   addSubsection("REFERENCE GEOMETRY", refBody);
   return wrap;
 }
@@ -1407,63 +1407,140 @@ function buildLayersTab(): HTMLElement {
   return wrap;
 }
 
-function buildGridsTab(): HTMLElement {
-  const wrap = el("div", "tab-body grids-tab");
+function build2DLayersTab(): HTMLElement {
+  const wrap = el("div", "tab-body drawing-layers-tab");
+  wrap.style.cssText = "padding:0 2px 4px;";
 
-  const header = el("div", "grids-header");
-  header.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 6px;";
+  // Header row: label + add (+) / delete (−) buttons
+  const hdr = el("div");
+  hdr.style.cssText = "display:flex; align-items:center; justify-content:space-between; padding:4px 2px 4px;";
   const title = el("div");
   title.style.cssText = "font-size:9.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); font-weight:600;";
-  title.textContent = "REFERENCE GRIDS";
-  header.appendChild(title);
-  wrap.appendChild(header);
+  title.textContent = "2D LAYERS";
+  const btnWrap = el("div");
+  btnWrap.style.cssText = "display:flex; gap:2px;";
+  const btnStyle = "background:none; border:1px solid var(--hairline-soft); border-radius:3px; cursor:pointer; font-size:12px; color:var(--ink-dim); padding:0 5px; line-height:1.4;";
 
-  const list = el("div", "grid-list");
+  const addBtn = el("button") as HTMLButtonElement;
+  addBtn.textContent = "+";
+  addBtn.title = "Add 2D layer";
+  addBtn.style.cssText = btnStyle;
+  addBtn.addEventListener("click", () => {
+    drawingLayerStore.add(`Layer ${drawingLayerStore.all().length + 1}`);
+  });
+
+  const delBtn = el("button") as HTMLButtonElement;
+  delBtn.textContent = "−";
+  delBtn.title = "Delete active layer";
+  delBtn.style.cssText = btnStyle;
+  delBtn.addEventListener("click", () => {
+    drawingLayerStore.remove(drawingLayerStore.getActiveId());
+  });
+
+  btnWrap.appendChild(addBtn);
+  btnWrap.appendChild(delBtn);
+  hdr.appendChild(title);
+  hdr.appendChild(btnWrap);
+  wrap.appendChild(hdr);
+
+  const list = el("div", "drawing-layer-list");
   wrap.appendChild(list);
 
-  function getViewer(): { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; visible: boolean }) => void) => void } | undefined {
-    return (window as unknown as { __viewer?: { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; visible: boolean }) => void) => void } }).__viewer;
+  function syncSceneVisibility(layer: DrawingLayer): void {
+    const viewer = (window as unknown as { __viewer?: { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; visible: boolean }) => void) => void } }).__viewer;
+    if (!viewer) return;
+    viewer.forEachSceneChild((obj) => {
+      if (obj.userData.drawingLayerId === layer.id) obj.visible = layer.visible;
+    });
   }
 
   function renderList(): void {
     list.innerHTML = "";
-    const activeId = gridStore.getActiveId();
-    for (const grid of gridStore.all()) {
-      const row = el("div", "layer-row");
-      row.style.cssText = "display:flex; align-items:center; gap:6px; padding:3px 2px; border-bottom:1px solid var(--hairline); cursor:pointer;";
-      if (grid.id === activeId) row.style.fontWeight = "600";
+    const activeId = drawingLayerStore.getActiveId();
+    for (const layer of drawingLayerStore.all()) {
+      const row = el("div");
+      row.style.cssText =
+        "display:flex; align-items:center; gap:5px; padding:3px 4px;" +
+        " border-bottom:1px solid var(--hairline);" +
+        (layer.id === activeId ? " background:var(--bg-hover);" : " cursor:pointer;");
 
-      const visBtn = el("button") as HTMLButtonElement;
-      visBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:12px; color:var(--ink); padding:0 2px;";
-      visBtn.textContent = grid.visible ? "●" : "○";
-      visBtn.title = grid.visible ? "Hide grid" : "Show grid";
-      visBtn.dataset.gridId = grid.id;
-      visBtn.addEventListener("click", (e) => {
+      // Eye — toggle visibility
+      const eyeBtn = el("button") as HTMLButtonElement;
+      eyeBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink); padding:0 1px; flex-shrink:0;";
+      eyeBtn.textContent = layer.visible ? "●" : "○";
+      eyeBtn.title = layer.visible ? "Hide layer" : "Show layer";
+      eyeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const ok = gridStore.setVisible(grid.id, !grid.visible);
-        if (ok) {
-          const v = getViewer();
-          if (v) v.forEachSceneChild((obj) => { if (obj.userData.gridId === grid.id) obj.visible = grid.visible; });
-        }
+        drawingLayerStore.setVisible(layer.id, !layer.visible);
+        syncSceneVisibility(drawingLayerStore.get(layer.id)!);
       });
 
+      // Lock — toggle locked
+      const lockBtn = el("button") as HTMLButtonElement;
+      lockBtn.style.cssText = "background:none; border:none; cursor:pointer; font-size:10px; color:var(--ink-dim); padding:0 1px; flex-shrink:0;";
+      lockBtn.textContent = layer.locked ? "🔒" : "🔓";
+      lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
+      lockBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        drawingLayerStore.setLocked(layer.id, !layer.locked);
+      });
+
+      // Color swatch
+      const swatchWrap = el("div");
+      swatchWrap.style.cssText = "position:relative; width:14px; height:14px; border-radius:2px; flex-shrink:0; cursor:pointer; border:1px solid var(--hairline);";
+      swatchWrap.style.background = layer.color;
+      const colorInput = el("input") as HTMLInputElement;
+      colorInput.type = "color";
+      colorInput.value = layer.color;
+      colorInput.style.cssText = "position:absolute; opacity:0; inset:0; width:100%; height:100%; cursor:pointer; padding:0; border:none;";
+      colorInput.addEventListener("input", (e) => {
+        e.stopPropagation();
+        const newColor = (e.target as HTMLInputElement).value;
+        drawingLayerStore.setColor(layer.id, newColor);
+        // Update all scene objects on this layer
+        const viewer = (window as unknown as { __viewer?: { forEachSceneChild: (fn: (o: { userData: Record<string, unknown>; material?: { color?: { set: (c: string) => void } } }) => void) => void } }).__viewer;
+        if (viewer) {
+          viewer.forEachSceneChild((obj) => {
+            if (obj.userData.drawingLayerId === layer.id && obj.material?.color) {
+              obj.material.color.set(newColor);
+            }
+          });
+        }
+      });
+      swatchWrap.appendChild(colorInput);
+
+      // Name — double-click to rename inline
       const nameEl = el("span");
-      nameEl.style.cssText = "flex:1; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
-      nameEl.textContent = grid.name;
+      nameEl.style.cssText = "flex:1; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" + (layer.id === activeId ? " font-weight:600;" : "");
+      nameEl.textContent = layer.name;
+      nameEl.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        const input = el("input") as HTMLInputElement;
+        input.value = layer.name;
+        input.style.cssText = "flex:1; font-size:11px; border:1px solid var(--sanguine); border-radius:2px; padding:0 2px; width:100%;";
+        nameEl.replaceWith(input);
+        input.focus();
+        input.select();
+        const commit = (): void => {
+          drawingLayerStore.rename(layer.id, input.value);
+        };
+        input.addEventListener("blur", commit);
+        input.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { commit(); input.blur(); }
+          if (ke.key === "Escape") input.blur();
+        });
+      });
 
-      const spacingEl = el("span");
-      spacingEl.style.cssText = "font-size:10px; color:var(--ink-dim);";
-      spacingEl.textContent = `${grid.spacing}m`;
-
-      row.appendChild(visBtn);
+      row.appendChild(eyeBtn);
+      row.appendChild(lockBtn);
+      row.appendChild(swatchWrap);
       row.appendChild(nameEl);
-      row.appendChild(spacingEl);
-      row.addEventListener("click", () => { gridStore.setActive(grid.id); renderList(); });
+      row.addEventListener("click", () => { drawingLayerStore.setActive(layer.id); });
       list.appendChild(row);
     }
   }
 
-  gridStore.subscribe(renderList);
+  drawingLayerStore.subscribe(renderList);
   renderList();
   return wrap;
 }

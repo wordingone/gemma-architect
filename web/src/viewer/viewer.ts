@@ -22,6 +22,7 @@ import { dissolveGroupForMesh, isOpening, nearestGroupMember, onElementCommitted
 import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from "../tools/wall-corners.js";
 import { ClipFillManager } from "./clip-fill.js";
 import { getLayerForCreator } from "../geometry/layers.js";
+import { drawingLayerStore } from "../geometry/drawing-layers.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -1001,6 +1002,9 @@ export class Viewer {
     const visibleHit = hits.find(h => {
       let o: THREE.Object3D | null = h.object;
       while (o) { if (!o.visible) return false; o = o.parent; }
+      // #964: skip objects on locked or hidden drawing layers.
+      const dlId = h.object.userData.drawingLayerId as string | undefined;
+      if (dlId) { const dl = drawingLayerStore.get(dlId); if (dl && (!dl.visible || dl.locked)) return false; }
       return true;
     });
     let hit = (handleHit ?? visibleHit)?.object ?? null;
@@ -2241,6 +2245,12 @@ export class Viewer {
         let effVisible = true;
         while (anc) { if (!anc.visible) { effVisible = false; break; } anc = anc.parent; }
         if (!effVisible) continue;
+        // #964: skip objects on locked or hidden drawing layers.
+        const dlId = o.userData.drawingLayerId as string | undefined;
+        if (dlId) {
+          const dl = drawingLayerStore.get(dlId);
+          if (dl && (!dl.visible || dl.locked)) continue;
+        }
       }
       // #953: roof children → resolve to parent Group so entire roof highlights.
       if (o.parent instanceof THREE.Group && o.parent.userData.creator === "roof") return o.parent;

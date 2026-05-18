@@ -23,6 +23,20 @@ import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./openings";
+import { drawingLayerStore, SKETCH_KINDS } from "../geometry/drawing-layers";
+
+// ── Drawing layer assignment ──────────────────────────────────────────────────
+
+function applyDrawingLayer(obj: THREE.Object3D): void {
+  const kind = obj.userData.kind as string | undefined;
+  if (!kind || !SKETCH_KINDS.has(kind)) return;
+  const layer = drawingLayerStore.getActive();
+  obj.userData.drawingLayerId = layer.id;
+  obj.traverse((child) => {
+    const mat = (child as THREE.Mesh).material as THREE.LineBasicMaterial | THREE.MeshStandardMaterial | undefined;
+    if (mat && "color" in mat) mat.color.set(layer.color);
+  });
+}
 
 // ── Append-only construction sequence ────────────────────────────────────────
 
@@ -653,6 +667,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   }
 
   const out = handler.handler(pts);
+  applyDrawingLayer(out.mesh);
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
   _createSequence.push(out.chain);
@@ -692,6 +707,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
     _pending = [];
   }
   // noHistory: true — undo managed via explicit push / transaction below.
+  applyDrawingLayer(out.mesh);
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "brep", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh && out.mesh.userData.creator === "wall") {
     attemptWallCornerJoins(out.mesh, viewer.getScene());
