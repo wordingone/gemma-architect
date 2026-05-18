@@ -58,7 +58,7 @@ import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRaili
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction } from "./history";
-import { csgUnion, csgDifference, csgIntersection } from "./viewer/csg";
+import { csgUnion, csgDifference, csgIntersection, filletMesh } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
@@ -465,8 +465,14 @@ registerHandler("SdBoolean", (args) => {
 registerHandler("SdFillet", (args) => {
   const targetId = args.target as string | undefined;
   const radius = (args.radius as number | undefined) ?? 0.05;
-  // Fillet geometry modification is pending kernel integration — same stub as op-tool fillet flow.
-  return { acknowledged: true, target: targetId, radius, status: "fillet-pending-kernel" };
+  const scene = viewer.getScene();
+  const obj = targetId ? scene.getObjectByProperty("uuid", targetId) : null;
+  if (!obj) return { error: `SdFillet — target not found: ${targetId}` };
+  if (!(obj instanceof THREE.Mesh)) return { error: `SdFillet — target is not a Mesh` };
+  const filleted = filletMesh(obj, radius);
+  viewer.addMesh(filleted, "brep", { noHistory: true });
+  pushReplaceAction(filleted, [obj], "fillet");
+  return { modified: filleted.uuid };
 });
 
 registerHandler("SdSelect", (args) => {

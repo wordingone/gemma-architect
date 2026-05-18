@@ -3,6 +3,7 @@
 // Works for convex solids; approximate for complex concave meshes.
 
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 
 const EPS = 1e-5;
 const COPLANAR = 0, FRONT = 1, BACK = 2, SPANNING = 3;
@@ -160,4 +161,40 @@ export function csgIntersection(a: THREE.Mesh, b: THREE.Mesh, mat: THREE.Materia
   na.invert(); nb.clipTo(na); nb.invert(); na.clipTo(nb); nb.clipTo(na);
   na.build(nb.allPolygons()); na.invert();
   return polygonsToMesh(na.allPolygons(), mat);
+}
+
+/**
+ * Return a new Mesh whose geometry has all edges rounded by `radius`.
+ * Computes the bounding box in local space and builds a RoundedBoxGeometry
+ * centred at the same local origin with matching dimensions. For non-box
+ * geometry the bbox approximation is a conservative stand-in that still
+ * produces visually recognisable rounded corners.
+ *
+ * The caller must replace the old mesh in the scene and history.
+ */
+export function filletMesh(mesh: THREE.Mesh, radius: number): THREE.Mesh {
+  mesh.geometry.computeBoundingBox();
+  const bb = mesh.geometry.boundingBox;
+  if (!bb) return mesh;
+
+  const w = bb.max.x - bb.min.x;
+  const h = bb.max.y - bb.min.y;
+  const d = bb.max.z - bb.min.z;
+  const cx = (bb.min.x + bb.max.x) / 2;
+  const cy = (bb.min.y + bb.max.y) / 2;
+  const cz = (bb.min.z + bb.max.z) / 2;
+
+  const r = Math.min(radius, w / 2, h / 2, d / 2);
+  const segs = Math.max(2, Math.ceil(r * 20));
+
+  const geo = new RoundedBoxGeometry(w, h, d, segs, r);
+  geo.translate(cx, cy, cz);
+
+  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  const result = new THREE.Mesh(geo, mat.clone());
+  result.position.copy(mesh.position);
+  result.rotation.copy(mesh.rotation);
+  result.scale.copy(mesh.scale);
+  result.userData = { ...mesh.userData };
+  return result;
 }

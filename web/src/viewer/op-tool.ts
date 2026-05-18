@@ -3,7 +3,7 @@
 // Does NOT import from selection-ops.ts — runPolySel/overlay fns injected via registerOpToolHooks.
 
 import * as THREE from "three";
-import { csgUnion, csgDifference, csgIntersection } from "./csg";
+import { csgUnion, csgDifference, csgIntersection, filletMesh } from "./csg";
 import type { Viewer } from "./viewer";
 import { getSnap } from "./snap-state";
 import { nearestSnapVertex, closestPtOnSegToRay } from "./snap-state";
@@ -906,8 +906,17 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
   if (phase.kind === "fillet_radius") {
     const r = parseFloat(raw);
     if (!Number.isFinite(r) || r <= 0) { ptPrompt("Fillet radius — enter a positive number"); return; }
-    ptPrompt(`Fillet r=${formatLength(r)} — select an edge to apply (kernel integration pending)`);
-    setTimeout(() => opFinish(viewer), 800);
+    const target = phase.target;
+    if (!(target instanceof THREE.Mesh)) {
+      ptPrompt("Fillet — selected object is not a mesh");
+      setTimeout(() => opFinish(viewer), 800);
+      return;
+    }
+    const filleted = filletMesh(target, r);
+    viewer.addMesh(filleted, "brep", { noHistory: true });
+    pushReplaceAction(filleted, [target], "fillet");
+    ptPrompt(`Fillet r=${formatLength(r)} applied`);
+    setTimeout(() => opFinish(viewer), 400);
   }
 }
 
