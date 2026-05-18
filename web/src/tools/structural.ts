@@ -762,12 +762,13 @@ export function buildRoof(
     soffit.position.set(0, -hd + overhang / 2, -0.01);
     group.add(soffit);
 
-    // Rafters
+    // Rafters — offset to interior face of sheathing (25mm deck sits on top of 150mm rafter).
+    const shedRafterInset = 0.025 / 2 + rafterD / 2; // 0.0875m along slope interior normal
     for (let i = 0; i < nRafters; i++) {
       const xPos = -hw + i * ((w + 2 * overhang) / (nRafters - 1));
       const rafter = member(rafterW, rafterD, rLen, frameMat.clone());
       rafter.rotation.x = rafterRx;
-      rafter.position.set(xPos, 0, shedH / 2);
+      rafter.position.set(xPos, shedRafterInset * Math.sin(pitchRad), shedH / 2 - shedRafterInset * Math.cos(pitchRad));
       group.add(rafter);
     }
 
@@ -940,6 +941,11 @@ export function buildRoof(
     group.add(soffitB);
 
     // Rafters — two slopes
+    // Interior-side offset: sheathing (25mm) sits on top of rafter (150mm deep).
+    // Rafter center must be inward from sheathing center by sheathThick/2 + rafterD/2
+    // along the slope's interior normal: (sin(pitch), -cos(pitch)) in (span, Z) axes.
+    const sheathThick = 0.025;
+    const rafterInset = sheathThick / 2 + rafterD / 2; // 0.0875m
     for (let i = 0; i < nRafters; i++) {
       const axialPos = -ridgeLenHalf + i * (ridgeLenHalf * 2 / (nRafters - 1));
 
@@ -948,10 +954,10 @@ export function buildRoof(
       rfA.visible = params.showStructure !== false;
       if (landscape) {
         rfA.rotation.x = slopeRx;
-        rfA.position.set(axialPos, -spanHalf / 2, rH / 2);
+        rfA.position.set(axialPos, -spanHalf / 2 + rafterInset * Math.sin(pitchRad), rH / 2 - rafterInset * Math.cos(pitchRad));
       } else {
         rfA.rotation.y = -slopeRx;
-        rfA.position.set(-spanHalf / 2, axialPos, rH / 2);
+        rfA.position.set(-spanHalf / 2 + rafterInset * Math.sin(pitchRad), axialPos, rH / 2 - rafterInset * Math.cos(pitchRad));
       }
       group.add(rfA);
 
@@ -960,10 +966,10 @@ export function buildRoof(
       rfB.visible = params.showStructure !== false;
       if (landscape) {
         rfB.rotation.x = -slopeRx;
-        rfB.position.set(axialPos, spanHalf / 2, rH / 2);
+        rfB.position.set(axialPos, spanHalf / 2 - rafterInset * Math.sin(pitchRad), rH / 2 - rafterInset * Math.cos(pitchRad));
       } else {
         rfB.rotation.y = slopeRx;
-        rfB.position.set(spanHalf / 2, axialPos, rH / 2);
+        rfB.position.set(spanHalf / 2 - rafterInset * Math.sin(pitchRad), axialPos, rH / 2 - rafterInset * Math.cos(pitchRad));
       }
       group.add(rfB);
     }
