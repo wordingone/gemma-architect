@@ -89,25 +89,47 @@ export function readActiveTool(): string | null {
 // Object hovered during an op-tool select phase.
 let _opHoverObj: THREE.Object3D | null = null;
 let _opHoverSavedEmissive: number | null = null;
+// #953: per-child saved emissives when hovered object is a Group (e.g. roof).
+let _opHoverGroupSaved: { mesh: THREE.Mesh; emissive: number }[] | null = null;
 const HOVER_THIN_COLOR  = 0x44aaff;
 const HOVER_MESH_EMIT   = 0x1a5f8a; // bright enough to show on grey/cream surfaces
 
 export function opSetHover(obj: THREE.Object3D | null): void {
   if (_opHoverObj === obj) return;
-  if (_opHoverObj && _opHoverSavedEmissive !== null) {
-    if (_opHoverObj instanceof THREE.Line) {
-      (_opHoverObj.material as THREE.LineBasicMaterial).color.setHex(_opHoverSavedEmissive);
-    } else if (_opHoverObj instanceof THREE.Points) {
-      (_opHoverObj.material as THREE.PointsMaterial).color.setHex(_opHoverSavedEmissive);
-    } else if (_opHoverObj instanceof THREE.Mesh) {
-      const m = (_opHoverObj.material as THREE.MeshStandardMaterial);
-      if (m?.emissive) m.emissive.setHex(_opHoverSavedEmissive);
+  // Restore previous hover.
+  if (_opHoverObj) {
+    if (_opHoverGroupSaved) {
+      for (const { mesh, emissive } of _opHoverGroupSaved) {
+        const m = mesh.material as THREE.MeshStandardMaterial;
+        if (m?.emissive) m.emissive.setHex(emissive);
+      }
+      _opHoverGroupSaved = null;
+    } else if (_opHoverSavedEmissive !== null) {
+      if (_opHoverObj instanceof THREE.Line) {
+        (_opHoverObj.material as THREE.LineBasicMaterial).color.setHex(_opHoverSavedEmissive);
+      } else if (_opHoverObj instanceof THREE.Points) {
+        (_opHoverObj.material as THREE.PointsMaterial).color.setHex(_opHoverSavedEmissive);
+      } else if (_opHoverObj instanceof THREE.Mesh) {
+        const m = (_opHoverObj.material as THREE.MeshStandardMaterial);
+        if (m?.emissive) m.emissive.setHex(_opHoverSavedEmissive);
+      }
+      _opHoverSavedEmissive = null;
     }
-    _opHoverSavedEmissive = null;
   }
   _opHoverObj = obj;
   if (obj) {
-    if (obj instanceof THREE.Line) {
+    if (obj instanceof THREE.Group) {
+      // #953: highlight all child meshes as one unit (e.g. roof group).
+      _opHoverGroupSaved = [];
+      obj.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+        const m = child.material as THREE.MeshStandardMaterial;
+        if (m?.emissive) {
+          _opHoverGroupSaved!.push({ mesh: child, emissive: m.emissive.getHex() });
+          m.emissive.setHex(HOVER_MESH_EMIT);
+        }
+      });
+    } else if (obj instanceof THREE.Line) {
       const lm = obj.material as THREE.LineBasicMaterial;
       _opHoverSavedEmissive = lm.color.getHex();
       lm.color.setHex(HOVER_THIN_COLOR);

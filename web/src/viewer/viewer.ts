@@ -2230,6 +2230,8 @@ export class Viewer {
       const isDisplay = !!o.userData.isJoinDisplay;
       if (!o.visible && !isDisplay) continue;
       if (o.userData.noSnap && !isDisplay) continue;
+      // #953: roof children → resolve to parent Group so entire roof highlights.
+      if (o.parent instanceof THREE.Group && o.parent.userData.creator === "roof") return o.parent;
       return o;
     }
     return null;

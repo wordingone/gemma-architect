@@ -489,7 +489,10 @@ export function opRaycastObject(
   const hits = rc.intersectObjects(meshes, false);
   if (!hits.length) return null;
   const hit = hits[0];
-  return { obj: hit.object, point: hit.point.clone() };
+  let hitObj: THREE.Object3D = hit.object;
+  // #953: resolve roof child to parent Group for group-level operations.
+  if (hitObj.parent instanceof THREE.Group && hitObj.parent.userData.creator === "roof") hitObj = hitObj.parent;
+  return { obj: hitObj, point: hit.point.clone() };
 }
 
 export function opPhaseIsObjectSelect(phase: OpPhase): boolean {
