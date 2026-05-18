@@ -4198,6 +4198,118 @@ await resetScene('before-box-inject');
   else record('export-dropdown-renders', r77.passed, r77.evidence ?? { error: r77.error });
 }
 
+// ── S78: fzk-haus-perception-rehearsal (#782) ────────────────────────────────
+// Loads AC20-FZK-Haus.ifc, submits "What's currently in the scene?", asserts
+// the agent response references ≥ 2 of {wall, slab, roof, door, window, column}.
+// Self-test: keyword-detection logic validated against empty string (→ 0 hits)
+// and a synthetic match string (→ ≥ 2 hits) before the live agent round-trip.
+{
+  await resetScene('s78-pre');
+
+  const r78 = await evaluate(`(async function() {
+    try {
+      const KEYWORDS = ['wall', 'slab', 'roof', 'door', 'window', 'column'];
+      function keywordHits(text) {
+        return KEYWORDS.filter(k => text.toLowerCase().includes(k)).length;
+      }
+
+      // ── Part A: self-test — validate keyword-detection logic ──────────────
+      const selfTestEmpty = keywordHits('') === 0;
+      const selfTestMatch = keywordHits('The scene contains walls, slabs and a roof.') >= 2;
+      if (!selfTestEmpty || !selfTestMatch) {
+        return { passed: false, evidence: {
+          selfTestFailed: true, selfTestEmpty, selfTestMatch
+        }};
+      }
+
+      // ── Part B: load FZK-Haus IFC ────────────────────────────────────────
+      const loadPromise = new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('viewer:ifc-loaded timeout (30s)')), 30000);
+        window.addEventListener('viewer:ifc-loaded', e => {
+          clearTimeout(t);
+          resolve(e.detail);
+        }, { once: true });
+      });
+
+      const resp = await fetch('/samples/AC20-FZK-Haus.ifc');
+      if (!resp.ok) return { passed: false, evidence: { reason: 'fetch failed', status: resp.status } };
+      const bytes = await resp.arrayBuffer();
+      const file = new File([bytes], 'AC20-FZK-Haus.ifc', { type: 'application/x-step' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const fileInput = document.getElementById('file-input');
+      if (!fileInput) return { passed: false, evidence: { reason: '#file-input not found' } };
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      try { await loadPromise; }
+      catch (e) { return { passed: false, evidence: { reason: e.message } }; }
+      // Let geometry settle after ifc-loaded fires.
+      await new Promise(r => setTimeout(r, 1000));
+
+      const sceneMeshCount = window.__viewer?.scene?.children?.length ?? 0;
+      if (sceneMeshCount === 0) {
+        return { passed: false, evidence: { reason: 'scene empty after IFC load' } };
+      }
+
+      // ── Part C: submit "What's currently in the scene?" via chat ─────────
+      // Navigate to chat panel if needed.
+      const dockTab = document.querySelector('.dock-tab[data-tab="prompt"]');
+      if (dockTab) { dockTab.click(); await new Promise(r => setTimeout(r, 200)); }
+
+      const chatInput = document.querySelector('.chat-input');
+      const sendBtn   = document.querySelector('.chat-send-btn');
+      if (!chatInput || !sendBtn) {
+        return { passed: false, evidence: {
+          reason: 'chat UI not found', chatInputFound: !!chatInput, sendBtnFound: !!sendBtn
+        }};
+      }
+      if (sendBtn.disabled) {
+        return { passed: false, evidence: { reason: 'send-btn disabled — model turn in progress' } };
+      }
+
+      const turnPromise = new Promise(resolve => {
+        const t = setTimeout(() => resolve({ timedOut: true }), 60000);
+        window.addEventListener('agent:turn-complete', e => {
+          clearTimeout(t);
+          resolve({ timedOut: false, verbs: e.detail?.verbs ?? [] });
+        }, { once: true });
+      });
+
+      chatInput.value = "What's currently in the scene?";
+      chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+      chatInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+      chatInput.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+
+      const turn = await turnPromise;
+      if (turn.timedOut) {
+        return { passed: false, evidence: { reason: 'agent:turn-complete timeout (60s)', sceneMeshCount } };
+      }
+
+      // ── Part D: scrape most-recent agent response from chat DOM ──────────
+      const msgEls = document.querySelectorAll('.chat-msg-assistant, .chat-message.assistant, [data-role="assistant"]');
+      const lastMsg = msgEls.length > 0 ? msgEls[msgEls.length - 1].innerText : '';
+      const hits = keywordHits(lastMsg);
+      const hitsFound = KEYWORDS.filter(k => lastMsg.toLowerCase().includes(k));
+
+      return {
+        passed: hits >= 2,
+        evidence: {
+          selfTestEmpty, selfTestMatch,
+          sceneMeshCount,
+          agentTurnOk: !turn.timedOut,
+          responseLength: lastMsg.length,
+          hits, hitsFound,
+          responseSnippet: lastMsg.slice(0, 200),
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r78) record('fzk-haus-perception-rehearsal', false, { reason: 'evaluate returned null' });
+  else record('fzk-haus-perception-rehearsal', r78.passed, r78.evidence ?? { error: r78.error });
+}
+
 } finally {
   await cleanup();
 }
