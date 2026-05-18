@@ -18,7 +18,7 @@ import { initPickerHint, setPickerHint, setChooserHint, getChooserEl, readActive
 import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPrompt, ptShowCoordInput, ptHideCoordInput, ptStartTool, ptHandlePoint, ptHandleCoordSubmit as _ptHandleCoordSubmit, ptHandleEnter as _ptHandleEnter, ptCancel, ptFinish, ptPhaseIsObjectSelect, _ptPhase, _ptAxisLock, _ptCoordInputEl, ptGetAxisBase, ptEffectiveAxisDir, ptSetAxisLockLine, ptClearAxisLockLine, _ptViewer, _lastPtTool, unprojectToAxisLine } from "../viewer/transforms";
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, opUpdateDimPreview, opUpdateCopyPreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
-import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
+import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildStairOnPolyline, buildStairOnCurve, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
@@ -365,7 +365,9 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   door:        { clicks: 1, handler: atTopOfLevel(([p]) => buildDoor(p), 0) },
   window:      { clicks: 1, handler: atTopOfLevel(([p]) => buildWindow(p), FZK_WINDOW_SILL) },
   column:      { clicks: 1, handler: atZ(([p]) => buildColumn(p)) },
-  stair:       { clicks: 2, handler: atZ(([a, b]) => { const { group, chain } = buildStair(a, b); return { mesh: group, chain }; }) },
+  stair:           { clicks: 2,  handler: atZ(([a, b]) => { const { group, chain } = buildStair(a, b); return { mesh: group, chain }; }) },
+  "stair-polyline": { clicks: -1, handler: atZ((pts) => { const { group, chain } = buildStairOnPolyline(pts); return { mesh: group, chain }; }) },
+  "stair-curve":    { clicks: -1, handler: atZ((pts) => { const { group, chain } = buildStairOnCurve(pts); return { mesh: group, chain }; }) },
   polygon:     { clicks: 2, handler: atZ(([a, b]) => buildPolygon(a, b)) },
   polyline:    { clicks: -1, handler: atZ((pts) => buildPolyline(pts)) },
   curve:       { clicks: -1, handler: atZ((pts) => buildCurve(pts)) },

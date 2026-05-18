@@ -252,6 +252,64 @@ export interface StairParams {
 // Plan-view footprint bbox (in world XY) — returned so the handler can cut a slab void.
 export interface StairFootprint { minX: number; minY: number; maxX: number; maxY: number }
 
+const _stepMat = (): THREE.MeshStandardMaterial =>
+  new THREE.MeshStandardMaterial({ color: 0xc8b8a2, roughness: 0.7, metalness: 0.0 });
+
+// Add individually-tagged step meshes into group, in local-space coordinates.
+// localOffX/Y: starting corner of this flight in group-local space.
+// angRad: rotation of flight direction relative to group +X.
+function _addSteps(
+  group: THREE.Group,
+  n: number, riser: number, tread: number, stairW: number,
+  zBase: number, stairId: string, startIdx: number,
+  localOffX: number, localOffY: number, angRad: number,
+): void {
+  const cosA = Math.cos(angRad), sinA = Math.sin(angRad);
+  for (let i = 0; i < n; i++) {
+    const stepH = zBase + (i + 1) * riser;
+    const step = new THREE.Mesh(new THREE.BoxGeometry(tread, stairW, stepH), _stepMat());
+    // Center of step along flight axis at i*tread + tread/2, lateral at stairW/2
+    const lx = i * tread + tread / 2;
+    const ly = stairW / 2;
+    step.position.set(
+      localOffX + lx * cosA - ly * sinA,
+      localOffY + lx * sinA + ly * cosA,
+      stepH / 2,
+    );
+    step.rotation.z = angRad;
+    step.userData.kind = "brep";
+    step.userData.creator = "stair";
+    step.userData.ifcClass = "IfcStairFlight";
+    step.userData.parentId = stairId;
+    step.userData.stepIndex = startIdx + i;
+    group.add(step);
+  }
+}
+
+// Stringer: triangular prism along flight, forming the sloped underside.
+function _addStringer(
+  group: THREE.Group, run: number, rise: number, stairW: number,
+  localOffX: number, localOffY: number, angRad: number,
+): void {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(run, 0);
+  shape.lineTo(run, rise);
+  shape.closePath();
+  const geom = new THREE.ExtrudeGeometry(shape, { depth: stairW, bevelEnabled: false });
+  // Shape is in XY; rotate +90° around X so Y→Z (height up).
+  geom.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+  const mesh = new THREE.Mesh(geom, _stepMat());
+  const cosA = Math.cos(angRad), sinA = Math.sin(angRad);
+  mesh.position.set(localOffX, localOffY, 0);
+  mesh.rotation.z = angRad;
+  mesh.userData.kind = "brep";
+  mesh.userData.ifcClass = "IfcMember";
+  mesh.userData.creator = "stair";
+  void cosA; void sinA;
+  group.add(mesh);
+}
+
 function _flightGeoms(nRisers: number, riser: number, tread: number, stairW: number, zBase: number): THREE.BufferGeometry[] {
   const geoms: THREE.BufferGeometry[] = [];
   for (let i = 0; i < nRisers; i++) {
@@ -279,16 +337,41 @@ export function buildStair(
   b: { x: number; y: number },
   params?: StairParams,
 ): { group: THREE.Group; chain: string; footprint: StairFootprint } {
-  const shape       = params?.type ?? params?.shape ?? "straight";
-  const stairW      = params?.width        ?? DEFAULT_STAIR_WIDTH;
-  const tread       = params?.treadDepth   ?? DEFAULT_STAIR_TREAD;
-  const landingD    = params?.landingDepth ?? 1.0;
-  const targetH     = params?.rise ?? params?.targetHeight ?? 3.0;
-  const nRisers     = params?.count != null ? Math.max(2, params.count) : Math.max(2, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
-  const actualRiser = targetH / nRisers;
+  const shape    = params?.type ?? params?.shape ?? "straight";
+  const stairW   = params?.width       ?? DEFAULT_STAIR_WIDTH;
+  const tread    = params?.treadDepth  ?? DEFAULT_STAIR_TREAD;
+  const landingD = params?.landingDepth ?? 1.0;
 
   const dx = b.x - a.x, dy = b.y - a.y;
-  const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const totalRun = Math.sqrt(dx * dx + dy * dy) || tread * 2;
+  const angDeg   = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const stairId  = THREE.MathUtils.generateUUID();
+
+  // Parametric step count: derive from actual click distance for straight mode.
+  // Explicit count or total-rise override the distance-based default.
+  let nRisers: number, actualRiser: number, actualTread: number;
+  if (params?.count != null) {
+    nRisers = Math.max(2, params.count);
+    actualRiser = params?.riserHeight ?? DEFAULT_STAIR_RISE;
+    actualTread = tread;
+  } else if (params?.rise != null || params?.targetHeight != null) {
+    const targetH = (params.rise ?? params.targetHeight)!;
+    nRisers = Math.max(2, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
+    actualRiser = targetH / nRisers;
+    actualTread = tread;
+  } else if (shape === "straight") {
+    // Run-derived: step count from distance; tread fits exactly.
+    nRisers = Math.max(2, Math.round(totalRun / tread));
+    actualRiser = params?.riserHeight ?? DEFAULT_STAIR_RISE;
+    actualTread = totalRun / nRisers;
+  } else {
+    // L / U: height-based default (one full storey).
+    const targetH = DEFAULT_WALL_HEIGHT;
+    nRisers = Math.max(2, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
+    actualRiser = targetH / nRisers;
+    actualTread = tread;
+  }
+  const totalRise = nRisers * actualRiser;
 
   const mat = new THREE.MeshStandardMaterial({ color: 0xc8b8a2, roughness: 0.7, metalness: 0.0 });
   const group = new THREE.Group();
@@ -296,6 +379,8 @@ export function buildStair(
   group.rotation.z = (angDeg * Math.PI) / 180;
   group.userData.kind = "compound";
   group.userData.creator = "stair";
+  group.userData.stairId = stairId;
+  group.userData.stairParams = { shape, nRisers, actualRiser, actualTread, stairW, totalRise };
 
   let footLocal: { minX: number; minY: number; maxX: number; maxY: number };
   let chainDesc: string;
@@ -395,12 +480,12 @@ export function buildStair(
     chainDesc = `L(flights:${n1}+${n2},tread:${round(tread)},riser:${round(actualRiser)},w:${round(stairW)})`;
 
   } else {
-    // Straight: N steps going in +X direction.
-    const run = nRisers * tread;
-    const geoms = _flightGeoms(nRisers, actualRiser, tread, stairW, 0);
-    group.add(_mergeFlight(geoms));
+    // Straight: N individually-tagged steps going in +X direction, with stringer.
+    const run = nRisers * actualTread;
+    _addSteps(group, nRisers, actualRiser, actualTread, stairW, 0, stairId, 0, 0, 0, 0);
+    _addStringer(group, run, totalRise, stairW, 0, 0, 0);
     footLocal = { minX: 0, minY: 0, maxX: run, maxY: stairW };
-    chainDesc = `straight(n:${nRisers},tread:${round(tread)},riser:${round(actualRiser)},w:${round(stairW)})`;
+    chainDesc = `straight(n:${nRisers},tread:${round(actualTread)},riser:${round(actualRiser)},w:${round(stairW)})`;
   }
 
   // World-space footprint (for slab void cut). Approximated from local bbox + group position/rotation.
@@ -421,7 +506,156 @@ export function buildStair(
     maxX: Math.max(...xs), maxY: Math.max(...ys),
   };
 
-  const chain = `IfcStair({shape:"${shape}",start:[${round(a.x)},${round(a.y)}],targetHeight:${round(targetH)},width:${round(stairW)},riserHeight:${round(actualRiser)},treadDepth:${round(tread)}})`;
+  const chain = `IfcStair({shape:"${shape}",start:[${round(a.x)},${round(a.y)}],end:[${round(b.x)},${round(b.y)}],steps:${nRisers},riserHeight:${round(actualRiser)},treadDepth:${round(actualTread)},totalRise:${round(totalRise)},width:${round(stairW)}})`;
+  return { group, chain, footprint };
+}
+
+// Polyline stair: multi-segment flight with landings at polyline vertices.
+export function buildStairOnPolyline(
+  pts: Array<{ x: number; y: number }>,
+  params?: StairParams,
+): { group: THREE.Group; chain: string; footprint: StairFootprint } {
+  const stairW   = params?.width       ?? DEFAULT_STAIR_WIDTH;
+  const riser    = params?.riserHeight ?? DEFAULT_STAIR_RISE;
+  const tread    = params?.treadDepth  ?? DEFAULT_STAIR_TREAD;
+  const landingT = DEFAULT_SLAB_THICKNESS;
+  const stairId  = THREE.MathUtils.generateUUID();
+
+  const group = new THREE.Group();
+  group.userData.kind = "compound";
+  group.userData.creator = "stair";
+  group.userData.stairId = stairId;
+
+  let zCurrent = 0;
+  let totalSteps = 0;
+
+  for (let seg = 0; seg < pts.length - 1; seg++) {
+    const pA = pts[seg], pB = pts[seg + 1];
+    const dx = pB.x - pA.x, dy = pB.y - pA.y;
+    const segLen = Math.sqrt(dx * dx + dy * dy) || tread;
+    const angRad = Math.atan2(dy, dx);
+    const n = Math.max(1, Math.round(segLen / tread));
+    const actualT = segLen / n;
+
+    for (let i = 0; i < n; i++) {
+      const stepH = zCurrent + (i + 1) * riser;
+      const step = new THREE.Mesh(new THREE.BoxGeometry(actualT, stairW, stepH), _stepMat());
+      const lx = i * actualT + actualT / 2;
+      const ly = stairW / 2;
+      const cosA = Math.cos(angRad), sinA = Math.sin(angRad);
+      step.position.set(
+        pA.x + lx * cosA - ly * sinA,
+        pA.y + lx * sinA + ly * cosA,
+        stepH / 2,
+      );
+      step.rotation.z = angRad;
+      step.userData.kind = "brep";
+      step.userData.creator = "stair";
+      step.userData.ifcClass = "IfcStairFlight";
+      step.userData.parentId = stairId;
+      step.userData.stepIndex = totalSteps++;
+      group.add(step);
+    }
+    zCurrent += n * riser;
+
+    if (seg < pts.length - 2) {
+      const landing = new THREE.Mesh(
+        new THREE.BoxGeometry(stairW, stairW, landingT),
+        _stepMat(),
+      );
+      landing.position.set(pB.x, pB.y, zCurrent + landingT / 2);
+      landing.userData.kind = "brep";
+      landing.userData.creator = "stair";
+      landing.userData.ifcClass = "IfcSlab";
+      landing.userData.parentId = stairId;
+      group.add(landing);
+    }
+  }
+
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const footprint: StairFootprint = {
+    minX: Math.min(...xs), minY: Math.min(...ys),
+    maxX: Math.max(...xs), maxY: Math.max(...ys),
+  };
+  const chain = `IfcStairPolyline({pts:[${pts.map((p) => `[${round(p.x)},${round(p.y)}]`).join(",")}],steps:${totalSteps},riserHeight:${round(riser)},width:${round(stairW)}})`;
+  return { group, chain, footprint };
+}
+
+// Curve stair: stair following arc-length parameterisation of a Catmull-Rom spline.
+export function buildStairOnCurve(
+  ctrlPts: Array<{ x: number; y: number }>,
+  params?: StairParams,
+): { group: THREE.Group; chain: string; footprint: StairFootprint } {
+  const stairW   = params?.width       ?? DEFAULT_STAIR_WIDTH;
+  const riser    = params?.riserHeight ?? DEFAULT_STAIR_RISE;
+  const stairId  = THREE.MathUtils.generateUUID();
+
+  const group = new THREE.Group();
+  group.userData.kind = "compound";
+  group.userData.creator = "stair";
+  group.userData.stairId = stairId;
+
+  // Tessellate the curve.
+  const sampleCount = Math.max(ctrlPts.length * 32, 128);
+  const sampled: Array<{ x: number; y: number }> = [];
+  if (ctrlPts.length >= 2) {
+    // Linear interpolation fallback when NURBS unavailable; proper NURBS via buildCurve path.
+    for (let i = 0; i <= sampleCount; i++) {
+      const t = i / sampleCount;
+      const si = Math.min(Math.floor(t * (ctrlPts.length - 1)), ctrlPts.length - 2);
+      const lt = t * (ctrlPts.length - 1) - si;
+      sampled.push({
+        x: ctrlPts[si].x * (1 - lt) + ctrlPts[si + 1].x * lt,
+        y: ctrlPts[si].y * (1 - lt) + ctrlPts[si + 1].y * lt,
+      });
+    }
+  }
+
+  // Arc lengths.
+  const arcLens: number[] = [0];
+  for (let i = 1; i < sampled.length; i++) {
+    const dx = sampled[i].x - sampled[i - 1].x;
+    const dy = sampled[i].y - sampled[i - 1].y;
+    arcLens.push(arcLens[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const totalArcLen = arcLens[arcLens.length - 1] || 1;
+  const tread = params?.treadDepth ?? DEFAULT_STAIR_TREAD;
+  const nRisers = Math.max(2, Math.round(totalArcLen / tread));
+  const actualT = totalArcLen / nRisers;
+
+  // Sample curve at each step arc-length.
+  function sampleAt(arcLen: number): { x: number; y: number; angRad: number } {
+    let idx = arcLens.findIndex((l) => l >= arcLen);
+    if (idx <= 0) idx = 1;
+    const frac = (arcLen - arcLens[idx - 1]) / (arcLens[idx] - arcLens[idx - 1] + 1e-9);
+    const px = sampled[idx - 1].x * (1 - frac) + sampled[idx].x * frac;
+    const py = sampled[idx - 1].y * (1 - frac) + sampled[idx].y * frac;
+    const nxt = Math.min(idx, sampled.length - 1);
+    const prev = Math.max(idx - 1, 0);
+    const angRad = Math.atan2(sampled[nxt].y - sampled[prev].y, sampled[nxt].x - sampled[prev].x);
+    return { x: px, y: py, angRad };
+  }
+
+  for (let i = 0; i < nRisers; i++) {
+    const s = sampleAt((i + 0.5) * actualT);
+    const stepH = (i + 1) * riser;
+    const step = new THREE.Mesh(new THREE.BoxGeometry(actualT, stairW, stepH), _stepMat());
+    step.position.set(s.x, s.y, stepH / 2);
+    step.rotation.z = s.angRad;
+    step.userData.kind = "brep";
+    step.userData.creator = "stair";
+    step.userData.ifcClass = "IfcStairFlight";
+    step.userData.parentId = stairId;
+    step.userData.stepIndex = i;
+    group.add(step);
+  }
+
+  const xs = ctrlPts.map((p) => p.x), ys = ctrlPts.map((p) => p.y);
+  const footprint: StairFootprint = {
+    minX: Math.min(...xs), minY: Math.min(...ys),
+    maxX: Math.max(...xs), maxY: Math.max(...ys),
+  };
+  const chain = `IfcStairCurve({pts:[${ctrlPts.map((p) => `[${round(p.x)},${round(p.y)}]`).join(",")}],steps:${nRisers},riserHeight:${round(riser)},width:${round(stairW)}})`;
   return { group, chain, footprint };
 }
 
