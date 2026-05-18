@@ -17,8 +17,8 @@ import { getCurrentDispatchCtx } from "../commands/dispatch.js";
 import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
-import { pushAction, pushDeleteAction, pushTransformAction, captureTransform, type TransformSnapshot } from "../history.js";
-import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted } from "../tools/join-groups.js";
+import { pushAction, pushDeleteAction, pushReplaceAction, pushTransformAction, captureTransform, beginTransaction, endTransaction, type TransformSnapshot } from "../history.js";
+import { dissolveGroupForMesh, nearestGroupMember, onElementCommitted, restoreVoidCut } from "../tools/join-groups.js";
 import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from "../tools/wall-corners.js";
 import { ClipFillManager } from "./clip-fill.js";
 import { getLayerForCreator } from "../geometry/layers.js";
@@ -1176,7 +1176,16 @@ export class Viewer {
       }
       // Geometry is NOT disposed here — pushDeleteAction keeps it alive so undo
       // can re-add the object. Disposal happens in clearHistory() on scene wipe.
+      const _creator = (removed.userData as Record<string, unknown>).creator as string | undefined;
+      const _voidRestore = (_creator === "door" || _creator === "window")
+        ? restoreVoidCut(removed, this.scene) : null;
+      // Wrap delete + void-restore in one atomic undo group (#875).
+      if (_voidRestore) beginTransaction("delete-opening");
       pushDeleteAction(removed, removedParent);
+      if (_voidRestore) {
+        pushReplaceAction(_voidRestore.newWall, [_voidRestore.oldGroup], "wall-void-restore");
+        endTransaction();
+      }
       this.pivotOffsetByUuid.delete(removed.uuid);
       anyRemoved = true;
     }

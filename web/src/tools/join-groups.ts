@@ -373,7 +373,61 @@ export function cutRectVoidFromBoxMesh(
   geom.dispose();
   parent.add(group);
 
-  // Suppress local variable warning; wallLen is useful for callers inspecting the group
-  void wallLen;
+  // Store original wall dims in Group so restoreVoidCut can recreate the solid (#875).
+  group.userData.originalWallDims = { w: wallLen, d: wallThick, h: wallHt };
   return group;
+}
+
+// ── Void restore for door/window delete (#875) ────────────────────────────────
+// Call before removing a door or window from the scene. Finds the host wall
+// Group (created by cutRectVoidFromBoxMesh) and replaces it with a solid Mesh.
+// Returns { newWall, oldGroup } for undo recording, or null if nothing to restore.
+export function restoreVoidCut(
+  opening: THREE.Object3D,
+  scene: THREE.Scene,
+): { newWall: THREE.Mesh; oldGroup: THREE.Group } | null {
+  const hostId = (opening.userData as Record<string, unknown>).hostExpressID as string | undefined;
+  if (!hostId) return null;
+
+  // Find the host wall Group (inherits expressID from the original wall Mesh).
+  let hostGroup: THREE.Group | null = null;
+  scene.traverse((obj) => {
+    if (hostGroup || !(obj instanceof THREE.Group)) return;
+    const uid = (obj.userData as Record<string, unknown>).expressID as string | undefined;
+    if (uid === hostId || obj.uuid === hostId) hostGroup = obj as THREE.Group;
+  });
+  if (!hostGroup) return null;
+
+  // Get stored dims — written by cutRectVoidFromBoxMesh above.
+  const dims = (hostGroup.userData as Record<string, unknown>).originalWallDims as
+    { w: number; d: number; h: number } | undefined;
+  if (!dims) return null;
+
+  // Get material from first child Mesh.
+  let srcMat: THREE.Material | null = null;
+  hostGroup.traverse((child) => {
+    if (!srcMat && child instanceof THREE.Mesh) {
+      srcMat = Array.isArray(child.material) ? child.material[0] : child.material as THREE.Material;
+    }
+  });
+  const mat = srcMat ? (srcMat as THREE.Material).clone() : new THREE.MeshStandardMaterial({ color: 0x888888 });
+
+  // Rebuild solid wall.
+  const geom = new THREE.BoxGeometry(dims.w, dims.d, dims.h);
+  const newWall = new THREE.Mesh(geom, mat);
+  newWall.position.copy(hostGroup.position);
+  newWall.quaternion.copy(hostGroup.quaternion);
+  newWall.scale.copy(hostGroup.scale);
+  newWall.userData = { ...hostGroup.userData };
+  delete (newWall.userData as Record<string, unknown>).originalWallDims;
+  newWall.updateMatrix();
+  newWall.updateMatrixWorld(true);
+
+  // Swap Group → Mesh in scene.
+  const parent = hostGroup.parent;
+  if (!parent) return null;
+  parent.remove(hostGroup);
+  parent.add(newWall);
+
+  return { newWall, oldGroup: hostGroup };
 }
