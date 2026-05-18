@@ -5,9 +5,10 @@
 // captured from in-session dispatch sequences.
 
 const DB_NAME = "gemma-architect-skills";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE = "skills";
 const CLUSTER_STORE = "clusters";
+const CANVAS_CLUSTER_STORE = "canvas-clusters";
 
 export type SkillStep = {
   verb: string;
@@ -35,6 +36,18 @@ export type SkillCluster = {
   steps: SkillClusterStep[];
 };
 
+// CanvasCluster stores a full canvas subgraph (nodes + edges) as JSON for
+// save/load roundtrip on the SKILL NODES tab (#427).
+export type CanvasCluster = {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  graphJson: string;  // JSON.stringify({ nodes, edges, groups })
+  nodeCount: number;
+  edgeCount: number;
+};
+
 let _db: IDBDatabase | null = null;
 
 function openDB(): Promise<IDBDatabase> {
@@ -48,6 +61,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(CLUSTER_STORE)) {
         db.createObjectStore(CLUSTER_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(CANVAS_CLUSTER_STORE)) {
+        db.createObjectStore(CANVAS_CLUSTER_STORE, { keyPath: "id" });
       }
     };
     req.onsuccess = () => { _db = req.result; resolve(_db); };
@@ -140,6 +156,47 @@ export async function deleteCluster(id: string): Promise<void> {
   });
 }
 
+// ── CanvasCluster CRUD (#427) ──────────────────────────────────────────────
+
+export async function listCanvasClusters(): Promise<CanvasCluster[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CANVAS_CLUSTER_STORE, "readonly");
+    const req = tx.objectStore(CANVAS_CLUSTER_STORE).getAll();
+    req.onsuccess = () => {
+      const all = req.result as CanvasCluster[];
+      all.sort((a, b) => b.createdAt - a.createdAt);
+      resolve(all);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveCanvasCluster(cluster: Omit<CanvasCluster, "id" | "createdAt">): Promise<CanvasCluster> {
+  const db = await openDB();
+  const full: CanvasCluster = {
+    ...cluster,
+    id: crypto.randomUUID(),
+    createdAt: Date.now(),
+  };
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CANVAS_CLUSTER_STORE, "readwrite");
+    const req = tx.objectStore(CANVAS_CLUSTER_STORE).add(full);
+    req.onsuccess = () => resolve(full);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+export async function deleteCanvasCluster(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CANVAS_CLUSTER_STORE, "readwrite");
+    const req = tx.objectStore(CANVAS_CLUSTER_STORE).delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror   = () => reject(req.error);
+  });
+}
+
 // Test instrumentation — exposes cluster CRUD for gemma-verify surface AC6 (#664).
 if (typeof window !== "undefined") {
   (window as unknown as {
@@ -147,6 +204,8 @@ if (typeof window !== "undefined") {
       saveCluster: typeof saveCluster;
       getClusterByName: typeof getClusterByName;
       deleteCluster: typeof deleteCluster;
+      listCanvasClusters: typeof listCanvasClusters;
+      saveCanvasCluster: typeof saveCanvasCluster;
     };
-  }).__skillStore = { saveCluster, getClusterByName, deleteCluster };
+  }).__skillStore = { saveCluster, getClusterByName, deleteCluster, listCanvasClusters, saveCanvasCluster };
 }

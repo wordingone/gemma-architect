@@ -8,8 +8,8 @@
 
 import { dispatchSync, registerPostDispatch, type DispatchArgs } from "../commands/dispatch";
 import { compileDsl } from "../commands/dsl-eval";
-import { saveSkill, listSavedSkills, type SkillStep, type SavedSkill } from "./skill-store";
-import { openSaveSkillModal } from "./skill-modal";
+import { saveSkill, listSavedSkills, listCanvasClusters, type SkillStep, type SavedSkill, type CanvasCluster } from "./skill-store";
+import { openSaveSkillModal, openSaveClusterModal } from "./skill-modal";
 import { subscribe as subscribeAppState, getState } from "../app-state";
 
 
@@ -174,6 +174,7 @@ export class SkillCanvas {
   private _recordDispatchUnsubscribe: (() => void) | null = null;
   private _recordBtn: HTMLElement | null = null;
   private _recordStatus: HTMLElement | null = null;
+  private _clusterBtn: HTMLButtonElement | null = null;
 
   // Inspector callback (set by workbench)
   private _onNodeSelect: ((nodeId: string | null) => void) | null = null;
@@ -378,6 +379,13 @@ export class SkillCanvas {
     saveBtn.className = "btn btn-accent btn-sm sc-compile-btn";
     saveBtn.textContent = "Save as skill";
 
+    const clusterBtn = document.createElement("button");
+    clusterBtn.type = "button";
+    clusterBtn.className = "btn btn-sm sc-cluster-btn";
+    clusterBtn.textContent = "Save cluster";
+    clusterBtn.title = "Save selected nodes as a reusable cluster";
+    clusterBtn.disabled = true;
+
     recordBtn.addEventListener("click", () => {
       if (this._recording) this.stopRecording();
       else this.startRecording();
@@ -385,8 +393,10 @@ export class SkillCanvas {
     clearBtn.addEventListener("click", () => this._clear());
     runBtn.addEventListener("click", () => void this._run());
     saveBtn.addEventListener("click", () => this._compile());
+    clusterBtn.addEventListener("click", () => void this._saveSelectedAsCluster());
 
-    toolbar.append(recordBtn, recordStatus, clearBtn, runBtn, saveBtn);
+    toolbar.append(recordBtn, recordStatus, clearBtn, runBtn, saveBtn, clusterBtn);
+    this._clusterBtn = clusterBtn;
     this._root.appendChild(toolbar);
 
     // ── Main row (palette + viewport) ────────────────────────────────────────
@@ -496,6 +506,7 @@ export class SkillCanvas {
 
     this._renderGraph();
     void this._buildPalette();
+    window.addEventListener("skillstore:cluster-saved", () => { void this._buildPalette(); });
   }
 
   private _applyTransform(): void {
@@ -518,7 +529,10 @@ export class SkillCanvas {
   // ── Palette ────────────────────────────────────────────────────────────────
 
   private async _buildPalette(): Promise<void> {
-    const saved = await listSavedSkills().catch(() => [] as SavedSkill[]);
+    const [saved, clusters] = await Promise.all([
+      listSavedSkills().catch(() => [] as SavedSkill[]),
+      listCanvasClusters().catch(() => [] as CanvasCluster[]),
+    ]);
 
     this._paletteEl.innerHTML = "";
 
@@ -572,6 +586,36 @@ export class SkillCanvas {
       hint.className = "sc-palette-empty-hint";
       hint.textContent = "No saved skills yet — record one with ⏺ RECORD.";
       this._paletteEl.appendChild(hint);
+    }
+
+    // ── Clusters section ──────────────────────────────────────────────────────
+    if (clusters.length > 0) {
+      const clusterTitle = document.createElement("div");
+      clusterTitle.className = "skill-canvas-palette-title";
+      clusterTitle.style.marginTop = "10px";
+      clusterTitle.textContent = "Clusters";
+      this._paletteEl.appendChild(clusterTitle);
+      for (const cluster of clusters) {
+        const item = document.createElement("div");
+        item.className = "skill-canvas-palette-item";
+        item.style.cssText = "display:flex; justify-content:space-between; align-items:center; gap:4px;";
+        item.innerHTML = `
+          <span class="sc-pal-name" style="overflow:hidden;text-overflow:ellipsis;">${escHtml(cluster.name)}</span>
+          <span style="display:flex;gap:3px;flex-shrink:0;">
+            <span class="sc-cluster-load-btn" title="Load cluster onto canvas" style="cursor:pointer;padding:1px 4px;border-radius:2px;font-size:9px;background:var(--paper-3,#2a2a2a);">load</span>
+            <span class="sc-cluster-export-btn" title="Export as .skill file" style="cursor:pointer;padding:1px 4px;border-radius:2px;font-size:9px;background:var(--paper-3,#2a2a2a);">↓</span>
+          </span>
+        `;
+        item.querySelector(".sc-cluster-load-btn")!.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.loadCanvasCluster(cluster);
+        });
+        item.querySelector(".sc-cluster-export-btn")!.addEventListener("click", (e) => {
+          e.stopPropagation();
+          SkillCanvas.exportClusterFile(cluster);
+        });
+        this._paletteEl.appendChild(item);
+      }
     }
   }
 
@@ -946,6 +990,7 @@ export class SkillCanvas {
       const id = el.dataset.id ?? "";
       el.classList.toggle("sc-node-selected", this._selected.has(id));
     });
+    if (this._clusterBtn) this._clusterBtn.disabled = this._selected.size === 0;
   }
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
@@ -1211,6 +1256,62 @@ export class SkillCanvas {
     saveGraph(this._graph);
     this._renderGraph();
     await this._run();
+  }
+
+  // ── Cluster save / load (#427) ─────────────────────────────────────────────
+
+  private async _saveSelectedAsCluster(): Promise<void> {
+    if (this._selected.size === 0) return;
+    const selectedIds = new Set(this._selected);
+    const nodes = this._graph.nodes.filter(n => selectedIds.has(n.id));
+    const edges = this._graph.edges.filter(e => selectedIds.has(e.from) && selectedIds.has(e.to));
+    const graphJson = JSON.stringify({ nodes, edges, groups: [] });
+    openSaveClusterModal(graphJson, nodes.length, edges.length, () => {
+      void this._buildPalette();
+    });
+  }
+
+  // Append a saved cluster's nodes/edges to the current graph.
+  loadCanvasCluster(cluster: CanvasCluster): void {
+    let parsed: { nodes: CanvasNode[]; edges: CanvasEdge[]; groups: CanvasGroup[] };
+    try { parsed = JSON.parse(cluster.graphJson) as typeof parsed; }
+    catch { return; }
+
+    // Re-ID to avoid UUID collisions; offset position so they don't overlap existing nodes.
+    const idMap = new Map<string, string>();
+    const offset = { x: 20, y: 20 };
+    const newNodes: CanvasNode[] = (parsed.nodes ?? []).map(n => {
+      const newId = crypto.randomUUID();
+      idMap.set(n.id, newId);
+      return { ...n, id: newId, x: (n.x ?? 0) + offset.x, y: (n.y ?? 0) + offset.y };
+    });
+    const newEdges: CanvasEdge[] = (parsed.edges ?? [])
+      .filter(e => idMap.has(e.from) && idMap.has(e.to))
+      .map(e => ({ ...e, id: crypto.randomUUID(), from: idMap.get(e.from)!, to: idMap.get(e.to)! }));
+
+    this._graph.nodes.push(...newNodes);
+    this._graph.edges.push(...newEdges);
+    saveGraph(this._graph);
+    this._renderGraph();
+  }
+
+  // Export a cluster as a downloadable .skill JSON file.
+  static exportClusterFile(cluster: CanvasCluster): void {
+    const payload = JSON.stringify({
+      schema: "gemma-cad:canvas-cluster:v1",
+      name: cluster.name,
+      description: cluster.description,
+      nodeCount: cluster.nodeCount,
+      edgeCount: cluster.edgeCount,
+      graph: JSON.parse(cluster.graphJson) as unknown,
+    }, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `${cluster.name.replace(/[^a-z0-9_-]/gi, "-")}.skill`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
