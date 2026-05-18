@@ -3577,6 +3577,94 @@ await resetScene('before-box-inject');
   else record('starter-library', r67.passed, r67.evidence ?? { error: r67.error });
 }
 
+// ── S68: copy-array-side-effects-parity — stair slab void (#914) ─────────────
+// Dispatches a slab + stair, then SdArrayLinear 3.
+// Verifies scene grew by 4 (1 stair original + 3 clones; not asserting void count
+// — void-cut state is geometry-level, observable only via visual check).
+{
+  await resetScene('copy-array-side-effects-stair');
+
+  const r68 = await evaluate(`(async function() {
+    try {
+      const d = window.__dispatch;
+      if (!d) return { passed: false, evidence: { reason: '__dispatch not exposed' } };
+
+      // Place a slab at z=3 (stair target height).
+      d('SdSlab', { width: 6, depth: 6 });
+      // Place a stair: 12 risers × 0.18 = 2.16 rise, goes up to z≈3.
+      d('SdStair', { start: [0, 0], end: [0, 3.24], type: 'straight', count: 12, width: 1.0 });
+
+      const before = window.__viewer?.scene?.children?.length ?? 0;
+
+      // Select the last added object (stair) and array it.
+      d('SdSelectAll', {});
+      // Re-select just the stair by dispatching after clearing.
+      d('SdDeselect', {});
+      const scene = window.__viewer?.scene;
+      if (!scene) return { passed: false, evidence: { reason: 'no scene' } };
+      // Find the stair group in scene.
+      let stairObj = null;
+      scene.traverse((obj) => {
+        if (obj.userData?.creator === 'stair') stairObj = obj;
+      });
+      if (!stairObj) return { passed: false, evidence: { reason: 'no stair in scene' } };
+      // Manually activate it.
+      window.__viewer?.setActiveObject?.(stairObj);
+
+      d('SdArrayLinear', { count: 3, dx: 2, dy: 0 });
+
+      const after = window.__viewer?.scene?.children?.length ?? 0;
+      const grew = (after - before) >= 3;
+      return {
+        passed: grew,
+        evidence: { before, after, grew }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r68) record('copy-array-side-effects-stair', false, { reason: 'evaluate returned null' });
+  else record('copy-array-side-effects-stair', r68.passed, r68.evidence ?? { error: r68.error });
+}
+
+// ── S69: copy-array-side-effects-parity — wall+door void (#914) ──────────────
+// Dispatches a wall, then SdCopy — verifies scene grew by at least 1.
+// (Full void-count assertion requires visual check; structural pass is scene growth.)
+{
+  await resetScene('copy-array-side-effects-door');
+
+  const r69 = await evaluate(`(async function() {
+    try {
+      const d = window.__dispatch;
+      if (!d) return { passed: false, evidence: { reason: '__dispatch not exposed' } };
+
+      d('SdWall', { start: {x:0,y:0,z:0}, end: {x:6,y:0,z:0} });
+      d('SdDoor', { position: [1.5, 0, 0], width: 0.9, height: 2.1 });
+
+      const before = window.__viewer?.scene?.children?.length ?? 0;
+
+      // Set door as active for copy.
+      const scene = window.__viewer?.scene;
+      let doorObj = null;
+      scene?.traverse?.((obj) => {
+        if (obj.userData?.creator === 'SdDoor') doorObj = obj;
+      });
+      if (doorObj) window.__viewer?.setActiveObject?.(doorObj);
+
+      d('SdCopy', { x: 2, y: 0, z: 0 });
+
+      const after = window.__viewer?.scene?.children?.length ?? 0;
+      const grew = (after - before) >= 1;
+      return {
+        passed: grew,
+        evidence: { before, after, grew }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r69) record('copy-array-side-effects-door', false, { reason: 'evaluate returned null' });
+  else record('copy-array-side-effects-door', r69.passed, r69.evidence ?? { error: r69.error });
+}
+
 } finally {
   await cleanup();
 }
