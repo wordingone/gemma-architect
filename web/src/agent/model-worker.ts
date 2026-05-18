@@ -9,16 +9,19 @@
 //   {type:"abort", turnId}
 //
 // Protocol (worker → main):
-//   {type:"progress",      phase, progress?, file?, bytes?}
-//   {type:"model-ready",   device}
+//   {type:"returning-user"}                  // cached weights detected before download
+//   {type:"manifest",    totalBytesExpected}  // total expected bytes across all files
+//   {type:"progress",    phase, file, bytes, total, throughputBytesPerSec, progress?}
+//   {type:"model-ready", device}
 //   {type:"warmup-done"}
 //   {type:"drafter-ready"}
 //   {type:"drafter-error", error}
-//   {type:"ready",         device}
+//   {type:"boot-complete"}                    // model-ready + warmup-done + drafter done
+//   {type:"ready",       device}
 //   {type:"generate-done", turnId, text, specAttempts, specAccepts,
 //                          prefillMs, decodeMs, inputLength, tokensOut}
 //   {type:"generate-error", turnId, error}
-//   {type:"error",         error}
+//   {type:"error",       error}
 
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage } from "@huggingface/transformers";
 import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
@@ -34,8 +37,48 @@ let _drafterSession: any = null;
 
 const WEBGPU_CONTEXT_LIMIT = 2048;
 
+// Boot-completion tracking — boot-complete fires when all three phases done.
+let _bootModelReady = false;
+let _bootWarmupDone = false;
+let _bootDrafterDone = false; // true when drafter-ready OR drafter-error OR no drafterUrl
+
+// Throughput tracking for progress events.
+let _progressLastBytes = 0;
+let _progressLastTs = 0;
+
+function calcThroughput(cumulativeBytes: number): number {
+  const now = Date.now();
+  const dtMs = now - _progressLastTs;
+  const db = cumulativeBytes - _progressLastBytes;
+  _progressLastBytes = cumulativeBytes;
+  _progressLastTs = now;
+  if (dtMs < 50 || db <= 0) return 0;
+  return Math.round(db / (dtMs / 1000));
+}
+
 function post(msg: Record<string, unknown>): void {
   (self as unknown as Worker).postMessage(msg);
+}
+
+function checkBootComplete(): void {
+  if (_bootModelReady && _bootWarmupDone && _bootDrafterDone) {
+    post({ type: "boot-complete" });
+  }
+}
+
+// Check if model weights are already in Cache API — indicates a returning user.
+// transformers.js stores downloaded files in Cache Storage keyed to their CDN URLs.
+async function checkReturningUser(modelId: string): Promise<boolean> {
+  try {
+    if (!("caches" in globalThis)) return false;
+    const names = await (globalThis as unknown as { caches: CacheStorage }).caches.keys();
+    for (const name of names) {
+      const cache = await (globalThis as unknown as { caches: CacheStorage }).caches.open(name);
+      const keys = await cache.keys();
+      if (keys.some((req) => req.url.includes(modelId))) return true;
+    }
+  } catch { /* Cache API unavailable (private mode / quota) */ }
+  return false;
 }
 
 // ── Message router ────────────────────────────────────────────────────────────
@@ -56,15 +99,38 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   const drafterUrl = data.drafterUrl as string;
   const drafterCacheKey = data.drafterCacheKey as string;
 
+  // Returning-user detection: if model files are already in Cache API, skip the
+  // loading screen and show a fast-path pulse instead.
+  const isReturning = await checkReturningUser(modelId);
+  if (isReturning) {
+    post({ type: "returning-user" });
+  }
+
+  // Emit manifest with estimated total bytes so the overlay can show aggregate %.
+  // E4B: model ONNX q4f16 ≈ 2.5 GB + drafter ≈ 158 MB + tokenizer files ≈ 5 MB.
+  const ESTIMATED_MODEL_BYTES = 2_700_000_000;
+  post({ type: "manifest", totalBytesExpected: ESTIMATED_MODEL_BYTES });
+
+  // Cumulative bytes downloaded (all model files combined) for aggregate throughput.
+  let _cumulativeBytes = 0;
+
   const progressCb = (info: Record<string, unknown>) => {
     if (info.status === "downloading") {
+      const bytes = (info.loaded as number | undefined) ?? 0;
+      const total = (info.total as number | undefined) ?? 0;
+      _cumulativeBytes = Math.max(_cumulativeBytes, bytes); // rough sum across files
+      const throughputBytesPerSec = calcThroughput(_cumulativeBytes);
       post({
-        type: "progress", phase: "model",
+        type: "progress",
+        phase: "model",
         progress: (info.progress as number | undefined) ?? 0,
         file: ((info.name as string | undefined) ?? "").split("/").pop() ?? "",
+        bytes,
+        total,
+        throughputBytesPerSec,
       });
     } else if (info.status === "loading") {
-      post({ type: "progress", phase: "model-init" });
+      post({ type: "progress", phase: "model-init", bytes: 0, total: 0, throughputBytesPerSec: 0 });
     }
   };
 
@@ -118,11 +184,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     return;
   }
 
+  _bootModelReady = true;
   post({ type: "model-ready", device: loadedLabel });
+  checkBootComplete();
 
   // Warmup probe — warms GPU shader pipeline; non-fatal if it fails
   try {
-    post({ type: "progress", phase: "warmup" });
+    post({ type: "progress", phase: "warmup", bytes: 0, total: 0, throughputBytesPerSec: 0 });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const proc = _processor as any;
     const chatText = proc.apply_chat_template(
@@ -138,27 +206,49 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     }
   } catch { /* warmup failure non-fatal */ }
 
+  _bootWarmupDone = true;
   post({ type: "warmup-done" });
+  checkBootComplete();
 
   // Drafter load — fire after warmup; drafter-error is non-fatal (standard path covers)
   if (drafterUrl) {
     try {
-      post({ type: "progress", phase: "drafter", progress: 0 });
+      post({ type: "progress", phase: "drafter", progress: 0, bytes: 0, total: 0, throughputBytesPerSec: 0 });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ort = (globalThis as any).ort ?? await import("onnxruntime-web");
+      let _drafterLastBytes = 0;
+      let _drafterLastTs = Date.now();
       const drafterBuf = await fetchDrafterCached(drafterUrl, drafterCacheKey, (loaded, total) => {
-        post({ type: "progress", phase: "drafter", progress: total > 0 ? (loaded / total) * 100 : -1, bytes: loaded });
+        const now = Date.now();
+        const dtMs = now - _drafterLastTs;
+        const throughputBytesPerSec = dtMs >= 50 ? Math.round((loaded - _drafterLastBytes) / (dtMs / 1000)) : 0;
+        _drafterLastBytes = loaded;
+        _drafterLastTs = now;
+        post({
+          type: "progress",
+          phase: "drafter",
+          progress: total > 0 ? (loaded / total) * 100 : -1,
+          bytes: loaded,
+          total,
+          throughputBytesPerSec,
+        });
       });
       _drafterSession = await ort.InferenceSession.create(drafterBuf, {
         executionProviders: ["webgpu", "wasm"],
         preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
       });
+      _bootDrafterDone = true;
       post({ type: "drafter-ready" });
     } catch (e) {
+      _bootDrafterDone = true;
       post({ type: "drafter-error", error: (e as Error).message?.slice(0, 120) });
     }
+  } else {
+    // No drafter URL — drafter phase is skipped.
+    _bootDrafterDone = true;
   }
 
+  checkBootComplete();
   post({ type: "ready", device: loadedLabel });
 }
 

@@ -145,11 +145,22 @@ function initWorkerIfNeeded(): Worker {
   _inferenceWorker.onmessage = (ev: MessageEvent<Record<string, unknown>>) => {
     const msg = ev.data;
     switch (msg.type) {
+      case "returning-user":
+        window.dispatchEvent(new CustomEvent("agentmodel:returning-user"));
+        break;
+      case "manifest":
+        window.dispatchEvent(new CustomEvent("agentmodel:manifest", {
+          detail: { totalBytesExpected: msg.totalBytesExpected as number },
+        }));
+        break;
       case "progress": {
         const phase = msg.phase as string;
+        const bytes = (msg.bytes as number | undefined) ?? 0;
+        const total = (msg.total as number | undefined) ?? 0;
+        const throughputBytesPerSec = (msg.throughputBytesPerSec as number | undefined) ?? 0;
         if (phase === "drafter") {
           window.dispatchEvent(new CustomEvent("agentmodel:drafter:loading", {
-            detail: { progress: msg.progress ?? 0, bytes: msg.bytes ?? 0 },
+            detail: { progress: msg.progress ?? 0, bytes, total, throughputBytesPerSec },
           }));
         } else {
           const pct = msg.progress != null ? `${Math.round(msg.progress as number)}%` : "";
@@ -157,7 +168,7 @@ function initWorkerIfNeeded(): Worker {
           const label = [pct, file].filter(Boolean).join(" ");
           if (label) updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ${label}`);
           window.dispatchEvent(new CustomEvent("agentmodel:loading", {
-            detail: { progress: msg.progress ?? 0, file },
+            detail: { progress: msg.progress ?? 0, file, bytes, total, throughputBytesPerSec, phase },
           }));
         }
         break;
@@ -178,6 +189,9 @@ function initWorkerIfNeeded(): Worker {
       case "drafter-error":
         (globalThis as any).__drafterLoaded = false;
         window.dispatchEvent(new CustomEvent("agentmodel:drafter:error", { detail: msg.error }));
+        break;
+      case "boot-complete":
+        window.dispatchEvent(new CustomEvent("agentmodel:boot-complete"));
         break;
       case "ready":
         _workerReady = true;
