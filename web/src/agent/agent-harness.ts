@@ -476,21 +476,21 @@ function buildSceneContext(): string {
 const DIMENSION_RULES = `
 DIMENSION RULES — extract ALL numeric values BEFORE generating geometry. Never use default 5.5 × 2.8 × 0.2 when the prompt gives dimensions.
 - Width / length / depth: take EXACT values from prompt ("20m × 15m" → width=20, depth=15).
-- Height: floor_height × n_stories. "3-story, 3m floor height" → total=9m; use 3m per SdLevel.
+- Height: floor_height × n_stories. "3-story, 3m floor height" → total=9m; use 3m per IfcLevel.
 - Footprint polygon: [[0,0],[W,0],[W,D],[0,D]] where W=width, D=depth.
-- Multi-story: one SdLevel per floor, elevation = floor_index × floor_height. Default floor heights: 3.0m office/residential, 4.5m industrial/bay.
+- Multi-story: one IfcLevel per floor, elevation = floor_index × floor_height. Default floor heights: 3.0m office/residential, 4.5m industrial/bay.
 - SdSpace must include a descriptive name= param: name="lobby", name="apparatus bay 1", etc.
 `.trim();
 
 const BUILDING_DEFAULTS = `
 BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apartment/office" implies ALL of the following element types:
-- SdLevel: one per storey (elevation = floor_index × floor_height). Always emit before walls on that level.
-- SdWall: exterior 0.15m thick; interior partition 0.10m thick. Enclose all rooms — no open faces.
-- SdSlab: 0.20m thick at every level base (floor slab). Also use for roof on flat-roof buildings.
-- SdDoor: width=0.9, height=2.1, wallThickness=0.15. One per building minimum; front entry on south wall.
-- SdWindow: width=1.2, height=1.2, sillH=0.9. Minimum 2 per exterior elevation (south + north or east + west).
+- IfcLevel: one per storey (elevation = floor_index × floor_height). Always emit before walls on that level.
+- IfcWall: exterior 0.15m thick; interior partition 0.10m thick. Enclose all rooms — no open faces.
+- IfcSlab: 0.20m thick at every level base (floor slab). Also use for roof on flat-roof buildings.
+- IfcDoor: width=0.9, height=2.1, wallThickness=0.15. One per building minimum; front entry on south wall.
+- IfcWindow: width=1.2, height=1.2, sillH=0.9. Minimum 2 per exterior elevation (south + north or east + west).
 - SdColumn: size=0.3 at building corners and wall junctions; height = floor height. Add when span >6m.
-- SdRoof: roofType=pitched (residential house/tiny home), roofType=hipped (villa), roofType=flat (apartment/office), roofType=shed (lean-to/mono-pitch, industrial annexe). pitchDeg=35 default.
+- IfcRoof: roofType=pitched (residential house/tiny home), roofType=hipped (villa), roofType=flat (apartment/office), roofType=shed (lean-to/mono-pitch, industrial annexe). pitchDeg=35 default.
 - SdCeiling: one per storey, placed at floor_height elevation. width/depth = room footprint. elevation = floor_index × floor_height + floor_height (top of room). IFC convention: explicit IfcCovering element; do NOT rely on slab-above as implicit ceiling.
 - SdExport: always end with format=ifc, target=scene.
 - Room sizes (net internal): bedroom 9-15m², living 18-25m², kitchen 8-12m², bathroom 4-6m².
@@ -740,93 +740,93 @@ Assistant:
 User: design a small house
 Assistant: Assuming 8m × 6m footprint, 1 storey, 3.0m ceiling, 3 rooms (living + bedroom + bathroom), gable roof, 1 front door, 4 windows.
 <plan>
-1. SdLevel — name="Ground", elevation=0, height=3.0
-2. SdWall — south front, profile=[[0,0],[8,0]], thickness=0.15, height=3.0
-3. SdWall — north rear, profile=[[8,6],[0,6]], thickness=0.15, height=3.0
-4. SdWall — east, profile=[[8,0],[8,6]], thickness=0.15, height=3.0
-5. SdWall — west, profile=[[0,6],[0,0]], thickness=0.15, height=3.0
-6. SdSlab — floor, profile=[[0,0],[8,0],[8,6],[0,6]], thickness=0.2
-7. SdWall — living/bedroom partition, profile=[[5,0],[5,6]], thickness=0.1, height=3.0
-8. SdWall — bedroom/bath divider, profile=[[5,4],[8,4]], thickness=0.1, height=3.0
-9. SdDoor — front entry, width=0.9, height=2.1, position=[4,0]
-10. SdWindow — south left, width=1.2, height=1.2, sillH=0.9, position=[1.5,0]
-11. SdWindow — south right, width=1.2, height=1.2, sillH=0.9, position=[6.5,0]
-12. SdWindow — east, width=1.0, height=1.2, sillH=0.9, position=[8,3]
-13. SdWindow — north, width=1.0, height=1.2, sillH=0.9, position=[4,6]
-14. SdRoof — pitched gable, roofType=pitched, footprint=[[0,0],[8,0],[8,6],[0,6]], pitchDeg=35
+1. IfcLevel — name="Ground", elevation=0, height=3.0
+2. IfcWall — south front, profile=[[0,0],[8,0]], thickness=0.15, height=3.0
+3. IfcWall — north rear, profile=[[8,6],[0,6]], thickness=0.15, height=3.0
+4. IfcWall — east, profile=[[8,0],[8,6]], thickness=0.15, height=3.0
+5. IfcWall — west, profile=[[0,6],[0,0]], thickness=0.15, height=3.0
+6. IfcSlab — floor, profile=[[0,0],[8,0],[8,6],[0,6]], thickness=0.2
+7. IfcWall — living/bedroom partition, profile=[[5,0],[5,6]], thickness=0.1, height=3.0
+8. IfcWall — bedroom/bath divider, profile=[[5,4],[8,4]], thickness=0.1, height=3.0
+9. IfcDoor — front entry, width=0.9, height=2.1, position=[4,0]
+10. IfcWindow — south left, width=1.2, height=1.2, sillH=0.9, position=[1.5,0]
+11. IfcWindow — south right, width=1.2, height=1.2, sillH=0.9, position=[6.5,0]
+12. IfcWindow — east, width=1.0, height=1.2, sillH=0.9, position=[8,3]
+13. IfcWindow — north, width=1.0, height=1.2, sillH=0.9, position=[4,6]
+14. IfcRoof — pitched gable, roofType=pitched, footprint=[[0,0],[8,0],[8,6],[0,6]], pitchDeg=35
 15. SdExport — format=ifc, target=scene
 </plan>
-<tool_call>{"command":"SdLevel","parameters":{"name":"Ground","elevation":0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[8,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[8,6],[0,6]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[8,0],[8,6]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,6],[0,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[8,0],[8,6],[0,6]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[5,0],[5,6]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[5,4],[8,4]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdDoor","parameters":{"width":0.9,"height":2.1,"position":[4,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[1.5,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[6.5,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[8,3]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[4,6]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[8,0],[8,6],[0,6]],"pitchDeg":35},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Ground","elevation":0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[8,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[8,6],[0,6]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[8,0],[8,6]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,6],[0,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[8,0],[8,6],[0,6]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[5,0],[5,6]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[5,4],[8,4]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.9,"height":2.1,"position":[4,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[1.5,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[6.5,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[8,3]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[4,6]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[8,0],[8,6],[0,6]],"pitchDeg":35},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdExport","parameters":{"format":"ifc","target":"scene"},"metadata":{"source":"agent"}}</tool_call>
 
 User: design a 2-storey house
 Assistant: Assuming 10m × 8m footprint, 2 storeys at 3.0m each, 4 bedrooms upper / living+kitchen lower, gable roof, 2 doors, 6 windows.
 <plan>
-1. SdLevel — name="Ground", elevation=0, height=3.0
-2. SdLevel — name="First Floor", elevation=3.0, height=3.0
+1. IfcLevel — name="Ground", elevation=0, height=3.0
+2. IfcLevel — name="First Floor", elevation=3.0, height=3.0
 3. setActiveLevel — id=level/0
-4. SdWall — south ground, profile=[[0,0],[10,0]], thickness=0.15, height=3.0
-5. SdWall — north ground, profile=[[10,8],[0,8]], thickness=0.15, height=3.0
-6. SdWall — east ground, profile=[[10,0],[10,8]], thickness=0.15, height=3.0
-7. SdWall — west ground, profile=[[0,8],[0,0]], thickness=0.15, height=3.0
-8. SdSlab — ground floor, profile=[[0,0],[10,0],[10,8],[0,8]], thickness=0.2
-9. SdWall — kitchen/living partition, profile=[[5,0],[5,8]], thickness=0.1, height=3.0
-10. SdDoor — front entry, width=0.9, height=2.1, position=[5,0]
-11. SdDoor — rear patio, width=0.9, height=2.1, position=[5,8]
-12. SdWindow — south ×2, width=1.2, height=1.2, sillH=0.9
-13. SdWindow — north, width=1.0, height=1.2, sillH=0.9, position=[7,8]
+4. IfcWall — south ground, profile=[[0,0],[10,0]], thickness=0.15, height=3.0
+5. IfcWall — north ground, profile=[[10,8],[0,8]], thickness=0.15, height=3.0
+6. IfcWall — east ground, profile=[[10,0],[10,8]], thickness=0.15, height=3.0
+7. IfcWall — west ground, profile=[[0,8],[0,0]], thickness=0.15, height=3.0
+8. IfcSlab — ground floor, profile=[[0,0],[10,0],[10,8],[0,8]], thickness=0.2
+9. IfcWall — kitchen/living partition, profile=[[5,0],[5,8]], thickness=0.1, height=3.0
+10. IfcDoor — front entry, width=0.9, height=2.1, position=[5,0]
+11. IfcDoor — rear patio, width=0.9, height=2.1, position=[5,8]
+12. IfcWindow — south ×2, width=1.2, height=1.2, sillH=0.9
+13. IfcWindow — north, width=1.0, height=1.2, sillH=0.9, position=[7,8]
 14. setActiveLevel — id=level/1
-15. SdWall — south upper, profile=[[0,0],[10,0]], thickness=0.15, height=3.0
-16. SdWall — north upper, profile=[[10,8],[0,8]], thickness=0.15, height=3.0
-17. SdWall — east upper, profile=[[10,0],[10,8]], thickness=0.15, height=3.0
-18. SdWall — west upper, profile=[[0,8],[0,0]], thickness=0.15, height=3.0
-19. SdSlab — mid-floor ceiling/upper floor, profile=[[0,0],[10,0],[10,8],[0,8]], thickness=0.2
-20. SdWall — bedroom partitions, profile=[[5,0],[5,8]], thickness=0.1, height=3.0
-21. SdWall — bedroom partition 2, profile=[[0,4],[5,4]], thickness=0.1, height=3.0
-22. SdWindow — upper south ×2, width=1.2, height=1.2, sillH=0.9
-23. SdWindow — upper north, width=1.0, height=1.2, sillH=0.9
-24. SdRoof — pitched gable, roofType=pitched, footprint=[[0,0],[10,0],[10,8],[0,8]], pitchDeg=35
+15. IfcWall — south upper, profile=[[0,0],[10,0]], thickness=0.15, height=3.0
+16. IfcWall — north upper, profile=[[10,8],[0,8]], thickness=0.15, height=3.0
+17. IfcWall — east upper, profile=[[10,0],[10,8]], thickness=0.15, height=3.0
+18. IfcWall — west upper, profile=[[0,8],[0,0]], thickness=0.15, height=3.0
+19. IfcSlab — mid-floor ceiling/upper floor, profile=[[0,0],[10,0],[10,8],[0,8]], thickness=0.2
+20. IfcWall — bedroom partitions, profile=[[5,0],[5,8]], thickness=0.1, height=3.0
+21. IfcWall — bedroom partition 2, profile=[[0,4],[5,4]], thickness=0.1, height=3.0
+22. IfcWindow — upper south ×2, width=1.2, height=1.2, sillH=0.9
+23. IfcWindow — upper north, width=1.0, height=1.2, sillH=0.9
+24. IfcRoof — pitched gable, roofType=pitched, footprint=[[0,0],[10,0],[10,8],[0,8]], pitchDeg=35
 25. SdExport — format=ifc, target=scene
 </plan>
-<tool_call>{"command":"SdLevel","parameters":{"name":"Ground","elevation":0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdLevel","parameters":{"name":"First Floor","elevation":3.0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"Ground","elevation":0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcLevel","parameters":{"name":"First Floor","elevation":3.0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[10,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[10,8],[0,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[10,0],[10,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[10,0],[10,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[5,0],[5,8]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdDoor","parameters":{"width":0.9,"height":2.1,"position":[5,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdDoor","parameters":{"width":0.9,"height":2.1,"position":[5,8]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[2,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[7,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[7,8]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[10,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[10,8],[0,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[10,0],[10,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[10,0],[10,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[5,0],[5,8]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.9,"height":2.1,"position":[5,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.9,"height":2.1,"position":[5,8]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[2,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[7,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[7,8]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[10,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[10,8],[0,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[10,0],[10,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[10,0],[10,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[5,0],[5,8]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,4],[5,4]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[2,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[7,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[7,8]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[10,0],[10,8],[0,8]],"pitchDeg":35},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,0],[10,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[10,8],[0,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[10,0],[10,8]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[10,0],[10,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[5,0],[5,8]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWall","parameters":{"profile":[[0,4],[5,4]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[2,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[7,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[7,8]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[10,0],[10,8],[0,8]],"pitchDeg":35},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdExport","parameters":{"format":"ifc","target":"scene"},"metadata":{"source":"agent"}}</tool_call>
 
 User: Describe the default scene in one sentence.
