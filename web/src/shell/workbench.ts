@@ -1771,6 +1771,20 @@ function buildSidebar(host: HTMLElement, scenePanel: HTMLElement | null) {
     if (wb) wb.style.setProperty("--sidebar-w", savedW);
   }
 
+  // Auto-switch: inspect when wall(s) selected, scene when deselected/non-wall.
+  function isWall(obj: THREE.Object3D) { return obj.userData?.creator === "wall"; }
+  subscribe((sel) => {
+    if (sel && isWall(sel.object)) activate("inspect");
+    else if (!sel) activate("scene");
+  });
+  subscribeMulti(() => {
+    const multi = getMultiSelected();
+    if (multi.length > 1) {
+      if (multi.some((s) => isWall(s.object))) activate("inspect");
+      else activate("scene");
+    }
+  });
+
   host.appendChild(tabs);
   host.appendChild(body);
   host.appendChild(resizeHandle);
