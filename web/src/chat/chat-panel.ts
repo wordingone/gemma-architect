@@ -381,14 +381,29 @@ export class ChatPanel {
         }
       }
 
-      const resp = await runAgentTurn({
-        prompt: text,
-        history: this._history.slice(0, -1),
-        skills: skillsToPass,
-        skillsTotal: this._skills.length,
-        maxNewTokens: estimateMaxTokens(text),
-        userImage: effectiveImage,
-      });
+      const progressSpan = thinking.querySelector<HTMLElement>(".chat-thinking-progress");
+      const onGenerateProgress = (e: Event): void => {
+        const n = (e as CustomEvent<{ tokens_generated: number }>).detail.tokens_generated;
+        if (progressSpan) {
+          progressSpan.style.display = "";
+          progressSpan.textContent = `${n} tok`;
+        }
+      };
+      window.addEventListener("agentmodel:generate-progress", onGenerateProgress);
+
+      let resp: Awaited<ReturnType<typeof runAgentTurn>>;
+      try {
+        resp = await runAgentTurn({
+          prompt: text,
+          history: this._history.slice(0, -1),
+          skills: skillsToPass,
+          skillsTotal: this._skills.length,
+          maxNewTokens: estimateMaxTokens(text),
+          userImage: effectiveImage,
+        });
+      } finally {
+        window.removeEventListener("agentmodel:generate-progress", onGenerateProgress);
+      }
       agentRing?.remove();
 
       this._removeThinking(thinking);
@@ -641,7 +656,7 @@ export class ChatPanel {
   private _appendThinking(): HTMLElement {
     const item = document.createElement("div");
     item.className = "chat-msg chat-msg-assistant chat-thinking";
-    item.innerHTML = `<span class="chat-thinking-dots"><span>·</span><span>·</span><span>·</span></span>`;
+    item.innerHTML = `<span class="chat-thinking-dots"><span>·</span><span>·</span><span>·</span></span><span class="chat-thinking-progress" style="margin-left:6px;font-size:11px;opacity:0.6;display:none"></span>`;
     this._listEl.appendChild(item);
     this._listEl.scrollTop = this._listEl.scrollHeight;
     return item;

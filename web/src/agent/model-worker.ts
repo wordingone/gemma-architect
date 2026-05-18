@@ -349,11 +349,30 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
 
   // Standard generate fallback
   if (!outputs) {
+    // Progress streamer — skip the initial prompt put, then post every 50 tokens generated.
+    // Keeps the UI alive during long plans (two-story house ≈ 800 tokens @ 5-10 t/s = 80-160s).
+    let _initPutSeen = false;
+    let _tokensGenerated = 0;
+    const _progressStreamer = {
+      put: (_tokenIds: unknown) => {
+        if (!_initPutSeen) { _initPutSeen = true; return; }
+        _tokensGenerated++;
+        if (_tokensGenerated === 1 || _tokensGenerated % 50 === 0) {
+          post({ type: "generate-progress", turnId, tokens_generated: _tokensGenerated });
+        }
+      },
+      end: () => {
+        if (_tokensGenerated > 0) {
+          post({ type: "generate-progress", turnId, tokens_generated: _tokensGenerated });
+        }
+      },
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     outputs = await (_model as any).generate({
       ...inputs,
       max_new_tokens: safeMaxNewTokens,
       do_sample: false,
+      streamer: _progressStreamer,
     });
   }
 

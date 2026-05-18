@@ -196,6 +196,11 @@ function initWorkerIfNeeded(): Worker {
       case "ready":
         _workerReady = true;
         break;
+      case "generate-progress":
+        window.dispatchEvent(new CustomEvent("agentmodel:generate-progress", {
+          detail: { turnId: msg.turnId, tokens_generated: msg.tokens_generated },
+        }));
+        break;
       case "generate-done": {
         const cb = _generateCallbacks.get(msg.turnId as string);
         if (cb) {
