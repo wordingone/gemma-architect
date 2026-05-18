@@ -16,7 +16,7 @@ import { buildDispatchSummary } from "./chat-dispatch-summary";
 import { classifyDispatchResult } from "./chat-dispatch-routing";
 import { setPickerHint } from "../viewer/picker-hint";
 import { openSaveSkillModal } from "../skills/skill-modal";
-import { getState } from "../app-state";
+import { getState, subscribe } from "../app-state";
 
 type Message = {
   role: "user" | "assistant";
@@ -31,12 +31,20 @@ type GemmaSession = { startTs: number; turnCount: number; dispatchCount: number;
 type GemmaDispatchHooks = { pre: Array<(d: AgentDispatch) => void> };
 type _GemmaW = Window & typeof globalThis & { __gemmaSession: GemmaSession; __gemma_dispatch_hooks: GemmaDispatchHooks };
 
-const STARTER_PROMPTS: Array<{ label: string; prompt: string | (() => string) }> = [
+type StarterPrompt = { label: string | (() => string); prompt: string | (() => string) };
+
+function resolveStr(v: string | (() => string)): string {
+  return typeof v === "function" ? v() : v;
+}
+
+const STARTER_PROMPTS: StarterPrompt[] = [
   { label: "What's currently in the scene?", prompt: "What's currently in the scene?" },
   {
-    label: "Two-story house",
+    label: () => getState("unitSystem") === "imperial"
+      ? "Two-story house (26' × 20')"
+      : "Two-story house (8m × 6m)",
     prompt: () => getState("unitSystem") === "imperial"
-      ? "Build a two-story residential house, 26ft wide by 20ft deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs."
+      ? "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs."
       : "Build a two-story residential house, 8m wide by 6m deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
   },
 ];
@@ -210,17 +218,22 @@ export class ChatPanel {
 
     window.addEventListener("gemma:clear-history", () => this.clear());
 
-    for (const s of STARTER_PROMPTS) {
-      const chip = document.createElement("span");
-      chip.className = "ai-chip chat-starter-chip";
-      chip.textContent = s.label;
-      chip.addEventListener("click", () => {
-        this._inputEl.value = typeof s.prompt === "function" ? s.prompt() : s.prompt;
-        this._inputEl.focus();
-        void this._send();
-      });
-      this._startersEl.appendChild(chip);
-    }
+    const buildChips = () => {
+      this._startersEl.innerHTML = "";
+      for (const s of STARTER_PROMPTS) {
+        const chip = document.createElement("span");
+        chip.className = "ai-chip chat-starter-chip";
+        chip.textContent = resolveStr(s.label);
+        chip.addEventListener("click", () => {
+          this._inputEl.value = resolveStr(s.prompt);
+          this._inputEl.focus();
+          void this._send();
+        });
+        this._startersEl.appendChild(chip);
+      }
+    };
+    buildChips();
+    subscribe("unitSystem", () => buildChips());
 
     this._sendBtn.addEventListener("click", () => { void this._send(); });
     this._inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
