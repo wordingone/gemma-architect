@@ -491,10 +491,20 @@ BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apa
 - IfcWindow: width=1.2, height=1.2, sillH=0.9. Minimum 2 per exterior elevation (south + north or east + west).
 - SdColumn: size=0.3 at building corners and wall junctions; height = floor height. Add when span >6m.
 - IfcRoof: roofType=pitched (residential house/tiny home), roofType=hipped (villa), roofType=flat (apartment/office), roofType=shed (lean-to/mono-pitch, industrial annexe). pitchDeg=35 default.
+- IfcStair: width=1.0, type=straight. Dispatch AFTER the upper-floor slab; handler auto-cuts stairwell void. Minimum 1 per multi-storey building.
 - SdCeiling: one per storey, placed at floor_height elevation. width/depth = room footprint. elevation = floor_index × floor_height + floor_height (top of room). IFC convention: explicit IfcCovering element; do NOT rely on slab-above as implicit ceiling.
 - SdExport: always end with format=ifc, target=scene.
 - Room sizes (net internal): bedroom 9-15m², living 18-25m², kitchen 8-12m², bathroom 4-6m².
 - Floor heights: residential 3.0m, office 3.5m, industrial/bay 4.5m.
+`.trim();
+
+// Handler auto-behaviors: concise principles so the agent knows what NOT to compute.
+// Token budget: ≤200 tokens for this entire block.
+const MULTI_LEVEL_NOTES = `
+HANDLER AUTO-BEHAVIORS — the dispatch handlers do these automatically; agent must NOT re-compute or emit extra args for them:
+- IfcRoof(type=pitched): auto-trims the two short-edge (gable-end) walls to a triangle profile. Emit IfcRoof only — do NOT emit topProfile on walls.
+- IfcStair: auto-cuts a rectangular stairwell void through the IfcSlab at target elevation. Place IfcStair AFTER the upper-floor slab.
+- Multi-level sequence: emit ALL IfcLevel calls first (elevation=0, 3.0, 6.0 ...), then setActiveLevel, then walls+slabs for that level. Walls spanning only one storey use height = floor_height (not total building height).
 `.trim();
 
 const FEW_SHOT_EXAMPLES = `
@@ -863,6 +873,7 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     "CRITICAL: Use ONLY the exact function names listed below. Any unknown name is silently dropped — nothing will be created.",
     DIMENSION_RULES,
     BUILDING_DEFAULTS,
+    MULTI_LEVEL_NOTES,
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene: ${buildSceneContext()}`,
