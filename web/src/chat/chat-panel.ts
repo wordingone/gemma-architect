@@ -16,6 +16,7 @@ import { buildDispatchSummary } from "./chat-dispatch-summary";
 import { classifyDispatchResult } from "./chat-dispatch-routing";
 import { setPickerHint } from "../viewer/picker-hint";
 import { openSaveSkillModal } from "../skills/skill-modal";
+import { getState } from "../app-state";
 
 type Message = {
   role: "user" | "assistant";
@@ -30,9 +31,14 @@ type GemmaSession = { startTs: number; turnCount: number; dispatchCount: number;
 type GemmaDispatchHooks = { pre: Array<(d: AgentDispatch) => void> };
 type _GemmaW = Window & typeof globalThis & { __gemmaSession: GemmaSession; __gemma_dispatch_hooks: GemmaDispatchHooks };
 
-const STARTER_PROMPTS: Array<{ label: string; prompt: string }> = [
+const STARTER_PROMPTS: Array<{ label: string; prompt: string | (() => string) }> = [
   { label: "What's currently in the scene?", prompt: "What's currently in the scene?" },
-  { label: "Two-story house", prompt: "Build a two-story house, 8m by 6m, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs." },
+  {
+    label: "Two-story house",
+    prompt: () => getState("unitSystem") === "imperial"
+      ? "Build a two-story residential house, 26ft wide by 20ft deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs."
+      : "Build a two-story residential house, 8m wide by 6m deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
+  },
 ];
 
 // ── Skill re-binding helpers ──────────────────────────────────────────────────
@@ -209,7 +215,7 @@ export class ChatPanel {
       chip.className = "ai-chip chat-starter-chip";
       chip.textContent = s.label;
       chip.addEventListener("click", () => {
-        this._inputEl.value = s.prompt;
+        this._inputEl.value = typeof s.prompt === "function" ? s.prompt() : s.prompt;
         this._inputEl.focus();
         void this._send();
       });

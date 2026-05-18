@@ -856,42 +856,15 @@ Assistant:
 `.trim();
 
 // WebGPU-only few-shot: one example (two-story residential house) to stay under
-// the 2048-position ONNX bake limit (#998). buildSystemPrompt uses full FEW_SHOT_EXAMPLES.
+// the 2048-position ONNX bake limit. buildSystemPrompt uses full FEW_SHOT_EXAMPLES.
+// #980: No <plan> block — emit <tool_call> blocks directly. Level naming: Level 1 = ground.
 const WEBGPU_HOUSE_FEW_SHOT = `
-Examples — copy verb names EXACTLY; always emit <plan> before tool_call tags:
+Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan> block):
 
 User: design a two-story residential house, 8m × 6m
-Assistant: 8m wide, 6m deep, 2 floors × 2.74m walls, 3.0m floor-to-floor. Door on south face (y=0); stair at NE corner cuts void in upper slab.
-<plan>
-1. SdRectangle — footprint, width=8, depth=6, center=[4,3]
-2. SdLevel — Ground, elevation=0, height=3.0, extent=8
-3. SdLevel — Floor 2, elevation=3.0, height=3.0, extent=8
-4. setActiveLevel — id=level/0 (ground)
-5. SdSlab — ground slab, profile=[[0,0],[8,0],[8,6],[0,6]], thickness=0.10
-6. SdWall — south ground, profile=[[0,0],[8,0]], thickness=0.20, height=2.74
-7. SdWall — east ground, profile=[[8,0],[8,6]], thickness=0.20, height=2.74
-8. SdWall — north ground, profile=[[8,6],[0,6]], thickness=0.20, height=2.74
-9. SdWall — west ground, profile=[[0,6],[0,0]], thickness=0.20, height=2.74
-10. SdCeiling — ground ceiling, width=8, depth=6, elevation=2.74
-11. setActiveLevel — id=level/1 (upper, so next slab lands at z=3.0)
-12. SdSlab — upper slab, profile=[[0,0],[8,0],[8,6],[0,6]], thickness=0.10
-13. setActiveLevel — id=level/0 (back to ground so stair void-cut scans upper slab)
-14. SdStair — NE corner, start=[7,5], end=[7.7,2.2], type=straight, riser=0.1778, tread=0.2794, width=0.914, targetHeight=3.0
-15. setActiveLevel — id=level/1 (upper walls + ceiling + roof)
-16. SdWall — south upper, profile=[[0,0],[8,0]], thickness=0.20, height=2.74
-17. SdWall — east upper, profile=[[8,0],[8,6]], thickness=0.20, height=2.74
-18. SdWall — north upper, profile=[[8,6],[0,6]], thickness=0.20, height=2.74
-19. SdWall — west upper, profile=[[0,6],[0,0]], thickness=0.20, height=2.74
-20. SdCeiling — upper ceiling, width=8, depth=6, elevation=5.74
-21. SdRoof — pitched, footprint=[[0,0],[8,0],[8,6],[0,6]], pitchDeg=30
-22. setActiveLevel — id=level/0 (ground door + windows)
-23. SdDoor — south wall entry, position=[4,0,0], width=0.914, height=2.032
-24. SdWindow — south wall, position=[1.5,0,0], width=1.2, height=1.2, sillH=0.9
-25. SdWindow — east wall, position=[8,3,0], width=1.2, height=1.2, sillH=0.9
-</plan>
-<tool_call>{"command":"SdRectangle","parameters":{"width":8,"depth":6,"center":[4,3]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdLevel","parameters":{"name":"Ground","elevation":0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdLevel","parameters":{"name":"Floor 2","elevation":3.0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
+Assistant: 8m wide, 6m deep, 2 floors × 2.74m walls, 3.0m floor-to-floor. Door on south face (y=0); stair at NE corner.
+<tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":3.0,"height":3.0,"extent":8},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[8,0],[8,6],[0,6]],"thickness":0.10},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[8,0]],"thickness":0.20,"height":2.74},"metadata":{"source":"agent"}}</tool_call>
@@ -955,7 +928,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
 
   return [
     "You are Gemma, a parametric CAD assistant. Be direct — no preamble.",
-    "PLAN BEFORE DISPATCH: emit <plan> block first, then <tool_call> blocks.\nExample:\n<plan>\n1. SdWall — profile=[[0,0],[5,0]], height=2.8\n</plan>\n<tool_call>{\"command\":\"SdWall\",\"parameters\":{\"profile\":[[0,0],[5,0]],\"height\":2.8},\"metadata\":{\"source\":\"agent\"}}</tool_call>",
+    "DISPATCH DIRECTLY: emit <tool_call> blocks immediately — no <plan> block. State ONE assumption on one line if needed, then emit tool calls. Level names are always 'Level 1', 'Level 2', 'Level 3' — never 'Ground', 'Floor 2', or custom names.",
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",

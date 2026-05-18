@@ -1409,11 +1409,11 @@ registerHandler("setActiveGrid", (args) => {
 
 registerHandler("SdLevel", (args) => {
   const elev   = (args.elevation as number | undefined) ?? 0;
-  const name   = (args.name as string | undefined) ?? `Level ${levelStore.all().length}`;
   const height = (args.height as number | undefined) ?? 3.0;
   const extent = (args.extent  as number | undefined) ?? 20;
-  // Register in levelStore so UI panel + active-level routing knows about it.
-  const level = levelStore.findOrCreate(name, elev, height);
+  // Canonical naming — agent-provided name ignored; levels are always "Level 1", "Level 2", ...
+  const canonicalName = `Level ${levelStore.all().length + 1}`;
+  const level = levelStore.findOrCreate(canonicalName, elev, height);
   const geom   = new THREE.BoxGeometry(extent, extent, 0.02);
   const mat    = new THREE.MeshBasicMaterial({ color: 0x44aa88, transparent: true, opacity: 0.05, side: THREE.DoubleSide });
   const mesh   = new THREE.Mesh(geom, mat);
