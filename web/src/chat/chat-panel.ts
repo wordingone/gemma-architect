@@ -391,6 +391,12 @@ export class ChatPanel {
       };
       window.addEventListener("agentmodel:generate-progress", onGenerateProgress);
 
+      const onGenerateWarning = (e: Event): void => {
+        const detail = (e as CustomEvent<{ message: string }>).detail;
+        this._pushMsg({ role: "assistant", content: `[warn] ${detail.message}` });
+      };
+      window.addEventListener("agentmodel:generate-warning", onGenerateWarning);
+
       let resp: Awaited<ReturnType<typeof runAgentTurn>>;
       try {
         resp = await runAgentTurn({
@@ -403,6 +409,7 @@ export class ChatPanel {
         });
       } finally {
         window.removeEventListener("agentmodel:generate-progress", onGenerateProgress);
+        window.removeEventListener("agentmodel:generate-warning", onGenerateWarning);
       }
       agentRing?.remove();
 

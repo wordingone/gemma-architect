@@ -309,6 +309,14 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
     post({ type: "generate-error", turnId, error: `input too long: ${inputLength} tokens` });
     return;
   }
+  // Warn when context saturation severely reduces output budget — produces empty plans with no error.
+  if (safeMaxNewTokens < maxNewTokens / 2) {
+    post({
+      type: "generate-warning",
+      turnId,
+      message: `context saturated: prompt ${inputLength} tok, budget clamped ${maxNewTokens}→${safeMaxNewTokens} tok (limit ${WEBGPU_CONTEXT_LIMIT})`,
+    });
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let outputs: any;

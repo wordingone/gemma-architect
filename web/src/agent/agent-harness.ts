@@ -201,6 +201,11 @@ function initWorkerIfNeeded(): Worker {
           detail: { turnId: msg.turnId, tokens_generated: msg.tokens_generated },
         }));
         break;
+      case "generate-warning":
+        window.dispatchEvent(new CustomEvent("agentmodel:generate-warning", {
+          detail: { turnId: msg.turnId, message: msg.message },
+        }));
+        break;
       case "generate-done": {
         const cb = _generateCallbacks.get(msg.turnId as string);
         if (cb) {
