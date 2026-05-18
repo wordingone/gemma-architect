@@ -134,9 +134,9 @@ export function opFinish(viewer: Viewer): void {
   _hooks.removeSelOverlay();
   _rawChooserDefault = null;
   _selDragging = false;
-  // sel_window / sel_lasso / sel_boundary commit multi-select into state — don't deselect.
+  // sel_window / sel_lasso commit multi-select into state — don't deselect.
   // All other op tools (extrude, boolean, fillet, dim) should clear the active target on finish.
-  if (_finishedKind !== "sel_window" && _finishedKind !== "sel_lasso" && _finishedKind !== "sel_boundary") {
+  if (_finishedKind !== "sel_window" && _finishedKind !== "sel_lasso") {
     viewer.deselectCurrent();
   }
   viewer.setGumballEnabled(true);
