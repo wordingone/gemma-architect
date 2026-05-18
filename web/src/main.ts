@@ -393,6 +393,83 @@ registerHandler("SdRotate", (args) => {
   return { rotated: true, angle: deg, axis };
 });
 
+registerHandler("SdCopy", (args) => {
+  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  if (!sel) return { copied: false, reason: "no selection" };
+  const x = (args.x as number | undefined)
+    ?? (Array.isArray(args.vector) ? (args.vector as number[])[0] : undefined) ?? 0;
+  const y = (args.y as number | undefined)
+    ?? (Array.isArray(args.vector) ? (args.vector as number[])[1] : undefined) ?? 0;
+  const z = (args.z as number | undefined)
+    ?? (Array.isArray(args.vector) ? (args.vector as number[])[2] : undefined) ?? 0;
+  const clone = sel.clone();
+  clone.position.x += x; clone.position.y += y; clone.position.z += z;
+  clone.userData = { ...sel.userData };
+  viewer.addMesh(clone as THREE.Mesh, "brep");
+  return { created: clone.uuid, delta: [x, y, z] };
+});
+
+registerHandler("SdArrayLinear", (args) => {
+  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  if (!sel) return { created: false, reason: "no selection" };
+  const count = Math.max(1, Math.round((args.count as number | undefined) ?? 3));
+  const dx = (args.dx as number | undefined) ?? 1;
+  const dy = (args.dy as number | undefined) ?? 0;
+  const dz = (args.dz as number | undefined) ?? 0;
+  const ids: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    const clone = sel.clone();
+    clone.position.x += dx * i; clone.position.y += dy * i; clone.position.z += dz * i;
+    clone.userData = { ...sel.userData };
+    viewer.addMesh(clone as THREE.Mesh, "brep");
+    ids.push(clone.uuid);
+  }
+  return { created: ids.length, ids };
+});
+
+registerHandler("SdArrayGrid", (args) => {
+  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  if (!sel) return { created: false, reason: "no selection" };
+  const rows = Math.max(1, Math.round((args.rows as number | undefined) ?? 3));
+  const cols = Math.max(1, Math.round((args.cols as number | undefined) ?? 3));
+  const dx = (args.dx as number | undefined) ?? 1;
+  const dy = (args.dy as number | undefined) ?? 1;
+  const ids: string[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (r === 0 && c === 0) continue;
+      const clone = sel.clone();
+      clone.position.x += dx * c; clone.position.y += dy * r;
+      clone.userData = { ...sel.userData };
+      viewer.addMesh(clone as THREE.Mesh, "brep");
+      ids.push(clone.uuid);
+    }
+  }
+  return { created: ids.length, rows, cols };
+});
+
+registerHandler("SdArrayPolar", (args) => {
+  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  if (!sel) return { created: false, reason: "no selection" };
+  const count = Math.max(2, Math.round((args.count as number | undefined) ?? 6));
+  const cx = (args.cx as number | undefined) ?? 0;
+  const cy = (args.cy as number | undefined) ?? 0;
+  const totalAngle = ((args.angle as number | undefined) ?? 360) * Math.PI / 180;
+  const ox = sel.position.x - cx;
+  const oy = sel.position.y - cy;
+  const ids: string[] = [];
+  for (let i = 1; i < count; i++) {
+    const a = (totalAngle / count) * i;
+    const clone = sel.clone();
+    clone.position.x = cx + ox * Math.cos(a) - oy * Math.sin(a);
+    clone.position.y = cy + ox * Math.sin(a) + oy * Math.cos(a);
+    clone.userData = { ...sel.userData };
+    viewer.addMesh(clone as THREE.Mesh, "brep");
+    ids.push(clone.uuid);
+  }
+  return { created: ids.length, count };
+});
+
 // Select-all handler (#31): populates the multi-set with every selectable
 // scene object that passes the current filters. Gumball anchors at the
 // centroid of the bounding union.

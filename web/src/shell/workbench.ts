@@ -110,6 +110,8 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "move",    icon: "move",    label: "Move" },
     { id: "rotate",  icon: "rotate",  label: "Rotate" },
     { id: "scale",   icon: "scale",   label: "Scale" },
+    { id: "copy",    icon: "copy",    label: "Copy" },
+    { id: "array",   icon: "array",   label: "Array" },
   ]},
   { tools: [
     { id: "line",    icon: "line",    label: "Line" },

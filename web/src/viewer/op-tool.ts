@@ -90,7 +90,13 @@ export type OpPhase =
   | { kind: "label_pick" }
   | { kind: "label_text"; pt: THREE.Vector3 }
   | { kind: "tmeasure_a" }
-  | { kind: "tmeasure_b"; ptA: THREE.Vector3 };
+  | { kind: "tmeasure_b"; ptA: THREE.Vector3 }
+  | { kind: "copy_select" }
+  | { kind: "copy_place"; source: THREE.Object3D; srcPt: THREE.Vector3 }
+  | { kind: "array_select" }
+  | { kind: "array_linear_params"; source: THREE.Object3D }
+  | { kind: "array_grid_params";   source: THREE.Object3D }
+  | { kind: "array_polar_params";  source: THREE.Object3D };
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
@@ -238,6 +244,39 @@ export function opUpdateDimPreview(viewer: Viewer, snapped3: THREE.Vector3): voi
     _opPreview = opBuildAnnotLine([phase.ptA, snapped3]);
     viewer.getScene().add(_opPreview);
   }
+}
+
+export function opUpdateCopyPreview(viewer: Viewer, clientX: number, clientY: number): void {
+  const phase = _opPhase;
+  if (phase?.kind !== "copy_place") return;
+  opClearPreview(viewer);
+  const world = unprojectToXY(viewer, clientX, clientY);
+  const sv = nearestSnapVertex(viewer, clientX, clientY);
+  const snapped = sv
+    ? new THREE.Vector3(sv.x, sv.y, sv.z)
+    : world ? new THREE.Vector3(world.x, world.y, world.z ?? 0) : null;
+  if (!snapped) return;
+
+  const ghost = phase.source.clone();
+  const dx = snapped.x - phase.srcPt.x;
+  const dy = snapped.y - phase.srcPt.y;
+  ghost.position.x += dx;
+  ghost.position.y += dy;
+  ghost.traverse((c) => {
+    const m = c as THREE.Mesh;
+    if (m.material) {
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      m.material = mats.map((mat) => {
+        const clone = (mat as THREE.Material).clone();
+        (clone as THREE.MeshStandardMaterial).transparent = true;
+        (clone as THREE.MeshStandardMaterial).opacity = 0.45;
+        return clone;
+      });
+    }
+  });
+  ghost.userData.noSnap = true;
+  _opPreview = ghost;
+  viewer.getScene().add(ghost);
 }
 
 function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
@@ -443,6 +482,8 @@ export function opPhaseIsObjectSelect(phase: OpPhase): boolean {
     case "bool_b":
     case "bool_op":
     case "fillet_select":
+    case "copy_select":
+    case "array_select":
       return true;
     case "dim_a":
       return phase.tool === "volume-dim";
@@ -642,7 +683,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     ? new THREE.Vector3(sv.x, sv.y, sv.z)
     : world ? (() => { const s = snapWorldForView(viewer, world); return new THREE.Vector3(s.x, s.y, s.z); })()
              : null;
-  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a") return false;
+  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select") return false;
 
   if (phase.kind === "extrude_select") {
     const hit = opRaycastObject(viewer, clientX, clientY, true);
@@ -882,6 +923,37 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     return true;
   }
 
+  if (phase.kind === "copy_select") {
+    const hit = opRaycastObject(viewer, clientX, clientY);
+    if (!hit) { ptPrompt("Copy — click an object to copy"); return true; }
+    opSetHover(null);
+    const ctr = new THREE.Vector3(); new THREE.Box3().setFromObject(hit.obj).getCenter(ctr);
+    _opPhase = { kind: "copy_place", source: hit.obj, srcPt: ctr };
+    ptPrompt("Copy — click destination point  or type  dx dy [dz]  [Esc] cancel");
+    ptShowCoordInput("dx dy  or  dx dy dz");
+    return true;
+  }
+
+  if (phase.kind === "copy_place") {
+    if (!snapped3) return true;
+    opClearPreview(viewer);
+    const dx = round(snapped3.x - phase.srcPt.x);
+    const dy = round(snapped3.y - phase.srcPt.y);
+    const dz = round(snapped3.z - phase.srcPt.z);
+    dispatchSync("SdCopy", { target: phase.source.uuid, x: dx, y: dy, z: dz });
+    opFinish(viewer);
+    return true;
+  }
+
+  if (phase.kind === "array_select") {
+    const hit = opRaycastObject(viewer, clientX, clientY);
+    if (!hit) { ptPrompt("Array — click an object to array"); return true; }
+    opSetHover(null);
+    viewer.selectObject(hit.obj);
+    _opPhaseStartArray(hit.obj);
+    return true;
+  }
+
   return false;
 }
 
@@ -961,6 +1033,39 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
     const text = raw.trim();
     if (!text) { ptPrompt("Label — type text for the label"); return; }
     opAddLabel(text, phase.pt, viewer);
+    opFinish(viewer);
+  }
+
+  if (phase.kind === "copy_place") {
+    const nums = raw.trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+    if (nums.length < 2) { ptPrompt("Copy — type: dx dy [dz]"); return; }
+    const [dx, dy, dz = 0] = nums;
+    opClearPreview(viewer);
+    dispatchSync("SdCopy", { target: phase.source.uuid, x: round(dx), y: round(dy), z: round(dz) });
+    opFinish(viewer);
+  }
+
+  if (phase.kind === "array_linear_params") {
+    const nums = raw.trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+    if (nums.length < 3) { ptPrompt("Linear Array — type: count  dx  dy  [dz]"); return; }
+    const [count, dx, dy, dz = 0] = nums;
+    dispatchSync("SdArrayLinear", { target: phase.source.uuid, count: Math.max(1, Math.round(count)), dx: round(dx), dy: round(dy), dz: round(dz) });
+    opFinish(viewer);
+  }
+
+  if (phase.kind === "array_grid_params") {
+    const nums = raw.trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+    if (nums.length < 4) { ptPrompt("Grid Array — type: rows  cols  dx  dy"); return; }
+    const [rows, cols, dx, dy] = nums;
+    dispatchSync("SdArrayGrid", { target: phase.source.uuid, rows: Math.max(1, Math.round(rows)), cols: Math.max(1, Math.round(cols)), dx: round(dx), dy: round(dy) });
+    opFinish(viewer);
+  }
+
+  if (phase.kind === "array_polar_params") {
+    const nums = raw.trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+    if (nums.length < 1) { ptPrompt("Polar Array — type: count  [cx  cy]"); return; }
+    const [count, cx = 0, cy = 0] = nums;
+    dispatchSync("SdArrayPolar", { target: phase.source.uuid, count: Math.max(2, Math.round(count)), cx: round(cx), cy: round(cy) });
     opFinish(viewer);
   }
 }
@@ -1049,5 +1154,49 @@ export function opStartTool(viewer: Viewer, tool: string): void {
       ptPrompt("Boundary Select — click points to define polygon  [Enter] close & select  [Esc] cancel");
     });
     ptPrompt("Boundary Select — choose input method above  [Enter=Draw Polygon]");
+  } else if (tool === "copy") {
+    const sel = ptGetTarget();
+    if (sel) {
+      const ctr = new THREE.Vector3(); new THREE.Box3().setFromObject(sel).getCenter(ctr);
+      _opPhase = { kind: "copy_place", source: sel, srcPt: ctr };
+      ptPrompt("Copy — click destination point  or type  dx dy [dz]  [Esc] cancel");
+      ptShowCoordInput("dx dy  or  dx dy dz");
+    } else {
+      _opPhase = { kind: "copy_select" };
+      ptPrompt("Copy — click an object to copy");
+    }
+  } else if (tool === "array") {
+    const sel = ptGetTarget();
+    if (sel) {
+      _opPhaseStartArray(sel);
+    } else {
+      _opPhase = { kind: "array_select" };
+      ptPrompt("Array — click an object to array");
+    }
   }
+}
+
+function _opPhaseStartArray(source: THREE.Object3D): void {
+  showRawChooser("Array mode:", [
+    { label: "Linear",  description: "Repeat along an axis — type count dx dy [dz]",   onSelect: () => {
+      _opPhase = { kind: "array_linear_params", source };
+      ptPrompt("Linear Array — type: count  dx  dy  [dz]  then Enter  [Esc] cancel");
+      ptShowCoordInput("count dx dy");
+    }},
+    { label: "Grid",    description: "Rows × columns — type rows cols dx dy",          onSelect: () => {
+      _opPhase = { kind: "array_grid_params", source };
+      ptPrompt("Grid Array — type: rows  cols  dx  dy  then Enter  [Esc] cancel");
+      ptShowCoordInput("rows cols dx dy");
+    }},
+    { label: "Polar",   description: "Circular pattern — type count [cx cy]",          onSelect: () => {
+      _opPhase = { kind: "array_polar_params", source };
+      ptPrompt("Polar Array — type: count  [cx  cy]  then Enter  [Esc] cancel");
+      ptShowCoordInput("count  or  count cx cy");
+    }},
+  ], () => {
+    _opPhase = { kind: "array_linear_params", source };
+    ptPrompt("Linear Array — type: count  dx  dy  [dz]  then Enter  [Esc] cancel");
+    ptShowCoordInput("count dx dy");
+  });
+  ptPrompt("Array — choose mode above  [Enter=Linear]");
 }

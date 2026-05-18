@@ -477,6 +477,62 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- canonical_name: SdCopy
+  kernel_op: copy
+  args:
+    - {name: target, type: any,    required: false}
+    - {name: x,      type: number, required: false, default: 0, unit: m}
+    - {name: y,      type: number, required: false, default: 0, unit: m}
+    - {name: z,      type: number, required: false, default: 0, unit: m}
+    - {name: vector, type: vector3, required: false}
+  topology_role: transform
+  kg_predicates: [duplicates]
+  synonyms: [copy, duplicate, clone]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdArrayLinear
+  kernel_op: array_linear
+  args:
+    - {name: target, type: any,     required: false}
+    - {name: count,  type: integer, required: true,  default: 3}
+    - {name: dx,     type: number,  required: false, default: 1, unit: m}
+    - {name: dy,     type: number,  required: false, default: 0, unit: m}
+    - {name: dz,     type: number,  required: false, default: 0, unit: m}
+  topology_role: transform
+  kg_predicates: [groupedWith]
+  synonyms: [linear array, linear pattern, repeat along axis]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdArrayGrid
+  kernel_op: array_grid
+  args:
+    - {name: target, type: any,     required: false}
+    - {name: rows,   type: integer, required: true,  default: 3}
+    - {name: cols,   type: integer, required: true,  default: 3}
+    - {name: dx,     type: number,  required: false, default: 1, unit: m}
+    - {name: dy,     type: number,  required: false, default: 1, unit: m}
+  topology_role: transform
+  kg_predicates: [groupedWith]
+  synonyms: [grid array, rectangular array, grid pattern]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdArrayPolar
+  kernel_op: array_polar
+  args:
+    - {name: target, type: any,     required: false}
+    - {name: count,  type: integer, required: true,  default: 6}
+    - {name: cx,     type: number,  required: false, default: 0, unit: m}
+    - {name: cy,     type: number,  required: false, default: 0, unit: m}
+    - {name: angle,  type: number,  required: false, default: 360, unit: deg}
+  topology_role: transform
+  kg_predicates: [groupedWith]
+  synonyms: [polar array, circular array, radial pattern]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §7 Architectural (IFC4-canonical)
 # ============================================================

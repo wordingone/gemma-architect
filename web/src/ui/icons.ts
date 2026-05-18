@@ -100,6 +100,8 @@ export function iconSVG(name: string, size = 16): string {
     case "railing":      return `<svg ${attr}><path d="M3 8h18M3 15h18"/><path d="M7 8v7M12 8v7M17 8v7"/></svg>`;
     case "level":        return `<svg ${attr}><path d="M3 13h18"/><path d="M17 9v8M20 9l-3-2-3 2" stroke-width="0.9"/></svg>`;
     case "datum":        return `<svg ${attr}><path d="M12 5l8 13H4z"/><path d="M4 18h16"/></svg>`;
+    case "copy":         return `<svg ${attr}><rect x="9" y="9" width="11" height="11"/><path d="M4 15V4h11"/></svg>`;
+    case "array":        return `<svg ${attr}><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg>`;
     default:        return `<svg ${attr}><rect x="4" y="4" width="16" height="16"/></svg>`;
   }
 }

@@ -16,7 +16,7 @@ import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMu
 import { projectToScreen, unprojectToXY, unprojectForClipTool, snapWorldForView, getGeometryZ, showLevelChip } from "../viewer/projection";
 import { initPickerHint, setPickerHint, setChooserHint, getChooserEl, readActiveTool, setSubToolOverride, opSetHover, OP_TOOL_IDS } from "../viewer/picker-hint";
 import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPrompt, ptShowCoordInput, ptHideCoordInput, ptStartTool, ptHandlePoint, ptHandleCoordSubmit as _ptHandleCoordSubmit, ptHandleEnter as _ptHandleEnter, ptCancel, ptFinish, ptPhaseIsObjectSelect, _ptPhase, _ptAxisLock, _ptCoordInputEl, ptGetAxisBase, ptEffectiveAxisDir, ptSetAxisLockLine, ptClearAxisLockLine, _ptViewer, _lastPtTool, unprojectToAxisLine } from "../viewer/transforms";
-import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, opUpdateDimPreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
+import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, opUpdateDimPreview, opUpdateCopyPreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
@@ -877,7 +877,7 @@ export function initCreateMode(viewer: Viewer): void {
     }
   });
 
-  const OP_TOOLS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure", "sel-window", "sel-lasso", "sel-boundary"]);
+  const OP_TOOLS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure", "sel-window", "sel-lasso", "sel-boundary", "copy", "array"]);
 
   // Clear multi-select highlights when the viewer performs a normal single-object selection.
   window.addEventListener("viewer:select", () => {
@@ -1179,6 +1179,9 @@ export function initCreateMode(viewer: Viewer): void {
 
     if (opPhase?.kind === "extrude_height") {
       opUpdateExtrudePreview(viewer, ev.clientX, ev.clientY, ev.shiftKey);
+    }
+    if (opPhase?.kind === "copy_place") {
+      opUpdateCopyPreview(viewer, ev.clientX, ev.clientY);
     }
     if (opPhase?.kind === "dim_b" || opPhase?.kind === "dim_c" || opPhase?.kind === "dim_area") {
       const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
