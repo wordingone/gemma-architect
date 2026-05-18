@@ -3690,6 +3690,176 @@ await resetScene('before-box-inject');
   else record('two-story-house-chip', r70.passed, r70.evidence ?? { error: r70.error });
 }
 
+// ── S71: canvas-visible-width-skill-nodes (#909 Class E gap) ─────────────────
+// Activates SKILL NODES tab, asserts .skill-canvas-viewport has width>100 AND
+// height>100 AND is not display:none. Includes structural self-test: forces
+// width:0 via injected style, confirms assertion fails, then restores.
+{
+  // Navigate to SKILL NODES tab.
+  await evaluate(`(function() {
+    const tab = document.querySelector('.dock-tab[data-tab="skills"]');
+    if (tab) tab.click();
+  })()`);
+  await delay(600);
+
+  const r71 = await evaluate(`(async function() {
+    try {
+      function checkViewport() {
+        const vp = document.querySelector('.skill-canvas-viewport');
+        if (!vp) return { ok: false, reason: 'no .skill-canvas-viewport' };
+        const style = window.getComputedStyle(vp);
+        if (style.display === 'none') return { ok: false, reason: 'display:none' };
+        const rect = vp.getBoundingClientRect();
+        return { ok: rect.width > 100 && rect.height > 100, w: rect.width, h: rect.height };
+      }
+
+      // Structural self-test: inject width:0 override, confirm check fails.
+      const st = document.createElement('style');
+      st.id = '__vw_test_override';
+      st.textContent = '.skill-canvas-viewport { width: 0 !important; }';
+      document.head.appendChild(st);
+      await new Promise(r => setTimeout(r, 50));
+      const failResult = checkViewport();
+      document.head.removeChild(st);
+      await new Promise(r => setTimeout(r, 50));
+
+      // Now check for real.
+      const liveResult = checkViewport();
+
+      const selfTestOk = !failResult.ok; // override should have made it fail
+      return {
+        passed: liveResult.ok && selfTestOk,
+        evidence: {
+          liveW: liveResult.w, liveH: liveResult.h, liveOk: liveResult.ok,
+          selfTestOk, failResultOk: failResult.ok, failReason: failResult.reason,
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r71) record('canvas-visible-width-skill-nodes', false, { reason: 'evaluate returned null' });
+  else record('canvas-visible-width-skill-nodes', r71.passed, r71.evidence ?? { error: r71.error });
+}
+
+// ── S72: canvas-visible-width-viewer (#909 Class E gap) ──────────────────────
+// Ensures model mode is active, then asserts #viewer-canvas has width>100 AND
+// height>100. Includes structural self-test via forced height:0 override.
+{
+  // Ensure model mode.
+  await evaluate(`(function() {
+    const tab = document.querySelector('.mode-tab[data-mode="model"]');
+    if (tab) tab.click();
+  })()`);
+  await delay(500);
+
+  const r72 = await evaluate(`(async function() {
+    try {
+      function checkCanvas() {
+        const c = document.getElementById('viewer-canvas');
+        if (!c) return { ok: false, reason: 'no #viewer-canvas' };
+        const style = window.getComputedStyle(c);
+        if (style.display === 'none') return { ok: false, reason: 'display:none' };
+        const rect = c.getBoundingClientRect();
+        return { ok: rect.width > 100 && rect.height > 100, w: rect.width, h: rect.height };
+      }
+
+      // Structural self-test: force height:0.
+      const st = document.createElement('style');
+      st.id = '__vc_test_override';
+      st.textContent = '#viewer-canvas { height: 0 !important; }';
+      document.head.appendChild(st);
+      await new Promise(r => setTimeout(r, 50));
+      const failResult = checkCanvas();
+      document.head.removeChild(st);
+      await new Promise(r => setTimeout(r, 50));
+
+      const liveResult = checkCanvas();
+      const selfTestOk = !failResult.ok;
+      return {
+        passed: liveResult.ok && selfTestOk,
+        evidence: {
+          liveW: liveResult.w, liveH: liveResult.h, liveOk: liveResult.ok,
+          selfTestOk, failResultOk: failResult.ok,
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r72) record('canvas-visible-width-viewer', false, { reason: 'evaluate returned null' });
+  else record('canvas-visible-width-viewer', r72.passed, r72.evidence ?? { error: r72.error });
+}
+
+// ── S73: canvas-visible-width-layout-detail (#909 Class E gap) ───────────────
+// Enters LAYOUT mode, places a viewport panel via ribbon:tool-click + sheet
+// click, then asserts the panel's thumbnail canvas has width>100 and height>100.
+// Exits back to model mode after.
+{
+  // Switch to LAYOUT.
+  await evaluate(`(function() {
+    const tab = document.querySelector('.mode-tab[data-mode="layout"]');
+    if (tab) tab.click();
+  })()`);
+  await delay(800);
+
+  // Activate viewport tool and place one panel.
+  await evaluate(`(async function() {
+    window.dispatchEvent(new CustomEvent('ribbon:tool-click', { detail: { tool: 'viewport' } }));
+    await new Promise(r => setTimeout(r, 100));
+    const sheet = document.querySelector('.paper-sheet, .paper-stage');
+    if (!sheet) return;
+    const rect = sheet.getBoundingClientRect();
+    const cx = rect.left + rect.width * 0.5, cy = rect.top + rect.height * 0.5;
+    sheet.dispatchEvent(new MouseEvent('click', { clientX: cx, clientY: cy, bubbles: true, button: 0 }));
+  })()`);
+  await delay(600);
+
+  const r73 = await evaluate(`(async function() {
+    try {
+      // Find any thumbnail canvas inside a layout panel.
+      const panels = document.querySelectorAll('[data-panel-id]');
+      if (!panels.length) return { passed: false, evidence: { reason: 'no panels found after placement' } };
+
+      // Look for a canvas element inside a paper-cell-render div.
+      const thumbCanvas = document.querySelector('.paper-cell-render canvas');
+      if (!thumbCanvas) return { passed: false, evidence: { reason: 'no .paper-cell-render canvas found', panelCount: panels.length } };
+
+      const rect = thumbCanvas.getBoundingClientRect();
+      const liveOk = rect.width > 100 && rect.height > 100;
+
+      // Structural self-test: force zero width.
+      const st = document.createElement('style');
+      st.id = '__lc_test_override';
+      st.textContent = '.paper-cell-render canvas { width: 0 !important; }';
+      document.head.appendChild(st);
+      await new Promise(r => setTimeout(r, 50));
+      const failRect = thumbCanvas.getBoundingClientRect();
+      const failOk = failRect.width > 100 && failRect.height > 100;
+      document.head.removeChild(st);
+      await new Promise(r => setTimeout(r, 50));
+
+      const selfTestOk = !failOk;
+      return {
+        passed: liveOk && selfTestOk,
+        evidence: {
+          panelCount: panels.length,
+          liveW: rect.width, liveH: rect.height, liveOk,
+          selfTestOk, failW: failRect.width,
+        }
+      };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  // Exit LAYOUT mode.
+  await evaluate(`(function() {
+    const tab = document.querySelector('.mode-tab[data-mode="model"]');
+    if (tab) tab.click();
+  })()`);
+  await delay(400);
+
+  if (!r73) record('canvas-visible-width-layout-detail', false, { reason: 'evaluate returned null' });
+  else record('canvas-visible-width-layout-detail', r73.passed, r73.evidence ?? { error: r73.error });
+}
+
 } finally {
   await cleanup();
 }
