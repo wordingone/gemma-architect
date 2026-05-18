@@ -57,7 +57,12 @@ export const VERB_LABELS: Record<string, [string, string]> = {
   SdText:          ["text label",     "text labels"],
 };
 
-export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[], errors: string[] = []): string {
+export function buildDispatchSummary(
+  dispatches: AgentDispatch[],
+  fired: string[],
+  errors: string[] = [],
+  opts?: { audience?: "user" | "agent" },
+): string {
   const counts = new Map<string, number>();
   for (let i = 0; i < dispatches.length; i++) {
     if (!fired[i].endsWith("(err)")) {
@@ -65,9 +70,10 @@ export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[
       if (!QUERY_VERBS.has(v)) counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
-  // Errors are internal feedback for the agent's self-correction loop —
-  // they must not appear in the user-facing bubble (per user directive 2026-05-18).
-  const parts: string[] = [];
+  // audience:'user' → strip errors from the visible bubble.
+  // audience:'agent' (default) → include errors so the model reads its own mistakes
+  // on the next turn and can self-correct (required by #271 regression net).
+  const parts: string[] = opts?.audience === "user" ? [] : [...errors];
   if (counts.size > 0) {
     const built = [...counts.entries()].map(([v, n]) => {
       const [sing, plur] = VERB_LABELS[v] ?? [v.replace(/^Sd/, "").toLowerCase(), v.replace(/^Sd/, "").toLowerCase() + "s"];

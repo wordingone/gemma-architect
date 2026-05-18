@@ -475,7 +475,7 @@ export class ChatPanel {
     this._history.push({ role: "assistant", content });
   }
 
-  private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; fired: string[] }> {
+  private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; userSummary: string; fired: string[] }> {
     const fired: string[] = [];
     const errors: string[] = [];
     // QW-1: read pre-dispatch hooks once per batch (fault-isolated — hook errors are silenced).
@@ -499,15 +499,18 @@ export class ChatPanel {
     if (resp.dispatches.length > 0) {
       await invokeCommand({ command: "SdZoomExtents", parameters: {}, metadata: { source: "agent" } });
     }
-    const summary = resp.dispatches.length === 0
+    const agentSummary = resp.dispatches.length === 0
       ? (resp.text.trim() || "(no response)")
       : buildDispatchSummary(resp.dispatches, fired, errors);
-    return { summary, fired };
+    const userSummary = resp.dispatches.length === 0
+      ? agentSummary
+      : buildDispatchSummary(resp.dispatches, fired, errors, { audience: "user" });
+    return { summary: agentSummary, userSummary, fired };
   }
 
   private async _executeAndPush(resp: AgentResponse, turnStartMs?: number): Promise<void> {
-    const { summary } = await this._runDispatches(resp);
-    this._pushMsg({ role: "assistant", content: summary, dispatches: resp.dispatches });
+    const { summary, userSummary } = await this._runDispatches(resp);
+    this._pushMsg({ role: "assistant", content: userSummary, dispatches: resp.dispatches });
     this._history.push({ role: "assistant", content: summary });
     if (resp.dispatches.length > 0) {
       (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();

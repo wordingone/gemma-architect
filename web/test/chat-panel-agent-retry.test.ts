@@ -109,4 +109,26 @@ describe("#271 — agent self-correct loop regression net", () => {
       expect(summary).toContain("Built:");
     });
   });
+
+  describe("Layer 3: audience channel split", () => {
+    const dispatches = [{ verb: "SdRectangle", args: {} }];
+    const fired = ["SdRectangle(err)"];
+    const errors = ["Failed SdRectangle: missing width, height."];
+
+    test("audience:'agent' (default) — error in summary for self-correction", () => {
+      const agentSummary = buildDispatchSummary(dispatches, fired, errors, { audience: "agent" });
+      expect(agentSummary).toContain("Failed SdRectangle");
+    });
+
+    test("audience:'user' — error stripped from visible bubble", () => {
+      const userSummary = buildDispatchSummary(dispatches, fired, errors, { audience: "user" });
+      expect(userSummary).not.toContain("Failed");
+      expect(userSummary).not.toContain("SdRectangle");
+    });
+
+    test("no opts (default) behaves like audience:'agent'", () => {
+      const defaultSummary = buildDispatchSummary(dispatches, fired, errors);
+      expect(defaultSummary).toContain("Failed SdRectangle");
+    });
+  });
 });
