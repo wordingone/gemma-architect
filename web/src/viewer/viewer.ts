@@ -2535,6 +2535,25 @@ export class Viewer {
     };
   }
 
+  // AABB of all brep/compound meshes in the scene, or null if scene is empty.
+  getSceneBounds(): THREE.Box3 | null {
+    this.scene.updateMatrixWorld(true);
+    const box = new THREE.Box3();
+    this.scene.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      const kind = (obj.userData as Record<string, unknown>).kind;
+      if (kind !== "brep" && kind !== "compound") return;
+      box.expandByObject(obj);
+    });
+    if (box.isEmpty() && this.currentBounds) {
+      box.set(
+        new THREE.Vector3(...this.currentBounds.min),
+        new THREE.Vector3(...this.currentBounds.max),
+      );
+    }
+    return box.isEmpty() ? null : box;
+  }
+
   // Plane layout (setSectionBox order):
   //   [0] normal(+1,0,0) constant=-min[0]  → -X face
   //   [1] normal(-1,0,0) constant=+max[0]  → +X face

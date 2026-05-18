@@ -273,8 +273,16 @@ registerHandler("SdSectionBox", (args) => {
 });
 
 registerHandler("SdSectionBoxOff", () => {
+  const prev = viewer.getSectionBox();
   viewer.clearSectionBox();
   document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
+  if (prev) {
+    const { min, max } = prev;
+    pushCustomAction(
+      () => { viewer.setSectionBox(min, max); document.dispatchEvent(new CustomEvent("viewer:clip-changed")); },
+      () => { viewer.clearSectionBox(); document.dispatchEvent(new CustomEvent("viewer:clip-changed")); },
+    );
+  }
   return { ok: true };
 });
 

@@ -8,7 +8,7 @@ import { setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { getSnap, snapPoint } from "../viewer/snap-state";
 import { getSnapTarget, setSnapTarget, getLastSnapEdgeDir, getLastSurfaceHit, HOST_TOOL_CREATORS, getPendingHostId, setPendingHostId, findHostMesh, nearestSnapVertex } from "../viewer/snap-state";
-import { pushAction, pushReplaceAction, beginTransaction, endTransaction } from "../history";
+import { pushAction, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
 import { levelStore, getActiveLevelId } from "../geometry/levels";
@@ -388,7 +388,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   grid:        { clicks: 2, handler: ([a, b]) => buildGridLine(a, b) },          // grid always at Z=0
   level:       { clicks: 1, handler: ([p]) => buildLevel(p) },                   // level uses getGeometryZ
   datum:       { clicks: 2, handler: ([a, b]) => buildReferenceLine(a, b) },     // datum always at Z=0
-  section:     { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b) },
+  section:     { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b, _viewer?.getSceneBounds()) },
   clip:        { clicks: 2, handler: ([a, b]) => buildClipPlane(a, b, _viewer?.activeView ?? "top") },
 };
 
@@ -773,6 +773,15 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
     pushReplaceAction(_voidCutGroup, [_voidCutHost], "wall-void-cut");
   }
   pushAction(out.mesh, out.chain);
+  if (out.dispatchOnCommit?.verb === "SdSectionBox") {
+    // Clip-plane state lives outside the scene graph — capture it in the transaction
+    // so Ctrl+Z reverses both the outline mesh and the active clipping planes.
+    const { min, max } = out.dispatchOnCommit.args as { min: [number,number,number]; max: [number,number,number] };
+    pushCustomAction(
+      () => { _viewer?.clearSectionBox(); document.dispatchEvent(new CustomEvent("viewer:clip-changed")); },
+      () => { _viewer?.setSectionBox(min, max); document.dispatchEvent(new CustomEvent("viewer:clip-changed")); },
+    );
+  }
   endTransaction();
   if (out.dispatchOnCommit) {
     dispatchSync(out.dispatchOnCommit.verb, out.dispatchOnCommit.args);

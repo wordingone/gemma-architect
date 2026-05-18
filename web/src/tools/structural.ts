@@ -1257,10 +1257,12 @@ export function buildReferenceLine(a: { x: number; y: number }, b: { x: number; 
   return { mesh: line, chain };
 }
 
-export function buildSectionBox(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
+export function buildSectionBox(a: { x: number; y: number }, b: { x: number; y: number }, sceneBounds?: THREE.Box3 | null): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
   const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
   const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
-  const minZ = -0.1, maxZ = 6.0;
+  const margin = sceneBounds ? Math.max((sceneBounds.max.z - sceneBounds.min.z) * 0.05, 0.3) : 0.3;
+  const minZ = sceneBounds ? sceneBounds.min.z - margin : -0.1;
+  const maxZ = sceneBounds ? sceneBounds.max.z + margin : 6.0;
   const w = maxX - minX || 0.1, d = maxY - minY || 0.1, h = maxZ - minZ;
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
   const geom = new THREE.BoxGeometry(w, d, h);
