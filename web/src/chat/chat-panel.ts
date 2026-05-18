@@ -321,7 +321,7 @@ export class ChatPanel {
 
     const dispatchBlock = allDispatches.length > 0
       ? allDispatches
-          .map((d) => `<tool_call>${JSON.stringify({ command: d.verb, parameters: d.args, metadata: { source: "agent" } })}</tool_call>`)
+          .map((d) => `[${d.verb}(${JSON.stringify(d.args)})]`)
           .join("\n")
       : "(no dispatches yet)";
 
