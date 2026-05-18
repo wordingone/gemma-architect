@@ -54,7 +54,7 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, type RoofParams, type CurtainWallParams } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, type RoofParams, type CurtainWallParams } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
@@ -529,15 +529,19 @@ registerHandler("SdBox", (args) => {
   const d = (args.depth as number | undefined) ?? (args.length as number | undefined) ?? 1;
   const h = (args.height as number | undefined) ?? 1;
   const cplane = resolveCPlane("SdBox", args as Record<string, unknown>, viewer);
-  const geom = new THREE.BoxGeometry(w, d, h);
-  geom.translate(0, 0, h / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cplane.normal);
-  mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdBox";
+  // Synthesize 3-corner form expected by buildBox: c1/c2 = footprint corners, c3 = height point.
+  const c1 = { x: -w / 2, y: -d / 2 };
+  const c2 = { x: w / 2, y: d / 2 };
+  const c3 = { x: h, y: 0 }; // distance from footprint center (0,0) = h
+  const { mesh, chain } = buildBox(c1, c2, c3);
+  mesh.position.z = getActiveLevelElevation();
   mesh.userData.cplaneKind = cplane.kind;
+  mesh.userData.layerId = resolveLayerId("SdBox", args);
+  mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
+  onElementCommitted(mesh as THREE.Mesh, viewer.getScene());
   return { created: "box", width: w, depth: d, height: h };
 });
 
@@ -640,8 +644,19 @@ registerHandler("SdExtrude", (args) => {
     mesh.quaternion.setFromUnitVectors(up, dir);
   }
 
+  // Agent superset of buildExtrude: supports arbitrary profiles + direction vectors.
+  // Align creator + chain format to palette builder output for KG consistency.
+  const cplane = resolveCPlane("SdExtrude", args as Record<string, unknown>, viewer);
+  const r3 = (v: number) => Math.round(v * 1000) / 1000;
+  const bx = r3(pts[0][0]), by = r3(pts[0][1]), bd = r3(distance);
+  const chain = `const ext = drawRectangle(1, 1).sketchOnPlane("XY").extrude(${bd}).translate([${bx}, ${by}, 0]);`;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdExtrude";
+  mesh.userData.creator = "extrude";
+  mesh.userData.cplaneKind = cplane.kind;
+  mesh.userData.layerId = resolveLayerId("SdExtrude", args);
+  mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
   return { created: "extrude", profile_points: pts.length, distance };
 });
@@ -1278,23 +1293,15 @@ registerHandler("SdDatum", (args) => {
 registerHandler("SdReferenceLine", (args) => {
   const origin = (args.origin as number[] | undefined) ?? [0, 0];
   const end    = (args.end    as number[] | undefined) ?? [5, 0];
-  const ax = origin[0] ?? 0, ay = origin[1] ?? 0;
-  const bx = end[0]    ?? 5, by = end[1]    ?? 0;
-  const dx = bx - ax, dy = by - ay;
-  const len = Math.sqrt(dx * dx + dy * dy) || 1;
-  const cx = (ax + bx) / 2, cy = (ay + by) / 2;
-  const angRad = Math.atan2(dy, dx) - Math.PI / 2;
-  const points = [new THREE.Vector3(0, -len / 2, 0), new THREE.Vector3(0, len / 2, 0)];
-  const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xcc1166 });
-  const line = new THREE.Line(geom, mat);
-  line.position.set(cx, cy, 0.002);
-  line.rotation.z = angRad;
-  line.userData.kind = "reference-line";
-  line.userData.creator = "SdReferenceLine";
-  line.userData.controlPoints = [[ax, ay, 0], [bx, by, 0]];
-  viewer.addMesh(line, "brep");
-  return { created: "reference-line", origin: [ax, ay], end: [bx, by] };
+  const a = { x: origin[0] ?? 0, y: origin[1] ?? 0 };
+  const b = { x: end[0]    ?? 5, y: end[1]    ?? 0 };
+  const { mesh, chain } = buildReferenceLine(a, b);
+  mesh.userData.layerId = resolveLayerId("SdReferenceLine", args);
+  mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "brep");
+  return { created: "reference-line", origin: [a.x, a.y], end: [b.x, b.y] };
 });
 
 registerHandler("SdFurnishing", (args) => {
