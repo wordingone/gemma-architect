@@ -852,13 +852,8 @@ export function buildSystemPrompt(skills?: Skill[]): string {
   ].filter(Boolean).join("\n\n");
 }
 
-// Compact system prompt for the on-device WebGPU path (#424 follow-up).
-// The E2B model's compiled context window (~2048 tokens) cannot fit the full
-// prompt (summariseDictionary alone is ~1200 tokens). This version:
-//   - drops BUILDING_DEFAULTS (large, inferred by model training)
-//   - uses 1 minimal few-shot example instead of 6
-//   - replaces summariseDictionary (full args) with verb-names-only list
-// Result: ~600-700 tokens vs ~3000, leaving ~1300+ tokens for generation.
+// On-device WebGPU system prompt. With WEBGPU_CONTEXT_LIMIT = 16384 (#988) the full
+// prompt including FEW_SHOT_EXAMPLES (~1375 tok) now fits within budget.
 export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
   const dict = getDictionary();
   const implemented = new Set(listHandlers());
@@ -880,6 +875,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
     DIMENSION_RULES,
+    FEW_SHOT_EXAMPLES,
     verbList,
     `Current scene: ${buildSceneContext()}`,
     summariseSkills(skills),
@@ -1115,10 +1111,12 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   }
 
   // Plain-text messages: worker splices image into last user message if imageUrl is set.
-  const MAX_HISTORY_MSGS = 20;
+  // §C (#990): build once, reuse length for telemetry — avoids redundant 7K-char rebuild.
+  const MAX_HISTORY_MSGS = 60;
   const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+  const _sysPrompt = buildWebGPUSystemPrompt(req.skills);
   const messages = [
-    { role: "system" as const, content: buildWebGPUSystemPrompt(req.skills) },
+    { role: "system" as const, content: _sysPrompt },
     ...trimmedHistory,
     { role: "user" as const, content: req.prompt },
   ];
@@ -1162,7 +1160,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     decode_ms:           decodeMs,
     tokens_in:           inputLength,
     tokens_out:          tokensOut,
-    system_prompt_chars: buildSystemPrompt(req.skills).length,
+    system_prompt_chars: _sysPrompt.length,
     skills_total:        req.skillsTotal ?? req.skills?.length ?? 0,
     skills_matched:      req.skills?.length ?? 0,
     tg_tps:              tgTps,

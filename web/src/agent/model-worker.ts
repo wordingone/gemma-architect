@@ -323,9 +323,10 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
   let specAttempts = 0;
   let specAccepts  = 0;
 
-  // MTP spec-decode — disabled for long contexts: drafter produces degenerate output
-  // (argmax over NaN verifier logits → token ID 0) when kvSeqLen approaches 2048.
-  // Threshold 900: two-story-house prompt is ~997 tok; standard path handles it correctly.
+  // MTP spec-decode — disabled for long prompts: drafter produces degenerate output
+  // (NaN verifier logits) on large inputs due to drafter KV window mismatch (#979).
+  // Threshold 900: conservative safe zone; two-story-house prompt is ~997 tok.
+  // WEBGPU_CONTEXT_LIMIT is now 16384 — this threshold is about drafter quality, not ceiling.
   if (useMtp && _drafterSession && inputLength < 900) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -398,6 +399,10 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
     typeof (generated as any).tolist === "function" ? (generated as any).tolist() : generated,
     { skip_special_tokens: true },
   );
+
+  // §A (#990): release GPU-backed ORT tensors after decode — prevents KV VRAM leak at 16K depth.
+  try { if (generated !== outputs) (generated as any)?.dispose?.(); } catch { /* non-fatal */ }
+  try { (outputs as any)?.dispose?.(); } catch { /* non-fatal */ }
 
   post({
     type: "generate-done",
