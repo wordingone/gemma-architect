@@ -1218,11 +1218,15 @@ export function initCreateMode(viewer: Viewer): void {
     } else if (ptPhaseIsObjectSelect()) {
       const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
       opSetHover(hit ? hit.obj : null);
+    } else if (tool === "wall-pick") {
+      // #952: wall-pick is a pure mesh-click mode — hover highlight, no cursor dot.
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
+      opSetHover(hit ? hit.obj : null);
     } else {
       opSetHover(null);
     }
 
-    if ((opPhase && opPhaseSupressesSnap(opPhase)) || ptPhaseIsObjectSelect()) {
+    if ((opPhase && opPhaseSupressesSnap(opPhase)) || ptPhaseIsObjectSelect() || tool === "wall-pick") {
       hideCursorDot();
       setSnapTarget(null);
       return;
