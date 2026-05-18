@@ -1260,8 +1260,9 @@ export function buildSectionBox(a: { x: number; y: number }, b: { x: number; y: 
   const geom = new THREE.BoxGeometry(w, d, h);
   const edges = new THREE.EdgesGeometry(geom);
   geom.dispose();
-  const mat = new THREE.LineBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.7 });
+  const mat = new THREE.LineBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.85, depthTest: false });
   const mesh = new THREE.LineSegments(edges, mat);
+  mesh.renderOrder = 999;
   mesh.position.set(cx, cy, cz);
   mesh.userData.kind = "section-box";
   mesh.userData.creator = "SdSectionBox";

@@ -54,6 +54,8 @@ export function clearCreateSequence(): void {
 // z is only set for the "level" tool (geometry raycast elevation).
 
 let _pending: Array<{ x: number; y: number; z?: number }> = [];
+// #943: section-box single-drag mode — mousedown sets A, mouseup sets B.
+let _sectionDragging = false;
 // #951: last non-select tool activated — spacebar re-activates it.
 let _lastActivatedTool: string | null = null;
 
@@ -1147,6 +1149,8 @@ export function initCreateMode(viewer: Viewer): void {
     _lastCreateClickX = ev.clientX;
     _lastCreateClickY = ev.clientY;
     emitClickWorld(viewer, { ...snapped, z }, { tool });
+    // #943: after registering point A for section, enter drag mode so pointerup registers point B.
+    if (tool === "section" && _pending.length === 1) _sectionDragging = true;
     setPendingHostId(null);
   }, { capture: true });
 
@@ -1410,6 +1414,21 @@ export function initCreateMode(viewer: Viewer): void {
 
   // ── pointerup ─────────────────────────────────────────────────────────────────
   vpBody.addEventListener("pointerup", (ev) => {
+    // #943: section-box single-drag — mouseup at point B completes the box.
+    if (_sectionDragging) {
+      _sectionDragging = false;
+      if (ev.button === 0 && _pending.length === 1) {
+        const world = unprojectToXY(viewer, ev.clientX, ev.clientY);
+        if (world) {
+          const snapped = snapWorldForView(viewer, world);
+          emitClickWorld(viewer, snapped, { tool: "section" });
+        }
+      } else {
+        // Cancelled (e.g. button changed, or pending was cleared).
+        _pending = [];
+      }
+      return;
+    }
     if (!_selDragging) return;
     setSelDragging(false);
     const opPhase = getOpPhase();

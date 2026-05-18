@@ -29,6 +29,7 @@ const FACE_CURSOR: Record<Face, string> = {
 let _viewer: Viewer | null = null;
 let _vpEl: HTMLElement | null = null;
 let _container: HTMLElement | null = null;
+let _dimChip: HTMLElement | null = null;
 const _handles = new Map<Face, HTMLElement>();
 let _rafId: number | null = null;
 let _drag: { face: Face; prevX: number; prevY: number } | null = null;
@@ -74,14 +75,28 @@ function pixelDeltaToWorld(viewer: Viewer, face: Face, dxPx: number, dyPx: numbe
   return (dxPx * sx + dyPx * sy) / len2;
 }
 
+function updateDimChip(): void {
+  if (!_dimChip || !_viewer) return;
+  const box = _viewer.getSectionBox();
+  if (!box) { _dimChip.style.display = "none"; return; }
+  const w = Math.abs(box.max[0] - box.min[0]);
+  const d = Math.abs(box.max[1] - box.min[1]);
+  const h = Math.abs(box.max[2] - box.min[2]);
+  const fmt = (v: number): string => v.toFixed(2) + "m";
+  _dimChip.textContent = `W ${fmt(w)}  D ${fmt(d)}  H ${fmt(h)}`;
+  _dimChip.style.display = "block";
+}
+
 function updatePositions(): void {
   if (!_viewer || !_container || !_vpEl) return;
   const box = _viewer.getSectionBox();
   if (!box) {
     _container.style.display = "none";
+    updateDimChip();
     return;
   }
   _container.style.display = "block";
+  updateDimChip();
 
   const canvas = _viewer.getCanvas();
   const canvasRect = canvas.getBoundingClientRect();
@@ -120,6 +135,13 @@ export function initSectionHandles(viewer: Viewer, vpEl: HTMLElement): void {
   _container.style.display = "none";
   vpEl.appendChild(_container);
 
+  // #943 bug3: dimension chip — shows W/D/H live during resize.
+  _dimChip = document.createElement("div");
+  _dimChip.className = "section-dim-chip";
+  _dimChip.style.cssText = "display:none; position:absolute; bottom:8px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.65); color:#fff; font-size:10px; padding:2px 8px; border-radius:3px; pointer-events:none; white-space:nowrap; z-index:100;";
+  vpEl.appendChild(_dimChip);
+  document.addEventListener("viewer:clip-changed", () => updateDimChip());
+
   for (const face of FACES) {
     const el = document.createElement("div");
     el.className = "section-handle";
@@ -145,6 +167,9 @@ export function initSectionHandles(viewer: Viewer, vpEl: HTMLElement): void {
     if (Math.abs(delta) > 1e-4) {
       viewer.pushSectionFace(_drag.face, delta);
       document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
+      // #943 bug1: update handle positions immediately so they track the cursor
+      // without waiting for the next rAF frame.
+      updatePositions();
     }
     _drag.prevX = ev.clientX;
     _drag.prevY = ev.clientY;
