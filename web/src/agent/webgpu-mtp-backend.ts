@@ -453,6 +453,13 @@ export async function runMtpSpecDecode(
     kvSeqLen = newCacheLen;
 
     if (eos) break;
+
+    // Yield to the browser macrotask queue between spec-decode iterations (#925).
+    // Each outer iteration already spends ~100–500 ms in GPU (drafter×K + decoder×1
+    // forward passes). The 4 ms setTimeout overhead is negligible, but the macrotask
+    // boundary is essential: `await gpuSession.run()` resolves as a microtask and
+    // never yields to the event loop, so CDP + UI events are starved without this.
+    await new Promise<void>(r => setTimeout(r, 0));
   }
 
   return { tokens, specAttempts, specAccepts };
