@@ -86,7 +86,11 @@ export type OpPhase =
   | { kind: "dim_b";       tool: "aligned-dim"; ptA: THREE.Vector3 }
   | { kind: "dim_c";       tool: "angular-dim"; ptA: THREE.Vector3; ptB: THREE.Vector3 }
   | { kind: "dim_area";    tool: "area-dim";    pts: THREE.Vector3[] }
-  | { kind: "dim_volume";  tool: "volume-dim" };
+  | { kind: "dim_volume";  tool: "volume-dim" }
+  | { kind: "label_pick" }
+  | { kind: "label_text"; pt: THREE.Vector3 }
+  | { kind: "tmeasure_a" }
+  | { kind: "tmeasure_b"; ptA: THREE.Vector3 };
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
@@ -229,6 +233,9 @@ export function opUpdateDimPreview(viewer: Viewer, snapped3: THREE.Vector3): voi
     const grp = new THREE.Group();
     if (pts.length >= 2) grp.add(opBuildAnnotLine(pts));
     _opPreview = grp;
+    viewer.getScene().add(_opPreview);
+  } else if (phase.kind === "tmeasure_b") {
+    _opPreview = opBuildAnnotLine([phase.ptA, snapped3]);
     viewer.getScene().add(_opPreview);
   }
 }
@@ -635,7 +642,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     ? new THREE.Vector3(sv.x, sv.y, sv.z)
     : world ? (() => { const s = snapWorldForView(viewer, world); return new THREE.Vector3(s.x, s.y, s.z); })()
              : null;
-  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "dim_a" && phase.kind !== "dim_volume") return false;
+  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a") return false;
 
   if (phase.kind === "extrude_select") {
     const hit = opRaycastObject(viewer, clientX, clientY, true);
@@ -708,6 +715,32 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     _opPhase = { kind: "fillet_radius", target: hit.obj };
     ptPrompt("Fillet radius — type a value and press Enter");
     ptShowCoordInput("radius");
+    return true;
+  }
+
+  if (phase.kind === "label_pick") {
+    if (!snapped3) return true;
+    _opPhase = { kind: "label_text", pt: snapped3 };
+    ptPrompt("Label — type text and press Enter");
+    ptShowCoordInput("label text");
+    return true;
+  }
+
+  if (phase.kind === "tmeasure_a") {
+    if (!snapped3) return true;
+    _opPhase = { kind: "tmeasure_b", ptA: snapped3 };
+    ptPrompt("Transient Measure — click second point");
+    return true;
+  }
+
+  if (phase.kind === "tmeasure_b" && snapped3) {
+    const dist = snapped3.distanceTo(phase.ptA);
+    const mid = phase.ptA.clone().add(snapped3).multiplyScalar(0.5);
+    opClearPreview(viewer);
+    _opPreview = opBuildAnnotLine([phase.ptA, snapped3]);
+    viewer.getScene().add(_opPreview);
+    opAddLabel(`${formatLength(dist)}`, mid, viewer);
+    opFinish(viewer);
     return true;
   }
 
@@ -896,6 +929,11 @@ export function opHandleEnter(viewer: Viewer): void {
     ptPrompt("Fillet radius — type a value and press Enter");
     return;
   }
+
+  if (phase.kind === "label_text") {
+    ptPrompt("Label — type text and press Enter");
+    return;
+  }
 }
 
 // ── Coord-input submit ────────────────────────────────────────────────────────
@@ -917,6 +955,13 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
     pushReplaceAction(filleted, [target], "fillet");
     ptPrompt(`Fillet r=${formatLength(r)} applied`);
     setTimeout(() => opFinish(viewer), 400);
+  }
+
+  if (phase.kind === "label_text") {
+    const text = raw.trim();
+    if (!text) { ptPrompt("Label — type text for the label"); return; }
+    opAddLabel(text, phase.pt, viewer);
+    opFinish(viewer);
   }
 }
 
@@ -982,6 +1027,12 @@ export function opStartTool(viewer: Viewer, tool: string): void {
       { label: "Window",   description: "Objects fully inside the lasso",              onSelect: () => activateLasso("window") },
     ], () => activateLasso("crossing"));
     ptPrompt("Lasso Select — choose mode above  [Enter=Crossing]");
+  } else if (tool === "label") {
+    _opPhase = { kind: "label_pick" };
+    ptPrompt("Label — click a point in the scene");
+  } else if (tool === "transient-measure") {
+    _opPhase = { kind: "tmeasure_a" };
+    ptPrompt("Transient Measure — click first point");
   } else if (tool === "sel-boundary") {
     _opPhase = { kind: "sel_boundary_sub" };
     showRawChooser("Boundary input:", [

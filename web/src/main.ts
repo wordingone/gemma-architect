@@ -1842,6 +1842,28 @@ registerHandler("SdVolumeDim", (args) => {
   return { measured: "volume", volume: parseFloat(volume.toFixed(4)), unit: "m3", annotationUuid: lineObj.uuid };
 });
 
+registerHandler("SdLabel", (args) => {
+  const text = (args.text as string | undefined) ?? "";
+  if (!text) return { error: "SdLabel requires text" };
+  const posArr = (args.position as number[] | undefined) ?? [0, 0, 0];
+  const pt = new THREE.Vector3(posArr[0] ?? 0, posArr[1] ?? 0, posArr[2] ?? 0);
+  opAddLabel(text, pt, viewer);
+  return { placed: true, text };
+});
+
+registerHandler("SdTransientMeasure", (args) => {
+  const aArr = (args.a as number[] | undefined) ?? [0, 0, 0];
+  const bArr = (args.b as number[] | undefined) ?? [1, 0, 0];
+  const ptA = new THREE.Vector3(aArr[0] ?? 0, aArr[1] ?? 0, aArr[2] ?? 0);
+  const ptB = new THREE.Vector3(bArr[0] ?? 0, bArr[1] ?? 0, bArr[2] ?? 0);
+  const dist = ptA.distanceTo(ptB);
+  const mid = ptA.clone().add(ptB).multiplyScalar(0.5);
+  const lineObj = opBuildAnnotLine([ptA, ptB]);
+  viewer.getScene().add(lineObj); // audit-undo-ok — transient measurement line, no undo entry intentional
+  opAddLabel(formatLength(dist), mid, viewer);
+  return { measured: "length", distance: parseFloat(dist.toFixed(4)), unit: "m" };
+});
+
 // Translate position/point fields in a cluster step's params by an anchor offset.
 // Steps that reference another object by UUID are returned unchanged (translation not safe).
 function _translateClusterStep(params: Record<string, unknown>, anchor: number[]): Record<string, unknown> {

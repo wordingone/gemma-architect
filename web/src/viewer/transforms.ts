@@ -338,7 +338,7 @@ export function ptShowCoordInput(placeholder: string): void {
   if (!_ptCoordWrapEl) return;
   if (_ptCoordInputEl) _ptCoordInputEl.placeholder = placeholder;
   _ptCoordWrapEl.classList.add("visible");
-  setTimeout(() => _ptCoordInputEl?.focus(), 30);
+  setTimeout(() => _ptCoordInputEl?.focus(), 0);
 }
 
 export function ptHideCoordInput(): void {

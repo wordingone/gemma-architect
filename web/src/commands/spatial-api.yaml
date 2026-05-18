@@ -1256,7 +1256,16 @@
   topology_role: annotation
   kg_predicates: []
   synonyms: [label, annotate, tag, text label, callout label]
-  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- canonical_name: SdTransientMeasure
+  kernel_op: transientMeasure
+  args:
+    - {name: a, type: point3, required: true}
+    - {name: b, type: point3, required: true}
+  topology_role: annotation
+  kg_predicates: []
+  synonyms: [transient measure, quick measure, measure distance, measure]
   alias_source: generic_cad_vocabulary
 
 # ============================================================
