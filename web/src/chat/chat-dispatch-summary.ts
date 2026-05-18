@@ -65,7 +65,9 @@ export function buildDispatchSummary(dispatches: AgentDispatch[], fired: string[
       if (!QUERY_VERBS.has(v)) counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
-  const parts: string[] = [...errors];
+  // Errors are internal feedback for the agent's self-correction loop —
+  // they must not appear in the user-facing bubble (per user directive 2026-05-18).
+  const parts: string[] = [];
   if (counts.size > 0) {
     const built = [...counts.entries()].map(([v, n]) => {
       const [sing, plur] = VERB_LABELS[v] ?? [v.replace(/^Sd/, "").toLowerCase(), v.replace(/^Sd/, "").toLowerCase() + "s"];

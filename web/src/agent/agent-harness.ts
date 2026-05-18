@@ -823,6 +823,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "PLAN BEFORE DISPATCH: emit <plan> block first, then <tool_call> blocks.\nExample:\n<plan>\n1. SdWall — profile=[[0,0],[5,0]], height=2.8\n</plan>\n<tool_call>{\"command\":\"SdWall\",\"parameters\":{\"profile\":[[0,0],[5,0]],\"height\":2.8},\"metadata\":{\"source\":\"agent\"}}</tool_call>",
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
+    "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
     DIMENSION_RULES,
     verbList,
     `Current scene: ${buildSceneContext()}`,
