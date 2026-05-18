@@ -1165,6 +1165,12 @@ export class Viewer {
     }
   }
 
+  setGridAxesVisible(visible: boolean): void {
+    this.grid.visible = visible;
+    this.axes.visible = visible;
+    this._cplaneGizmo.group.visible = visible;
+  }
+
   /** Enter sub-object mode: gumball attaches to the CP handle sphere.
    *  Handles stay visible; parent geometry refits live as the handle moves. */
   selectSubObject(handle: THREE.Object3D): void {

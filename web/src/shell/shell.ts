@@ -155,7 +155,7 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
 // SAMPLES displayed as ribbon asset cards in MODEL mode (far right of ribbon-tools).
 // Projects = full building scenes; Elements = individual components (naming subject to Leo review).
 const RIBBON_SCENE_SAMPLES = [
-  { name: "FZK-Haus",  v: "kit-fzk-haus",      thumb: "/thumbnails/kit-fzk-haus.png" },
+  { name: "IFC - FZK-House",  v: "kit-fzk-haus",      thumb: "/thumbnails/kit-fzk-haus.png" },
 ];
 const RIBBON_ELEMENT_SAMPLES = [
   { name: "Wall",  v: "wall-with-opening", thumb: "/thumbnails/wall-with-opening.png" },
