@@ -123,13 +123,15 @@ async function extractGeomForType(
     console.warn(`[geom] ${typeName}: no geometry extracted`);
     return null;
   }
+  // TS closure narrowing: re-assert after null guard.
+  const result = bestOut as GeomOut;
 
   // Center at origin, bottom at z=0
-  centerGeom(bestOut!);
+  centerGeom(result);
   // Round to 5 decimal places to keep JSON compact
-  bestOut!.positions = bestOut!.positions.map(v => Math.round(v * 1e5) / 1e5);
-  bestOut!.normals   = bestOut!.normals.map(v => Math.round(v * 1e5) / 1e5);
-  return bestOut;
+  result.positions = result.positions.map((v: number) => Math.round(v * 1e5) / 1e5);
+  result.normals   = result.normals.map((v: number) => Math.round(v * 1e5) / 1e5);
+  return result;
 }
 
 async function main() {
