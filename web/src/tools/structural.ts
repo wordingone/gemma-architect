@@ -79,7 +79,6 @@ export function rebuildWallParams(
   mesh.userData.endpoints = [
     { x: wA.x, y: wA.y, z: zOff, id: makeSnapId(wA.x, wA.y, zOff) },
     { x: wB.x, y: wB.y, z: zOff, id: makeSnapId(wB.x, wB.y, zOff) },
-    { x: cx, y: cy, z: zOff, id: makeSnapId(cx, cy, zOff) },
   ];
 }
 
@@ -120,7 +119,6 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
-    { x: cx, y: cy, z: 0, id: makeSnapId(cx, cy, 0) },
   ] as SnapVertex[];
   const chain = `const wall = makeBox(${round(len)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0, 0, 0], [0, 0, 1]).translate([${round(cx)}, ${round(cy)}, 0]);`;
 
@@ -140,11 +138,9 @@ export function rebuildWallInPlace(mesh: THREE.Mesh, a: { x: number; y: number }
   mesh.geometry = geom;
   mesh.position.set(cx, cy, 0);
   mesh.rotation.z = (angDeg * Math.PI) / 180;
-  const midX = cx, midY = cy;
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
-    { x: midX, y: midY, z: 0, id: makeSnapId(midX, midY, 0) },
   ] as SnapVertex[];
 }
 
@@ -199,7 +195,6 @@ export function buildWallPitchedTop(
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
-    { x: cx, y: cy, z: 0, id: makeSnapId(cx, cy, 0) },
   ] as SnapVertex[];
   const chain = `// gable wall len=${round(len)} eave=${round(eaveH)} ridge=${round(eaveH + ridgeH)}`;
   return { mesh, chain };

@@ -227,7 +227,7 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   const anyGeomSnap = snap.vertexSnapOn || snap.edgeSnapOn || snap.midpointSnapOn;
   if (!anyGeomSnap) return null;
 
-  // ── 1. Stored endpoint vertices ─────────────────────────────────────────────
+  // ── 1a. Stored endpoint vertices ────────────────────────────────────────────
   if (snap.vertexSnapOn) {
     const verts = collectSnapVertices(viewer);
     let best: SnapVertex | null = null;
@@ -239,25 +239,58 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
       if (d < bestD) { bestD = d; best = v; }
     }
     if (best) return best;
+  }
 
-    if (snap.midpointSnapOn) {
-      const midState = { best: null as THREE.Vector3 | null, bestD: VERTEX_SNAP_PX };
-      viewer.getScene().traverse((obj) => {
-        const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
-        if (!eps || eps.length < 2) return;
-        for (let i = 0; i < eps.length - 1; i++) {
-          const a = eps[i], b = eps[i + 1];
-          const mid = new THREE.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
-          const sc = projectToScreen(viewer, mid.x, mid.y, mid.z);
-          if (!sc) return;
-          const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-          if (d < midState.bestD) { midState.bestD = d; midState.best = mid; }
-        }
-      });
-      if (midState.best) {
-        const v = midState.best;
-        return { id: makeSnapId(v.x, v.y, v.z), x: v.x, y: v.y, z: v.z };
+  // ── 1b. Midpoint snap from stored endpoints (independent of vertexSnapOn) ──
+  if (snap.midpointSnapOn) {
+    const midState = { best: null as THREE.Vector3 | null, bestD: VERTEX_SNAP_PX };
+    viewer.getScene().traverse((obj) => {
+      if (obj.userData.noSnap) return;
+      const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
+      if (!eps || eps.length < 2) return;
+      for (let i = 0; i < eps.length - 1; i++) {
+        const a = eps[i], b = eps[i + 1];
+        const mid = new THREE.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+        const sc = projectToScreen(viewer, mid.x, mid.y, mid.z);
+        if (!sc) return;
+        const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+        if (d < midState.bestD) { midState.bestD = d; midState.best = mid; }
       }
+    });
+    if (midState.best) {
+      const v = midState.best;
+      return { id: makeSnapId(v.x, v.y, v.z), x: v.x, y: v.y, z: v.z };
+    }
+  }
+
+  // ── 1c. Edge snap from stored endpoints (covers walls + other Mesh objects) ─
+  // Line/curve geometry is handled in section 2 with full tessellation fidelity.
+  if (snap.edgeSnapOn) {
+    let epEdgeBest: SnapVertex | null = null;
+    let epEdgeBestD = VERTEX_SNAP_PX;
+    viewer.getScene().traverse((obj) => {
+      if (obj.userData.noSnap) return;
+      if (obj instanceof THREE.Line) return; // covered by section 2
+      const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
+      if (!eps || eps.length < 2) return;
+      for (let i = 0; i < eps.length - 1; i++) {
+        const A = new THREE.Vector3(eps[i].x, eps[i].y, eps[i].z);
+        const B = new THREE.Vector3(eps[i + 1].x, eps[i + 1].y, eps[i + 1].z);
+        const ep = closestPtOnSegToRay(viewer, clientX, clientY, A, B);
+        if (!ep) continue;
+        const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
+        if (!sc) continue;
+        const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+        if (d < epEdgeBestD) {
+          epEdgeBestD = d;
+          const edgeDir = B.clone().sub(A).normalize();
+          epEdgeBest = { id: makeSnapId(ep.x, ep.y, ep.z), x: ep.x, y: ep.y, z: ep.z, edgeDir };
+        }
+      }
+    });
+    if (epEdgeBest) {
+      if ((epEdgeBest as SnapVertex).edgeDir) _lastSnapEdgeDir = (epEdgeBest as SnapVertex).edgeDir!;
+      return epEdgeBest;
     }
   }
 

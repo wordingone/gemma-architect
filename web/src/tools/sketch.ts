@@ -84,7 +84,6 @@ export function buildLine(a: { x: number; y: number }, b: { x: number; y: number
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
-    { x: cx, y: cy, z: 0, id: makeSnapId(cx, cy, 0) },
   ] as SnapVertex[];
   const chain = `const line = drawPolyline([[${round(a.x)}, ${round(a.y)}], [${round(b.x)}, ${round(b.y)}]]).sketchOnPlane("XY").extrude(0.002);`;
   return { mesh, chain };

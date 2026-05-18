@@ -134,7 +134,6 @@ export function refitParentGeometry(parent: THREE.Object3D): void {
     parentMesh.userData.endpoints = [
       { x: wA.x, y: wA.y, z: 0, id: makeSnapId(wA.x, wA.y, 0) },
       { x: wB.x, y: wB.y, z: 0, id: makeSnapId(wB.x, wB.y, 0) },
-      { x: cx, y: cy, z: 0, id: makeSnapId(cx, cy, 0) },
     ];
     return;
   }
