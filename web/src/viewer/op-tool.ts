@@ -480,10 +480,14 @@ export function opRaycastObject(
   viewer.getScene().traverse((o) => {
     const isDisplay = !!o.userData.isJoinDisplay;
     if (o.userData.noSnap && !isDisplay) return;
-    if (!o.visible && !isDisplay) return;
     if (!(o instanceof THREE.Mesh)) return;
     if (!o.geometry?.getAttribute("position")) return;
     if (profileOnly && !CLICK_PROFILE_CREATORS.has(o.userData.creator ?? "")) return;
+    // #950: skip meshes that are effectively invisible (parent-group visibility).
+    if (!isDisplay) {
+      let anc: THREE.Object3D | null = o;
+      while (anc) { if (!anc.visible) return; anc = anc.parent; }
+    }
     meshes.push(o);
   });
   const hits = rc.intersectObjects(meshes, false);

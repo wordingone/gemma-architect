@@ -40,6 +40,8 @@ export function clearCreateSequence(): void {
 // z is only set for the "level" tool (geometry raycast elevation).
 
 let _pending: Array<{ x: number; y: number; z?: number }> = [];
+// #951: last non-select tool activated — spacebar re-activates it.
+let _lastActivatedTool: string | null = null;
 
 // Shift-axis constraint: when Shift is held and ≥1 pending point exists, lock to the
 // dominant world axis (X or Y) from the last pending point and grid-snap along it.
@@ -888,6 +890,8 @@ export function initCreateMode(viewer: Viewer): void {
 
   // When activeTool changes to a PT or op tool, start the state machine.
   subscribe("activeTool", (tool) => {
+    // #951: record last non-select tool for spacebar repeat.
+    if (tool && tool !== "select") _lastActivatedTool = tool;
     // Wall sub-tools have no palette button; override readActiveTool() so the
     // pointer-event pipeline sees the correct tool ID instead of null.
     setSubToolOverride(WALL_SUB_TOOLS.has(tool) ? tool : null);
@@ -1447,9 +1451,10 @@ export function initCreateMode(viewer: Viewer): void {
     }
     if (ev.key === "Enter" || (ev.key === " " && document.activeElement !== ptInput)) {
       if (ev.key === " ") {
-        if (!_ptPhase && !getOpPhase() && !readActiveTool() && _lastPtTool) {
+        const repeatTool = _lastPtTool ?? _lastActivatedTool;
+        if (!_ptPhase && !getOpPhase() && !readActiveTool() && repeatTool) {
           ev.preventDefault();
-          dispatchSync("setActiveTool", { toolId: _lastPtTool });
+          dispatchSync("setActiveTool", { toolId: repeatTool });
           return;
         }
         ev.preventDefault();

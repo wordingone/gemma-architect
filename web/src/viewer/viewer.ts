@@ -996,7 +996,14 @@ export class Viewer {
     // depth), prefer it over closer wall hits.
     const handleSet = new Set(getHandles());
     const handleHit = hits.find(h => handleSet.has(h.object) || (h.object.parent !== null && handleSet.has(h.object.parent)));
-    let hit = (handleHit ?? hits[0])?.object ?? null;
+    // #950: Three.js intersectObjects does not check visibility — filter out objects
+    // whose effective visibility is false (hidden level, hidden layer, etc.).
+    const visibleHit = hits.find(h => {
+      let o: THREE.Object3D | null = h.object;
+      while (o) { if (!o.visible) return false; o = o.parent; }
+      return true;
+    });
+    let hit = (handleHit ?? visibleHit)?.object ?? null;
     // CSG display mesh hit: redirect selection to the nearest logical member
     // WITHOUT dissolving the group — the join stays intact until the user drags.
     if (hit?.userData?.isJoinDisplay) {
@@ -2226,10 +2233,15 @@ export class Viewer {
     const hits = this.raycaster.intersectObjects(pickables, true);
     for (const h of hits) {
       const o = h.object;
-      // Skip invisible objects unless they're a join-display mesh.
       const isDisplay = !!o.userData.isJoinDisplay;
-      if (!o.visible && !isDisplay) continue;
       if (o.userData.noSnap && !isDisplay) continue;
+      // #950: skip objects whose effective visibility is false (level/layer hidden).
+      if (!isDisplay) {
+        let anc: THREE.Object3D | null = o;
+        let effVisible = true;
+        while (anc) { if (!anc.visible) { effVisible = false; break; } anc = anc.parent; }
+        if (!effVisible) continue;
+      }
       // #953: roof children → resolve to parent Group so entire roof highlights.
       if (o.parent instanceof THREE.Group && o.parent.userData.creator === "roof") return o.parent;
       return o;
