@@ -59,6 +59,7 @@ import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRaili
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
 import { initWallHeightHandle } from "./viewer/wall-height-handle";
+import { replayCloneSideEffects } from "./viewer/copy-array";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction } from "./history";
 import { csgUnion, csgDifference, csgIntersection, filletMesh } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
@@ -406,6 +407,7 @@ registerHandler("SdCopy", (args) => {
   clone.position.x += x; clone.position.y += y; clone.position.z += z;
   clone.userData = { ...sel.userData };
   viewer.addMesh(clone as THREE.Mesh, "brep");
+  replayCloneSideEffects(clone, viewer.getScene());
   return { created: clone.uuid, delta: [x, y, z] };
 });
 
@@ -422,6 +424,7 @@ registerHandler("SdArrayLinear", (args) => {
     clone.position.x += dx * i; clone.position.y += dy * i; clone.position.z += dz * i;
     clone.userData = { ...sel.userData };
     viewer.addMesh(clone as THREE.Mesh, "brep");
+    replayCloneSideEffects(clone, viewer.getScene());
     ids.push(clone.uuid);
   }
   return { created: ids.length, ids };
@@ -442,6 +445,7 @@ registerHandler("SdArrayGrid", (args) => {
       clone.position.x += dx * c; clone.position.y += dy * r;
       clone.userData = { ...sel.userData };
       viewer.addMesh(clone as THREE.Mesh, "brep");
+      replayCloneSideEffects(clone, viewer.getScene());
       ids.push(clone.uuid);
     }
   }
@@ -465,6 +469,7 @@ registerHandler("SdArrayPolar", (args) => {
     clone.position.y = cy + ox * Math.sin(a) + oy * Math.cos(a);
     clone.userData = { ...sel.userData };
     viewer.addMesh(clone as THREE.Mesh, "brep");
+    replayCloneSideEffects(clone, viewer.getScene());
     ids.push(clone.uuid);
   }
   return { created: ids.length, count };
