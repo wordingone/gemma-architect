@@ -3419,6 +3419,67 @@ await resetScene('before-box-inject');
   record('door-wall-orientation', r?.passed ?? false, r ?? { reason: 'evaluate returned null' });
 }
 
+// ── S65: agent-palette-parity ─────────────────────────────────────────────────
+// Dispatches SdBox, SdExtrude, SdReferenceLine via __dispatch and asserts that
+// the resulting scene objects carry the palette-aligned creator + chain fields.
+{
+  await resetScene('agent-palette-parity');
+
+  const r65 = await evaluate(`(function() {
+    try {
+      const dispatch = window.__dispatch;
+      if (!dispatch) return { passed: false, evidence: { reason: '__dispatch not available' } };
+
+      const results = [];
+      const scene = window.__viewer.scene;
+
+      // SdBox — creator must be "box", chain must be non-empty
+      const beforeBox = scene.children.length;
+      dispatch('SdBox', { width: 2, depth: 2, height: 1 });
+      const afterBox = scene.children.length;
+      const boxMesh = scene.children.slice().reverse().find(c => c.userData?.kind === 'brep' && (c.userData?.creator === 'box' || c.userData?.creator === 'SdBox'));
+      results.push({
+        verb: 'SdBox',
+        added: afterBox > beforeBox,
+        creator: boxMesh?.userData?.creator,
+        hasChain: typeof boxMesh?.userData?.chain === 'string' && boxMesh.userData.chain.length > 0,
+        passed: afterBox > beforeBox && boxMesh?.userData?.creator === 'box' && typeof boxMesh?.userData?.chain === 'string' && boxMesh.userData.chain.length > 0,
+      });
+
+      // SdExtrude — creator must be "extrude", chain must be non-empty
+      const beforeExt = scene.children.length;
+      dispatch('SdExtrude', { distance: 2 });
+      const afterExt = scene.children.length;
+      const extMesh = scene.children.slice().reverse().find(c => c.userData?.creator === 'extrude' || c.userData?.creator === 'SdExtrude');
+      results.push({
+        verb: 'SdExtrude',
+        added: afterExt > beforeExt,
+        creator: extMesh?.userData?.creator,
+        hasChain: typeof extMesh?.userData?.chain === 'string' && extMesh.userData.chain.length > 0,
+        passed: afterExt > beforeExt && extMesh?.userData?.creator === 'extrude' && typeof extMesh?.userData?.chain === 'string' && extMesh.userData.chain.length > 0,
+      });
+
+      // SdReferenceLine — creator must be "IfcReferenceLine", refLineId must be present
+      const beforeRef = scene.children.length;
+      dispatch('SdReferenceLine', { origin: [0, 0], end: [3, 0] });
+      const afterRef = scene.children.length;
+      const refLine = scene.children.slice().reverse().find(c => c.userData?.kind === 'reference-line');
+      results.push({
+        verb: 'SdReferenceLine',
+        added: afterRef > beforeRef,
+        creator: refLine?.userData?.creator,
+        refLineId: refLine?.userData?.refLineId,
+        passed: afterRef > beforeRef && refLine?.userData?.creator === 'IfcReferenceLine' && typeof refLine?.userData?.refLineId === 'string' && refLine.userData.refLineId.length > 0,
+      });
+
+      return { passed: results.every(r => r.passed), evidence: { results } };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r65) record('agent-palette-parity', false, { reason: 'evaluate returned null' });
+  else record('agent-palette-parity', r65.passed, r65.evidence ?? { error: r65.error });
+}
+
 } finally {
   await cleanup();
 }
