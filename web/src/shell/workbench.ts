@@ -715,108 +715,9 @@ function buildSnapDock(): HTMLElement {
   return root;
 }
 
-interface ParityUpdate {
-  iterationN: number;
-  score: number;
-  tier: number;
-  scoreSeries: number[];
-  deltas: Array<{ dimension: string; description: string }>;
-  action: string;
-}
-
-function buildParitySubsection(): HTMLElement {
-  const body = el("div");
-  body.style.cssText = "padding-bottom:4px;";
-
-  const hint = el("div");
-  hint.style.cssText = "padding:4px 10px; font-size:10px; color:var(--ink-faint);";
-  hint.textContent = "No iteration yet.";
-  body.appendChild(hint);
-
-  function render(u: ParityUpdate): void {
-    body.innerHTML = "";
-
-    function row(label: string, value: string): void {
-      const r = el("div");
-      r.className = "parity-row";
-      r.style.cssText =
-        "display:flex; align-items:center; justify-content:space-between;" +
-        " padding:2px 10px; font-size:10px; color:var(--ink-dim);";
-      const k = el("span");
-      k.textContent = label;
-      const v = el("span");
-      v.textContent = value;
-      r.appendChild(k);
-      r.appendChild(v);
-      body.appendChild(r);
-    }
-
-    row("Iteration", String(u.iterationN));
-    row("Score", `${u.score}%`);
-    row("Tier", `${u.tier}%`);
-    row("Action", u.action);
-
-    if (u.scoreSeries.length > 0) {
-      const blocks = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
-      const max = Math.max(...u.scoreSeries);
-      const min = Math.min(...u.scoreSeries);
-      const range = max - min || 1;
-      const spark = u.scoreSeries
-        .map(s => blocks[Math.round(((s - min) / range) * (blocks.length - 1))])
-        .join("");
-      const sparkEl = el("div");
-      sparkEl.className = "parity-sparkline";
-      sparkEl.style.cssText =
-        "padding:2px 10px; font-size:10px; font-family:var(--mono); color:var(--ink-dim);";
-      sparkEl.textContent = spark;
-      body.appendChild(sparkEl);
-    }
-
-    for (const d of u.deltas.slice(0, 5)) {
-      const dim = el("div");
-      dim.className = "parity-delta";
-      dim.style.cssText =
-        "padding:1px 10px 1px 18px; font-size:9px; color:var(--ink-faint);" +
-        " overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
-      dim.textContent = `• ${d.dimension}: ${d.description}`;
-      body.appendChild(dim);
-    }
-  }
-
-  document.addEventListener("viewer:parity-changed", (e: Event) => {
-    render((e as CustomEvent<ParityUpdate>).detail);
-  });
-
-  return body;
-}
-
-function ifcClassOf(name: string): string {
-  const n = name.toLowerCase();
-  if (/(wall|slab|floor|roof|covering|space)/.test(n)) return "ARCHITECTURE";
-  if (/(column|beam|footing|pile|member|brace|truss)/.test(n)) return "STRUCTURE";
-  if (/(door|window|opening|reveal)/.test(n)) return "OPENINGS";
-  if (/(stair|ramp|railing|hand)/.test(n)) return "CIRCULATION";
-  return "MESHES";
-}
 
 function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body hier-tab");
-
-  // COMP scope header bar
-  const compBar = el("div");
-  compBar.style.cssText = "display:flex; align-items:center; gap:6px; padding:4px 8px 4px 10px; border-bottom:1px solid var(--hairline-soft); user-select:none;";
-  const compBtn = el("button");
-  compBtn.id = "comp-scope-btn";
-  compBtn.textContent = "COMP";
-  compBtn.title = "Toggle component scope — filter tree to selected component";
-  compBtn.style.cssText = "font-family:var(--mono); font-size:9px; letter-spacing:0.1em; padding:2px 6px; border-radius:3px; border:1px solid var(--hairline-soft); background:none; cursor:pointer; color:var(--ink-dim);";
-  const compHint = el("span");
-  compHint.id = "comp-scope-hint";
-  compHint.style.cssText = "font-family:var(--mono); font-size:9px; color:var(--ink-faint); flex:1;";
-  compHint.textContent = "scene";
-  compBar.appendChild(compBtn);
-  compBar.appendChild(compHint);
-  wrap.appendChild(compBar);
 
   if (!scenePanel) {
     const hint = el("div");
@@ -824,9 +725,6 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
     hint.textContent = "No scene — drop IFC/GLB or pick a sample.";
     wrap.appendChild(hint);
   }
-
-  // Track subsection header+body pairs for COMP hide/show
-  const subsectionEls: HTMLElement[] = [];
 
   function addSubsection(title: string, body: HTMLElement): void {
     const hdr = el("div");
@@ -849,7 +747,6 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
       body.style.display = open ? "" : "none";
       arrow.textContent = open ? "▾" : "▸";
     });
-    subsectionEls.push(hdr, body);
     wrap.appendChild(hdr);
     wrap.appendChild(body);
   }
@@ -859,119 +756,7 @@ function buildSceneTab(scenePanel: HTMLElement | null): HTMLElement {
   refBody.appendChild(buildLevelsTab());
   refBody.appendChild(buildGridsTab());
   addSubsection("REFERENCE GEOMETRY", refBody);
-  addSubsection("PARITY", buildParitySubsection());
-  addSubsection("VIEW STATE", buildViewStateSection());
-
-  // COMP scope logic
-  let _compScopeUuid: string | null = null;
-
-  function applyCompFilter(uuid: string | null): void {
-    _compScopeUuid = uuid;
-    if (!getState("compScope") || !scenePanel) return;
-    if (!uuid) {
-      compHint.textContent = "select an object";
-      scenePanel.querySelectorAll<HTMLElement>(".outliner-section").forEach(s => { s.style.display = ""; });
-      return;
-    }
-    const viewer = (window as unknown as { __viewer?: { getActiveObject?: () => { name?: string } | null } }).__viewer;
-    const objName = viewer?.getActiveObject?.()?.name ?? "";
-    const ifcClass = ifcClassOf(objName);
-    compHint.textContent = ifcClass.toLowerCase();
-    scenePanel.querySelectorAll<HTMLElement>(".outliner-section").forEach(section => {
-      const key = section.dataset["section"] ?? "";
-      if (key.startsWith("class-")) {
-        section.style.display = key === `class-${ifcClass}` ? "" : "none";
-      } else {
-        section.style.display = "";
-      }
-    });
-  }
-
-  function setCompScope(on: boolean): void {
-    compBtn.classList.toggle("active", on);
-    compBtn.style.background = on ? "var(--sanguine)" : "";
-    compBtn.style.color = on ? "#fff" : "";
-    compBtn.style.borderColor = on ? "var(--sanguine)" : "";
-    subsectionEls.forEach(e => { e.style.display = on ? "none" : ""; });
-    if (!on) {
-      compHint.textContent = "scene";
-      if (scenePanel) scenePanel.querySelectorAll<HTMLElement>(".outliner-section").forEach(s => { s.style.display = ""; });
-    } else {
-      applyCompFilter(_compScopeUuid);
-    }
-  }
-
-  compBtn.addEventListener("click", () => {
-    const next = !getState("compScope");
-    setState("compScope", next);
-    setCompScope(next);
-  });
-
-  window.addEventListener("viewer:select", (rawEv: Event) => {
-    const uuid: string | null = (rawEv as CustomEvent<{ uuid: string | null }>).detail?.uuid ?? null;
-    if (getState("compScope")) applyCompFilter(uuid);
-  });
-
   return wrap;
-}
-
-function buildViewStateSection(): HTMLElement {
-  const body = el("div");
-  body.style.cssText = "padding-bottom:4px;";
-
-  function render(): void {
-    body.innerHTML = "";
-    const v = (window as unknown as { __viewer?: { getSectionBox?: () => unknown; getClippingPlanes?: () => Array<{ label: string }> } }).__viewer;
-    const dispatch = (window as unknown as { __dispatch?: (verb: string, args: Record<string, unknown>) => void }).__dispatch;
-
-    const hasSectionBox = !!v?.getSectionBox?.();
-    const planes = v?.getClippingPlanes?.() ?? [];
-
-    if (!hasSectionBox && planes.length === 0) {
-      const hint = el("div");
-      hint.style.cssText = "padding:4px 10px; font-size:10px; color:var(--ink-faint);";
-      hint.textContent = "No active clips";
-      body.appendChild(hint);
-      return;
-    }
-
-    function makeRow(labelText: string, onRemove: () => void): void {
-      const row = el("div");
-      row.style.cssText =
-        "display:flex; align-items:center; justify-content:space-between;" +
-        " padding:2px 10px; font-size:10px; color:var(--ink-dim);";
-      const name = el("span");
-      name.textContent = labelText;
-      const btn = el("button");
-      btn.textContent = "✕";
-      btn.title = "Remove";
-      btn.style.cssText =
-        "background:none; border:none; cursor:pointer; color:var(--ink-faint);" +
-        " font-size:10px; padding:0 2px; line-height:1;";
-      btn.addEventListener("click", onRemove);
-      row.appendChild(name);
-      row.appendChild(btn);
-      body.appendChild(row);
-    }
-
-    if (hasSectionBox) {
-      makeRow("Section box", () => {
-        dispatch?.("SdSectionBoxOff", {});
-        document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
-      });
-    }
-
-    for (const p of planes) {
-      makeRow(p.label, () => {
-        dispatch?.("SdClippingPlaneRemove", { label: p.label });
-        document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
-      });
-    }
-  }
-
-  render();
-  document.addEventListener("viewer:clip-changed", render);
-  return body;
 }
 
 function buildInspectTab(): HTMLElement {
