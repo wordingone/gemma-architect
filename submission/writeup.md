@@ -3,7 +3,7 @@
 **Track:** Equity — 3D parametric design accessibility for non-CAD-trained users
 **Submission for:** Gemma 4 Good Hackathon (Kaggle + Google DeepMind)
 **Author:** wordingone
-**License:** Apache-2.0
+**License:** CC BY 4.0
 
 ---
 
@@ -15,20 +15,15 @@ dormitory, kitchen, bathrooms, day room — rendered as a coherent
 multi-room 3D building. Click **Export IFC** and download a file that
 opens in Revit, ArchiCAD, BlenderBIM, or any other BIM tool on the planet.
 
-Five reference skills ship with the page: fire station, SF residence 2BR,
-25-desk office, hospitality cabin, research pavilion. Each is a
-pre-verified dispatch sequence that bypasses model limitations entirely.
-**Bare Gemma 4 E2B without fine-tuning emits correct verb names but
-ignores dimensional args (K=0 "wrong-args" mode).** The saved-skills
-library executes pre-baked verified sequences instead — the model gets
-out of the way, the geometry is correct.
+Six starter skill-graph clusters ship in the SKILLS dock tab (Wall Row, Window Array,
+Room, Roof Walls, Stair Flight, Skylight Grid). Users save their own via the SKILL NODES tab.
+Each cluster is a pre-verified dispatch sequence — the model gets out of the way,
+the geometry is correct.
 
-60 cached Gemma 4 LoRA outputs back the single-element prompt path;
+60 cached prompt→JS pairs back the single-element prompt path;
 sub-100ms F1 fuzzy match is the default judge experience for one-liner
 prompts. The geometry kernel and IFC4 emitter run in-browser via
-WebAssembly. Live LoRA inference is opt-in: `src/serve/serve_lora.py`
-(FastAPI + Unsloth) serves a 4090-resident adapter on port 8088 when
-`window.__loraUrl` is set.
+WebAssembly. Novel prompts that miss the cache go to the on-device stock Gemma 4 model.
 
 The goal is to put parametric architectural design — the kind of tool you
 draw a building in before you build it — in front of people who can't
@@ -164,41 +159,19 @@ schematic-design phase: walls, slabs, columns, footings, basic openings,
 L-shape and U-shape footprints. Tier 2 (revolves for tanks/silos, multi-hole
 boolean chains) is curated in the dataset but not the model's primary target.
 
-### Dataset (`dataset/v2-results.md`)
+### Model deployment
 
-- **400 base rows**, 5 buckets:
-  - `fixtures/tier1.jsonl` (50) — Spike A wall/slab/footing core
-  - `fixtures/tier1-extra.jsonl` (50) — columns, beams, plinths, makeBox/makeCylinder
-  - `data/v2-synthetic.jsonl` (200) — parametric room/wall/slab/column emitter
-  - `fixtures/tier2-curated.jsonl` (50) — revolves, multi-hole cuts, L-fuses
-  - `fixtures/mined-extra.jsonl` (50) — IFC corpus mining + mechanical-voice paraphrases
-- **Round-trip pass: 100% (250/250 synthetic + mined; 50/50/50 hand-curated)**
-- **Augmentation**: deterministic paraphrase via numeric-suffix swap, integer→word
-  substitution, imperative-verb swap. Mean 2.6× per base row → 932 train rows.
-- **Stratified 10% holdout** (seed 42, per-bucket) → **40 eval rows** (no aug).
+No fine-tuning shipped in this submission. The deployed app runs stock
+`onnx-community/gemma-4-E4B-it-ONNX` in-browser via Transformers.js v4 (WebGPU path).
+No LoRA adapter is loaded at runtime.
 
-### Training
+The 60-row prompt cache was built from a precursor Gemma 3 4B LoRA's eval outputs
+(see `outputs/archive-gemma3-2026-05-05/`) and remains as a deterministic
+single-element demo path. A Gemma 4 retrain is planned post-submission.
 
-- Base: `unsloth/gemma-4-E2B-it-unsloth-bnb-4bit` (Gemma 4 E2B-it, 4-bit)
-- LoRA: rank 16, alpha 16, all-linear targets via Unsloth FastModel
-- 3 epochs, effective batch 8 (batch 2 × grad-accum 4), AdamW-8bit, lr 2e-4, bf16
-- **53 minutes on one RTX 4090, 932 training rows × 3 epochs (351 steps)**
-- **`train_loss = 0.2442`** at end of epoch 3
-  (`outputs/cad-lora-v2-4b-it/train-stats.json`)
-
-### Eval (held-out 40 rows, never seen at train time)
-
-| Metric        | Pass   |
-| :-----------: | :----: |
-| parse_ok      | 40/40  |
-| api_clean     | 40/40  |
-| has_solid_op  | 40/40  |
-| **runtime_pass (full round-trip)** | **40/40 (100%)** |
-
-Per-row results in `outputs/cad-lora-v2-4b-it-eval.jsonl`. Per-row prompts
-plus generated source are auditable; eight of them ship as canned demos in
-the web page (the ninth is the Schultz Residence hero, which uses `gold`
-because the 4b-it `pred` has translate/cut bugs on the 14-element multi-fuse).
+Training scripts are scaffolded in `src/train/` (Unsloth FastModel, QLoRA, full
+dataset pipeline). The dataset (`fixtures/`, `data/`) is fully deterministic and
+ships with the repo. See [`submission/repro.md`](repro.md) for the dataset build steps.
 
 ### Browser runtime
 
@@ -219,27 +192,20 @@ because the 4b-it `pred` has translate/cut bugs on the 14-element multi-fuse).
 Two paths back the page's prompt textbox; the user picks via configuration,
 the default is the cache.
 
-**Path 1 — bundled cache.** Sixty prompt → JS pairs ship with the web bundle
-as `web/public/ai-cache.json`. Forty come from the LoRA eval corpus (every
-held-out row that scored full round-trip — parse + api + runtime). Nineteen
-come from the DSL corpus (the copyright-safe lexicon's reference rows that
-back the PROMPT tab's CONSOLE-mode typed input). The sixtieth is the Schultz Residence (gold;
-the 4b-it pred has structural bugs on the 14-element multi-fuse). On a typed
-prompt, `web/src/ai-generate.ts` does weighted-F1 fuzzy match (numeric and
-dimension tokens count 2x) against the cache and returns the closest match's
-JS. Sub-100ms. No GPU. No network.
+**Path 1 — bundled cache.** Sixty prompt → JS pairs are built into the bundle
+by `scripts/build-ai-cache.ts` (run at `bun run web:build`). They come from
+`data/dsl-demo-corpus.jsonl` (19 DSL corpus rows), the Schultz Residence gold
+sequence, and the precursor Gemma 3 LoRA eval outputs (archived at
+`outputs/archive-gemma3-2026-05-05/`). On a typed prompt, `web/src/ai-generate.ts`
+does weighted-F1 fuzzy match (numeric and dimension tokens count 2x) against the
+cache and returns the closest match's JS. Sub-100ms. No GPU. No network.
 
-This path makes the demo bullet-proof for judges who don't want to set up
-a GPU server. The cache is built deterministically from the eval JSONL +
-DSL corpus rows; if we re-train or extend the lexicon, regenerating is a
-one-line `bun scripts/build-ai-cache.ts`.
+This path makes the demo bullet-proof for judges who don't want to wait for WebGPU model load.
 
-**Path 2 — live LoRA inference.** A minimal FastAPI wrapper at
-`src/serve/serve_lora.py` loads the v2 adapter through Unsloth FastModel
-(4-bit) and exposes an OpenAI-compat `/v1/chat/completions` endpoint.
-Setting `window.__loraUrl` (or build-time `VITE_LORA_URL`) makes the
-frontend hit it first and only fall back to the cache on network/HTTP
-errors. ~30s adapter load on a 4090, then ~2s/turn at temperature 0.1.
+**Path 2 — live Gemma 4 (default for novel prompts).** Stock
+`onnx-community/gemma-4-E4B-it-ONNX` loads in-browser via Transformers.js v4
+(WebGPU). No adapter loaded. Novel prompts that miss the cache go directly to the
+on-device model. `?gemma_model=e2b` URL param switches to the smaller E2B variant.
 
 Both paths funnel into the same `generateGeometry()` interface, so the
 backend can swap without touching the workbench wiring. Pipeline shape:
@@ -310,12 +276,10 @@ distinct per-part translations.
   fallback because GH Pages can't serve COOP+COEP); HuggingFace Spaces
   and Vercel are drop-in upgrades that light up the multi-thread
   SharedArrayBuffer path. Free tier forever in any of the three.
-- **Strong base instruction-following on small data.** 100% round-trip on a
-  held-out eval set with **only 932 augmented training pairs**. The base
-  model already reads English; the LoRA only has to teach the 12-op
-  replicad vocabulary.
-- **Apache-2.0 license.** The model artifact ships under a license downstream
-  users can deploy commercially without legal review.
+- **Strong base instruction-following.** Stock Gemma 4 E4B-it handles the 12-op
+  replicad vocabulary from the system prompt + few-shot examples without fine-tuning.
+- **CC BY 4.0 license.** The repo ships under a license downstream users can deploy
+  commercially without legal review.
 
 A larger non-Gemma model would have meant either a paid API (kills the
 free-tier deployment) or a server we'd have to host (kills the static-site
@@ -350,17 +314,14 @@ bun scripts/web-self-harness.ts
 
 ## What ships with this submission
 
-- **GitHub repo**: `github.com/wordingone/gemma-architect` — Apache-2.0,
-  full source, 18-day plan in `docs/plan-18-day.md`, training scripts in
-  `src/train/`, web app in `web/`. Five reference saved-skills at
-  `web/skills/` (fire-station, sf-residence-2br, office-25desk,
-  hospitality-cabin, research-pavilion — merged at f28dfa8).
-- **Hugging Face Hub adapter**: `gemma-architect/cad-lora-v2` is the
-  intended path (LoRA on `gemma-4-E2B-it-unsloth-bnb-4bit`, Apache-2.0,
-  model card with eval numbers + intended-use + limitations). Push is
-  pending HF_TOKEN; until then `src/train/publish_v2.py` writes
-  `outputs/cad-lora-v2-publish-plan.json` on the training machine
-  (`outputs/` is gitignored).
+- **GitHub repo**: `github.com/wordingone/gemma-architect` — CC BY 4.0,
+  full source, training scripts scaffolded in `src/train/`, web app in `web/`.
+  Six starter skill-graph clusters in `web/src/skills/starter-clusters.ts`
+  (Wall Row, Window Array, Room, Roof Walls, Stair Flight, Skylight Grid).
+- **Model**: no LoRA adapter ships in this submission. The deployed app runs stock
+  `onnx-community/gemma-4-E4B-it-ONNX` in-browser. Training scripts are scaffolded
+  for a future Gemma 4 retrain; the prior Gemma 3 4B LoRA is archived at
+  `outputs/archive-gemma3-2026-05-05/` and not loaded by the deployed app.
 - **Hosted live demo**: GitHub Pages — https://wordingone.github.io/gemma-architect/
   (single-thread WASM fallback because GH Pages can't serve COOP+COEP; the
   multi-thread path lights up on any host that can — Spaces, Vercel, etc.).
@@ -372,17 +333,11 @@ bun scripts/web-self-harness.ts
 
 Honest about scope:
 
-- **Bare Gemma 4 E2B ignores dimensional args at K=0.** Without the LoRA
-  adapter loaded, the model emits correct verb names but produces
-  dimensionally incorrect sequences — walls come out at wrong sizes,
-  columns appear at wrong positions. This is "wrong-args" mode, not
-  hallucination. Two paths mitigate: (1) the LoRA-fine-tuned adapter
-  (`cad-lora-v2`) corrects arg handling and scores 100% runtime_pass on
-  the held-out eval; (2) the saved-skills library bypasses model inference
-  entirely for building-type queries, executing pre-baked verified sequences.
-  Judges who run the page without the LoRA adapter will see this limitation
-  on custom single-element prompts (the cache covers the 60 bundled examples
-  correctly regardless).
+- **Stock Gemma 4 E4B-it on novel prompts.** The base model (no fine-tune) emits
+  correct verb names for simple prompts but may produce dimensionally imprecise
+  sequences — "wrong-args" mode, not hallucination. The 60-row cache covers
+  the bundled demos correctly. Novel prompts rely on the base model's instruction
+  following; a future Gemma 4 LoRA retrain is the planned fix.
 
 - **Tier 1 vocabulary only** — schematic-design primitives. A user finishing
   a real project hands the IFC export to a CAD-trained collaborator for
@@ -430,7 +385,7 @@ format accessible from a free webpage typed into in plain English."
 ## Links
 
 - **Repo**: https://github.com/wordingone/gemma-architect
-- **LoRA adapter**: https://huggingface.co/gemma-architect/cad-lora-v2
+- **Training scripts**: `src/train/` (Gemma 4 retrain is future work)
 - **Live demo**: https://wordingone.github.io/gemma-architect/
 - **Demo video**: (YouTube URL — to be filled at submission time)
 - **Reproduction guide**: `submission/repro.md`

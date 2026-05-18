@@ -1,8 +1,8 @@
 // Demo (prompt, JS) pairs.
 //
-// Items 1-8 are picked from the cad-lora-v2-4b-it eval set
-// (40-row held-out, 100% runtime_pass). All verified parse_ok + api_clean
-// + has_solid_op + runtime_pass on the live tier1 surface.
+// Items 1-8 are from a precursor Gemma 3 4B LoRA eval set (archived at
+// outputs/archive-gemma3-2026-05-05/), cached here as deterministic demos.
+// All verified parse_ok + api_clean + has_solid_op + runtime_pass on the tier1 surface.
 //   row  2 — slab with hole       → Boolean cut
 //   row  5 — raised slab          → translate
 //   row  7 — circular column      → drawCircle + extrude
@@ -13,12 +13,8 @@
 //   row 33 — wall with doorway    → cut
 //
 // Item 9 is the Schultz Residence multi-element compound — 14 consts,
-// fuses + cuts across slab/walls/door/window/columns/roof. Sourced from
-// data/schultz-target.jsonl (the canonical first-target eval row); this is
-// the architectural target the LoRA is being trained to produce. Current
-// 4b-it pred achieves 12 of 14 consts (door/window emitted as floating
-// boxes instead of cuts — see docs/closed-loop-cad-test-report.md). When
-// the LoRA closes the gap this entry can be regenerated from its output.
+// fuses + cuts across slab/walls/door/window/columns/roof. Gold sequence
+// sourced from data/schultz-target.jsonl.
 
 export type Param = {
   name: string;        // identifier in the JS source to substitute

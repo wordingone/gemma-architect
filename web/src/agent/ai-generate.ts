@@ -2,7 +2,7 @@
 //
 // Two paths:
 //   1. cache-first — fuzzy-match against the bundled ai-cache.json built from
-//      the v2 LoRA eval corpus (40 rows, 100% round-trip on Gemma 4 E2B-it).
+//      the v2 corpus (DSL rows + Schultz gold + archived Gemma 3 LoRA eval outputs).
 //      This is what judges see — sub-100ms response, no GPU required, no
 //      network call. Deterministic, demo-stable.
 //   2. live LoRA — POST /v1/chat/completions to a configurable endpoint

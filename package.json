@@ -1,7 +1,7 @@
 {
   "name": "gemma-cad",
   "version": "0.1.0",
-  "description": "Browser-native 3D architectural design tool — Gemma 4 fine-tuned on parametric IFC.",
+  "description": "Browser-native 3D architectural design tool — Gemma 4 (base) with replicad geometry kernel.",
   "license": "CC-BY-4.0",
   "type": "module",
   "private": true,

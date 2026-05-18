@@ -49,10 +49,9 @@ by Robert McNeel & Associates as part of the Rhino ecosystem — that toolkit
 is also MIT-licensed. We cite that lineage once here for historical context;
 the gemma-architect codebase does not use the Rhino name elsewhere.
 
-verb-nurbs is used in `nurbs-kernel.ts::tessellateWithVerb` for browser-side
-adaptive tessellation. The Bun test path uses our hand-rolled Cox-de Boor
-evaluator to avoid pulling in the verb-nurbs bundle's browser-globals
-assumption.
+The WebGPU kernel path in `nurbs-kernel.ts` (line 412+) is hand-rolled WGSL;
+verb-nurbs is declared as a package dependency but is not on the import path.
+The Bun test path uses our hand-rolled Cox-de Boor evaluator.
 
 ### web-ifc (MPL-2.0)
 

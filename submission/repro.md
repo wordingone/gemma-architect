@@ -54,85 +54,29 @@ bun scripts/validate-fixtures.ts
 # Expected: all 5 fixture files round-trip 100%
 ```
 
-## 3. Train
+## 3. Model training (future work — not required for the deployed demo)
 
-```bash
-GEMMA_V2_MODEL=4b PYTHONUTF8=1 python src/train/lora_train_v2.py
-```
+No model training is required to reproduce the deployed demo. The bundled
+prompt cache + stock Gemma 4 E4B-it (`onnx-community/gemma-4-E4B-it-ONNX`)
+is the deployment path.
 
-Wall-clock: **~53 min on RTX 4090** (351 steps = 932 train rows × 3 epochs / batch 8).
+Training scripts are scaffolded in `src/train/` for a future Gemma 4 retrain.
+The precursor Gemma 3 4B LoRA (not deployed) is archived at
+`outputs/archive-gemma3-2026-05-05/`. Dataset build is fully deterministic
+(step 2 above).
 
-Writes:
-- `outputs/cad-lora-v2-4b-it/adapter_config.json`
-- `outputs/cad-lora-v2-4b-it/adapter_model.safetensors`
-- `outputs/cad-lora-v2-4b-it/tokenizer*` (chat template + tokenizer files)
-- `outputs/cad-lora-v2-4b-it/train-stats.json` (train_loss + step counts)
-- `outputs/cad-lora-v2-4b-it/checkpoints/` (per-epoch snapshots)
+## 4. Eval (archived Gemma 3 LoRA — not required for deployed demo)
 
-Expected `train-stats.json`:
-```json
-{
-  "model": "gemma-4-E2B-it (onnx-community/gemma-4-E2B-it-ONNX)",
-  "tag": "4b-it",
-  "train_loss": 0.2442411027883214,
-  "metrics": {
-    "train_runtime": 3179.3876,
-    "train_loss": 0.2442411027883214,
-    "epoch": 3.0
-  },
-  "n_train": 932,
-  "n_eval": 40
-}
-```
-
-Numbers may differ in the 5th decimal place across runs (cuDNN
-non-determinism); the loss should be in the 0.20–0.27 band.
-
-### E2B-LoRA variant (deferred in the hackathon submission)
-
-```bash
-GEMMA_V2_MODEL=E2B PYTHONUTF8=1 python src/train/lora_train_v2.py
-```
-
-This variant trains with the same hyperparameters on the Gemma 4 E2B base.
-Adds ~35 min. Compare eval scores and pick the better one for browser
-deployment if VRAM permits both at runtime. Base: E2B-it (browser VRAM ceiling
-rules out E4B for the live demo). Set GEMMA4_BASE_MODEL=gemma-4-E2B-it.
-
-**Note on naming.** "E2B" in this section refers to the *LoRA-on-Gemma-4-E2B
-training variant* — NOT the image→IFC agent (the one demo-script.md and
-writeup.md sometimes call the "E2B agent"). The image→IFC path (#182) shipped
-in v1 using Gemma 4 multimodal native function-calling against the same
-dispatch table the typed-prompt path uses; it does NOT depend on this
-LoRA-on-E2B variant. Deferring the E2B-LoRA training does not affect the
-image-input mode in the deployed page.
-
-## 4. Eval
+The eval outputs from the precursor Gemma 3 4B LoRA are archived at
+`outputs/archive-gemma3-2026-05-05/`. They are not required to run the
+deployed app. The eval script and output format are preserved for reference:
 
 ```bash
 PYTHONUTF8=1 python src/train/inference_eval_v2.py --tag 4b-it
+# writes outputs/cad-lora-v2-4b-it-eval.jsonl (40 rows)
 ```
 
-Wall-clock: ~5 min on RTX 4090 (40 generations × ~7s each).
-
-Writes:
-- `outputs/cad-lora-v2-4b-it-eval.jsonl` (40 rows: prompt + emitted JS + per-row scores)
-
-Each row carries:
-```json
-{
-  "id": "<seed-id>",
-  "prompt": "Build a wall, 5.5m long, 0.2m thick, 2.8m tall.",
-  "emitted_js": "const e0 = drawRectangle(5.5, 0.2).sketchOnPlane(\"XY\").extrude(2.8);",
-  "parse_ok": true,
-  "api_clean": true,
-  "has_solid_op": true,
-  "runtime_pass": true,
-  "result_kind": "Solid"
-}
-```
-
-Aggregate:
+Aggregate check:
 ```bash
 jq -s '{
   parse_ok: (map(select(.parse_ok)) | length),
@@ -158,7 +102,7 @@ set to execute the upload.
 Uploads:
 - Adapter weights + config to `gemma-architect/cad-lora-v2`
 - Auto-generated model card (eval numbers, intended use, limitations)
-- Apache-2.0 license
+- CC BY 4.0 license
 
 ## 6. Build + run the web app
 
@@ -173,7 +117,7 @@ bun run web:typecheck      # strict tsc, no emit
 
 ```bash
 bun run web:dev
-# http://localhost:5173 — hot reload, COOP+COEP headers configured
+# http://localhost:5175 — hot reload, COOP+COEP headers configured
 ```
 
 ### Production build
@@ -215,37 +159,20 @@ configured in `web/vite.config.ts` for both `server` and `preview`.
 ## 7. AI prompt → geometry pipeline
 
 The PROMPT tab (`web/src/ai-generate.ts`) turns a natural-language
-description into replicad JS. Two paths back the textbox: a bundled
-60-row cache (default) and a live LoRA server (opt-in). See
-`docs/ai-pipeline.md` for the full architecture.
+description into replicad JS. Two paths: a 60-row prompt cache (default)
+and stock Gemma 4 E4B-it in-browser (cache miss). See `docs/ai-pipeline.md`.
 
-### Build the bundled cache (optional — ships pre-built)
+### Build the bundled cache (required — not checked in)
 
-The cache `web/public/ai-cache.json` ships in the repo (60 rows). Rebuilding
-is only needed if you re-train (step 3) and re-run eval (step 4) — the
-build script reads the eval JSONL written by step 4. Without those outputs
-on disk, this command exits with `ENOENT: outputs/cad-lora-v2-4b-it-eval.jsonl`.
-A judge running the web app + self-harness path (steps 6, 8, 9) does **not**
-need to rebuild the cache — the shipped file is the demo path.
+The cache `web/dist/ai-cache.json` is produced at build time. `bun run web:build`
+runs `scripts/build-ai-cache.ts` automatically. The build script reads
+`data/dsl-demo-corpus.jsonl` + Schultz gold + archived Gemma 3 eval outputs
+(if available at `outputs/archive-gemma3-2026-05-05/`).
 
 ```bash
-bun scripts/build-ai-cache.ts
-# wrote web/public/ai-cache.json (60 rows)
+bun run web:build
+# emits web/dist/ai-cache.json (60 rows) among other bundle artifacts
 ```
-
-The cache is sourced from three corpora that the build script merges:
-- `outputs/cad-lora-v2-4b-it-eval.jsonl` — 40 prompts × 100% round-trip
-  on the v2 LoRA eval (each row's `pred` parses, executes, and produces
-  a non-empty solid through Tier 1)
-- `data/dsl-demo-corpus.jsonl` — 19 DSL prompts compiled to JS via
-  `web/src/dsl-eval.ts` (`compileDsl()`, the same path the PROMPT tab's
-  CONSOLE mode uses at runtime — broader coverage on parametric scenarios
-  than the
-  4b-it eval alone)
-- `outputs/cad-lora-v2-4b-it-schultz-eval.jsonl` — 1 row for the
-  Schultz Residence using `gold` (the 4b-it `pred` has translate/cut
-  bugs on the 14-element multi-fuse — gold is shipped as the
-  user-facing artifact)
 
 ### Smoke-test the matcher
 
@@ -254,8 +181,8 @@ bun scripts/test-ai-match.ts
 ```
 
 F1-weighted similarity (numeric tokens count 2x, stop-words filtered).
-F1 ≥ 0.30 returns the cached row; below threshold the path falls
-through to live LoRA or surfaces a `no-match` error to the user.
+F1 ≥ 0.30 returns the cached row; below threshold falls through to the
+on-device Gemma 4 model.
 
 ### IFC viewer + DSL corpus regressions
 
@@ -283,7 +210,7 @@ GEMMA4_GGUF=models/gemma-4-E2B-IT-Q4_K_M.gguf bash scripts/serve-gemma4-e2b.sh
 
 # 3. Open the web app — the CREATE tab is live:
 bun run web:dev
-# Navigate to http://localhost:5173, click CREATE, type a prompt.
+# Navigate to http://localhost:5175, click CREATE, type a prompt.
 ```
 
 `scripts/serve-gemma4-e2b.sh` auto-detects llama-server from avir-cli's vendor directory

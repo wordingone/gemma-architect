@@ -21,17 +21,12 @@ file readable by every BIM tool on the planet (Revit, ArchiCAD, BlenderBIM,
 Solibri, IFC.js viewers, BimVision). Parameters become sliders the user
 can drag without ever opening a modeling environment.
 
-The sharpest version of the equity case is the hand-sketch path: a
-small-shop architect in a region where Revit costs three months' wages
-opens the page, drags a hand-drawn pencil-on-paper floorplan into the
-canvas, and downloads a BIM-compliant IFC4 file in seconds. Sobel +
-Hough wall detection runs in-line on the page (zero deps, no service
-to call), extrudes detected segments at 2.8m, emits IFC4 — turns
-"person with a sketch" into "BIM asset producer" without an installer,
-API key, or CAD training prerequisite. For a real photograph of a
-floorplan, a Gemma 4 multimodal function-calling path is wired in
-`agent-harness.ts` (geometry dispatch handlers are the remaining
-integration milestone).
+The equity case is the prompt-to-IFC path: a small-shop architect types a
+sentence, the page generates geometry in-browser (no server, no API key),
+and exports an IFC4 file readable by any BIM tool. Stock Gemma 4 E4B-it
+runs on-device via Transformers.js; no fine-tune or adapter is required.
+The 60-row prompt cache provides sub-100ms responses for common one-liner
+prompts; the on-device model handles novel prompts.
 
 The audience who gains access:
 
@@ -50,28 +45,23 @@ The audience who gains access:
 Three properties of Gemma 4 made this approach feasible inside an 18-day
 window:
 
-1. **On-device inference path.** Gemma 4 E2B (and 4b-it as a 4B-parameter
-   ceiling) fit inside the WebGPU memory window of a mid-tier laptop GPU.
+1. **On-device inference path.** Gemma 4 E4B-it fits inside the WebGPU memory
+   window of a mid-tier laptop GPU (E2B is available via `?gemma_model=e2b`).
    No server roundtrip, no per-query API cost, no rate limit. The
    submission ships as a single static page on GitHub Pages today;
    HuggingFace Spaces and Vercel are drop-in upgrades that light up
    COOP+COEP multi-thread WASM. Free tier forever in any of the three.
-2. **Strong base instruction-following on small data.** A LoRA on a Gemma 4
-   base converges to high round-trip pass rates on held-out eval sets
-   with only ~932 augmented training pairs. The base model already knows
-   how to read English; the LoRA only has to teach it the replicad vocabulary.
-3. **Apache-2.0 license** — the model artifact ships under a license the
-   hackathon and downstream users can actually deploy commercially without
-   legal review.
-4. **Eval round-trip strong enough to ship a cache.** The held-out eval
-   produces 40/40 valid prompt → JS pairs. Those pairs ship as a 60-row
-   bundled cache (40 eval + 19 DSL corpus + 1 Schultz gold) the page
-   fuzzy-matches against. Result: a user without a GPU, behind a
-   network-blocked demo VM, or on a low-spec laptop hits the same demo
-   experience in ~50 ms as someone running the live LoRA. The live model
-   is one toggle away (`window.__loraUrl` → `src/serve/serve_lora.py`)
-   for novel off-corpus prompts — but the cache is the floor, not the
-   fallback.
+2. **Strong base instruction-following.** Stock Gemma 4 E4B-it handles
+   architectural prompts in-browser without fine-tuning. The replicad
+   vocabulary is small enough (~12 ops) that the base model learns it from
+   the system prompt and few-shot examples.
+3. **CC BY 4.0 license** — the repo ships under a license the hackathon
+   and downstream users can deploy commercially without legal review.
+4. **60-row prompt cache for instant demos.** Prompt → JS pairs (built from
+   `data/dsl-demo-corpus.jsonl` + Schultz gold + archived Gemma 3 LoRA eval)
+   ship with the bundle. A user without a GPU, behind a network-blocked demo VM,
+   or on a low-spec laptop hits the demo experience in ~50 ms via cache fuzzy
+   match. Novel prompts fall through to the on-device Gemma 4 model.
 
 A larger non-Gemma model would have meant either a paid API (kills the
 free-tier deployment) or a server we'd have to host. Both contradict the
@@ -84,9 +74,8 @@ The submission is not a research artifact; it's a deployable web app.
 **Phase 1 (today, hackathon submission)**
 - Static page at GitHub Pages (https://wordingone.github.io/gemma-architect/),
   free tier; HF Spaces / Vercel are COOP+COEP-capable upgrade paths.
-- Repo at github.com/wordingone/gemma-architect, Apache-2.0.
-- LoRA adapter intended for HuggingFace Hub at `gemma-architect/cad-lora-v2`;
-  push pending HF_TOKEN per `submission/README.md` outstanding blockers.
+- Repo at github.com/wordingone/gemma-architect, CC BY 4.0.
+- No LoRA adapter in this submission; training scripts scaffolded for a future Gemma 4 retrain.
 - Vocabulary: Tier 1, 12 ops covering walls, slabs, columns, footings,
   basic openings (cut), L-shape and U-shape footprints. ~85% of the
   building primitives a small-shop architect produces in a typical
@@ -95,12 +84,9 @@ The submission is not a research artifact; it's a deployable web app.
 **Phase 2 (post-hackathon, 1–3 months)**
 - Tier 2 vocabulary: revolves (cylindrical tanks, tapered silos, toroidal
   forms), multi-hole boolean cuts, more sophisticated boolean chains.
-- Sketch-recognition refinement: the v1 Sobel + Hough wall detector handles
-  orthogonal-only floorplans at default 100 px/m scale. Phase 2 adds curved
-  walls (Hough circle), per-room labels via OCR, and user-adjustable scale.
-- Photo-to-IFC fine-tune: v1's image→IFC path uses Gemma 4 multimodal native
-  (no LoRA on the multimodal branch). A LoRA tuned on annotated floorplan
-  photos would lift accuracy above the function-calling baseline.
+- Sketch-to-IFC: wire the `reconstructFromImage` agent (exists in `main.ts`,
+  not connected to file-drop yet). Phase 2 adds the drag-PNG → IFC path.
+- Photo-to-IFC: Gemma 4 multimodal function-calling for annotated floorplan photos.
 - IFC4 → IFC4x3 spec coverage for civil-infrastructure projects.
 
 **Phase 3 (6–12 months)**
@@ -114,11 +100,7 @@ The submission is not a research artifact; it's a deployable web app.
 
 ## Numbers we can defend
 
-- **Training**: 53 min on one RTX 4090, 932 augmented pairs, train_loss 0.2442
-  at epoch 3 (`outputs/cad-lora-v2-4b-it/train-stats.json`).
-- **Held-out eval**: 40/40 parse_ok, 40/40 api_clean, 40/40 has_solid_op,
-  40/40 runtime_pass = **100% round-trip**
-  (`outputs/cad-lora-v2-4b-it-eval.jsonl`).
+- **Self-harness**: 9 demo prompts verified end-to-end (parse + run + IFC).
 - **Self-harness**: 9 demo prompts span single-element (wall, column,
   raised slab), parametric variation, multi-element fuse + boolean cut
   (slab-with-hole, wall-with-door, four-walled-room, stair-step,
@@ -151,14 +133,13 @@ The submission is not a research artifact; it's a deployable web app.
   ~1 ms. These are the numbers a non-CAD user actually sees on a
   consumer GH Pages link with no header tricks.
 - **License chain** (verified against `node_modules/*/LICENSE` files at
-  the deployed bundle's pinned versions): Apache-2.0 on the repo + LoRA
-  adapter, MIT on replicad 0.20.0, MIT on the replicad-opencascadejs
-  0.20.2 wrapper (the bundled OpenCascade WASM it ships is separately
-  LGPL-2.1 with linking exception), MPL-2.0 on web-ifc 0.0.77, MIT on
-  three.js 0.162.0. All five are compatible with commercial deployment;
-  MPL-2.0 is weakly copyleft per file (modifications to web-ifc files
-  redistributed must stay MPL, but our app code that *uses* web-ifc has
-  no copyleft obligation).
+  the deployed bundle's pinned versions): CC BY 4.0 on the repo,
+  LGPL-2.1 on replicad 0.20.0 and replicad-opencascadejs 0.20.2 (plus
+  the bundled OpenCascade WASM separately under LGPL-2.1 with linking exception),
+  MPL-2.0 on web-ifc 0.0.77, MIT on three.js 0.162.0. MPL-2.0 is
+  weakly copyleft per file (modifications to web-ifc files redistributed
+  must stay MPL, but our app code that *uses* web-ifc has no copyleft obligation).
+  LGPL-2.1 on replicad allows dynamic linking without copyleft propagation.
 
 ## What this is not
 

@@ -93,11 +93,10 @@ against:
 
 ## Cross-reference: NURBS toolkit lineage
 
-The verb-nurbs library used by the WebGPU kernel is MIT-licensed
-clean-room JavaScript. NURBS itself is public-domain mathematics from
-Versprille's 1975 PhD thesis. We do mention "Rhino's open-source NURBS
-toolkit" once in `web/src/nurbs-kernel.LICENSE.md` for academic
-attribution and never again in the codebase to avoid trademark drag.
+The WebGPU kernel in `nurbs-kernel.ts` (line 412+) is hand-rolled WGSL, not
+verb-nurbs. NURBS itself is public-domain mathematics from Versprille's 1975
+PhD thesis. verb-nurbs is an MIT-licensed library declared as a package
+dependency but not used on the WebGPU code path.
 
 ## Summary
 

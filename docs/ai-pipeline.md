@@ -5,73 +5,34 @@ JS construction sequence. Two paths back the textbox.
 
 ## Path A — bundled cache (default)
 
-60 prompt → JS pairs ship with the web bundle:
-- 40 rows from `outputs/cad-lora-v2-4b-it-eval.jsonl` (100% round-trip on the
-  v2 LoRA eval set — every row's `pred` parses, runs, and produces a non-
-  empty solid through Tier 1 `execute()`).
-- 19 rows from `data/dsl-demo-corpus.jsonl` compiled to JS via
-  `web/src/dsl-eval.ts` (`compileDsl()` — same path the CONSOLE tab uses
-  at runtime; broader parametric coverage than the 4b-it eval alone).
-- 1 row for the Schultz Residence (uses `gold` since the 4b-it pred has
-  translate/cut bugs on the 14-element multi-fuse).
+60 prompt → JS pairs are produced at build time (`bun run web:build` runs
+`scripts/build-ai-cache.ts` which emits `web/dist/ai-cache.json`):
+- Rows from `data/dsl-demo-corpus.jsonl` (19 DSL corpus rows compiled via
+  `web/src/dsl-eval.ts`).
+- 1 row for the Schultz Residence (gold sequence from `data/schultz-target.jsonl`).
+- Remaining rows from the precursor Gemma 3 4B LoRA eval outputs (archived at
+  `outputs/archive-gemma3-2026-05-05/`). Note: `outputs/` is gitignored; these
+  are not in a fresh clone. Run `submission/repro.md` dataset steps first.
 
-The cache itself (`web/public/ai-cache.json`, 60 rows) is checked into the
-repo and ships with the bundle — a fresh clone serves it directly with no
-rebuild step. To regenerate after corpus changes:
-
-```
-bun scripts/build-ai-cache.ts
-# wrote web/public/ai-cache.json (60 rows)
-```
-
-Note: the rebuild reads `outputs/cad-lora-v2-4b-it-eval.jsonl` and
-`outputs/cad-lora-v2-4b-it-schultz-eval.jsonl`, both produced by
-`src/train/inference_eval_v2.py` on the training machine. `outputs/` is
-gitignored (per top-level `.gitignore:14`) — those JSONLs are not in a
-fresh clone. To rebuild from scratch, follow `submission/repro.md` §3
-through `inference_eval_v2.py` first, then run the build script.
-
-The frontend's `web/src/ai-generate.ts` fetches `ai-cache.json` lazily on the
-first `generateGeometry()` call and does weighted-F1 fuzzy match (numeric/
-dimension tokens count 2x) to pick the best cached row. F1 ≥ 0.30 hits;
-below that, falls through to live LoRA or surfaces a no-match error.
+The cache (`web/dist/ai-cache.json`) is produced at build time, not checked in.
+The frontend's `web/src/ai-generate.ts` fetches it lazily on the first
+`generateGeometry()` call and does weighted-F1 fuzzy match (numeric/dimension
+tokens count 2x) to pick the best cached row. F1 ≥ 0.30 hits;
+below that, falls through to the on-device Gemma 4 model.
 
 This path is **demo-stable** — sub-100ms response, no GPU, no network call.
 It's what judges see by default.
 
-## Path B — live LoRA inference
+## Path B — live Gemma 4 (default for novel prompts)
 
-For users who want the real model in the loop, point the frontend at an
-OpenAI-compat endpoint:
+Stock `onnx-community/gemma-4-E4B-it-ONNX` loads in-browser via Transformers.js v4
+(WebGPU). No fine-tune or adapter loaded. When a prompt misses the cache (F1 < 0.30),
+`generateGeometry()` sends it to the in-browser model.
 
-```js
-window.__loraUrl = "http://localhost:8088/v1/chat/completions";
-// or at build:
-//   VITE_LORA_URL=http://localhost:8088/v1/chat/completions vite build
-```
+Use `?gemma_model=e2b` URL param to switch to the smaller E2B variant.
 
-When `__loraUrl` is set, `generateGeometry()` tries the LoRA endpoint first
-and only falls back to cache on network/HTTP errors.
-
-### Running the LoRA server
-
-`src/serve/serve_lora.py` is a minimal FastAPI wrapper around the v2 adapter:
-
-```
-pip install fastapi uvicorn pydantic
-python src/serve/serve_lora.py
-# adapter loads in ~30s on a 4090
-# listening on http://127.0.0.1:8088
-```
-
-Endpoints:
-- `GET /health` → `{"status": "ok", "adapter": "..."}`
-- `POST /v1/chat/completions` → OpenAI-compat chat response
-
-The server uses Unsloth `FastModel.from_pretrained` with 4-bit quantization
-(same setup as `inference_eval_v2.py`), max_seq_length=4096, temperature=0.1
-default. It accepts a system prompt; the frontend sends the same v2 training
-system prompt automatically.
+`src/serve/serve_lora.py` (FastAPI LoRA wrapper) is legacy scaffolding kept for
+reference; it is not on the deployed path.
 
 ## Pipeline shape
 
@@ -81,16 +42,12 @@ prompt textbox
     ▼
 ai-generate.generateGeometry(prompt)
     │
-    ├─ if window.__loraUrl set → POST /v1/chat/completions → JS
-    │       │
-    │       └─ on error → fall through to cache
-    │
     └─ tryCache(prompt)
             │
             └─ F1 fuzzy match against ai-cache.json (60 rows)
                     │
                     └─ best ≥ 0.30 → JS
-                    └─ no match  → throw GenerateError
+                    └─ no match → live Gemma 4 E4B-it (Transformers.js WebGPU)
     │
     ▼
 js-source textarea (legacy id)
@@ -115,13 +72,9 @@ To re-verify after corpus changes:
 bun scripts/build-ai-cache.ts && bun scripts/test-ai-match.ts
 ```
 
-## Why a cache, not just live LoRA
+## Why a cache + on-device model
 
-A 15-day hackathon needs a path judges can hit without provisioning GPU. The
-cache gives sub-100ms latency on a known corpus and survives offline /
-network-blocked demo settings. Live LoRA is the production answer for novel
-prompts — it produces fresh JS for off-corpus inputs that the cache can't
-handle.
-
-The two paths share one frontend interface (`generateGeometry`) so swapping
-backends doesn't touch the workbench wiring.
+The cache gives sub-100ms latency on the 60 known demo prompts and survives
+offline / network-blocked demo settings. The on-device Gemma 4 E4B-it handles
+novel prompts. Both paths share one frontend interface (`generateGeometry`) so
+the backend is transparent to the workbench wiring.

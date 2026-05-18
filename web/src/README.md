@@ -92,7 +92,7 @@ Heavy IFC parsing goes through `worker.ts`; these modules run on main thread for
 Keep parsing/loading concerns isolated from UI.
 
 ### nurbs/
-Self-contained B-spline library (BSD licensed — see `nurbs-kernel.LICENSE.md`).
+In-house B-spline library implementing Cox-de Boor evaluation for arc, ellipse, spline, and curve palette tools. Repo license is CC BY 4.0 (see `nurbs-kernel.LICENSE.md`).
 `nurbs-kernel.ts` — math core (knot vectors, basis functions, de Boor).
 `nurbs-curves.ts` / `nurbs-surfaces.ts` — higher-level ops (`tessellate`, `tessellateSurface`, `pointAt`, `domain`).
 `nurbs-primitives.ts` — constructors: `Point3`, `Plane`, `Arc`.

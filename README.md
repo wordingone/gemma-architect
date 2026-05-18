@@ -2,8 +2,9 @@
 
 Browser-native parametric architectural design from natural-language prompts.
 Type a sentence; render a building; export an IFC4 file. No server,
-no install, no API key — Gemma 4 LoRA + replicad geometry kernel +
-web-ifc all run inside a single tab.
+no install, no API key — Gemma 4 E4B-it (stock, no fine-tune) + replicad geometry kernel +
+web-ifc all run inside a single tab. A bundled 60-row prompt cache covers the canned demos;
+the model handles novel prompts on-device.
 
 **Hackathon entry:** Gemma 4 Good Hackathon (Kaggle + Google DeepMind),
 deadline 2026-05-18.
@@ -40,11 +41,9 @@ rooms, stair-step structures, and a 14-element Schultz Residence (the
 hero demo, also reachable via the Cmd-K palette). Each has 3-6 sliders
 that re-trigger the worker without re-running the model.
 
-Beyond prompt-to-geometry, the page accepts three other input modes:
-**drag a floorplan PNG** to drive the 2D→3D reconstruction agent
-(emits IFC4 from a hand sketch); **drag a JPG/PNG to "Reconstruct via
-Agent…"** to drive the image→IFC E2B agent (Gemma 4 multimodal,
-LoRA-free); and **type DSL into the CONSOLE tab** (`wall(...)`,
+Beyond prompt-to-geometry, the page accepts other input modes:
+**drag an IFC/STEP/GLB/OBJ/STL file** to load existing 3D models into the viewer;
+and **type DSL into the CONSOLE tab** (`wall(...)`,
 `slab(...)`, `column(...)`, `cut(...)`) for direct geometric control
 without round-tripping through the model.
 
@@ -71,17 +70,15 @@ emits BIM-compliant geometry without an installer or API key.
 
 The PROMPT textbox supports two paths:
 
-- **Cache-first (default).** A 60-row prompt → JS cache ships with the
-  bundle (40 from the v2 LoRA eval at 100 % round-trip + 19 DSL corpus
-  rows compiled via `compileDsl()` + 1 Schultz gold). F1-weighted
+- **Cache-first (for bundled demos).** A 60-row prompt → JS cache ships with the
+  bundle (built from `data/dsl-demo-corpus.jsonl` + Schultz gold + precursor Gemma 3
+  LoRA eval outputs archived at `outputs/archive-gemma3-2026-05-05/`). F1-weighted
   similarity (numeric tokens 2x, stop-words filtered) returns the best
-  match in ~50 ms. No GPU, no network call — the path judges hit by
-  default and the path that survives offline demo settings.
-- **Live LoRA (opt-in).** `src/serve/serve_lora.py` is a FastAPI wrapper
-  around the v2 adapter exposing `/v1/chat/completions`. Set
-  `window.__loraUrl` (or `VITE_LORA_URL` at build time) and the page
-  hits the live model first, falling back to the cache on
-  network/HTTP errors.
+  match in ~50 ms. No GPU, no network call — the path bundled demos use.
+- **Live Gemma 4 (default for novel prompts).** Stock `onnx-community/gemma-4-E4B-it-ONNX`
+  loads in-browser via Transformers.js v4 (WebGPU). No fine-tune or adapter loaded.
+  Novel prompts that miss the cache go directly to the in-browser model.
+  (`?gemma_model=e2b` URL param switches to the smaller E2B variant.)
 
 Architecture: [`docs/ai-pipeline.md`](docs/ai-pipeline.md). The
 console-DSL terminal that backs the cache's broader-coverage rows is
@@ -93,18 +90,9 @@ documented in [`docs/console-dsl.md`](docs/console-dsl.md).
 
 | What                                       | Number                            |
 | ------------------------------------------ | --------------------------------- |
-| Base model                                 | Gemma 4 E2B-it (onnx-community/gemma-4-E2B-it-ONNX) |
-| LoRA                                       | rank 16, alpha 16, all-linear     |
-| Train rows (augmented)                     | 932                               |
-| Eval rows (held-out, no augmentation)      | 40                                |
-| Train wall-clock (RTX 4090)                | 53 min (351 steps × 3 epochs)     |
-| `train_loss` @ epoch 3                     | 0.2442                            |
-| Eval `parse_ok`                            | 40 / 40                           |
-| Eval `api_clean`                           | 40 / 40                           |
-| Eval `has_solid_op`                        | 40 / 40                           |
-| Eval **`runtime_pass` (full round-trip)**  | **40 / 40 = 100 %**               |
+| Base model                                 | Gemma 4 E4B-it (onnx-community/gemma-4-E4B-it-ONNX) |
 | Self-harness demos (no browser)            | 9 / 9 pass                        |
-| AI prompt cache rows (eval + DSL + Schultz)| 60                                |
+| AI prompt cache rows (DSL + Schultz + archived eval) | 60               |
 | DSL corpus rows compiled via `compileDsl()`| 19 / 19 pass                      |
 
 Numbers reproducible end-to-end via [`submission/repro.md`](submission/repro.md).
@@ -124,11 +112,10 @@ Numbers reproducible end-to-end via [`submission/repro.md`](submission/repro.md)
 
 ## Stack
 
-- **Model:** Gemma 4 E2B-it (`onnx-community/gemma-4-E2B-it-ONNX`) via Unsloth FastModel (4-bit QLoRA).
-  E2B-it is the in-browser target — E4B exceeds the WebGPU VRAM ceiling for the live demo.
-- **Geometry kernel:** [replicad](https://replicad.xyz/) 0.20.0 (MIT) on
+- **Model:** Gemma 4 E4B-it (`onnx-community/gemma-4-E4B-it-ONNX`), Q4 quantized, loaded in-browser via Transformers.js v4. No fine-tune in the deployed path. (`?gemma_model=e2b` switches to the smaller E2B variant.)
+- **Geometry kernel:** [replicad](https://replicad.xyz/) 0.20.0 (LGPL-2.1) on
   [replicad-opencascadejs](https://github.com/sgenoud/replicad) 0.20.2
-  (MIT wrapper, with the bundled OpenCascade WASM separately under
+  (LGPL-2.1 wrapper, with the bundled OpenCascade WASM separately under
   LGPL-2.1 + linking exception).
 - **IFC4 parser:** [web-ifc](https://github.com/ThatOpen/engine_web-ifc)
   0.0.77 (MPL-2.0) — the page hand-emits STEP-21 text and round-trips
@@ -156,9 +143,9 @@ but our app code that *uses* web-ifc has no copyleft obligation.
 | `web/src/worker.ts` | Geometry-kernel web worker (replicad + OpenCascade). |
 | `web/src/ifc.ts` + `ifc-build.ts` | IFC4 STEP-21 emit + web-ifc round-trip verify. |
 | `web/src/demo-prompts.ts` | The 9 canned demos with parameter slider config (incl. Schultz hero). |
-| `web/src/ai-generate.ts` | Cache-first prompt → JS pipeline + live LoRA fallback. |
+| `web/src/ai-generate.ts` | Cache-first prompt → JS pipeline; falls through to live Gemma 4 on cache miss. |
 | `web/src/dsl-eval.ts` | `compileDsl()` — v0 lexicon → JS for the CONSOLE tab. |
-| `web/public/ai-cache.json` | 60-row prompt → JS cache (built by `scripts/build-ai-cache.ts`). |
+| `web/dist/ai-cache.json` | 60-row prompt → JS cache (produced by `bun run web:build` via `scripts/build-ai-cache.ts`). |
 | `src/tools/tier1.ts` | The 12-op replicad surface the model is trained against. |
 | `src/train/` | Unsloth LoRA training scripts (build dataset, train, eval, publish). |
 | `src/serve/serve_lora.py` | OpenAI-compat FastAPI wrapper around the v2 adapter. |
@@ -184,7 +171,7 @@ git clone https://github.com/wordingone/gemma-architect
 cd gemma-architect
 bun install
 bun run web:typecheck       # strict tsc, no emit
-bun run web:dev             # http://localhost:5173 — hot reload
+bun run web:dev             # http://localhost:5175 — hot reload
 # or
 bun run web:build           # outputs to web/dist/
 bun run web:preview         # http://127.0.0.1:4173 — same build the live demo serves
@@ -209,20 +196,17 @@ nested booleans). What it surfaced about the 12-op convention is in
 [`docs/tier1-conventions.md`](docs/tier1-conventions.md) — required
 reading for anyone training against this surface.
 
-To re-train the LoRA on a 4090, see [`submission/repro.md`](submission/repro.md) §3.
+Training scripts are in `src/train/` (scaffold for a future Gemma 4 retrain; the precursor Gemma 3 LoRA is archived at `outputs/archive-gemma3-2026-05-05/`).
 
 ---
 
 ## What ships with this submission
 
 - **GitHub repo** — this repo. CC BY 4.0.
-- **Hugging Face Hub adapter** — `gemma-architect/cad-lora-v2` is the
-  intended path (LoRA on Gemma 4 E2B-it, CC BY 4.0,
-  auto-generated model card with eval + intended-use + limitations).
-  Push is pending Gemma 4 retrain; until then `src/train/publish_v2.py` writes
-  `outputs/cad-lora-v2-publish-plan.json` on the training machine
-  (`outputs/` is gitignored). See `submission/README.md` outstanding
-  blockers and `dataset/v2-results.md` §Publish.
+- **Model** — no LoRA adapter ships in this submission. The deployed app runs stock
+  `onnx-community/gemma-4-E4B-it-ONNX` in-browser. Training scripts (`src/train/`) are
+  scaffolded for a future Gemma 4 retrain; the prior Gemma 3 4B LoRA is archived at
+  `outputs/archive-gemma3-2026-05-05/` and is not loaded by the deployed app.
 - **Hosted live demo** — GitHub Pages: https://wordingone.github.io/gemma-architect/
   (single-thread WASM fallback because GH Pages can't serve COOP+COEP;
   multi-thread path lights up on any host that can — Spaces, Vercel,
