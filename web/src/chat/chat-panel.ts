@@ -30,8 +30,9 @@ type GemmaSession = { startTs: number; turnCount: number; dispatchCount: number;
 type GemmaDispatchHooks = { pre: Array<(d: AgentDispatch) => void> };
 type _GemmaW = Window & typeof globalThis & { __gemmaSession: GemmaSession; __gemma_dispatch_hooks: GemmaDispatchHooks };
 
-const STARTER_PROMPTS = [
-  "What's currently in the scene?",
+const STARTER_PROMPTS: Array<{ label: string; prompt: string }> = [
+  { label: "What's currently in the scene?", prompt: "What's currently in the scene?" },
+  { label: "Two-story house", prompt: "Build a two-story house, 8m by 6m, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs." },
 ];
 
 // ── Skill re-binding helpers ──────────────────────────────────────────────────
@@ -161,9 +162,9 @@ export class ChatPanel {
     for (const s of STARTER_PROMPTS) {
       const chip = document.createElement("span");
       chip.className = "ai-chip chat-starter-chip";
-      chip.textContent = s;
+      chip.textContent = s.label;
       chip.addEventListener("click", () => {
-        this._inputEl.value = s;
+        this._inputEl.value = s.prompt;
         this._inputEl.focus();
       });
       this._startersEl.appendChild(chip);

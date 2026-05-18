@@ -3665,6 +3665,31 @@ await resetScene('before-box-inject');
   else record('copy-array-side-effects-door', r69.passed, r69.evidence ?? { error: r69.error });
 }
 
+// ── S70: two-story-house chip — label visible, click fills input (#chip) ──────
+// Asserts the "Two-story house" chip renders alongside existing chips and that
+// clicking it auto-fills the chat input with the full design prompt.
+{
+  const r70 = await evaluate(`(function() {
+    try {
+      const chips = Array.from(document.querySelectorAll('.chat-starter-chip'));
+      const chip = chips.find(c => c.textContent.trim() === 'Two-story house');
+      if (!chip) return { passed: false, evidence: { reason: 'chip not found', chipLabels: chips.map(c => c.textContent.trim()) } };
+
+      // Simulate click.
+      chip.click();
+
+      const input = document.querySelector('.chat-input');
+      const val = input ? input.value : '';
+      const expectedSubstr = 'Build a two-story house';
+      const passed = val.includes(expectedSubstr);
+      return { passed, evidence: { chipFound: true, inputValue: val.slice(0, 80), expectedSubstr } };
+    } catch(e) { return { passed: false, evidence: { error: e.message } }; }
+  })()`);
+
+  if (!r70) record('two-story-house-chip', false, { reason: 'evaluate returned null' });
+  else record('two-story-house-chip', r70.passed, r70.evidence ?? { error: r70.error });
+}
+
 } finally {
   await cleanup();
 }
