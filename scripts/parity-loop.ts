@@ -281,6 +281,10 @@ let iterationN = 0;
 let currentScore = 0;
 let activeTierIdx = START_TIER_IDX;
 let activeTier    = TIER_LADDER[activeTierIdx];
+// Fingerprint of the last reverted dispatch (verb+args JSON). When the model
+// proposes an exact repeat of a just-reverted dispatch, the driver emits
+// action:"skip" instead of re-executing and re-reverting (#472).
+let lastRevertedKey: string | null = null;
 
 console.log(`parity-loop: tiers=${TIER_LADDER.join("→")} starting=${activeTier} max_iterations=${MAX_ITERATIONS} mock=${MOCK}`);
 console.log(`JSONL → ${ITERATIONS_JSONL}`);
@@ -331,6 +335,19 @@ while (iterationN < MAX_ITERATIONS) {
   }
   console.log(`  → ${proposal.verb} ${JSON.stringify(proposal.args)}: ${proposal.rationale}`);
 
+  // Structural duplicate-detection (#472): if model proposes the exact same
+  // verb+args as the just-reverted dispatch, skip without re-executing.
+  const proposalKey = JSON.stringify({ verb: proposal.verb, args: proposal.args });
+  if (proposalKey === lastRevertedKey) {
+    console.log(`  ↷ Duplicate post-revert dispatch detected — skipping (non-imp counter unchanged).`);
+    log({ ts: new Date().toISOString(), iteration_n: iterationN, active_tier: activeTier,
+          dispatches: [{ verb: proposal.verb, args: proposal.args, rationale: proposal.rationale }],
+          delta_before: beforeResult, delta_after: null,
+          scorer_note: "skip: duplicate of last reverted dispatch (#472)",
+          score: currentScore, action: "skip" });
+    continue;
+  }
+
   // 4. Execute dispatch
   await evaluate(`window.__dispatch(${JSON.stringify(proposal.verb)}, ${JSON.stringify(proposal.args)})`);
   await new Promise<void>(r => setTimeout(r, 600));
@@ -365,16 +382,19 @@ while (iterationN < MAX_ITERATIONS) {
       action = "improve";
       activeTier = TIER_LADDER[activeTierIdx];
       consecutiveNonImprovements = 0;
+      lastRevertedKey = null;
       console.log(`  Retargeting to tier ${activeTier}.`);
     }
   } else if (improved) {
     action = "improve";
     consecutiveNonImprovements = 0;
     currentScore = scoreAfter;
+    lastRevertedKey = null;
     console.log(`  ✓ Improved: ${scoreBefore} → ${scoreAfter}`);
   } else {
     action = "revert";
     consecutiveNonImprovements++;
+    lastRevertedKey = proposalKey;
     console.log(`  ✗ No improvement (${scoreBefore} → ${scoreAfter}); reverting [${consecutiveNonImprovements}/${HALT_CONSECUTIVE}]`);
     await evaluate(`window.__dispatch("SdUndo", {})`);
     await new Promise<void>(r => setTimeout(r, 300));
