@@ -8,13 +8,14 @@ import { runAgentTurn } from "../agent/agent-harness";
 import { captureViewport } from "../agent/viewport-capture";
 import type { AgentDispatch, AgentRequest, AgentResponse } from "../agent/agent-harness";
 import { invokeCommand } from "../commands/command-session";
-import type { Skill } from "../agent/skills-loader";
+import type { Skill, SkillStep } from "../agent/skills-loader";
 import { findSkillsForPrompt } from "../agent/skills-loader";
 import { isSimplePlan } from "../agent/plan";
 import { lastTurn } from "../agent/telemetry";
 import { buildDispatchSummary } from "./chat-dispatch-summary";
 import { classifyDispatchResult } from "./chat-dispatch-routing";
 import { setPickerHint } from "../viewer/picker-hint";
+import { openSaveSkillModal } from "../skills/skill-modal";
 
 type Message = {
   role: "user" | "assistant";
@@ -32,6 +33,55 @@ type _GemmaW = Window & typeof globalThis & { __gemmaSession: GemmaSession; __ge
 const STARTER_PROMPTS = [
   "What's currently in the scene?",
 ];
+
+// ── Skill re-binding helpers ──────────────────────────────────────────────────
+
+function _extractPositionFromPrompt(prompt: string): { x: number; y: number; z: number } | null {
+  const m = prompt.match(/\bat\s*\(?\s*(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)(?:\s*[,\s]\s*(-?\d+\.?\d*))?\s*\)?/i);
+  if (!m) return null;
+  return { x: parseFloat(m[1]), y: parseFloat(m[2]), z: m[3] != null ? parseFloat(m[3]) : 0 };
+}
+
+function _getStepAnchor(steps: SkillStep[]): { x: number; y: number; z: number } | null {
+  for (const step of steps) {
+    const a = step.args;
+    if (typeof a.x === "number" && typeof a.y === "number") return { x: a.x as number, y: a.y as number, z: (a.z as number | undefined) ?? 0 };
+    const s = a.start as Record<string, unknown> | undefined;
+    if (s && typeof s.x === "number" && typeof s.y === "number") return { x: s.x as number, y: s.y as number, z: (s.z as number | undefined) ?? 0 };
+  }
+  return null;
+}
+
+function _offsetPoint(v: unknown, dx: number, dy: number, dz: number): unknown {
+  if (!v || typeof v !== "object") return v;
+  if (Array.isArray(v) && v.length >= 2 && typeof v[0] === "number") {
+    return [v[0] + dx, v[1] + dy, v.length >= 3 ? (v[2] as number) + dz : 0];
+  }
+  const obj = v as Record<string, unknown>;
+  if (typeof obj.x === "number") {
+    return {
+      ...obj,
+      x: (obj.x as number) + dx,
+      y: typeof obj.y === "number" ? (obj.y as number) + dy : obj.y,
+      z: typeof obj.z === "number" ? (obj.z as number) + dz : obj.z,
+    };
+  }
+  return v;
+}
+
+function _rebindSkillSteps(steps: SkillStep[], dx: number, dy: number, dz: number): SkillStep[] {
+  return steps.map((step) => ({
+    verb: step.verb,
+    args: Object.fromEntries(Object.entries(step.args).map(([k, v]) => {
+      if (k === "x" && typeof v === "number") return [k, (v as number) + dx];
+      if (k === "y" && typeof v === "number") return [k, (v as number) + dy];
+      if (k === "z" && typeof v === "number") return [k, (v as number) + dz];
+      if (["start", "end", "center", "position", "origin"].includes(k)) return [k, _offsetPoint(v, dx, dy, dz)];
+      if (k === "points" && Array.isArray(v)) return [k, (v as unknown[]).map((pt) => _offsetPoint(pt, dx, dy, dz))];
+      return [k, v];
+    })),
+  }));
+}
 
 function estimateMaxTokens(prompt: string): number {
   const p = prompt.toLowerCase();
@@ -230,7 +280,7 @@ export class ChatPanel {
       // bypass model inference. Covers the K=0 wrong-args case for building-type prompts.
       if (matchedSkills.length === 1 && matchedSkills[0].steps && matchedSkills[0].steps.length > 0) {
         this._removeThinking(thinking);
-        this._executeSkillDirect(matchedSkills[0]);
+        this._executeSkillDirect(matchedSkills[0], text);
         return;
       }
 
@@ -325,8 +375,25 @@ export class ChatPanel {
       `tg ${t.tg_tps.toFixed(1)} t/s · pp ${t.pp_tps.toFixed(0)} t/s · in ${t.tokens_in} · out ${t.tokens_out} · prefill ${Math.round(t.prefill_ms)}ms · decode ${Math.round(t.decode_ms)}ms${mtpTag}${pathTag}`;
   }
 
-  private _executeSkillDirect(skill: Skill): void {
-    const steps = skill.steps!;
+  private _executeSkillDirect(skill: Skill, promptText?: string): void {
+    let steps = skill.steps!;
+
+    // Re-bind positions if prompt contains "at X Y" coordinates.
+    if (promptText) {
+      const targetPos = _extractPositionFromPrompt(promptText);
+      if (targetPos) {
+        const anchor = _getStepAnchor(steps);
+        if (anchor) {
+          const dx = targetPos.x - anchor.x;
+          const dy = targetPos.y - anchor.y;
+          const dz = targetPos.z - anchor.z;
+          if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001 || Math.abs(dz) > 0.001) {
+            steps = _rebindSkillSteps(steps, dx, dy, dz);
+          }
+        }
+      }
+    }
+
     window.dispatchEvent(new CustomEvent("skill:animate", { detail: { steps } }));
     const dispatches: AgentDispatch[] = steps.map((s) => ({ verb: s.verb, args: s.args }));
     const content = `${skill.name} (${steps.length} steps)`;
@@ -497,6 +564,20 @@ export class ChatPanel {
           pills.appendChild(pill);
         }
         item.appendChild(pills);
+
+        // "Save as skill" affordance for multi-dispatch agent turns (#429).
+        if (msg.role === "assistant" && msg.dispatches.length >= 2) {
+          const saveBtn = document.createElement("button");
+          saveBtn.className = "chat-save-skill-btn";
+          saveBtn.type = "button";
+          saveBtn.textContent = "Save as skill…";
+          const capturedDispatches = msg.dispatches;
+          saveBtn.addEventListener("click", () => {
+            const steps = capturedDispatches.map((d) => ({ verb: d.verb, args: d.args }));
+            openSaveSkillModal(steps);
+          });
+          item.appendChild(saveBtn);
+        }
       }
     }
 

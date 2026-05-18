@@ -491,6 +491,24 @@
   border: var(--lw-construction) solid var(--gemma);
   color: var(--gemma);
 }
+/* Save-as-skill affordance (#429) */
+.chat-save-skill-btn {
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  background: transparent;
+  border: var(--lw-construction) solid var(--border);
+  color: var(--ink-dim);
+  cursor: pointer;
+  margin-top: 2px;
+  align-self: flex-start;
+}
+.chat-save-skill-btn:hover {
+  border-color: var(--gemma);
+  color: var(--gemma);
+  background: var(--gemma-tint);
+}
 /* Plan pane — foldable (#413/SU-7) */
 .chat-plan-details {
   width: 100%;
