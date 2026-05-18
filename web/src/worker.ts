@@ -94,6 +94,7 @@ type RunSuccess = {
   resultKind: string;
   mesh: { vertices: Float32Array; normals: Float32Array; indices: Uint32Array };
   stl: ArrayBuffer;
+  step: ArrayBuffer;
   bounds: { min: [number, number, number]; max: [number, number, number] };
 };
 type RunError = { type: "run-error"; id: number; error: string };
@@ -225,8 +226,15 @@ async function executeAndMesh(js: string): Promise<RunSuccess | RunError> {
     const blob = shape.blobSTL({ binary: true });
     stlBuffer = await blob.arrayBuffer();
   } catch (e) {
-    // Don't fail the whole run if STL synthesis hiccups — viewer still works.
     stlBuffer = new ArrayBuffer(0);
+  }
+
+  let stepBuffer: ArrayBuffer;
+  try {
+    const blob = shape.blobSTEP();
+    stepBuffer = await blob.arrayBuffer();
+  } catch (e) {
+    stepBuffer = new ArrayBuffer(0);
   }
 
   // Minification mangles ctorName ("Nt"); fall back to "Solid" for display
@@ -240,6 +248,7 @@ async function executeAndMesh(js: string): Promise<RunSuccess | RunError> {
     resultKind: resultKindOut,
     mesh: { vertices, normals, indices },
     stl: stlBuffer,
+    step: stepBuffer,
     bounds: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
   };
 }
@@ -579,6 +588,7 @@ self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
         out.mesh.indices.buffer,
       ];
       if (out.stl.byteLength > 0) transfer.push(out.stl);
+      if (out.step.byteLength > 0) transfer.push(out.step);
       (self as any).postMessage(out, transfer);
     } else {
       (self as any).postMessage(out);

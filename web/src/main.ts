@@ -15,7 +15,8 @@ import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonEleme
 import { formatLength, formatArea, formatVolume } from "./units";
 import { opAddLabel, opBuildAnnotLine, getOpPhase } from "./viewer/op-tool";
 import { buildWorkbench } from "./shell/workbench";
-import { buildModes, activateMode } from "./shell/modes";
+import { buildModes, activateMode, getLayoutHost } from "./shell/modes";
+import { exportLayoutAsSvg, exportLayoutAsPdf } from "./shell/layout";
 import { initCmdK } from "./ui/cmdk";
 import { initExportDrawer, openExportDrawer } from "./io/export-drawer";
 import { Viewer } from "./viewer/viewer";
@@ -2131,6 +2132,7 @@ function toggleDraftingStyle(): void {
 let worker: Worker;
 let nextId = 1;
 let pendingStl: ArrayBuffer | null = null;
+let pendingStep: ArrayBuffer | null = null;
 
 // Source mode tracking — drives which export buttons are enabled.
 type Source =
@@ -2189,7 +2191,8 @@ function spawnWorker(): void {
     if (msg.type === "run-ok") {
       viewer.setMesh(msg.mesh, msg.bounds);
       clearHistory();
-      pendingStl = msg.stl.byteLength > 0 ? msg.stl : null;
+      pendingStl  = msg.stl.byteLength  > 0 ? msg.stl  : null;
+      pendingStep = msg.step?.byteLength > 0 ? msg.step : null;
       currentSource = { kind: "prompt", demoId: currentDemo.id };
       setStatus(
         `${shortLabel(currentDemo.label)} · ${formatBounds(msg.bounds)} · ready to export`,
@@ -2432,7 +2435,8 @@ async function handleFile(file: File): Promise<void> {
 function finalizeFileLoad(scene: LoadedScene, filename: string) {
   viewer.setObject(scene.object, scene.bounds);
   clearHistory(); // file load replaces the full scene; stale undo refs would crash
-  pendingStl = null; // STL is replicad-only; loaded-file path doesn't ship one.
+  pendingStl = null;  // STL/STEP are replicad-only; loaded-file path doesn't ship them.
+  pendingStep = null;
   currentSource = { kind: "file", format: scene.format, filename };
   setStatus(scene.summary, "ok");
   // Pull schema/entityCount out of the summary for IFC; other formats
@@ -2540,11 +2544,8 @@ function refreshExportButtons(disabledOverride: boolean = false): void {
       btn.disabled = !pendingStl;
       continue;
     }
-    // STEP is only available when the source is a replicad-generated shape
-    // (currently we don't keep the OCCT shape handle around outside the
-    // worker, so STEP write is gated to "prompt" source for now).
     if (fmt === "step") {
-      btn.disabled = currentSource.kind !== "prompt";
+      btn.disabled = !pendingStep;
       continue;
     }
     btn.disabled = false;
@@ -2552,6 +2553,29 @@ function refreshExportButtons(disabledOverride: boolean = false): void {
 }
 
 async function handleExport(fmt: string): Promise<void> {
+  // Layout mode: route svg/pdf to the sheet export functions.
+  if (workbenchEl?.dataset.mode === "layout") {
+    const host = getLayoutHost();
+    if (!host) { setStatus("Layout not initialized.", "warn"); return; }
+    const stem = "sheet";
+    try {
+      if (fmt === "svg") {
+        const text = exportLayoutAsSvg(host);
+        downloadBlob(new Blob([text], { type: "image/svg+xml" }), `${stem}.svg`);
+        setStatus(`Layout SVG · ${(text.length / 1024).toFixed(1)} KB`, "ok");
+      } else if (fmt === "pdf") {
+        const buf = await exportLayoutAsPdf(host);
+        downloadBlob(new Blob([buf], { type: "application/pdf" }), `${stem}.pdf`);
+        setStatus(`Layout PDF · ${(buf.byteLength / 1024).toFixed(1)} KB`, "ok");
+      } else {
+        setStatus(`${fmt.toUpperCase()} not available in Layout mode — use SVG or PDF.`, "warn");
+      }
+    } catch (e) {
+      setStatus(`Layout export ${fmt.toUpperCase()} failed: ${(e as Error).message}`, "err");
+    }
+    return;
+  }
+
   const stem = currentSource.kind === "prompt"
     ? currentDemo.id
     : currentSource.kind === "file"
@@ -2606,7 +2630,12 @@ async function handleExport(fmt: string): Promise<void> {
       downloadBlob(new Blob([buf.buffer as ArrayBuffer], { type: "application/pdf" }), `${stem}.pdf`);
       setStatus(`PDF · ${(buf.byteLength / 1024).toFixed(1)} KB`, "ok");
     } else if (fmt === "step") {
-      setStatus("STEP export is stubbed for the import pass — coming next.", "warn");
+      if (pendingStep) {
+        downloadBlob(new Blob([pendingStep], { type: "application/step" }), `${stem}.step`);
+        setStatus(`STEP · ${(pendingStep.byteLength / 1024).toFixed(1)} KB`, "ok");
+      } else {
+        setStatus("STEP only available for replicad-generated geometry.", "warn");
+      }
     } else {
       setStatus(`Unknown export format: ${fmt}`, "err");
     }

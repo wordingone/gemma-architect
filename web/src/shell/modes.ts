@@ -416,6 +416,8 @@ function escAttr(s: string): string {
 let paperEl: HTMLElement | null = null;
 let researchEl: HTMLElement | null = null;
 
+export function getLayoutHost(): HTMLElement | null { return paperEl; }
+
 export function buildModes(workbench: HTMLElement, boundsProvider?: () => SceneBounds | null) {
   paperEl = buildPaperMode(boundsProvider);
   researchEl = buildResearchMode();
