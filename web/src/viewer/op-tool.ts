@@ -1005,7 +1005,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     const dz = round(snapped3.z - phase.basePt.z);
     if (dx === 0 && dy === 0 && dz === 0) { ptPrompt("Linear Array — endpoint must differ from base point"); return true; }
     _opPhase = { kind: "array_linear_count", source: phase.source, dx, dy, dz };
-    ptPrompt(`Linear Array — step (${dx}, ${dy}${dz !== 0 ? `, ${dz}` : ""})  —  type count  [Esc] cancel`);
+    ptPrompt(`Linear Array — step (${dx}, ${dy}${dz !== 0 ? `, ${dz}` : ""})  —  type total count  [Esc] cancel`);
     ptShowCoordInput("count");
     return true;
   }

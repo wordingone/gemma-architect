@@ -26,7 +26,7 @@ import { ChatPanel } from "../chat/chat-panel";
 import { compileDsl } from "../commands/dsl-eval";
 import { dispatch, dispatchSync, registerPostDispatch, type DispatchArgs } from "../commands/dispatch";
 import { startCommandSession } from "../commands/command-session";
-import { setPickerHint } from "../viewer/picker-hint";
+import { setPickerHint, OP_TOOL_IDS } from "../viewer/picker-hint";
 import { getState, setState, subscribe as subscribeAppState, type ViewName } from "../app-state";
 import { formatLength } from "../units";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setMidpointSnapOn, setStep, setAngleStep, getSnap } from "../viewer/snap-state";
@@ -719,7 +719,13 @@ function buildPalette(host: HTMLElement) {
           menuOpened = false;
         });
       } else {
-        btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
+        btn.addEventListener("click", () => {
+          if (getState("activeTool") === tool.id && OP_TOOL_IDS.has(tool.id)) {
+            dispatchSync("setActiveTool", { toolId: "select" });
+          } else {
+            dispatchSync("setActiveTool", { toolId: tool.id });
+          }
+        });
       }
       sec.appendChild(btn);
     }

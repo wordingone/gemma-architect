@@ -432,7 +432,7 @@ registerHandler("SdArrayLinear", (args) => {
   const dy = (args.dy as number | undefined) ?? 0;
   const dz = (args.dz as number | undefined) ?? 0;
   const ids: string[] = [];
-  for (let i = 1; i <= count; i++) {
+  for (let i = 1; i < count; i++) {
     const clone = sel.clone();
     clone.position.x += dx * i; clone.position.y += dy * i; clone.position.z += dz * i;
     clone.userData = { ...sel.userData };

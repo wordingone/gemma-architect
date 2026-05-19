@@ -5453,6 +5453,84 @@ await resetScene('before-box-inject');
   await resetScene('post-S108');
 }
 
+// ── S109 — array-linear-spawns-copies (#944 sub-bug 2) ────────────────────────
+// Activate Array tool on a rect, choose Linear mode, pick base + dir points,
+// type count 3 → assert 2 new clones exist (total 3 = original + 2 copies).
+{
+  const s109 = await evaluate(`
+    (async () => {
+      try {
+        // 1. Create a rect to array.
+        window.__dispatch('SdRect', { x: 0, y: 0, w: 2, d: 2 });
+        await new Promise(r => setTimeout(r, 30));
+        const rects = window.__viewer.scene.children.filter(c => c.userData.creator === 'rect');
+        if (rects.length === 0) return { passed: false, evidence: { reason: 'rect not created' } };
+        const rectUuid = rects[rects.length - 1].uuid;
+        const countBefore = rects.length;
+
+        // 2. Activate Array tool — object pre-selected so chooser appears.
+        window.__dispatch('setActiveTool', { toolId: 'select' });
+        await new Promise(r => setTimeout(r, 20));
+        window.__viewer.selectObject(window.__viewer.scene.children.find(c => c.uuid === rectUuid));
+        window.__dispatch('setActiveTool', { toolId: 'array' });
+        await new Promise(r => setTimeout(r, 60));
+
+        // 3. Click the "Linear" chooser chip.
+        const chips = Array.from(document.querySelectorAll('.chooser-chip'));
+        const linearChip = chips.find(c => c.textContent.trim() === 'Linear');
+        if (!linearChip) return { passed: false, evidence: { reason: 'Linear chip not found', chipTexts: chips.map(c => c.textContent.trim()) } };
+        linearChip.click();
+        await new Promise(r => setTimeout(r, 40));
+
+        // 4. Click base point at (0,0) and dir+dist point at (3,0).
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+
+        const base = window.__projectToScreen(0, 0, 0);
+        const dir  = window.__projectToScreen(3, 0, 0);
+        if (!base || !dir) return { passed: false, evidence: { reason: 'projectToScreen failed', base, dir } };
+
+        for (const pt of [base, dir]) {
+          canvas.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true, cancelable: true, clientX: pt.x, clientY: pt.y,
+            button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+          }));
+          canvas.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, cancelable: true, clientX: pt.x, clientY: pt.y,
+            button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+          }));
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 5. Type count "3" in coord input and press Enter.
+        const coordInput = document.querySelector('.pt-coord-input, #coord-input, input[placeholder*="count"]');
+        if (!coordInput) {
+          // Try submitting via opHandleCoordSubmit directly.
+          const opModule = window.__opModule;
+          if (opModule?.opHandleCoordSubmit) {
+            opModule.opHandleCoordSubmit(window.__viewer, '3');
+          }
+        } else {
+          coordInput.value = '3';
+          coordInput.dispatchEvent(new Event('input', { bubbles: true }));
+          coordInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+        }
+        await new Promise(r => setTimeout(r, 80));
+
+        const rectsAfter = window.__viewer.scene.children.filter(c => c.userData.creator === 'rect');
+        const countAfter = rectsAfter.length;
+        // count=3 total → 2 new copies (i < count means i=1,2 → 2 copies).
+        const passed = countAfter >= countBefore + 2;
+        return { passed, evidence: { countBefore, countAfter, expected: countBefore + 2 } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s109) record('array-linear-spawns-copies', false, { reason: 'evaluate returned null' });
+  else record('array-linear-spawns-copies', s109.passed, s109.evidence);
+  await resetScene('post-S109');
+}
+
 } finally {
   await cleanup();
 }
