@@ -6,9 +6,10 @@
 // Design:
 //   Poll origin/master every 30s. On SHA change:
 //     - Branch must be "master" (serving-tree invariant)
-//     - Tree must be clean (no uncommitted changes)
+//     - Tree must be clean OR dirty only with HMR-residue (content == incoming)
+//   If HMR-residue: auto-stash before pull, drop stash after (#1193)
+//   If real WIP (unique content): log SKIP; never touch the tree
 //   If both: `git pull --ff-only` → HMR fires automatically on :5847
-//   If either fails: log SKIP reason; never touch the tree
 //
 // Heartbeat: state/gemma-master-autofwd.heartbeat updated on every poll.
 // Log:        state/gemma-master-autofwd.log (rotated at 10MB → .log.1)
@@ -53,6 +54,25 @@ function run(cmd) {
   return spawnSync(cmd, { shell: true, cwd: SERVING_DIR, encoding: "utf8" });
 }
 
+// Returns files whose working-tree content does NOT match origin/master's blob.
+// Files that already match origin/master are HMR-sync residue — safe to stash.
+// Mirrors safe-stash.sh blob-hash equality check (leo/scripts/safe-stash.sh).
+function findUniqueContent(dirtyLines, remoteSha) {
+  const unique = [];
+  for (const line of dirtyLines) {
+    const f = line.trim();
+    if (!f) continue;
+    const wtResult = run(`git hash-object -- "${f}"`);
+    const wtHash = (wtResult.stdout ?? "").trim();
+    const omResult = run(`git rev-parse "${remoteSha}:${f}"`);
+    const omHash = (omResult.stdout ?? "").trim();
+    if (!wtHash || !omHash || wtHash !== omHash) {
+      unique.push(f);
+    }
+  }
+  return unique;
+}
+
 async function poll() {
   try {
     rotateLog();
@@ -90,20 +110,36 @@ async function poll() {
 
     // Only tracked changes block the pull; untracked files are harmless for ff-only.
     const statusResult = run("git status --porcelain");
-    const trackedDirty = (statusResult.stdout ?? "")
+    const dirtyLines = (statusResult.stdout ?? "")
       .split("\n")
       .filter(l => l.length >= 2 && !l.startsWith("??"))
-      .join("\n")
-      .trim();
-    if (trackedDirty) {
-      log(`SKIP-DIRTY serving tree has tracked uncommitted changes (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
-      return;
+      .map(l => l.slice(3)); // strip XY status prefix
+    let stashedHmr = false;
+
+    if (dirtyLines.length > 0) {
+      // Blob-hash check: files whose working-tree content != origin/master blob are real WIP.
+      // Files that already match are HMR-sync residue written by Vite — safe to auto-stash.
+      const unique = findUniqueContent(dirtyLines, remoteSha);
+      if (unique.length > 0) {
+        log(`SKIP-DIRTY unique WIP in ${unique.length} file(s): ${unique.join(", ")} (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
+        return;
+      }
+      // All dirty tracked files are HMR residue — auto-stash before pull.
+      log(`AUTO-STASH ${dirtyLines.length} HMR-residue file(s) before pull (local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)})`);
+      if (!DRY_RUN) {
+        const stashResult = run(`git stash push -m "autofwd-hmr-residue-${ts()}"`);
+        if (stashResult.status !== 0) {
+          log(`SKIP stash-push failed: ${(stashResult.stderr ?? "").trim()}`);
+          return;
+        }
+        stashedHmr = true;
+      }
     }
 
     const label = `local=${localSha.slice(0, 7)} remote=${remoteSha.slice(0, 7)}`;
 
     if (DRY_RUN) {
-      log(`DRY-RUN would-pull ${label}`);
+      log(`DRY-RUN would-pull ${label}${dirtyLines.length > 0 ? ` (would-auto-stash ${dirtyLines.length} HMR-residue file(s))` : ""}`);
       return;
     }
 
@@ -112,8 +148,22 @@ async function poll() {
     const pullResult = run("git pull --ff-only origin master");
     if (pullResult.status === 0) {
       log(`OK pulled to ${remoteSha.slice(0, 7)} — HMR will fire on :5847`);
+      if (stashedHmr) {
+        // Content already matches HEAD after pull — drop the stash (no re-apply needed).
+        const dropResult = run("git stash drop");
+        if (dropResult.status === 0) {
+          log(`AUTO-STASH dropped (HMR residue content now matches HEAD)`);
+        } else {
+          log(`WARN stash-drop failed — stash left on stack: ${(dropResult.stderr ?? "").trim()}`);
+        }
+      }
     } else {
       log(`PULL-FAILED ${(pullResult.stderr ?? "").trim()}`);
+      if (stashedHmr) {
+        // Restore the stash so no work is lost.
+        run("git stash pop");
+        log(`AUTO-STASH restored after pull failure`);
+      }
     }
   } catch (err) {
     log(`ERROR poll threw: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
