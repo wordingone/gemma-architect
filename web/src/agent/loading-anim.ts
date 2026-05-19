@@ -32,7 +32,10 @@ function _wireEvents(): void {
   window.addEventListener("agentmodel:loading", _onFirst, { once: true });
   window.addEventListener("agentmodel:ready", _onModelReady, { once: true });
   window.addEventListener("agentmodel:drafter:ready", _onDrafterReady, { once: true });
-  window.addEventListener("agentmodel:error", _onModelReady, { once: true });
+  // Model error: show visible ERROR state — do NOT route to _onModelReady (which
+  // calls _maybeComplete → _onDone, silently fading the bar even though model failed).
+  window.addEventListener("agentmodel:error", _onError, { once: true });
+  // Drafter error is non-fatal — worker falls back to standard-backend; keep routing.
   window.addEventListener("agentmodel:drafter:error", _onDrafterReady, { once: true });
   // returning-user: skip animation entirely (model already cached)
   window.addEventListener("agentmodel:returning-user", _onDone, { once: true });
@@ -76,6 +79,27 @@ function _onDone(): void {
     _svg.style.opacity = "0";
     setTimeout(() => { _svg?.remove(); _svg = null; }, 800);
   }, 350);
+}
+
+function _onError(ev: Event): void {
+  if (_done) return;
+  _done = true;
+  cancelAnimationFrame(_rafId);
+  if (!_svg) return;
+  const detail = (ev as CustomEvent).detail;
+  const msg = typeof detail === "string" ? detail : "Model failed to load. Try refreshing.";
+  // Replace sweep animation with visible error overlay — do NOT fade out silently.
+  _svg.innerHTML = "";
+  const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  text.setAttribute("x", "50%");
+  text.setAttribute("y", "50%");
+  text.setAttribute("fill", "var(--color-error, #ff4040)");
+  text.setAttribute("text-anchor", "middle");
+  text.setAttribute("font-family", "monospace");
+  text.setAttribute("font-size", "14");
+  text.textContent = `MODEL LOAD FAILED: ${msg}`;
+  _svg.appendChild(text);
+  // Keep visible — user must see the failure to know why chip-clicks produce nothing.
 }
 
 // ---- rAF sweep -------------------------------------------------------------

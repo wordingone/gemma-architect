@@ -33,6 +33,12 @@ let _progressStrip: HTMLElement | null = null;
 // Track both model and drafter completion before hiding strip (#780).
 let _modelDone = false;
 let _drafterDone = false;
+// Aggregate byte-progress tracking: manifest provides expected total;
+// we accumulate per-file totals as files complete to compute overall %.
+let _totalBytesExpected = 0;
+let _completedFileBytes = 0;  // sum of total bytes for fully-transitioned files
+let _lastFile = "";
+let _lastFileTotal = 0;
 
 function injectPulseKeyframe(): void {
   if (document.getElementById("model-dl-pulse-kf")) return;
@@ -108,14 +114,44 @@ function maybeHideStrip(): void {
 }
 
 function wireProgressEvents(): void {
-  // Model download events (transformers.js per-file progress, 0-100 each file).
+  // Capture manifest total so we can show aggregate bytes progress.
+  window.addEventListener("agentmodel:manifest", (e) => {
+    _totalBytesExpected = (e as CustomEvent<{ totalBytesExpected: number }>).detail.totalBytesExpected ?? 0;
+  }, { once: true });
+
+  // Model download events — use aggregate bytes when manifest total is known.
   window.addEventListener("agentmodel:loading", (e) => {
-    const { progress, file } = (e as CustomEvent<{ progress: number; file?: string }>).detail;
+    const { file, bytes, total } = (e as CustomEvent<{ progress: number; file?: string; bytes?: number; total?: number }>).detail;
     const shortFile = file ? file.split("/").pop() ?? file : "";
-    updateProgress(progress ?? 0, shortFile ? `GEMMA·4·E4B  ·  DOWNLOADING  ·  ${shortFile}` : "GEMMA·4·E4B  ·  DOWNLOADING");
+
+    let pct = 0;
+    if (_totalBytesExpected > 0 && bytes != null && bytes >= 0) {
+      // File-transition: when filename changes, bank the previous file's total.
+      if (shortFile && shortFile !== _lastFile && _lastFile !== "") {
+        _completedFileBytes += _lastFileTotal;
+      }
+      if (shortFile) { _lastFile = shortFile; _lastFileTotal = total ?? 0; }
+      pct = Math.min(99, ((_completedFileBytes + (bytes ?? 0)) / _totalBytesExpected) * 100);
+    }
+    updateProgress(pct, shortFile ? `GEMMA·4·E4B  ·  DOWNLOADING  ·  ${shortFile}` : "GEMMA·4·E4B  ·  DOWNLOADING");
   });
   window.addEventListener("agentmodel:ready", () => { _modelDone = true; maybeHideStrip(); }, { once: true });
-  window.addEventListener("agentmodel:error", () => { _modelDone = true; _drafterDone = true; hideProgressStrip(); }, { once: true });
+  window.addEventListener("agentmodel:error", (ev) => {
+    // Show red error state for 4 s so user knows model failed — do not silently hide.
+    const detail = (ev as CustomEvent).detail;
+    const msg = typeof detail === "string" ? detail : "Model load failed — try refreshing";
+    const strip = ensureProgressStrip();
+    const labelEl = document.getElementById("model-dl-label");
+    const bar = document.getElementById("model-dl-bar");
+    const pctEl = document.getElementById("model-dl-pct");
+    if (labelEl) labelEl.textContent = `GEMMA·4·E4B  ·  ${msg.toUpperCase()}`;
+    if (bar) { bar.style.background = "var(--color-error,#ff4040)"; bar.style.width = "100%"; bar.style.animation = "none"; }
+    if (pctEl) pctEl.textContent = "ERR";
+    strip.style.display = "flex";
+    _modelDone = true;
+    _drafterDone = true;
+    setTimeout(() => hideProgressStrip(), 6000);
+  }, { once: true });
 
   // Drafter events (real ReadableStream byte progress + indeterminate ORT parse phase).
   window.addEventListener("agentmodel:drafter:loading", (e) => {
