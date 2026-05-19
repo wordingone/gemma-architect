@@ -187,6 +187,7 @@ export class SkillCanvas {
   constructor(private _root: HTMLElement) {
     this._graph = loadGraph();
     this._build();
+    (window as unknown as Record<string, unknown>).__skillCanvas = this;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -197,6 +198,10 @@ export class SkillCanvas {
 
   getNode(id: string): CanvasNode | undefined {
     return this._graph.nodes.find(n => n.id === id);
+  }
+
+  getGraph(): CanvasGraph {
+    return this._graph;
   }
 
   updateNodeScript(id: string, src: string): void {
@@ -233,6 +238,28 @@ export class SkillCanvas {
     el?.classList.add("node-running");
     await this._runNode(node);
     el?.classList.remove("node-running");
+
+    // Cascade to downstream nodes in topological order (#426 SU-4).
+    const downstreamIds = this._getDownstream(nodeId);
+    if (downstreamIds.size > 0) {
+      const topoOrder = this._topoSort();
+      // Undo downstream results in reverse topo order before re-running.
+      for (let i = topoOrder.length - 1; i >= 0; i--) {
+        const n = topoOrder[i];
+        if (!downstreamIds.has(n.id) || !this._nodeHasResult.has(n.id)) continue;
+        dispatchSync("SdUndo", {});
+        this._nodeHasResult.delete(n.id);
+      }
+      // Re-dispatch downstream in forward topo order.
+      for (const n of topoOrder) {
+        if (!downstreamIds.has(n.id)) continue;
+        const el2 = this._nodesEl.querySelector<HTMLElement>(`[data-id="${n.id}"]`);
+        el2?.classList.add("node-running");
+        await this._runNode(n);
+        el2?.classList.remove("node-running");
+      }
+    }
+
     (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
   }
 
@@ -951,8 +978,13 @@ export class SkillCanvas {
         const fromPort = this._connectFrom.port;
         const toPort = parseInt(portEl.dataset.port ?? "0", 10);
         if (fromId !== node.id && !this._graph.edges.find(e => e.from === fromId && e.to === node.id && e.fromPort === fromPort && e.toPort === toPort)) {
-          this._graph.edges.push({ id: crypto.randomUUID(), from: fromId, fromPort, to: node.id, toPort });
-          saveGraph(this._graph);
+          if (this._hasCycle(fromId, node.id)) {
+            portEl.setAttribute("data-cycle-reject", "1");
+            setTimeout(() => portEl.removeAttribute("data-cycle-reject"), 500);
+          } else {
+            this._graph.edges.push({ id: crypto.randomUUID(), from: fromId, fromPort, to: node.id, toPort });
+            saveGraph(this._graph);
+          }
         }
         this._endConnect();
         this._renderGraph();
@@ -1231,6 +1263,40 @@ export class SkillCanvas {
     }
     if (steps.length === 0) return;
     openSaveSkillModal(steps);
+  }
+
+  // ── Cycle detection / downstream helpers ──────────────────────────────────
+
+  // DFS check: would adding edge from→to create a cycle?
+  private _hasCycle(from: string, to: string): boolean {
+    const visited = new Set<string>();
+    const queue = [to];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      if (cur === from) return true;
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      for (const edge of this._graph.edges) {
+        if (edge.from === cur) queue.push(edge.to);
+      }
+    }
+    return false;
+  }
+
+  // BFS: all node IDs reachable downstream of nodeId (not including nodeId itself).
+  private _getDownstream(nodeId: string): Set<string> {
+    const downstream = new Set<string>();
+    const queue = [nodeId];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (const edge of this._graph.edges) {
+        if (edge.from === cur && !downstream.has(edge.to)) {
+          downstream.add(edge.to);
+          queue.push(edge.to);
+        }
+      }
+    }
+    return downstream;
   }
 
   // ── Topo-sort (Kahn's algorithm) ───────────────────────────────────────────

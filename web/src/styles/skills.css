@@ -146,6 +146,7 @@
 .sc-port-in  { cursor: default; }
 .sc-port-out { cursor: crosshair; }
 .sc-port:hover { background: var(--gemma, #7c4dff); }
+.sc-port[data-cycle-reject] { background: #f44; border-color: #f44; }
 
 .skill-canvas-toolbar {
   grid-row: 2;

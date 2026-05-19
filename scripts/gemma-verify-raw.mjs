@@ -5932,6 +5932,71 @@ await resetScene('before-box-inject');
   await resetScene('post-S122');
 }
 
+// ── S123 — skill-canvas-wire-edge (#426/SU-4): port drag creates directed edge in graph ──
+{
+  const s123 = await evaluate(`
+    (async () => {
+      try {
+        // Activate SKILLS tab so SkillCanvas is instantiated.
+        const skillsTab = document.querySelector('[data-tab="skills"]');
+        if (!skillsTab) return { passed: false, evidence: { reason: 'skills tab not found' } };
+        skillsTab.click();
+        await new Promise(r => setTimeout(r, 200));
+
+        const canvas = window.__skillCanvas;
+        if (!canvas) return { passed: false, evidence: { reason: '__skillCanvas not exposed' } };
+
+        // Clear existing graph to get a clean state.
+        const graph = canvas.getGraph();
+        graph.nodes = [];
+        graph.edges = [];
+        graph.groups = [];
+
+        // Add two nodes directly into the graph (mimic what skill drop does).
+        const nodeA = {
+          id: 'test-node-a', kind: 'skill', skillName: 'NodeA',
+          skillSteps: [], x: 50, y: 50, inPorts: 0, outPorts: 1,
+        };
+        const nodeB = {
+          id: 'test-node-b', kind: 'skill', skillName: 'NodeB',
+          skillSteps: [], x: 260, y: 50, inPorts: 1, outPorts: 0,
+        };
+        graph.nodes.push(nodeA, nodeB);
+        // Re-render so port DOM elements exist.
+        canvas._renderGraph?.();
+        await new Promise(r => setTimeout(r, 60));
+
+        // Simulate output port mousedown on nodeA port-0.
+        const outPort = document.querySelector('[data-node="test-node-a"][data-side="out"][data-port="0"]');
+        if (!outPort) return { passed: false, evidence: { reason: 'output port element not found after renderGraph' } };
+        outPort.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+        await new Promise(r => setTimeout(r, 30));
+
+        // Simulate input port mouseup on nodeB port-0.
+        const inPort = document.querySelector('[data-node="test-node-b"][data-side="in"][data-port="0"]');
+        if (!inPort) return { passed: false, evidence: { reason: 'input port element not found' } };
+        inPort.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0 }));
+        await new Promise(r => setTimeout(r, 30));
+
+        const edgeCount = graph.edges.length;
+        const passed = edgeCount === 1;
+        const edge = graph.edges[0];
+        return { passed, evidence: {
+          edgeCount,
+          edgeFrom: edge?.from,
+          edgeTo: edge?.to,
+          fromPort: edge?.fromPort,
+          toPort: edge?.toPort,
+        } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s123) record('skill-canvas-wire-edge', false, { reason: 'evaluate returned null' });
+  else record('skill-canvas-wire-edge', s123.passed, s123.evidence);
+  await resetScene('post-S123');
+}
+
 } finally {
   await cleanup();
 }
