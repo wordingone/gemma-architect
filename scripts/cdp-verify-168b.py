@@ -2,7 +2,7 @@
 """CDP verification script for PR #181 fix/168b-layers-sidebar LAYERS tab evidence."""
 import json, time, datetime, urllib.request, websocket, sys, os
 
-CDP_HOST = "http://localhost:9222"
+CDP_HOST = f"http://localhost:{int(os.environ.get('CDP_PORT', '9222'))}"
 DEV_URL = "http://localhost:5175/"
 OUT_DIR = "B:/M/gemma-architect-master/state"
 SHA = "4003c9a"

@@ -11,7 +11,7 @@ export function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 /** Connect to the :5175 page target in the shared browser. */
 export async function connectPage5175() {
-  const targets = JSON.parse(execSync("curl -s http://localhost:9222/json", { encoding: "utf8" }));
+  const targets = JSON.parse(execSync("curl -s http://localhost:${CDP_PORT}/json", { encoding: "utf8" }));
   const target = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
   if (!target) throw new Error("No :5175 page target — is the shared browser running?");
   return connectWS(target.webSocketDebuggerUrl);

@@ -31,6 +31,9 @@ const FRESH_USER = process.argv.includes("--fresh-user");
 
 // ── Connection ────────────────────────────────────────────────────────────────
 
+const CDP_PORT  = Number(process.env.CDP_PORT ?? "9222");
+const CDP_BASE  = `http://localhost:${CDP_PORT}`;
+
 const targetUrlIdx = process.argv.indexOf("--target-url");
 const DEV_URL   = targetUrlIdx !== -1 ? process.argv[targetUrlIdx + 1]
                 : (process.env.GEMMA_DEV_URL ?? "http://localhost:5175/");
@@ -46,25 +49,20 @@ const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(".", "")
 mkdirSync(STATE_DIR, { recursive: true });
 const outFile   = `${STATE_DIR}/gemma-verify-${sha}-${timestamp}.json`;
 
-// Find canonical :5175 tab, or open a new tab for GEMMA_DEV_URL
-const USE_NEW_TAB = !DEV_URL.includes("localhost:5175");
-let target;
-let newTabTargetId = null;
-
-if (USE_NEW_TAB) {
-  // Open a new tab in the shared browser — does NOT spawn a new window
-  target = await fetch(`http://localhost:9222/json/new?${encodeURIComponent(DEV_URL)}`, { method: "PUT" }).then(r => r.json());
-  newTabTargetId = target.id;
-  console.log(`New tab: ${target.url} (id: ${newTabTargetId})`);
-} else {
-  const targets = await fetch("http://localhost:9222/json").then(r => r.json());
-  target = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
-  if (!target) {
-    console.error("ERROR: no :5175 page target found in shared browser");
-    process.exit(1);
-  }
-  console.log(`Canonical tab: ${target.url}`);
+// Find an existing page tab via Target.getTargets (no new tab opened — /json list only)
+const targets = await fetch(`${CDP_BASE}/json`).then(r => r.json()).catch(() => null);
+if (!targets) {
+  console.error(`ERROR: Cannot reach CDP at ${CDP_BASE} — is the shared browser running?`);
+  process.exit(1);
 }
+const DEV_HOST = new URL(DEV_URL).host;
+let target = targets.find(t => t.url?.includes(DEV_HOST) && t.type === "page");
+if (!target) {
+  console.error(`ERROR: no page tab at ${DEV_URL} found in shared browser (:${CDP_PORT})`);
+  console.error("Tabs:", targets.filter(t => t.type === "page").map(t => t.url));
+  process.exit(1);
+}
+console.log(`Attaching to existing tab: ${target.url}`);
 
 // Open raw WS to PAGE target (not browser-level)
 const ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -121,12 +119,9 @@ async function canvasBpp(label = '') {
   return { bpp, pixels: Math.round(pixels), label };
 }
 
-// Tab + WS cleanup — always runs even if a surface throws.
+// WS cleanup — always runs even if a surface throws. No tab is closed (we used an existing tab).
 async function cleanup() {
   try { ws.close(); } catch { /* ignore */ }
-  if (newTabTargetId) {
-    await fetch(`http://localhost:9222/json/close/${newTabTargetId}`).catch(() => {});
-  }
 }
 
 // ── Fresh-user: clear caches before reload ────────────────────────────────────

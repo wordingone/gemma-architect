@@ -1,11 +1,14 @@
 #!/usr/bin/env bun
 // verify-fastpath-5183.mjs — CDP receipt for chat skill fastpath on port 5183.
-// Opens a new tab at :5183 in the shared browser (port 9222), runs the fastpath
+// Opens a new tab at :5183 in the shared browser (CDP_PORT), runs the fastpath
 // verification, saves a receipt, then closes the tab.
 
 import { WebSocket } from "ws";
 import { mkdirSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
+
+const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
+const CDP_BASE = `http://localhost:${CDP_PORT}`;
 
 const SHA = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
 const TS  = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -16,15 +19,22 @@ const TARGET_URL = "http://localhost:5183/";
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ── 1: Open new tab via CDP HTTP PUT ──────────────────────────────────────────
+// ── 1: Open new tab via Target.createTarget (browser-level WS — avoids /json/new) ──
 console.log(`Opening new tab: ${TARGET_URL}`);
-const newTabResp = execSync(
-  `curl -s -X PUT "http://localhost:9222/json/new?${TARGET_URL}"`,
-  { encoding: "utf8" }
-);
-const newTab = JSON.parse(newTabResp);
+const version = await fetch(`${CDP_BASE}/json/version`).then(r => r.json());
+const bws = new WebSocket(version.webSocketDebuggerUrl);
+await new Promise((res, rej) => { bws.on("open", res); bws.on("error", rej); });
+const createReply = await new Promise(r => {
+  bws.on("message", raw => r(JSON.parse(raw)));
+  bws.send(JSON.stringify({ id: 1, method: "Target.createTarget", params: { url: TARGET_URL } }));
+});
+bws.close();
+const TARGET_ID = createReply.result.targetId;
+await delay(500);
+const tabList = await fetch(`${CDP_BASE}/json`).then(r => r.json());
+const newTab = tabList.find(t => t.id === TARGET_ID);
+if (!newTab) { console.error("ERROR: created tab not found"); process.exit(1); }
 const PAGE_WS = newTab.webSocketDebuggerUrl;
-const TARGET_ID = newTab.id;
 console.log("New tab WS:", PAGE_WS);
 
 // ── 2: Connect to new tab page WS ─────────────────────────────────────────────
@@ -43,6 +53,19 @@ ws.on("message", raw => {
     else resolve(msg.result ?? {});
   }
 });
+
+async function closeTab(targetId) {
+  try {
+    const ver = await fetch(`${CDP_BASE}/json/version`).then(r => r.json());
+    const bwsClose = new WebSocket(ver.webSocketDebuggerUrl);
+    await new Promise((res, rej) => { bwsClose.on("open", res); bwsClose.on("error", rej); });
+    await new Promise(r => {
+      bwsClose.on("message", raw => r(JSON.parse(raw)));
+      bwsClose.send(JSON.stringify({ id: 1, method: "Target.closeTarget", params: { targetId } }));
+    });
+    bwsClose.close();
+  } catch { /* ignore close errors */ }
+}
 
 function send(method, params = {}) {
   const id = msgId++;
@@ -92,7 +115,7 @@ record("chat-input-visible", chatReady, { chatReady });
 if (!chatReady) {
   console.error("No .chat-input found — aborting");
   ws.close();
-  execSync(`curl -s -X GET "http://localhost:9222/json/close/${TARGET_ID}"`);
+  await closeTab(TARGET_ID);
   process.exit(1);
 }
 
@@ -171,6 +194,6 @@ writeFileSync(OUT, JSON.stringify(receipt, null, 2));
 console.log(`Receipt: ${OUT}`);
 
 ws.close();
-// Close the tab we opened
-try { execSync(`curl -s -X GET "http://localhost:9222/json/close/${TARGET_ID}"`); } catch {}
+// Close the tab we opened (via Target.closeTarget — avoids /json/close HTTP endpoint)
+await closeTab(TARGET_ID);
 process.exit(allPassed ? 0 : 1);

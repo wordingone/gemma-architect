@@ -9,6 +9,7 @@ Writes: B:/M/gemma-architect-master/state/verify-168c-<sha>-<timestamp>.json
 """
 
 import json
+import os
 import sys
 import time
 import subprocess
@@ -22,7 +23,7 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "websocket-client", "-q"])
     import websocket
 
-CDP_PORT = 9222
+CDP_PORT = int(os.environ.get("CDP_PORT", "9222"))
 DEV_URL = "http://localhost:5182/"
 SHA = "1b9fc43"
 STATE_DIR = Path("B:/M/gemma-architect-master/state")

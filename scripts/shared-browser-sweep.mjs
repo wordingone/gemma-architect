@@ -30,7 +30,8 @@ mkdirSync(STATE_DIR, { recursive: true });
 const LOG_FILE      = join(STATE_DIR, "shared-browser-sweep.log");
 const SIDECAR_FILE  = join(STATE_DIR, "shared-browser-tabs-seen.json");
 
-const CDP_HOST  = "http://localhost:9222";
+const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
+const CDP_HOST  = `http://localhost:${CDP_PORT}`;
 const MAX_AGE_MS = Number(
   process.argv.find((a) => a.startsWith("--max-age-ms="))?.split("=")[1] ?? 300_000,
 );

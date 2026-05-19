@@ -3,7 +3,7 @@
 import WebSocket from "ws";
 import { writeFileSync } from "fs";
 
-const CDP_PORT = 9222;
+const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
 const DEV_URL = "http://localhost:5173/";
 
 async function cdpSession(): Promise<WebSocket> {

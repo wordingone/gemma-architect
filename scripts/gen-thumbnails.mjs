@@ -9,7 +9,7 @@
 import { WebSocket } from "ws";
 import { writeFileSync, mkdirSync } from "fs";
 
-const CDP_URL = "http://localhost:9222";
+const CDP_PORT = Number(process.env.CDP_PORT ?? "9222"); const CDP_URL = `http://localhost:${CDP_PORT}`;
 const OUT_DIR = "web/public/thumbnails";
 
 // Scenes = full buildings; Elements = individual components

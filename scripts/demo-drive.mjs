@@ -71,7 +71,8 @@ if (dryRun) {
 }
 
 // ── CDP connection ────────────────────────────────────────────────────────────
-const targets = await fetch("http://localhost:9222/json").then(r => r.json());
+const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
+const targets = await fetch(`http://localhost:${CDP_PORT}/json`).then(r => r.json());
 const target  = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
 if (!target) {
   console.error("ERROR: no :5175 page target found — is the shared browser running?");

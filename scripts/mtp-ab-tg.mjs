@@ -29,7 +29,7 @@ import { WebSocket } from "ws";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const PORT_CDP = parseInt(process.env.PORT_CDP ?? "9222", 10);
+const CDP_PORT = parseInt(process.env.CDP_PORT ?? "9222", 10);
 const BASE_URL = process.env.APP_URL ?? "http://localhost:5175/";
 // Scenario 1: text-only build prompt — does NOT match VISUAL_RE in chat-panel.ts.
 // /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i
@@ -97,11 +97,11 @@ async function cdpConnect(wsUrl) {
 }
 
 async function getTarget() {
-  const targets = await fetch(`http://localhost:${PORT_CDP}/json`).then(r => r.json());
+  const targets = await fetch(`http://localhost:${CDP_PORT}/json`).then(r => r.json());
   const host = new URL(BASE_URL).host;
   const t = targets.find(t => t.url?.includes(host) && t.type === "page")
          ?? targets.find(t => t.type === "page");
-  if (!t) throw new Error(`No page tab found at :${PORT_CDP}`);
+  if (!t) throw new Error(`No page tab found at :${CDP_PORT}`);
   return t;
 }
 

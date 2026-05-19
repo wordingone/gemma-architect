@@ -52,16 +52,17 @@ const TIER_LADDER      = [90, 95, 99];
 const _startTierIdx    = TIER_LADDER.findIndex(t => t >= (cfg.parity_threshold.current_tier ?? 90));
 const START_TIER_IDX   = _startTierIdx < 0 ? TIER_LADDER.length - 1 : _startTierIdx;
 
-// ── CDP connection ────────────────────────────────────────────────────────────
+// ── CDP connection ──────────────────────────────────────────────────────────
+const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");──
 
 type CdpTarget = { url?: string; type?: string; webSocketDebuggerUrl?: string };
 
-const targets: CdpTarget[] | null = await fetch("http://localhost:9222/json")
+const targets: CdpTarget[] | null = await fetch(`http://localhost:${CDP_PORT}/json`)
   .then(r => r.json())
   .catch(() => null);
 
 if (!targets) {
-  console.error("ERROR: Cannot reach CDP at :9222 — is the shared browser running?");
+  console.error(`ERROR: Cannot reach CDP at :${CDP_PORT} — is the shared browser running?`);
   process.exit(1);
 }
 
