@@ -1002,7 +1002,15 @@ if (RUN_UNIT) {
 }
 
 if (RUN_BROWSER) {
-  report.browser = await runBrowserTests();
+  if (!process.env.RUN_LIVE) {
+    console.log('\n════════════════════════════════════════════════════════');
+    console.log('PART B — Browser E2E tests SKIPPED (RUN_LIVE not set)');
+    console.log('  These tests drive the :9222 Chromium window the user sees.');
+    console.log('  Run with: RUN_LIVE=1 node scripts/fresh-device-matrix.mjs');
+    console.log('════════════════════════════════════════════════════════\n');
+  } else {
+    report.browser = await runBrowserTests();
+  }
 }
 
 // Overall summary
