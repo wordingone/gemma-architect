@@ -1167,22 +1167,60 @@ registerHandler("SdRoof", (args) => {
     // activeLevelElev already defined above (eave-height inference block).
     const TOL = 0.8; // metres — endpoint must be within TOL of the gable edge
 
+    // Collect wall candidates in one pass; restore Group walls (void-cut) to solid Mesh
+    // before trimming — modifying scene graph during traverse is unsafe (#1163).
+    const _gableWallCandidates: THREE.Mesh[] = [];
     viewer.getScene().traverse((child) => {
       if (child.userData?.creator !== "wall") return;
       if (child.userData?.topProfile === "pitched") return;
-      // Check world-space z against active level elevation.
-      // Use world position so joined walls inside JoinGroup containers are correctly located.
       const worldPos = new THREE.Vector3();
       child.getWorldPosition(worldPos);
       if (Math.abs(worldPos.z - activeLevelElev) > 0.5) return;
+      if (child instanceof THREE.Mesh) {
+        _gableWallCandidates.push(child);
+      } else if (child instanceof THREE.Group) {
+        // Wall was void-cut (Group) — restore to solid Mesh so geometry can be trimmed (#1163).
+        const dims = (child.userData as Record<string, unknown>).originalWallDims as { w: number; d: number; h: number } | undefined;
+        if (!dims) return;
+        let _srcMat: THREE.Material | undefined;
+        child.traverse((c) => {
+          if (!_srcMat && (c as THREE.Mesh).isMesh) {
+            const m = (c as THREE.Mesh).material;
+            _srcMat = (Array.isArray(m) ? m[0] : m) as THREE.Material;
+          }
+        });
+        const _rGeom = new THREE.BoxGeometry(dims.w, dims.d, dims.h);
+        _rGeom.translate(0, 0, dims.h / 2);
+        const _rMesh = new THREE.Mesh(_rGeom, _srcMat ?? new THREE.MeshStandardMaterial({ color: 0x9ec5d8 }));
+        _rMesh.position.copy(child.position);
+        _rMesh.rotation.copy(child.rotation);
+        _rMesh.scale.copy(child.scale);
+        _rMesh.userData = { ...child.userData };
+        delete (_rMesh.userData as Record<string, unknown>).originalWallDims;
+        _gableWallCandidates.push(_rMesh);
+        // Defer scene swap until after traverse to avoid mutating scene graph mid-walk.
+        (_rMesh as unknown as { _replaceGroup: THREE.Group })._replaceGroup = child;
+      }
+    });
 
+    // Apply scene swaps for restored Group walls, then trim gable geometry.
+    for (const _c of _gableWallCandidates) {
+      const _grp = (_c as unknown as { _replaceGroup?: THREE.Group })._replaceGroup;
+      if (_grp) {
+        const _parent = _grp.parent ?? viewer.getScene();
+        _parent.remove(_grp);
+        _parent.add(_c);
+        _c.updateMatrixWorld(true);
+      }
+    }
+
+    for (const child of _gableWallCandidates) {
       const eps = child.userData.endpoints as Array<{ x: number; y: number }> | undefined;
-      if (!eps || eps.length < 2) return;
+      if (!eps || eps.length < 2) continue;
       const wx0 = eps[0].x, wy0 = eps[0].y;
       const wx1 = eps[1].x, wy1 = eps[1].y;
 
       // Gable walls: both endpoints at the same gable-end X (landscape) or Y (portrait).
-      // Compare against world-space gable edges using the footprint centroid.
       const gx1 = centerX - w / 2, gx2 = centerX + w / 2;
       const gy1 = centerY - d / 2, gy2 = centerY + d / 2;
       const isGable = landscape
@@ -1190,9 +1228,9 @@ registerHandler("SdRoof", (args) => {
           (Math.abs(wx0 - gx2) < TOL && Math.abs(wx1 - gx2) < TOL)
         : (Math.abs(wy0 - gy1) < TOL && Math.abs(wy1 - gy1) < TOL) ||
           (Math.abs(wy0 - gy2) < TOL && Math.abs(wy1 - gy2) < TOL);
-      if (!isGable) return;
+      if (!isGable) continue;
 
-      const wallMesh = child as THREE.Mesh;
+      const wallMesh = child;
       const wallEaveH = (wallMesh.userData.wallHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
       const cps = wallMesh.userData.controlPoints as THREE.Vector3[] | undefined;
       const len = cps && cps.length >= 2 ? cps[0].distanceTo(cps[1]) : (() => {
@@ -1238,7 +1276,7 @@ registerHandler("SdRoof", (args) => {
           wallMesh.userData.ridgeHeight = rH;
         },
       );
-    });
+    }
   }
 
   endTransaction();
