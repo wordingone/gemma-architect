@@ -4929,6 +4929,63 @@ await resetScene('before-box-inject');
   await resetScene('post-S117');
 }
 
+// ── S100: wall-slab cross-level trim (Convention A) ──────────────────────────
+// Create Level 1 above ground, build a wall on Level 0, a slab on Level 1.
+// Assert: max wall top Z ≤ min slab bottom Z + 1mm.
+{
+  await resetScene('pre-S100');
+  const s100 = await evaluate(`(async () => {
+    try {
+      const SLAB_T = 0.1;
+      const LVL1_ELEV = 3.0;
+
+      // Create Level 1 at elevation 3m.
+      const lvlRes = window.__dispatch('SdLevel', { name: 'Level 2', elevation: LVL1_ELEV, height: 3 });
+      await new Promise(r => setTimeout(r, 300));
+
+      // Activate Level 0 (ground), build a wall.
+      window.__dispatch('setActiveLevel', { id: 'level/0' });
+      await new Promise(r => setTimeout(r, 200));
+      window.__dispatch('SdWall', { start: { x: 0, y: 0 }, end: { x: 4, y: 0 } });
+      await new Promise(r => setTimeout(r, 300));
+
+      // Activate Level 1, build a slab.
+      const lvlId = lvlRes?.id ?? 'level/1';
+      window.__dispatch('setActiveLevel', { id: lvlId });
+      await new Promise(r => setTimeout(r, 200));
+      window.__dispatch('SdSlab', { width: 5, depth: 5 });
+      await new Promise(r => setTimeout(r, 300));
+
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      let wallTopZ = -Infinity, slabBottomZ = Infinity;
+      v.scene.traverse(obj => {
+        const bb = new window.THREE.Box3().setFromObject(obj);
+        if (obj.userData?.creator === 'wall') {
+          wallTopZ = Math.max(wallTopZ, bb.max.z);
+        } else if (obj.userData?.creator === 'slab') {
+          slabBottomZ = Math.min(slabBottomZ, bb.min.z);
+        }
+      });
+
+      if (wallTopZ === -Infinity) return { passed: false, evidence: { reason: 'no wall found' } };
+      if (slabBottomZ === Infinity) return { passed: false, evidence: { reason: 'no slab found' } };
+
+      const passed = wallTopZ <= slabBottomZ + 0.001;
+      return { passed, evidence: {
+        wallTopZ: Math.round(wallTopZ * 1000) / 1000,
+        slabBottomZ: Math.round(slabBottomZ * 1000) / 1000,
+        delta: Math.round((wallTopZ - slabBottomZ) * 1000) / 1000
+      }};
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('wall-slab-cross-level-trim', !!(s100?.passed), s100 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S100');
+}
+
 } finally {
   await cleanup();
 }

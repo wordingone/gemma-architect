@@ -82,8 +82,8 @@ export function rebuildWallParams(
   ];
 }
 
-export function buildWall(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
-  const t = DEFAULT_WALL_THICKNESS, h = DEFAULT_WALL_HEIGHT;
+export function buildWall(a: { x: number; y: number }, b: { x: number; y: number }, height?: number): { mesh: THREE.Mesh; chain: string } {
+  const t = DEFAULT_WALL_THICKNESS, h = height ?? DEFAULT_WALL_HEIGHT;
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.sqrt(dx * dx + dy * dy);
   const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
@@ -125,11 +125,11 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
   return { mesh, chain };
 }
 
-export function rebuildWallInPlace(mesh: THREE.Mesh, a: { x: number; y: number }, b: { x: number; y: number }): void {
+export function rebuildWallInPlace(mesh: THREE.Mesh, a: { x: number; y: number }, b: { x: number; y: number }, height?: number): void {
   const dx = b.x - a.x, dy = b.y - a.y;
   const length = Math.sqrt(dx * dx + dy * dy);
   if (length < 0.01) return;
-  const t = DEFAULT_WALL_THICKNESS, h = DEFAULT_WALL_HEIGHT;
+  const t = DEFAULT_WALL_THICKNESS, h = height ?? DEFAULT_WALL_HEIGHT;
   const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
   mesh.geometry.dispose();

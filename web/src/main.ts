@@ -785,9 +785,17 @@ registerHandler("SdWall", (args) => {
   const topProfile = (args.topProfile as string | undefined) ?? "level";
   const eaveH = (args.eaveHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
   const ridgeH = (args.ridgeHeight as number | undefined) ?? 1.5;
+  const explicitH = (args.height as number | undefined);
+  const activeLvl = levelStore.getActive();
+  const allLevels = levelStore.all().sort((x, y) => x.elevation - y.elevation);
+  const nextLvl = allLevels.find(l => l.elevation > activeLvl.elevation + 0.01);
+  const baseH = explicitH ?? DEFAULT_WALL_HEIGHT;
+  const effectiveH = nextLvl
+    ? Math.min(baseH, nextLvl.elevation - activeLvl.elevation - DEFAULT_SLAB_THICKNESS)
+    : baseH;
   const { mesh, chain } = topProfile === "pitched"
     ? buildWallPitchedTop(a, b, eaveH, ridgeH)
-    : buildWall(a, b);
+    : buildWall(a, b, effectiveH);
   mesh.position.z = getActiveLevelElevation();
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWall", args);
