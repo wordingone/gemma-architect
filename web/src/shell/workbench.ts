@@ -2047,18 +2047,18 @@ function buildConsoleInner(): HTMLElement {
         }
         if (c.dispatches && c.dispatches.length > 0) {
           for (const d of c.dispatches) {
-            const sr = await startCommandSession({ command: d.name, parameters: d.arguments, metadata: { source: "console" } });
+            const sr = await startCommandSession({ command: d.verb, parameters: d.args, metadata: { source: "console" } });
             if (sr.status === "needs_input") {
               setPickerHint(sr.summary ?? "Click in viewport to place");
-              pushLine("info", `${d.name} → ${sr.summary ?? "needs_input"}`);
+              pushLine("info", `${d.verb} → ${sr.summary ?? "needs_input"}`);
             } else if (sr.status === "success") {
               setPickerHint(null);
-              pushLine("ok", `dispatch ${d.name} → ok`);
+              pushLine("ok", `dispatch ${d.verb} → ok`);
             } else {
-              const dr = dispatchSync(d.name, d.arguments);
+              const dr = dispatchSync(d.verb, d.args);
               pushLine(
                 dr.ok ? "ok" : (dr.error === "HandlerThrew" || dr.error === "NoHandler" ? "err" : "info"),
-                `dispatch ${d.name} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
+                `dispatch ${d.verb} → ${dr.ok ? dr.canonical! : `${dr.error}${dr.detail ? ": " + dr.detail : ""}`}`,
               );
             }
           }

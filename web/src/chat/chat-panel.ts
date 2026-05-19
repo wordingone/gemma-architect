@@ -443,10 +443,10 @@ export class ChatPanel {
           text: "Plan: small house fixture",
           plan: "1. IfcWall\n2. IfcWall\n3. IfcSlab\n4. SdExport",
           dispatches: [
-            { verb: "IfcWall", args: {} },
-            { verb: "IfcWall", args: {} },
-            { verb: "IfcSlab", args: {} },
-            { verb: "SdExport", args: { format: "gltf" } },
+            { name: "IfcWall", arguments: {} },
+            { name: "IfcWall", arguments: {} },
+            { name: "IfcSlab", arguments: {} },
+            { name: "SdExport", arguments: { format: "gltf" } },
           ],
         });
         return;
