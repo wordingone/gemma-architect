@@ -1525,3 +1525,14 @@
   synonyms: [listclusters, "list clusters", "show clusters", "list macros", "show macros", "list saved clusters"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
+
+- canonical_name: SdInvokeSkill
+  kernel_op: invokeSkill
+  args:
+    - {name: skill, type: string, required: true, description: "Name of the saved CanvasCluster or starter node to invoke"}
+    - {name: params, type: object, required: false, description: "name→value map bound to the skill's input ports"}
+  topology_role: system
+  kg_predicates: []
+  synonyms: [invokeskill, "invoke skill", "run skill", "call skill", "use skill"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary

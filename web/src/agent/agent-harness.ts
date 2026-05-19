@@ -35,6 +35,13 @@ let _clusterCatalog: { name: string; steps: number }[] = [];
 export function setClusterCatalog(clusters: { name: string; steps: number }[]): void {
   _clusterCatalog = clusters;
 }
+
+// ── Canvas skill catalog (#1116/SU-7) — starter nodes + saved CanvasCluster ─
+let _canvasSkillCatalog: { name: string; verb: string; desc: string }[] = [];
+
+export function setCanvasSkillCatalog(skills: { name: string; verb: string; desc: string }[]): void {
+  _canvasSkillCatalog = skills;
+}
 import { snapshotAsText } from "../scene/scene-kg";
 import { captureViewport } from "./viewport-capture";
 import type { Skill } from "./skills-loader";
@@ -386,6 +393,12 @@ function summariseClusters(): string {
   if (_clusterCatalog.length === 0) return "";
   const lines = _clusterCatalog.map(c => `  ${c.name} (${c.steps} steps)`).join("\n");
   return `Saved skill clusters (run with SdRunCluster({name:"…"})):\n${lines}\nTo place copies at different positions, emit separate SdRunCluster calls with distinct anchor offsets — e.g. anchor:[5,0,0] shifts all positions +5 on X. Do NOT use repeat for multi-position placement.`;
+}
+
+function summariseCanvasSkills(): string {
+  if (_canvasSkillCatalog.length === 0) return "";
+  const lines = _canvasSkillCatalog.map(s => `  ${s.name}(…): ${s.desc}`).join("\n");
+  return `User-defined skills (invoke with SdInvokeSkill({skill:"<name>",params:{…}})):\n${lines}`;
 }
 
 function buildSceneContext(): string {
@@ -953,6 +966,20 @@ Assistant: Using SdFillet with edgeId=0 to bevel one edge; all other edges stay 
 1. SdFillet — target=<uuid>, edgeId=0, radius=0.02
 </plan>
 <tool_call>{"name":"SdFillet","arguments":{"target":"box-uuid","edgeId":0,"radius":0.02},"metadata":{"source":"agent"}}</tool_call>
+
+User: build me one of those things I saved
+Assistant: Invoking your saved skill by name.
+<plan>
+1. SdInvokeSkill — skill="two-story-base", params={}
+</plan>
+<tool_call>{"name":"SdInvokeSkill","arguments":{"skill":"two-story-base","params":{}},"metadata":{"source":"agent"}}</tool_call>
+
+User: use my BuildWall skill, 6m long, 3m tall
+Assistant: Invoking starter skill BuildWall with custom length and height.
+<plan>
+1. SdInvokeSkill — skill="BuildWall", params={end:{x:6,y:0,z:0}, height:3}
+</plan>
+<tool_call>{"name":"SdInvokeSkill","arguments":{"skill":"BuildWall","params":{"end":{"x":6,"y":0,"z":0},"height":3}},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 
@@ -972,6 +999,7 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     "SCENE QUERY RESPONSE: when asked to describe the scene, what you see, what is in the scene, or what the default scene looks like — respond with PLAIN TEXT ONLY. Do NOT emit <plan> or <tool_call> blocks. Instead: (1) describe the viewport image visually: shapes, colors, materials, arrangement, scale (2-3 sentences); (2) narrate the object inventory from the \'Current scene:\' line above in plain English. Combine into ONE natural prose paragraph. No bullet lists. No Sd* names in prose — verb chips are shown separately in the UI.",
     summariseSkills(skills),
     summariseClusters(),
+    summariseCanvasSkills(),
   ].filter(Boolean).join("\n\n");
 }
 
@@ -1001,6 +1029,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
     FEW_SHOT_EXAMPLES,
     verbList,
+    summariseCanvasSkills(),
   ].filter(Boolean).join("\n\n");
 }
 

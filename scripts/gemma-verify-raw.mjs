@@ -6130,6 +6130,41 @@ await resetScene('before-box-inject');
   await resetScene('post-S125');
 }
 
+// ── S126 — agent-invoke-skill (#1116/SU-7): SdInvokeSkill handler dispatches starter + cluster verbs ──
+{
+  const s126 = await evaluate(`
+    (async () => {
+      try {
+        const store = window.__skillStore;
+        if (!store) return { passed: false, evidence: { reason: '__skillStore not exposed' } };
+
+        // Path A: SdInvokeSkill("BuildWall", {}) resolves starter → SdWall handler reached.
+        const starterResult = await window.__dispatch('SdInvokeSkill', { skill: 'BuildWall', params: {} });
+        const starterOk = starterResult && starterResult.ok === true && starterResult.source === 'starter' && starterResult.verb === 'SdWall';
+
+        // Path B: save a 2-node CanvasCluster, invoke it, verify both nodes fired in topo order.
+        const nA = { id: 'n-s126-a', kind: 'skill', skillName: 'BuildLevel', skillSteps: [{ verb: 'SdLevel', args: { elevation: 0.0, height: 3.0, name: 'S126 Level' } }], x: 20, y: 20, inPorts: 0, outPorts: 1 };
+        const nB = { id: 'n-s126-b', kind: 'skill', skillName: 'BuildWall', skillSteps: [{ verb: 'SdWall', args: { start: {x:0,y:0,z:0}, end: {x:4,y:0,z:0}, height: 3.0, thickness: 0.2 } }], x: 160, y: 20, inPorts: 1, outPorts: 1 };
+        const edge = { id: 'e-s126-1', from: 'n-s126-a', fromPort: 0, to: 'n-s126-b', toPort: 0 };
+        const graphJson = JSON.stringify({ nodes: [nA, nB], edges: [edge], groups: [] });
+        const saved = await store.saveCanvasCluster({ name: 's126-topo-cluster', description: 'S126 topo smoke', graphJson, nodeCount: 2, edgeCount: 1 });
+
+        const clusterResult = await window.__dispatch('SdInvokeSkill', { skill: 's126-topo-cluster', params: {} });
+        const clusterOk = clusterResult && clusterResult.ok === true && clusterResult.source === 'canvas-cluster' && clusterResult.fired === 2;
+
+        await store.deleteCanvasCluster(saved.id);
+
+        const passed = starterOk && clusterOk;
+        return { passed, evidence: { starterOk, starterResult, clusterOk, clusterResult } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s126) record('agent-invoke-skill', false, { reason: 'evaluate returned null' });
+  else record('agent-invoke-skill', s126.passed, s126.evidence);
+  await resetScene('post-S126');
+}
+
 } finally {
   await cleanup();
 }

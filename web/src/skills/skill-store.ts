@@ -274,6 +274,7 @@ if (typeof window !== "undefined") {
       listCanvasClusters: typeof listCanvasClusters;
       saveCanvasCluster: typeof saveCanvasCluster;
       putCanvasCluster: typeof putCanvasCluster;
+      deleteCanvasCluster: typeof deleteCanvasCluster;
     };
-  }).__skillStore = { saveCluster, getClusterByName, deleteCluster, listCanvasClusters, saveCanvasCluster, putCanvasCluster };
+  }).__skillStore = { saveCluster, getClusterByName, deleteCluster, listCanvasClusters, saveCanvasCluster, putCanvasCluster, deleteCanvasCluster };
 }

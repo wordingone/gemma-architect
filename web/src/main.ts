@@ -67,7 +67,8 @@ import { replayCloneSideEffects } from "./viewer/copy-array";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge, getUniqueEdges } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
-import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
+import { listClusters, getClusterByName, listCanvasClusters, type SkillClusterStep } from "./skills/skill-store";
+import { STARTER_LIBRARY } from "./skills/starter-library";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
 import { runIteration, runDesignLoop } from "./chat/chat-panel";
@@ -2253,6 +2254,64 @@ registerHandler("SdRunCluster", async (args) => {
 registerHandler("SdListClusters", async () => {
   const clusters = await listClusters();
   return { clusters: clusters.map(c => ({ name: c.name, steps: c.steps.length, createdAt: c.createdAt })) };
+});
+
+// ── SdInvokeSkill (#1116/SU-7) ────────────────────────────────────────────
+// Resolves a skill by name — either a starter-library node or a saved
+// CanvasCluster — then dispatches its underlying verbs in topological order.
+registerHandler("SdInvokeSkill", async (args) => {
+  const skillName = args["skill"] as string;
+  const params = (args["params"] && typeof args["params"] === "object" && !Array.isArray(args["params"]))
+    ? args["params"] as Record<string, unknown>
+    : {};
+
+  // 1. Check starter library by label
+  const starter = STARTER_LIBRARY.find(d => d.label === skillName || d.id === skillName);
+  if (starter) {
+    await dispatch(starter.verb, { ...starter.args, ...params });
+    return { ok: true, source: "starter", verb: starter.verb };
+  }
+
+  // 2. Check saved CanvasCluster by name (SU-5 graphJson clusters)
+  const canvasClusters = await listCanvasClusters();
+  const cluster = canvasClusters.find(c => c.name === skillName);
+  if (cluster) {
+    type CNode = { id: string; skillSteps: { verb: string; args: Record<string, unknown> }[]; inPorts: number; outPorts: number };
+    type CEdge = { from: string; to: string };
+    const { nodes, edges } = JSON.parse(cluster.graphJson) as { nodes: CNode[]; edges: CEdge[] };
+
+    // Kahn's topo sort
+    const inDegree = new Map<string, number>(nodes.map(n => [n.id, 0]));
+    for (const e of edges) inDegree.set(e.to, (inDegree.get(e.to) ?? 0) + 1);
+    const queue = nodes.filter(n => (inDegree.get(n.id) ?? 0) === 0).map(n => n.id);
+    const order: string[] = [];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      order.push(cur);
+      for (const e of edges) {
+        if (e.from === cur) {
+          const d = (inDegree.get(e.to) ?? 1) - 1;
+          inDegree.set(e.to, d);
+          if (d === 0) queue.push(e.to);
+        }
+      }
+    }
+    const nodeMap = new Map<string, CNode>(nodes.map(n => [n.id, n]));
+    let fired = 0;
+    for (const id of order) {
+      const node = nodeMap.get(id);
+      if (!node) continue;
+      for (const step of node.skillSteps) {
+        const mergedArgs = fired === 0 ? { ...step.args, ...params } : step.args;
+        await dispatch(step.verb, mergedArgs);
+        await new Promise(res => setTimeout(res, 50));
+        fired++;
+      }
+    }
+    return { ok: true, source: "canvas-cluster", fired };
+  }
+
+  return { ok: false, error: `No skill named "${skillName}" found in starter library or saved clusters` };
 });
 
 // Install shim handlers for every dictionary verb that doesn't have a native

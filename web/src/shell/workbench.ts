@@ -36,10 +36,11 @@ import { refLineStore } from "../geometry/ref-lines";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "../viewer/selection-state";
 import { getCreateSequence } from "../tools/index";
-import { prefetchModel, MODEL_ID, setClusterCatalog } from "../agent/agent-harness";
+import { prefetchModel, MODEL_ID, setClusterCatalog, setCanvasSkillCatalog } from "../agent/agent-harness";
 import { checkConsentAndLoad } from "../agent/model-consent";
 import { initBootScreen } from "../agent/boot-screen";
-import { listSavedSkills, deleteSkill, listClusters, saveCluster, deleteCluster, type SavedSkill, type SkillStep, type SkillCluster, type SkillClusterStep } from "../skills/skill-store";
+import { listSavedSkills, deleteSkill, listClusters, saveCluster, deleteCluster, listCanvasClusters, type SavedSkill, type SkillStep, type SkillCluster, type SkillClusterStep } from "../skills/skill-store";
+import { STARTER_LIBRARY } from "../skills/starter-library";
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { SkillCanvas } from "../skills/skill-canvas";
@@ -2163,6 +2164,21 @@ async function refreshClusterCatalog(): Promise<void> {
   setClusterCatalog(clusters.map(c => ({ name: c.name, steps: c.steps.length })));
 }
 
+async function refreshCanvasSkillCatalog(): Promise<void> {
+  const starterSkills = STARTER_LIBRARY.map(d => ({
+    name: d.label,
+    verb: d.verb,
+    desc: d.description,
+  }));
+  const canvasClusters = await listCanvasClusters().catch(() => []);
+  const clusterSkills = canvasClusters.map(c => ({
+    name: c.name,
+    verb: "SdInvokeSkill",
+    desc: c.description ?? `${c.nodeCount} node canvas cluster`,
+  }));
+  setCanvasSkillCatalog([...starterSkills, ...clusterSkills]);
+}
+
 async function renderSkillNodes(): Promise<void> {
   if (!_skillsWrap) return;
   const [saved, clusters] = await Promise.all([
@@ -2259,6 +2275,7 @@ async function renderSkillNodes(): Promise<void> {
       card.querySelector<HTMLButtonElement>(".skill-card-delete")!.addEventListener("click", async () => {
         await deleteCluster(cluster.id);
         await refreshClusterCatalog();
+        void refreshCanvasSkillCatalog();
         void renderSkillNodes();
       });
       _skillsWrap.appendChild(card);
@@ -2538,6 +2555,7 @@ function initLiveTabSubscriptions(): void {
 
   // Initialize cluster catalog for agent system prompt on startup.
   void refreshClusterCatalog();
+  void refreshCanvasSkillCatalog();
 
   // Replicad worker path: fires when run-ok completes geometry compilation.
   window.addEventListener("gemma:run-ok", (rawEv) => {
@@ -2587,6 +2605,10 @@ function initLiveTabSubscriptions(): void {
   window.addEventListener("skillstore:saved", () => {
     void renderSkillNodes();
     void _refreshChatSkills();
+  });
+
+  window.addEventListener("skillstore:cluster-saved", () => {
+    void refreshCanvasSkillCatalog();
   });
 
   window.addEventListener("viewer:select", (rawEv) => {
