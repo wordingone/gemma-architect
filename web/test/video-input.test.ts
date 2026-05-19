@@ -136,24 +136,25 @@ describe("#693 §video-input — video content block message structure", () => {
 
   type VideoBlock = { type: "video"; video: unknown[] };
   type TextBlock  = { type: "text";  text: string };
-  type ContentMsg = { role: string; content: Array<VideoBlock | TextBlock> };
+  // content is string for system/unchanged messages, array for spliced user messages
+  type ContentMsg = { role: string; content: string | Array<VideoBlock | TextBlock> };
 
   function spliceVideoIntoLastUser(
     messages: Array<{ role: string; content: string }>,
     videoFrames: unknown[],
   ): ContentMsg[] {
-    const lastUser = [...messages] as Array<{ role: string; content: string }>;
+    const lastUser = [...messages] as ContentMsg[];
     let ui = -1;
     for (let i = lastUser.length - 1; i >= 0; i--) {
       if (lastUser[i].role === "user") { ui = i; break; }
     }
-    if (ui < 0) return lastUser as unknown as ContentMsg[];
-    const spliced = [...lastUser] as unknown as ContentMsg[];
+    if (ui < 0) return lastUser;
+    const spliced = [...lastUser];
     spliced[ui] = {
       role: "user",
       content: [
         { type: "video", video: videoFrames },
-        { type: "text",  text: lastUser[ui].content },
+        { type: "text",  text: lastUser[ui].content as string },
       ],
     };
     return spliced;
@@ -168,21 +169,24 @@ describe("#693 §video-input — video content block message structure", () => {
   test("video block is first content item in last user message", () => {
     const result = spliceVideoIntoLastUser(baseMessages, fakeFrames);
     const lastUser = result.find(m => m.role === "user")!;
-    expect(Array.isArray(lastUser.content)).toBe(true);
-    expect((lastUser.content[0] as VideoBlock).type).toBe("video");
+    const blocks = lastUser.content as Array<VideoBlock | TextBlock>;
+    expect(Array.isArray(blocks)).toBe(true);
+    expect(blocks[0].type).toBe("video");
   });
 
   test("text block preserves original user prompt", () => {
     const result = spliceVideoIntoLastUser(baseMessages, fakeFrames);
     const lastUser = result.find(m => m.role === "user")!;
-    expect((lastUser.content[1] as TextBlock).type).toBe("text");
-    expect((lastUser.content[1] as TextBlock).text).toBe("What changed in the scene?");
+    const blocks = lastUser.content as Array<VideoBlock | TextBlock>;
+    expect((blocks[1] as TextBlock).type).toBe("text");
+    expect((blocks[1] as TextBlock).text).toBe("What changed in the scene?");
   });
 
   test("video block contains all frame URLs", () => {
     const result = spliceVideoIntoLastUser(baseMessages, fakeFrames);
     const lastUser = result.find(m => m.role === "user")!;
-    expect((lastUser.content[0] as VideoBlock).video).toEqual(fakeFrames);
+    const blocks = lastUser.content as Array<VideoBlock | TextBlock>;
+    expect((blocks[0] as VideoBlock).video).toEqual(fakeFrames);
   });
 
   test("system message is not modified", () => {
