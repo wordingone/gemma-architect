@@ -518,7 +518,7 @@ export function compileDsl(source: string): CompileResult {
 
     // Not a geometry primitive — check the spatial dictionary. If it resolves,
     // record as a dispatch (caller executes via dispatchSync) and continue.
-    const canonical = getEntry(verb)?.canonical_name ?? resolveAlias(verb) ?? null;
+    const canonical = getEntry(verb)?.name ?? resolveAlias(verb) ?? null;
     if (canonical) {
       const args: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(named)) args[k] = v;

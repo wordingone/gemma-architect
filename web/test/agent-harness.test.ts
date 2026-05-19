@@ -12,7 +12,7 @@ describe("B11 — schema metadata for system prompt", () => {
   test("SdWall entry has synonyms including 'wall' and backward-compat 'IfcWall'", () => {
     const dict = getDictionary();
     // IfcWall was renamed to SdWall in #609; old Ifc* names kept as synonyms.
-    const entry = dict.find((e) => e.canonical_name === "SdWall");
+    const entry = dict.find((e) => e.name === "SdWall");
     expect(entry).toBeDefined();
     if (!entry) return;
     expect(entry.synonyms).toContain("wall");
@@ -23,7 +23,7 @@ describe("B11 — schema metadata for system prompt", () => {
 
   test("SdWall args have unit=m and default values", () => {
     const dict = getDictionary();
-    const entry = dict.find((e) => e.canonical_name === "SdWall");
+    const entry = dict.find((e) => e.name === "SdWall");
     if (!entry) return;
     const thickness = entry.args.find((a) => a.name === "thickness");
     expect(thickness).toBeDefined();
@@ -38,7 +38,7 @@ describe("B11 — schema metadata for system prompt", () => {
   test("summariseDictionary format: unit= and default= markers appear in formatted string", () => {
     // Inline the format logic from agent-harness.ts summariseDictionary()
     const dict = getDictionary();
-    const entry = dict.find((e) => e.canonical_name === "SdWall");
+    const entry = dict.find((e) => e.name === "SdWall");
     if (!entry) return;
     const argList = entry.args
       .map((a) => {
@@ -49,7 +49,7 @@ describe("B11 — schema metadata for system prompt", () => {
       })
       .join(", ");
     const syn = entry.synonyms.length > 0 ? ` synonyms=[${entry.synonyms.join(", ")}]` : "";
-    const line = `  ${entry.canonical_name}(${argList})${syn}`;
+    const line = `  ${entry.name}(${argList})${syn}`;
     expect(line).toContain("unit=m");
     expect(line).toContain("default=0.2");
     expect(line).toContain("synonyms=[");

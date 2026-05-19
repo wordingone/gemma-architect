@@ -9,7 +9,7 @@ import {
 } from "../src/commands/command-session";
 
 function clearAllHandlers() {
-  for (const e of getDictionary()) unregisterHandler(e.canonical_name);
+  for (const e of getDictionary()) unregisterHandler(e.name);
 }
 
 beforeEach(() => {

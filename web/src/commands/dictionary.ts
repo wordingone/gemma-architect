@@ -59,7 +59,7 @@ export type SdTopologyRole =
 export type SdKernel = "replicad" | "nurbs-webgpu";
 
 export type SpatialDictionaryEntry = {
-  canonical_name: string;
+  name: string;
   ifc4_class?: string;
   kernel_op: string;
   args: SdArg[];
@@ -364,11 +364,11 @@ function asArgList(n: ParsedNode | undefined): SdArg[] {
 function coerceEntry(node: ParsedNode): SpatialDictionaryEntry | null {
   if (node.kind !== "map") return null;
   const e = node.entries;
-  const canonical_name = asString(e.canonical_name);
+  const name = asString(e.name);
   const kernel_op = asString(e.kernel_op);
-  if (!canonical_name || !kernel_op) return null;
+  if (!name || !kernel_op) return null;
   const entry: SpatialDictionaryEntry = {
-    canonical_name,
+    name,
     kernel_op,
     args: asArgList(e.args),
     topology_role: asString(e.topology_role),
@@ -403,40 +403,40 @@ export function getDictionary(): SpatialDictionaryEntry[] {
   return cachedEntries;
 }
 
-// synonym (lowercased) → canonical_name. O(1) lookup for dispatch.
+// synonym (lowercased) → name. O(1) lookup for dispatch.
 export function getAliasIndex(): Map<string, string> {
   if (cachedAliasIndex) return cachedAliasIndex;
   const map = new Map<string, string>();
   for (const e of getDictionary()) {
-    map.set(e.canonical_name.toLowerCase(), e.canonical_name);
-    map.set(e.kernel_op.toLowerCase(), e.canonical_name);
-    if (e.ifc4_class) map.set(e.ifc4_class.toLowerCase(), e.canonical_name);
-    for (const s of e.synonyms) map.set(s.toLowerCase(), e.canonical_name);
+    map.set(e.name.toLowerCase(), e.name);
+    map.set(e.kernel_op.toLowerCase(), e.name);
+    if (e.ifc4_class) map.set(e.ifc4_class.toLowerCase(), e.name);
+    for (const s of e.synonyms) map.set(s.toLowerCase(), e.name);
   }
   cachedAliasIndex = map;
   return map;
 }
 
-// hotkey → canonical_name.
+// hotkey → name.
 export function getHotkeyIndex(): Map<string, string> {
   if (cachedHotkeyIndex) return cachedHotkeyIndex;
   const map = new Map<string, string>();
   for (const e of getDictionary()) {
-    if (e.hotkey) map.set(e.hotkey.toUpperCase(), e.canonical_name);
+    if (e.hotkey) map.set(e.hotkey.toUpperCase(), e.name);
   }
   cachedHotkeyIndex = map;
   return map;
 }
 
-// Resolve any user-typed string to a canonical_name, or null.
+// Resolve any user-typed string to a name, or null.
 export function resolveAlias(input: string): string | null {
   return getAliasIndex().get(input.trim().toLowerCase()) ?? null;
 }
 
-// Get the full dictionary entry by canonical_name.
-export function getEntry(canonical_name: string): SpatialDictionaryEntry | null {
+// Get the full dictionary entry by name.
+export function getEntry(name: string): SpatialDictionaryEntry | null {
   for (const e of getDictionary()) {
-    if (e.canonical_name === canonical_name) return e;
+    if (e.name === name) return e;
   }
   return null;
 }

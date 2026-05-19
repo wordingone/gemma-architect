@@ -7,11 +7,11 @@
 // dispatch handler is responsible for keeping the KG in sync.
 //
 // Triple shape: { subject, predicate, object }. All three are strings —
-// either UUIDs (for instances), canonical_name from the spatial
+// either UUIDs (for instances), name from the spatial
 // dictionary (for types), or predicate names from predicates.ts.
 //
 // Predicates we track on day 1 (full set in predicates.ts):
-//   - rdf:type — instance ↔ canonical_name
+//   - rdf:type — instance ↔ name
 //   - hosts            — host (e.g. wall) hosts hosted (e.g. door)
 //   - containedIn      — element contained in spatial structure
 //   - aggregatedBy     — part aggregated by whole
@@ -209,7 +209,7 @@ export function getContainer(elementUuid: string): string | null {
   return hits.length > 0 ? hits[0].object : null;
 }
 
-/** The type of an element (rdf:type → canonical_name). */
+/** The type of an element (rdf:type → name). */
 export function getType(uuid: string): string | null {
   const hits = queryKG({ subject: uuid, predicate: "rdf:type" });
   return hits.length > 0 ? hits[0].object : null;
@@ -241,7 +241,7 @@ export function getSelected(): string | null {
 export interface KGSnapshot {
   totalTriples: number;
   selected: { uuid: string | null; type: string | null };
-  counts: Record<string, number>; // canonical_name → instance count
+  counts: Record<string, number>; // name → instance count
   hostings: { host: string; hostType: string | null; hosted: string; hostedType: string | null }[];
   containment: { element: string; type: string | null; container: string }[];
 }

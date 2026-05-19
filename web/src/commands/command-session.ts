@@ -119,7 +119,7 @@ function normalizeArgs(entry: SpatialDictionaryEntry, partial: Record<string, un
   }
   // Practical default for array/grid prompts: if no explicit target is provided,
   // treat it as a point-pattern request instead of failing validation.
-  if (entry.canonical_name === "SdArray" && (out.target === undefined || out.target === null)) {
+  if (entry.name === "SdArray" && (out.target === undefined || out.target === null)) {
     out.target = "point";
   }
   return out;

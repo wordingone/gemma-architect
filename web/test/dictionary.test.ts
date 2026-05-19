@@ -13,7 +13,7 @@ import {
 } from "../src/commands/dictionary";
 
 const REQUIRED_FIELDS: Array<keyof SpatialDictionaryEntry> = [
-  "canonical_name",
+  "name",
   "kernel_op",
   "topology_role",
   "kernel",
@@ -33,7 +33,7 @@ describe("Spatial Dictionary loader", () => {
     const dict = getDictionary();
     for (const entry of dict) {
       for (const field of REQUIRED_FIELDS) {
-        expect(entry[field], `entry ${entry.canonical_name} missing ${field}`).toBeDefined();
+        expect(entry[field], `entry ${entry.name} missing ${field}`).toBeDefined();
       }
       expect(entry.synonyms.length).toBeGreaterThan(0);
     }
@@ -43,8 +43,8 @@ describe("Spatial Dictionary loader", () => {
     const dict = getDictionary();
     const seen = new Set<string>();
     for (const entry of dict) {
-      expect(seen.has(entry.canonical_name), `duplicate canonical: ${entry.canonical_name}`).toBe(false);
-      seen.add(entry.canonical_name);
+      expect(seen.has(entry.name), `duplicate canonical: ${entry.name}`).toBe(false);
+      seen.add(entry.name);
     }
   });
 
@@ -55,17 +55,17 @@ describe("Spatial Dictionary loader", () => {
     // canonical, not that it resolves back to its parent entry.
     const dict = getDictionary();
     const idx = getAliasIndex();
-    const validCanonicals = new Set(dict.map((e) => e.canonical_name));
+    const validNames = new Set(dict.map((e) => e.name));
     for (const entry of dict) {
       for (const syn of entry.synonyms) {
         const resolved = idx.get(syn.toLowerCase());
         expect(
           resolved,
-          `synonym "${syn}" of ${entry.canonical_name} not in alias index`
+          `synonym "${syn}" of ${entry.name} not in alias index`
         ).toBeDefined();
         expect(
-          resolved && validCanonicals.has(resolved),
-          `synonym "${syn}" → "${resolved}" which is not a canonical name`
+          resolved && validNames.has(resolved),
+          `synonym "${syn}" → "${resolved}" which is not a known name`
         ).toBe(true);
       }
     }
@@ -87,7 +87,7 @@ describe("Spatial Dictionary loader", () => {
     if (wallCanonical) {
       const entry = getEntry(wallCanonical);
       expect(entry).toBeDefined();
-      expect(entry?.canonical_name).toBe(wallCanonical);
+      expect(entry?.name).toBe(wallCanonical);
     }
   });
 
@@ -95,7 +95,7 @@ describe("Spatial Dictionary loader", () => {
     const dict = getDictionary();
     const hkIdx = getHotkeyIndex();
     for (const [hotkey, canonical] of hkIdx.entries()) {
-      const entry = dict.find((e) => e.canonical_name === canonical);
+      const entry = dict.find((e) => e.name === canonical);
       expect(entry, `hotkey ${hotkey} → ${canonical} but no such canonical`).toBeDefined();
     }
   });
@@ -106,7 +106,7 @@ describe("Spatial Dictionary loader", () => {
     for (const entry of dict) {
       expect(
         allowed.has(entry.kernel),
-        `entry ${entry.canonical_name} has unknown kernel: ${entry.kernel}`
+        `entry ${entry.name} has unknown kernel: ${entry.kernel}`
       ).toBe(true);
     }
   });
@@ -117,22 +117,22 @@ describe("Spatial Dictionary loader", () => {
     for (const entry of dict) {
       expect(
         allowed.has(entry.topology_role),
-        `entry ${entry.canonical_name} has unknown topology_role: ${entry.topology_role}`
+        `entry ${entry.name} has unknown topology_role: ${entry.topology_role}`
       ).toBe(true);
     }
   });
 
   test("at least one architectural IFC entity is present (smoke)", () => {
     const dict = getDictionary();
-    const hasWall = dict.some((e) => e.canonical_name === "IfcWall" || e.ifc4_class === "IfcWall");
-    const hasSlab = dict.some((e) => e.canonical_name === "IfcSlab" || e.ifc4_class === "IfcSlab");
+    const hasWall = dict.some((e) => e.name === "IfcWall" || e.ifc4_class === "IfcWall");
+    const hasSlab = dict.some((e) => e.name === "IfcSlab" || e.ifc4_class === "IfcSlab");
     expect(hasWall, "no IfcWall entry").toBe(true);
     expect(hasSlab, "no IfcSlab entry").toBe(true);
   });
 
   test("at least one boolean op is present (union/difference/intersection)", () => {
     const dict = getDictionary();
-    const ops = dict.map((e) => e.canonical_name.toLowerCase());
+    const ops = dict.map((e) => e.name.toLowerCase());
     expect(
       ops.some((n) => /union|fuse/i.test(n)),
       "no boolean union op"

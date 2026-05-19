@@ -118,7 +118,7 @@ describe("Convenience accessors", () => {
     expect(getContainer("d2")).toBeNull();
   });
 
-  test("getType returns canonical_name for an instance", () => {
+  test("getType returns name for an instance", () => {
     expect(getType("w1")).toBe("IfcWall");
     expect(getType("d1")).toBe("IfcDoor");
     expect(getType("nonexistent")).toBeNull();

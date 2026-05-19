@@ -24,7 +24,7 @@ function clearAllHandlers() {
   // Instead, unregister every dictionary verb. (This is enough for tests;
   // production never needs to clear.)
   const dict = getDictionary();
-  for (const e of dict) unregisterHandler(e.canonical_name);
+  for (const e of dict) unregisterHandler(e.name);
 }
 
 beforeEach(() => {
@@ -43,7 +43,7 @@ describe("Verb resolution", () => {
     expect(wallCanonical).toBeTruthy();
     // The exact canonical depends on the YAML — we just assert it's
     // a valid dictionary entry.
-    expect(getDictionary().some((e) => e.canonical_name === wallCanonical)).toBe(true);
+    expect(getDictionary().some((e) => e.name === wallCanonical)).toBe(true);
   });
 
   test("resolves old Ifc* synonym to new Sd* canonical", () => {
@@ -101,8 +101,8 @@ describe("Dispatch + validation", () => {
     const entryWithRequired = dict.find((e) => e.args.some((a) => a.required));
     expect(entryWithRequired).toBeDefined();
     if (!entryWithRequired) return;
-    registerHandler(entryWithRequired.canonical_name, () => "ok");
-    const r = await dispatch(entryWithRequired.canonical_name, {});
+    registerHandler(entryWithRequired.name, () => "ok");
+    const r = await dispatch(entryWithRequired.name, {});
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error).toBe("ArgValidationError");
@@ -118,7 +118,7 @@ describe("Dispatch + validation", () => {
     if (!entry) return; // skip if YAML has no such entry
     const numericArg = entry.args.find((a) => a.required && (a.type === "number" || a.type === "integer"));
     if (!numericArg) return;
-    registerHandler(entry.canonical_name, () => "ok");
+    registerHandler(entry.name, () => "ok");
     // Build a complete-ish args object but break the numeric one.
     const args: Record<string, unknown> = {};
     for (const a of entry.args) {
@@ -133,7 +133,7 @@ describe("Dispatch + validation", () => {
         else args[a.name] = {};
       }
     }
-    const r = await dispatch(entry.canonical_name, args);
+    const r = await dispatch(entry.name, args);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.error).toBe("ArgValidationError");
@@ -147,7 +147,7 @@ describe("Dispatch + validation", () => {
     });
     // Provide all required args so we hit the handler.
     const dict = getDictionary();
-    const wall = dict.find((e) => e.canonical_name === "SdWall");
+    const wall = dict.find((e) => e.name === "SdWall");
     expect(wall).toBeDefined();
     if (!wall) return;
     const args: Record<string, unknown> = {};
@@ -171,7 +171,7 @@ describe("Dispatch + validation", () => {
   test("dispatchSync flags Promise-returning handlers", () => {
     registerHandler("SdWall", () => Promise.resolve("nope"));
     const dict = getDictionary();
-    const wall = dict.find((e) => e.canonical_name === "SdWall")!;
+    const wall = dict.find((e) => e.name === "SdWall")!;
     const args: Record<string, unknown> = {};
     for (const a of wall.args) {
       if (a.required) {
@@ -188,7 +188,7 @@ describe("Dispatch + validation", () => {
   test("happy path: registered handler returns ok with result", async () => {
     registerHandler("SdWall", () => ({ created: "wall-1" }));
     const dict = getDictionary();
-    const wall = dict.find((e) => e.canonical_name === "SdWall")!;
+    const wall = dict.find((e) => e.name === "SdWall")!;
     const args: Record<string, unknown> = {};
     for (const a of wall.args) {
       if (a.required) {
@@ -208,7 +208,7 @@ describe("Dispatch + validation", () => {
     if (!wallCanonical) return;
     registerHandler(wallCanonical, () => "via synonym");
     const dict = getDictionary();
-    const wall = dict.find((e) => e.canonical_name === wallCanonical)!;
+    const wall = dict.find((e) => e.name === wallCanonical)!;
     const args: Record<string, unknown> = {};
     for (const a of wall.args) {
       if (a.required) {

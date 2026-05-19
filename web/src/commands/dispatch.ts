@@ -1,14 +1,14 @@
 // dispatch.ts — central command dispatch (T6).
 //
 // Every UI surface (menubar / ribbon / palette / cmdk / console / agent
-// tool-calls / hotkeys) ends up calling dispatch(canonical_name, args).
-// One handler per canonical name keeps the call graph traceable and
+// tool-calls / hotkeys) ends up calling dispatch(name, args).
+// One handler per name keeps the call graph traceable and
 // pushes the ~177 stubs into one place where they're either implemented
 // or marked TODO with a single uniform shape.
 //
 // Resolution order:
-//   1. canonical_name (exact match in registry)
-//   2. alias-index lookup (via dictionary.ts) — maps synonyms → canonical
+//   1. name (exact match in registry)
+//   2. alias-index lookup (via dictionary.ts) — maps synonyms → name
 //   3. runtime alias-json from ~/.gemma-cad/aliases.json (deep-merge
 //      over compiled defaults; reloads on Window > Reload aliases)
 //
@@ -135,8 +135,8 @@ export function getRuntimeAliases(): Record<string, string> {
 // ============================================================
 
 /**
- * Resolve a token (canonical OR synonym OR runtime alias) to a
- * canonical_name from the spatial dictionary. Returns null if nothing
+ * Resolve a token (name OR synonym OR runtime alias) to a
+ * name from the spatial dictionary. Returns null if nothing
  * matches.
  */
 export function resolveVerb(token: string): string | null {
@@ -408,8 +408,8 @@ export function dispatchCoverage(): {
   const covered: string[] = [];
   const missing: string[] = [];
   for (const entry of dict) {
-    if (handlers.has(entry.canonical_name)) covered.push(entry.canonical_name);
-    else missing.push(entry.canonical_name);
+    if (handlers.has(entry.name)) covered.push(entry.name);
+    else missing.push(entry.name);
   }
   return {
     total: dict.length,
@@ -442,10 +442,10 @@ export function installDefaultHandlers(): void {
   // Bulk-register a default shim that re-emits as gemma:command. UI
   // subsystems that prefer native dispatch can override later.
   for (const entry of dict) {
-    if (handlers.has(entry.canonical_name)) continue;
-    handlers.set(entry.canonical_name, (args, e) => {
+    if (handlers.has(entry.name)) continue;
+    handlers.set(entry.name, (args, e) => {
       // The generic CustomEvent contract: detail = { id: kernel_op, args, canonical, kernel }.
-      emitCommand(e.kernel_op, { ...args, canonical: e.canonical_name, kernel: e.kernel });
+      emitCommand(e.kernel_op, { ...args, canonical: e.name, kernel: e.kernel });
       return { dispatched: e.kernel_op };
     });
   }

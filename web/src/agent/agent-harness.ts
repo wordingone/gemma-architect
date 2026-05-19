@@ -358,7 +358,7 @@ function summariseDictionary(): string {
   const implemented = new Set(listHandlers());
   // Show only verbs that have a registered handler (native or shim).
   // Falls back to full dictionary if dispatch hasn't initialized yet.
-  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.canonical_name)) : dict;
+  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.name)) : dict;
   const lines = available.map((e) => {
     const argList = e.args
       .map((a) => {
@@ -369,7 +369,7 @@ function summariseDictionary(): string {
       })
       .join(", ");
     const syn = e.synonyms.length > 0 ? ` synonyms=[${e.synonyms.join(", ")}]` : "";
-    return `  ${e.canonical_name}(${argList})${syn}`;
+    return `  ${e.name}(${argList})${syn}`;
   });
   const count = available.length;
   return count > 0
@@ -982,8 +982,8 @@ export function buildSystemPrompt(skills?: Skill[]): string {
 export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
   const dict = getDictionary();
   const implemented = new Set(listHandlers());
-  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.canonical_name)) : dict;
-  const verbNames = available.map((e) => e.canonical_name).join(", ");
+  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.name)) : dict;
+  const verbNames = available.map((e) => e.name).join(", ");
   const verbList = verbNames.length > 0
     ? `Available verbs (use ONLY these exact names): ${verbNames}`
     : "No verbs currently available. Do not emit function calls.";
