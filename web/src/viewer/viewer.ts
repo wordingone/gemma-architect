@@ -267,8 +267,11 @@ export class Viewer {
     // from the first frame; rebuildGrid uses the same formula on snap changes.
     const initSize = 20;
     const initStep = Math.max(0.001, getSnap().step);
-    const initDivs = Math.min(500, Math.max(4, Math.round(initSize / initStep)));
-    this.grid = new THREE.GridHelper(initSize, initDivs, 0xa8a8b0, 0xd8d4cc);
+    // Round to next even number so center line (x=0) is always a grid line.
+    const _initRaw = Math.min(500, Math.max(4, Math.round(initSize / initStep)));
+    const initDivs = _initRaw % 2 === 0 ? _initRaw : _initRaw + 1;
+    const initGridSize = initDivs * initStep; // exact multiple of step → lines land on snap targets
+    this.grid = new THREE.GridHelper(initGridSize, initDivs, 0xa8a8b0, 0xd8d4cc);
     (this.grid as unknown as { __lastSize?: number }).__lastSize = initSize;
     this.grid.rotation.x = Math.PI / 2;
     this.grid.renderOrder = -1;
@@ -919,10 +922,13 @@ export class Viewer {
   private rebuildGrid(): void {
     const sceneSize = (this.grid as unknown as { __lastSize?: number }).__lastSize ?? 20;
     const step = Math.max(0.001, getSnap().step);
-    const divisions = Math.min(500, Math.max(4, Math.round(sceneSize / step)));
+    // Round to next even number so center line (x=0) is always a grid line.
+    const _rawDivisions = Math.min(500, Math.max(4, Math.round(sceneSize / step)));
+    const divisions = _rawDivisions % 2 === 0 ? _rawDivisions : _rawDivisions + 1;
+    const gridSize = divisions * step; // exact multiple of step → lines land on snap targets
     this.scene.remove(this.grid);
     this.grid.geometry.dispose();
-    this.grid = new THREE.GridHelper(sceneSize, divisions, 0xa8a8b0, 0xd8d4cc);
+    this.grid = new THREE.GridHelper(gridSize, divisions, 0xa8a8b0, 0xd8d4cc);
     this.grid.rotation.x = Math.PI / 2;
     this.grid.renderOrder = -1;
     const gMat = Array.isArray(this.grid.material) ? this.grid.material : [this.grid.material];
