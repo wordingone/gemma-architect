@@ -280,8 +280,9 @@ function _buildOverlay(): void {
   const dimPath = document.createElementNS(svgNS, 'path');
   dimPath.setAttribute('d', ghostPath);
   dimPath.setAttribute('fill', 'none');
-  dimPath.setAttribute('stroke', '#1e1e1e');
-  dimPath.setAttribute('stroke-width', '0.06');
+  dimPath.setAttribute('stroke', '#222222');
+  dimPath.setAttribute('stroke-width', '0.5');
+  dimPath.setAttribute('vector-effect', 'non-scaling-stroke');
   dimPath.setAttribute('stroke-linecap', 'square');
   svg.appendChild(dimPath);
 
@@ -290,7 +291,8 @@ function _buildOverlay(): void {
   headPath.setAttribute('d', ghostPath);
   headPath.setAttribute('fill', 'none');
   headPath.setAttribute('stroke', '#4ca6ff');
-  headPath.setAttribute('stroke-width', '0.1');
+  headPath.setAttribute('stroke-width', '0.8');
+  headPath.setAttribute('vector-effect', 'non-scaling-stroke');
   headPath.setAttribute('stroke-linecap', 'round');
   headPath.setAttribute('opacity', '0.9');
   svg.appendChild(headPath);
@@ -422,112 +424,134 @@ function _buildOverlay(): void {
 // ---------------------------------------------------------------------------
 // Ghost UI path data (viewBox 0 0 160 90)
 //
-// Layout proportions mirror actual Gemma-CAD chrome:
-//   menubar:   y 0-2   (thin bar, app name + menu items)
-//   ribbon:    y 2-8   (tool groups; buttons span y 2.8-7.2, leaving margins)
-//   palette:   x 0-16, y 8-87  (4 col × 6 row icon grid, 3.2×2.8 each)
-//   viewport:  x 16-122, y 8-87 (floor plan; no grid lines to avoid overlap)
-//   sidebar:   x 122-160, y 8-87 (tabs + property rows)
-//   statusbar: y 87-90
+// Layout proportions derived from actual shell.css / tokens.css:
+//   grid-template-rows: 24px 30px 90px 1fr 22px
+//   --palette-w: 80px  --sidebar-w: 320px
+//
+// At 1366×768 reference: 1px ≈ 0.1171 SVG units
+//   menubar:   y 0–2.8    (24px)
+//   modebar:   y 2.8–6.3  (30px) — view presets: PERSPECTIVE / TOP / FRONT / RIGHT
+//   ribbon:    y 6.3–16.9 (90px) — tool buttons (inner y 7.4–15.8)
+//   palette:   x 0–9.4    (80px) — 2 col × 8 row icon grid
+//   viewport:  x 9.4–122.5         — floor plan
+//   sidebar:   x 122.5–160 (320px) — property panel
+//   statusbar: y 87.4–90  (22px)
 
 function _ghostPathData(): string {
   const segs: string[] = [];
 
-  // ── Chrome structure ──
-  segs.push('M0 2 H160');      // menubar bottom
-  segs.push('M0 8 H160');      // ribbon bottom
-  segs.push('M16 8 V87');      // palette right edge
-  segs.push('M122 8 V87');     // sidebar left edge
-  segs.push('M0 87 H160');     // statusbar top
+  // ── Chrome borders ──
+  segs.push('M0 2.8 H160');          // menubar bottom
+  segs.push('M0 6.3 H160');          // modebar bottom
+  segs.push('M0 16.9 H160');         // ribbon bottom
+  segs.push('M9.4 16.9 V87.4');      // palette right edge
+  segs.push('M122.5 16.9 V87.4');    // sidebar left edge
+  segs.push('M0 87.4 H160');         // statusbar top
 
-  // ── Menubar: short word-width blocks ──
-  segs.push('M2 1 H11');
-  segs.push('M13 1 H17');
-  segs.push('M19 1 H23');
-  segs.push('M25 1 H31');
-  segs.push('M33 1 H37');
+  // ── Menubar: app name + menu items (midpoint y≈1.4) ──
+  segs.push('M1.5 0.7 H9');
+  segs.push('M11 0.7 H16');
+  segs.push('M18 0.7 H23');
+  segs.push('M25 0.7 H31');
+  segs.push('M33 0.7 H37');
+  segs.push('M148 0.5 H153');
+  segs.push('M154.5 0.5 H159');
 
-  // ── Ribbon: buttons occupy y=2.8–7.2 (4.4 units = ~37px at full HD) ──
-  // Each button: 3.5 wide. Step 4.2. Groups separated by thin line.
-  const BY1 = 2.8, BY2 = 7.2, BW = 3.5;
-  function btn(x: number) { segs.push(`M${x} ${BY1} H${x+BW} V${BY2} H${x} Z`); }
-  function sep(x: number) { segs.push(`M${x} ${BY1} V${BY2}`); }
+  // ── Modebar: view preset buttons (inner y 3.2–5.9) ──
+  segs.push('M9 3.2 H24 V5.9 H9 Z');           // PERSPECTIVE
+  segs.push('M25.5 3.2 H35 V5.9 H25.5 Z');     // TOP
+  segs.push('M36.5 3.2 H47 V5.9 H36.5 Z');     // FRONT
+  segs.push('M48.5 3.2 H58 V5.9 H48.5 Z');     // RIGHT
+  segs.push('M59.5 3.2 H68 V5.9 H59.5 Z');     // LEFT
+  segs.push('M146 3.2 H151 V5.9 H146 Z');      // zoom fit
+  segs.push('M152 3.2 H157 V5.9 H152 Z');      // zoom controls
+  segs.push('M158 3.2 H160 V5.9 H158 Z');
 
-  // Group 1 (3)
-  btn(1.0); btn(5.2); btn(9.4); sep(13.8);
-  // Group 2 (5)
-  btn(14.3); btn(18.5); btn(22.7); btn(26.9); btn(31.1); sep(35.5);
-  // Group 3 (4)
-  btn(36.0); btn(40.2); btn(44.4); btn(48.6); sep(53.0);
-  // Group 4 (3)
-  btn(53.5); btn(57.7); btn(61.9); sep(66.3);
-  // Group 5 (2)
-  btn(66.8); btn(71.0);
-  // Right: render-mode + 4 small + viewport tabs
-  segs.push(`M107 ${BY1} H121 V${BY2} H107 Z`);
-  btn(122.0); btn(126.2); btn(130.4); btn(134.6);
-  segs.push(`M150 ${BY1} H160 V${BY2} H150 Z`);
+  // ── Ribbon: tool buttons (inner y 7.4–15.8, h≈8.4u) ──
+  // BW=5.5u (47px), step=6.2u. Groups separated by 1.4u gap.
+  const BY1 = 7.4, BY2 = 15.8, BW = 5.5;
+  function btn(x: number) {
+    const r = (n: number) => +n.toFixed(1);
+    segs.push(`M${r(x)} ${BY1} H${r(x+BW)} V${BY2} H${r(x)} Z`);
+  }
+  function sep(x: number) { segs.push(`M${+x.toFixed(1)} ${BY1} V${BY2}`); }
 
-  // ── Palette: 4 col × 6 row icon grid ──
-  // Icon: 3.2 wide × 2.8 tall. Col step 3.8, row step 3.3. Start (0.4, 9.2)
-  for (let r = 0; r < 6; r++) {
-    for (let c = 0; c < 4; c++) {
-      const x = +(0.4 + c * 3.8).toFixed(1);
-      const y = +(9.2 + r * 3.3).toFixed(1);
-      segs.push(`M${x} ${y} H${+(x+3.2).toFixed(1)} V${+(y+2.8).toFixed(1)} H${x} Z`);
+  // Group 1: Select/Move/Rotate (3)
+  btn(0.5); btn(6.7); btn(12.9); sep(20.2);
+  // Group 2: Wall/Floor/Roof/Column/Beam (5)
+  btn(20.7); btn(26.9); btn(33.1); btn(39.3); btn(45.5); sep(52.8);
+  // Group 3: Door/Window/Stair/Ramp (4)
+  btn(53.3); btn(59.5); btn(65.7); btn(71.9); sep(79.2);
+  // Group 4: Line/Polyline/Arc (3)
+  btn(79.7); btn(85.9); btn(92.1); sep(99.4);
+  // Group 5: Extrude/Boolean (2)
+  btn(99.9); btn(106.1);
+  // Render mode block
+  segs.push(`M109 ${BY1} H121 V${BY2} H109 Z`);
+  // Right-side display controls (in sidebar column — ribbon spans full width)
+  btn(123.5); btn(129.7); btn(135.9); btn(142.1);
+  segs.push(`M150 ${BY1} H159 V${BY2} H150 Z`);
+
+  // ── Palette: 2 col × 8 row icon grid (x 0–9.4, y 16.9–87.4) ──
+  // Icon 3.8w × 3.2h. Cols at x=0.4, x=5.0. Row step 3.7. Start y=18.0
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 2; c++) {
+      const x = +(0.4 + c * 4.6).toFixed(1);
+      const y = +(18.0 + r * 3.7).toFixed(1);
+      segs.push(`M${x} ${y} H${+(x+3.8).toFixed(1)} V${+(y+3.0).toFixed(1)} H${x} Z`);
     }
   }
-  // Three section dividers below icon grid (~y 29)
-  segs.push('M0.5 30 H15.5');
-  segs.push('M0.5 34.5 H15.5');
-  segs.push('M0.5 39 H15.5');
+  // Section label dividers below icon grid
+  segs.push('M0.4 48.0 H9.0');
+  segs.push('M0.4 52.5 H9.0');
+  segs.push('M0.4 57.0 H9.0');
 
-  // ── Viewport: clean floor-plan (no grid — avoids overlap clutter) ──
-  // Building boundary
-  segs.push('M26 17 H114 V83 H26 Z');
-  // Room dividers
-  segs.push('M26 46 H88');
-  segs.push('M26 63 H67');
-  segs.push('M63 17 V46');
-  segs.push('M80 46 V83');
-  segs.push('M47 46 V83');
-  // Door-opening gaps
-  segs.push('M63 31 L63 38');
-  segs.push('M44 46 L50 46');
-  // Window ticks on exterior walls
-  segs.push('M44 17 V19'); segs.push('M54 17 V19');
-  segs.push('M80 17 V19'); segs.push('M96 17 V19');
-  segs.push('M114 38 H112'); segs.push('M114 57 H112');
-  segs.push('M58 83 V81'); segs.push('M75 83 V81');
+  // ── Viewport: floor plan (x 9.4–122.5, y 16.9–87.4) ──
+  // Building outline (with viewport margin)
+  segs.push('M22 25 H114 V82 H22 Z');
+  // Interior walls
+  segs.push('M22 52 H86');       // main horizontal division
+  segs.push('M22 66 H65');       // lower horizontal
+  segs.push('M62 25 V52');       // left vertical
+  segs.push('M79 52 V82');       // lower-right vertical
+  segs.push('M46 52 V82');       // lower-left vertical
+  // Door gaps
+  segs.push('M62 34 L62 41');
+  segs.push('M43 52 L50 52');
+  // Window ticks on exterior
+  segs.push('M42 25 V27'); segs.push('M53 25 V27');
+  segs.push('M79 25 V27'); segs.push('M95 25 V27');
+  segs.push('M114 41 H112'); segs.push('M114 60 H112');
+  segs.push('M56 82 V80'); segs.push('M72 82 V80');
   // Stair block
-  segs.push('M91 17 H114 V35 H91 Z');
-  segs.push('M93 19 H112'); segs.push('M93 21.5 H112'); segs.push('M93 24 H112');
-  segs.push('M93 26.5 H112'); segs.push('M93 29 H112'); segs.push('M93 31.5 H112');
+  segs.push('M91 25 H114 V42 H91 Z');
+  segs.push('M93 27 H112'); segs.push('M93 29.5 H112'); segs.push('M93 32 H112');
+  segs.push('M93 34.5 H112'); segs.push('M93 37 H112');
   // Furniture
-  segs.push('M30 20 H60 V34 H30 Z');
-  segs.push('M32 22 H42 V32 H32 Z');
-  segs.push('M30 49 H62 V61 H30 Z');
-  // Compass (top-right viewport corner)
-  segs.push('M118 11 L118 15');
-  segs.push('M118 11 L116.5 13.5'); segs.push('M118 11 L119.5 13.5');
+  segs.push('M28 28 H58 V42 H28 Z');
+  segs.push('M30 30 H40 V40 H30 Z');
+  segs.push('M28 55 H60 V66 H28 Z');
+  // Compass (top-right corner of viewport area)
+  segs.push('M118 19 L118 23');
+  segs.push('M118 19 L116.5 21.5'); segs.push('M118 19 L119.5 21.5');
 
-  // ── Sidebar: header + 3 tabs + 10 property rows ──
-  segs.push('M123 9 H159 V13 H123 Z');
-  segs.push('M124 13.5 H136 V15.5 H124 Z');
-  segs.push('M137 13.5 H149 V15.5 H137 Z');
-  segs.push('M150 13.5 H158 V15.5 H150 Z');
+  // ── Sidebar: header + 3 tabs + 10 property rows (x 122.5–160) ──
+  segs.push('M123.5 18 H159 V22 H123.5 Z');
+  segs.push('M124.5 22.5 H136 V24.5 H124.5 Z');
+  segs.push('M137 22.5 H149 V24.5 H137 Z');
+  segs.push('M150 22.5 H158.5 V24.5 H150 Z');
   for (let i = 0; i < 10; i++) {
-    const y = +(17 + i * 6.8).toFixed(1);
-    segs.push(`M125 ${y} H143`);
-    segs.push(`M125 ${+(+y + 3.2).toFixed(1)} H158`);
+    const y = +(26 + i * 6.0).toFixed(1);
+    segs.push(`M125.5 ${y} H143`);
+    segs.push(`M125.5 ${+(+y + 3.0).toFixed(1)} H158.5`);
   }
 
-  // ── Statusbar: 5 indicator segments ──
-  segs.push('M2 88.5 H28');
-  segs.push('M30 88.5 H50');
-  segs.push('M52 88.5 H72');
-  segs.push('M120 88.5 H140');
-  segs.push('M142 88.5 H158');
+  // ── Statusbar: 5 indicator segments (midpoint y≈88.7) ──
+  segs.push('M2 88.7 H28');
+  segs.push('M30 88.7 H50');
+  segs.push('M52 88.7 H72');
+  segs.push('M120 88.7 H140');
+  segs.push('M142 88.7 H158');
 
   return segs.join(' ');
 }
