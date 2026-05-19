@@ -1526,7 +1526,7 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: SdInvokeSkill
+- name: SdInvokeSkill
   kernel_op: invokeSkill
   args:
     - {name: skill, type: string, required: true, description: "Name of the saved CanvasCluster or starter node to invoke"}
