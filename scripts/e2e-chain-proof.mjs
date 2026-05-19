@@ -126,20 +126,33 @@ if (!chipText) {
 console.log(`  Clicked: "${chipText}"`);
 
 const inferResult = await page.evaluate(() => new Promise((resolve) => {
+  const FAIL_PHRASES = ['model is still loading', 'please wait a moment'];
+  const check = () => {
+    const wall = document.querySelector('.chat-list');
+    if (!wall || wall.children.length === 0) return null;
+    const texts = Array.from(wall.children).map(el => el.textContent?.toLowerCase() ?? '');
+    const stillLoading = texts.some(t => FAIL_PHRASES.some(p => t.includes(p)));
+    if (stillLoading) return { ok: false, reason: 'model-not-ready: boot gate did not hold', texts };
+    return { ok: true, count: wall.children.length, texts };
+  };
   const wall = document.querySelector('.chat-list');
   if (!wall) return resolve({ ok: false, reason: 'no .chat-list' });
-  if (wall.children.length > 0) return resolve({ ok: true, count: wall.children.length });
+  const immediate = check();
+  if (immediate) return resolve(immediate);
   const obs = new MutationObserver(() => {
-    if (wall.children.length > 0) { obs.disconnect(); resolve({ ok: true, count: wall.children.length }); }
+    const r = check();
+    if (r) { obs.disconnect(); resolve(r); }
   });
-  obs.observe(wall, { childList: true });
-  setTimeout(() => { obs.disconnect(); resolve({ ok: false, reason: 'timeout' }); }, 90_000);
+  obs.observe(wall, { childList: true, subtree: true });
+  setTimeout(() => { obs.disconnect(); resolve({ ok: false, reason: 'timeout — no model response' }); }, 90_000);
 }), { timeout: 95_000 });
 
 if (!inferResult.ok) {
-  console.error(`  ❌ No inference output: ${inferResult.reason}`);
+  console.error(`  ❌ Inference check failed: ${inferResult.reason}`);
+  if (inferResult.texts) console.error('  Chat content:', inferResult.texts);
   process.exit(1);
 }
-console.log(`  ✅ Inference output visible (${inferResult.count} message(s) in chat)`);
+console.log(`  ✅ Model responded (${inferResult.count} message(s)); boot gate held — no "model still loading"`);
+if (inferResult.texts) console.log('  Content:', inferResult.texts.map(t => t.slice(0, 80)));
 
 console.log('\n✅ CHAIN COMPLETE: loading screen → fresh download → boot → inference\n');
