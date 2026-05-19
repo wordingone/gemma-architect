@@ -4,6 +4,15 @@
  * Attaches to shared :9222. Never launches or closes Chrome.
  */
 import { chromium } from 'playwright';
+import { writeFileSync, mkdirSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(__dirname, '..');
+const TS = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
+const ARTIFACT_DIR = resolve(ROOT, `state/chain-proof-artifacts/${TS}`);
+mkdirSync(ARTIFACT_DIR, { recursive: true });
 
 const TARGET = 'http://localhost:5847/';
 const BOOT_TIMEOUT_MS = 10 * 60 * 1000; // 10 min for real download from CDN
@@ -31,6 +40,16 @@ if (ctx) ctx.close = async () => {};
 const pages = ctx.pages();
 const page = pages.length > 0 ? pages[0] : await ctx.newPage();
 console.log(`Connected to :9222 — using ${pages.length > 0 ? 'existing' : 'new'} tab`);
+
+// Console capture — highest forensic value on the real-CDN path
+const consoleLogs = [];
+page.on('console', msg => {
+  const ts = new Date().toISOString().slice(11, 23);
+  const line = `${ts} [${msg.type()}] ${msg.text()}`;
+  consoleLogs.push(line);
+  // Mirror to script stdout for real-time visibility
+  if (msg.type() === 'error' || msg.type() === 'warning') process.stderr.write(line + '\n');
+});
 
 // ── Step 1: Navigate to app, clear IDB ───────────────────────────────────────
 console.log('\n[1/3] Clearing IDB (fresh-device simulation)...');
@@ -154,5 +173,17 @@ if (!inferResult.ok) {
 }
 console.log(`  ✅ Model responded (${inferResult.count} message(s)); boot gate held — no "model still loading"`);
 if (inferResult.texts) console.log('  Content:', inferResult.texts.map(t => t.slice(0, 80)));
+
+// Write console capture and final screenshot
+try {
+  const consoleLogPath = resolve(ARTIFACT_DIR, 'console.log');
+  writeFileSync(consoleLogPath, consoleLogs.join('\n') + (consoleLogs.length ? '\n' : ''), 'utf8');
+  console.log(`\n📝 Console capture: ${consoleLogPath} (${consoleLogs.length} lines)`);
+  const screenshotPath = resolve(ARTIFACT_DIR, 'final.png');
+  await page.screenshot({ path: screenshotPath, fullPage: false });
+  console.log(`📷 Screenshot: ${screenshotPath}`);
+} catch (e) {
+  console.log(`⚠️  Artifact write failed: ${e.message.slice(0, 60)}`);
+}
 
 console.log('\n✅ CHAIN COMPLETE: loading screen → fresh download → boot → inference\n');

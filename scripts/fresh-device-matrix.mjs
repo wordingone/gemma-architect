@@ -731,16 +731,41 @@ async function runBrowserConfig(cfg, page, cdp, artifactDir) {
     browserError: null,
     scenarios: [],
     screenshotPath: null,
+    consoleLogPath: null,
+  };
+
+  // Per-config artifact dir created early so console + screenshots can write immediately.
+  const cfgArtifactDir = resolve(artifactDir, cfg.name);
+  mkdirSync(cfgArtifactDir, { recursive: true });
+
+  // Console capture — every browser console message logged for forensic analysis.
+  // Catches fake-timer leaks, CDN errors, ORT warnings.
+  const consoleLogs = [];
+  const consoleHandler = msg => {
+    const ts = new Date().toISOString().slice(11, 23);
+    consoleLogs.push(`${ts} [${msg.type()}] ${msg.text()}`);
+  };
+  page.on('console', consoleHandler);
+
+  // Screenshot strip helper — silent on failure, sequential frame index.
+  let frameIdx = 0;
+  const snap = async (label) => {
+    const fname = `frame-${String(frameIdx).padStart(2, '0')}-${label}.png`;
+    await page.screenshot({ path: resolve(cfgArtifactDir, fname), fullPage: false }).catch(() => {});
+    frameIdx++;
   };
 
   // Apply CDP-level setup for this config (storage clear + network conditions)
   try {
     await cfg.setup(page, cdp);
   } catch (err) {
+    page.off('console', consoleHandler);
     cfgResult.browserError = `setup failed: ${err.message}`;
     console.log(`  ❌ Setup failed: ${err.message.slice(0, 100)}`);
     return cfgResult;
   }
+
+  await snap('post-setup');
 
   try {
     for (const scenario of BROWSER_SCENARIOS) {
@@ -748,6 +773,7 @@ async function runBrowserConfig(cfg, page, cdp, artifactDir) {
       if (scenario.name === 'inference-demo-chip' && cfg.skipInference) {
         console.log(`  ⏭  ${scenario.name}: SKIP (config disables inference)`);
         cfgResult.scenarios.push({ scenario: scenario.name, skipped: true, reason: 'config skipInference', pass: true });
+        await snap(`${scenario.name}-skip`);
         continue;
       }
 
@@ -769,6 +795,7 @@ async function runBrowserConfig(cfg, page, cdp, artifactDir) {
           console.log(`  ${isSkip ? '⏭ ' : '⚠️ '} ${scenario.name}: ${isSkip ? err.message : 'error — ' + err.message.slice(0, 80)}`);
           cfgResult.scenarios.push({ scenario: scenario.name, error: err.message, pass: isSkip, skipped: isSkip });
         }
+        await snap(scenario.name);
         continue;
       }
 
@@ -831,19 +858,15 @@ async function runBrowserConfig(cfg, page, cdp, artifactDir) {
         console.log(`  ⚠️  ${scenario.name}: error — ${err.message.slice(0, 80)}`);
         cfgResult.scenarios.push({ scenario: scenario.name, error: err.message, pass: false });
       }
+
+      await snap(scenario.name);
     }
 
-    // Screenshot after all scenarios for this config
-    try {
-      const cfgArtifactDir = resolve(artifactDir, cfg.name);
-      mkdirSync(cfgArtifactDir, { recursive: true });
-      const screenshotPath = resolve(cfgArtifactDir, 'final.png');
-      await page.screenshot({ path: screenshotPath, fullPage: false });
-      cfgResult.screenshotPath = screenshotPath;
-      console.log(`  📷 Screenshot: ${screenshotPath}`);
-    } catch (err) {
-      console.log(`  ⚠️  Screenshot failed: ${err.message.slice(0, 60)}`);
-    }
+    // Final screenshot (kept as 'final.png' for compatibility; strip frames are per-scenario)
+    const screenshotPath = resolve(cfgArtifactDir, 'final.png');
+    await page.screenshot({ path: screenshotPath, fullPage: false }).catch(() => {});
+    cfgResult.screenshotPath = screenshotPath;
+    console.log(`  📷 Screenshot: ${screenshotPath}`);
 
   } catch (err) {
     cfgResult.browserError = err.message;
@@ -854,6 +877,20 @@ async function runBrowserConfig(cfg, page, cdp, artifactDir) {
       await cfg.teardown(page, cdp);
     } catch (err) {
       console.log(`  ⚠️  Teardown error: ${err.message.slice(0, 60)}`);
+    }
+
+    // Post-teardown screenshot (captures state after network/CDP conditions reset)
+    await snap('post-teardown');
+
+    // Write console capture
+    page.off('console', consoleHandler);
+    try {
+      const consoleLogPath = resolve(cfgArtifactDir, 'console.log');
+      writeFileSync(consoleLogPath, consoleLogs.join('\n') + (consoleLogs.length ? '\n' : ''), 'utf8');
+      cfgResult.consoleLogPath = consoleLogPath;
+      console.log(`  📝 Console: ${consoleLogPath} (${consoleLogs.length} lines)`);
+    } catch (err) {
+      console.log(`  ⚠️  Console log write failed: ${err.message.slice(0, 60)}`);
     }
   }
 
