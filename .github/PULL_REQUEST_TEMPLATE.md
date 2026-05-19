@@ -25,7 +25,7 @@ If console/dispatch paths changed, also include:
 
 - [ ] `bun run audit:dispatch`
 - [ ] `bun test web/test/dispatch.test.ts`
-- [ ] Manual check at `http://localhost:5175/`:
+- [ ] Manual check at `http://localhost:5847/`:
   - console DSL input
   - `:` direct dispatch input
   - left palette tool click dispatch

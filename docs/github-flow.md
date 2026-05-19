@@ -2,7 +2,7 @@
 
 This repository uses GitHub Flow with `master` as the only long-lived branch.
 
-> See also: [Working-Tree Discipline](internal/working-tree-discipline.md) — rules for `B:/M/gemma-architect/` (the shared tree serving the `:5175`).
+> See also: [Working-Tree Discipline](internal/working-tree-discipline.md) — rules for `B:/M/gemma-architect/` (the shared tree serving the `:5847`).
 
 ## Rules
 

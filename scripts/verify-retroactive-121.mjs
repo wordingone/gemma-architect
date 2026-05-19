@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 // verify-retroactive-121.mjs — PR #121 cmdk dismiss evidence.
 // Verifies: open cmdk → X button closes it; Esc key also closes it.
-import { connectPage5175, delay, writeReceipt, makeRecorder, SHA } from "./retroactive-cdp-lib.mjs";
+import { connectPage5847, delay, writeReceipt, makeRecorder, SHA } from "./retroactive-cdp-lib.mjs";
 
 const OUT = `state/verify-retroactive-121-${SHA}-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
-const { evaluate, screenshot, close } = await connectPage5175();
-console.log("Connected to :5175");
+const { evaluate, screenshot, close } = await connectPage5847();
+console.log("Connected to :5847");
 
 const checks = [];
 const record = makeRecorder(checks);

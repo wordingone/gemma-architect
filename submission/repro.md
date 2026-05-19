@@ -119,7 +119,7 @@ bun run web:typecheck      # strict tsc, no emit
 
 ```bash
 bun run web:dev
-# http://localhost:5175 — hot reload, COOP+COEP headers configured
+# http://localhost:5847 — hot reload, COOP+COEP headers configured
 ```
 
 ### Production build
@@ -212,7 +212,7 @@ GEMMA4_GGUF=models/gemma-4-E2B-IT-Q4_K_M.gguf bash scripts/serve-gemma4-e2b.sh
 
 # 3. Open the web app — the CREATE tab is live:
 bun run web:dev
-# Navigate to http://localhost:5175, click CREATE, type a prompt.
+# Navigate to http://localhost:5847, click CREATE, type a prompt.
 ```
 
 `scripts/serve-gemma4-e2b.sh` auto-detects llama-server from avir-cli's vendor directory

@@ -171,7 +171,7 @@ git clone https://github.com/wordingone/gemma-architect
 cd gemma-architect
 bun install
 bun run web:typecheck       # strict tsc, no emit
-bun run web:dev             # http://localhost:5175 — hot reload
+bun run web:dev             # http://localhost:5847 — hot reload
 # or
 bun run web:build           # outputs to web/dist/
 bun run web:preview         # http://127.0.0.1:4173 — same build the live demo serves

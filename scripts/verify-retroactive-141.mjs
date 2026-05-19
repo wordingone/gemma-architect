@@ -9,11 +9,11 @@
 // Current state: item 1 was removed in D2 (#153) rewrite of chat-panel.ts.
 // This script tests items 2+3 directly (dispatch the event, verify canvas animates).
 // A follow-up defect issue should be filed for the missing chat-dispatch path.
-import { connectPage5175, delay, writeReceipt, makeRecorder, SHA } from "./retroactive-cdp-lib.mjs";
+import { connectPage5847, delay, writeReceipt, makeRecorder, SHA } from "./retroactive-cdp-lib.mjs";
 
 const OUT = `state/verify-retroactive-141-${SHA}-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
-const { evaluate, screenshot, close } = await connectPage5175();
-console.log("Connected to :5175");
+const { evaluate, screenshot, close } = await connectPage5847();
+console.log("Connected to :5847");
 
 const checks = [];
 const record = makeRecorder(checks);

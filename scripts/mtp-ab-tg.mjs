@@ -18,8 +18,8 @@
 // Outputs: console table + scripts/mtp-ab-result.json
 //
 // Prerequisites:
-//   - Shared browser at :9222 with a :5175 page tab loaded
-//   - gemma-architect dev server at :5175 (gemma-architect-master autofwd or bun web:dev)
+//   - Shared browser at :9222 with a :5847 page tab loaded
+//   - gemma-architect dev server at :5847 (gemma-architect-master autofwd or bun web:dev)
 //   - E4B drafter ONNX reachable (CDN: GitHub Releases drafter-e4b-v1, or local public/models/)
 
 import { writeFileSync } from "fs";

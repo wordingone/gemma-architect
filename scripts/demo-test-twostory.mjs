@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // demo-test-twostory.mjs — End-to-end test for the two-story-house default-prompt chip.
-// Uses raw CDP WS (no Playwright). Connects to existing :5175 tab in shared :9222 browser.
+// Uses raw CDP WS (no Playwright). Connects to existing :5847 tab in shared :9222 browser.
 // Reports branch A (green), B (context-clamp warning), or C (silent dispatch failure).
 //
 // Usage: bun scripts/demo-test-twostory.mjs
@@ -13,7 +13,7 @@ const CDP_URL = CDP_BASE;
 const APP_URL = DEV_URL;
 const TIMEOUT_MS = 240_000;
 
-// ── Find :5175 tab ─────────────────────────────────────────────────────────────
+// ── Find :5847 tab ─────────────────────────────────────────────────────────────
 const tabs = await fetch(`${CDP_URL}/json`).then(r => r.json());
 const tab = tabs.find(t => t.url?.startsWith(APP_URL) && t.type === "page");
 if (!tab) {
@@ -74,7 +74,7 @@ async function evaluate(fn) {
 await send("Runtime.enable");
 
 // ── Hard-refresh to pick up latest master ─────────────────────────────────────
-console.log("Hard-refreshing :5175 ...");
+console.log("Hard-refreshing :5847 ...");
 await send("Page.enable");
 await send("Page.reload", { ignoreCache: true });
 // Wait for load event

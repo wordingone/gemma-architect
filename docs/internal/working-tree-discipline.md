@@ -1,6 +1,6 @@
 # Working-Tree Discipline
 
-`B:/M/gemma-architect/` is the **shared working tree** — the engineer develops in it and the vite dev server at `localhost:5175` serves from it. Whatever branch is checked out there is what the user sees.
+`B:/M/gemma-architect/` is the **shared working tree** — the engineer develops in it and the vite dev server at `localhost:5847` serves from it. Whatever branch is checked out there is what the user sees.
 
 ## Rules
 
@@ -12,7 +12,7 @@
    ```
    This creates an isolated working tree at the new path. The shared tree's checkout is unaffected.
 3. **Verify with `git worktree list`** before any branch operation. If you see your topic branch already checked out somewhere, work there. If you don't, add it.
-4. **Never run a parallel vite from a worktree on the same port (5175)**. Either use a different port (and confirm before pointing at it — see gate-discipline rule about port redirects), or don't run vite at all from the worktree.
+4. **Never run a parallel vite from a worktree on the same port (5847)**. Either use a different port (and confirm before pointing at it — see gate-discipline rule about port redirects), or don't run vite at all from the worktree.
 
 ## When the shared tree's branch DOES need to change
 
@@ -34,8 +34,8 @@ git worktree list | grep <branch-name>
 # What branch is the shared tree on right now?
 cd B:/M/gemma-architect && git rev-parse --abbrev-ref HEAD
 
-# What's vite serving at :5175?
-powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5175 -State Listen | ForEach-Object { Get-CimInstance Win32_Process -Filter ('ProcessId=' + $_.OwningProcess) | Select-Object ProcessId, CommandLine }"
+# What's vite serving at :5847?
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5847 -State Listen | ForEach-Object { Get-CimInstance Win32_Process -Filter ('ProcessId=' + $_.OwningProcess) | Select-Object ProcessId, CommandLine }"
 ```
 
 The third command returns the process serving the dev URL; its working directory is in the CommandLine. Cross-check that working dir's HEAD before assuming what the user sees.

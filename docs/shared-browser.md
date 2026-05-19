@@ -1,6 +1,6 @@
 # Shared Browser — Lifecycle Guide
 
-A single persistent headed Chromium window at `http://localhost:5175/` serves as the common visual target for the project team. When any agent runs gemma-verify, cursor movement is visible in this window in real time.
+A single persistent headed Chromium window at `http://localhost:5847/` serves as the common visual target for the project team. When any agent runs gemma-verify, cursor movement is visible in this window in real time.
 
 Per project directive 2026-05-06.
 
@@ -76,7 +76,7 @@ When `attached_via_cdp: true`, the JSON satisfies the gemma-verify-gate hook. Th
 
 ### Canonical tab
 
-In CDP mode the runner finds the existing tab whose URL starts with `http://localhost:5175/` and reuses it — it never opens a new tab. If no such tab exists the runner exits 2 with `BLOCKED: no canonical tab found`. The tab is never closed after the run; the shared window and tab survive every `verify:raw` invocation. To restore a closed canonical tab, run `stop.ps1` then `start.ps1`.
+In CDP mode the runner finds the existing tab whose URL starts with `http://localhost:5847/` and reuses it — it never opens a new tab. If no such tab exists the runner exits 2 with `BLOCKED: no canonical tab found`. The tab is never closed after the run; the shared window and tab survive every `verify:raw` invocation. To restore a closed canonical tab, run `stop.ps1` then `start.ps1`.
 
 ---
 
@@ -135,7 +135,7 @@ The persistent profile at `B:\M\gemma-architect-master\.shared-browser\profile` 
 | Item | Survives stop/start? |
 |------|---------------------|
 | Profile (cookies, localStorage) | Yes — `--user-data-dir` is persistent |
-| Open tabs | No — Chrome closes; start.ps1 opens a fresh tab at :5175 |
+| Open tabs | No — Chrome closes; start.ps1 opens a fresh tab at :5847 |
 | Page state (scene objects, tools active) | No — fresh page load |
 
 ---

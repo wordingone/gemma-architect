@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // demo-prompt-harness.ts — SU-6 end-to-end acceptance harness (#413)
 //
-// Runs 1 or all 5 variant prompts against the live :5175 dev server via CDP.
+// Runs 1 or all 5 variant prompts against the live :5847 dev server via CDP.
 // For each prompt: calls window.__runDesignLoop, checks dispatch coverage,
 // asserts minimum IFC element classes per the #413 AC.
 //

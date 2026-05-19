@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // audit-vite-spawn.mjs — Gate: no checked-in script may spawn vite without
-// --port 5175 --strictPort. Exits non-zero if violations found.
+// --port 5847 --strictPort. Exits non-zero if violations found.
 //
 // Scans:
 //   - package.json "scripts" section
 //   - scripts/*.{mjs,ts,js,ps1}
 //
 // Pass patterns (any one of these means the invocation is compliant):
-//   --port 5175 --strictPort  (canonical)
-//   --port 5175 (missing strictPort still raises a warning but not a failure
+//   --port 5847 --strictPort  (canonical)
+//   --port 5847 (missing strictPort still raises a warning but not a failure
 //                because strictPort is advisory for CI one-off invocations)
 //   The invocation is inside a comment line (# or //)
 //   The file is a retroactive-* or debug-* script (archive, not production)
@@ -29,7 +29,7 @@ for (const [name, cmd] of Object.entries(pkg.scripts ?? {})) {
   // Match vite only as a launch command (followed by whitespace or end), not inside filenames.
   if (!/\bvite(\s|$)/.test(cmd)) continue;
   if (/\bbuild\b|\bpreview\b/.test(cmd)) continue; // build/preview don't need --port
-  if (!cmd.includes("--port 5175")) {
+  if (!cmd.includes("--port 5847")) {
     violations.push({ source: "package.json", key: name, cmd });
   } else if (!cmd.includes("--strictPort")) {
     warnings.push({ source: "package.json", key: name, cmd, reason: "missing --strictPort" });
@@ -57,7 +57,7 @@ for (const f of readdirSync(SCRIPTS_DIR)) {
     const line = lines[i];
     if (/^\s*(#|\/\/)/.test(line)) continue; // skip comment lines
     if (!VITE_LAUNCH_RE.test(line)) continue;
-    if (!line.includes("--port 5175")) {
+    if (!line.includes("--port 5847")) {
       violations.push({ source: `scripts/${f}`, line: i + 1, text: line.trim().slice(0, 120) });
     }
   }
@@ -70,10 +70,10 @@ if (warnings.length) {
 }
 
 if (violations.length === 0) {
-  console.log("OK audit:vite-spawn — all vite dev invocations enforce --port 5175");
+  console.log("OK audit:vite-spawn — all vite dev invocations enforce --port 5847");
   process.exit(0);
 } else {
-  console.error("FAIL audit:vite-spawn — vite spawned without --port 5175:");
+  console.error("FAIL audit:vite-spawn — vite spawned without --port 5847:");
   for (const v of violations) {
     if (v.key) {
       console.error(`  package.json [${v.key}]: ${v.cmd}`);
@@ -81,6 +81,6 @@ if (violations.length === 0) {
       console.error(`  ${v.source}:${v.line}: ${v.text}`);
     }
   }
-  console.error("Fix: add --port 5175 --strictPort to every vite dev invocation.");
+  console.error("Fix: add --port 5847 --strictPort to every vite dev invocation.");
   process.exit(1);
 }

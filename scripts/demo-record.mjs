@@ -2,7 +2,7 @@
 // scripts/demo-record.mjs — CDP Page.startScreencast recording for D4 demo video
 //
 // Connects to shared browser at :9222, starts Page.startScreencast on the
-// canonical :5175 tab, saves JPEG frames to an output directory, then
+// canonical :5847 tab, saves JPEG frames to an output directory, then
 // assembles them into an MP4 using ffmpeg on Ctrl+C.
 //
 // Usage:

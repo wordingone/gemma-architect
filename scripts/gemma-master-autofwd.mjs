@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // gemma-master-autofwd.mjs — auto-fast-forward the gemma-architect-master serving
 // tree when origin/master advances. Fixes the recurring stale-branch drift where
-// the :5175 window shows outdated UI (issue #239, third recurrence 2026-05-09).
+// the :5847 window shows outdated UI (issue #239, third recurrence 2026-05-09).
 //
 // Design:
 //   Poll origin/master every 30s. On SHA change:
 //     - Branch must be "master" (serving-tree invariant)
 //     - Tree must be clean (no uncommitted changes)
-//   If both: `git pull --ff-only` → HMR fires automatically on :5175
+//   If both: `git pull --ff-only` → HMR fires automatically on :5847
 //   If either fails: log SKIP reason; never touch the tree
 //
 // Heartbeat: state/gemma-master-autofwd.heartbeat updated on every poll.
@@ -111,7 +111,7 @@ async function poll() {
     run("git fetch origin");
     const pullResult = run("git pull --ff-only origin master");
     if (pullResult.status === 0) {
-      log(`OK pulled to ${remoteSha.slice(0, 7)} — HMR will fire on :5175`);
+      log(`OK pulled to ${remoteSha.slice(0, 7)} — HMR will fire on :5847`);
     } else {
       log(`PULL-FAILED ${(pullResult.stderr ?? "").trim()}`);
     }

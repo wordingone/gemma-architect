@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-// Kill every node/vite process listening on a TCP port EXCEPT :5175 from master clone.
-// Idempotent. Safe — leaves :5175 alone.
+// Kill every node/vite process listening on a TCP port EXCEPT :5847 from master clone.
+// Idempotent. Safe — leaves :5847 alone.
 
 import { execSync } from "node:child_process";
 
-const KEEP_PORT = 5175;
-const KEEP_CWD_FRAGMENT = "gemma-architect-master"; // only the master clone keeps :5175
+const KEEP_PORT = 5847;
+const KEEP_CWD_FRAGMENT = "gemma-architect-master"; // only the master clone keeps :5847
 
 // Note: $_ and $p are PS automatic/local variables — NOT template placeholders.
 // They appear as literal $_ in the PS script (not ${...}, so JS template does not expand them).

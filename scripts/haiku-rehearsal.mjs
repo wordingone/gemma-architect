@@ -10,7 +10,7 @@
 // Usage: bun scripts/haiku-rehearsal.mjs
 //
 // Prerequisites:
-//   - Shared Chromium running at :9222 with :5175 tab
+//   - Shared Chromium running at :9222 with :5847 tab
 //   - /visual-check skill installed at .claude/skills/visual-check/
 //   - All 4 new surfaces (S13-S16) must pass in gemma-verify-raw.mjs first
 //

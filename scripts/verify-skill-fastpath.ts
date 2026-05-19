@@ -17,7 +17,7 @@ import { chromium } from "playwright";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 
-// :5183 serves B:/M/gemma-architect/ (this repo). :5175 serves the master clone.
+// :5183 serves B:/M/gemma-architect/ (this repo). :5847 serves the master clone.
 const DEV_URL   = "http://localhost:5183/";
 const STATE_DIR = `${process.cwd()}/state`;
 

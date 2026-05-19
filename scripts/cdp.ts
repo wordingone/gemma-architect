@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cdp.ts — CDP-CLI helper: drive the canonical :5175 tab via one-line bash.
+// cdp.ts — CDP-CLI helper: drive the canonical :5847 tab via one-line bash.
 //
 // Usage: node --experimental-strip-types scripts/cdp.ts <subcommand> [args]
 //   (or) bun run cdp <subcommand> [args]

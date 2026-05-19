@@ -10,7 +10,7 @@
 param([switch]$Force)
 
 $CDP_PORT      = if ($env:CDP_PORT) { [int]$env:CDP_PORT } else { 9222 }
-$DEV_PORT      = if ($env:DEV_PORT) { $env:DEV_PORT } else { '5175' }
+$DEV_PORT      = if ($env:DEV_PORT) { $env:DEV_PORT } else { '5847' }
 $DEV_URL       = "http://localhost:$DEV_PORT/"
 $ChromeDataDir = "B:\M\gemma-architect-master\.shared-browser\profile"
 $CDP_JSON      = "B:\M\gemma-architect-master\.shared-browser\cdp.json"

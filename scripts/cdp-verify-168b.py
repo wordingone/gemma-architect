@@ -73,7 +73,7 @@ def main():
         wait_for_load(ws, timeout=20)
         time.sleep(2)
     else:
-        print("Already on :5175, waiting for HMR settle")
+        print("Already on :5847, waiting for HMR settle")
         time.sleep(2)
 
     surfaces = []

@@ -92,7 +92,7 @@ if (!isolated && existsSync(CDP_JSON)) {
 let page: import("playwright").Page;
 
 if (attachedViaCDP) {
-  // Find the canonical :5175 tab — never spawn a new one
+  // Find the canonical :5847 tab — never spawn a new one
   const allPages = browser.contexts().flatMap(c => c.pages());
   const canonical = allPages.find(p => p.url().startsWith(DEV_URL));
   if (!canonical) {

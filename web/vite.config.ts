@@ -23,6 +23,8 @@ export default defineConfig({
     plugins: () => [wasm(), topLevelAwait()],
   },
   server: {
+    port: 5847,
+    strictPort: true,
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",

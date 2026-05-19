@@ -5,7 +5,7 @@ Operational rules for gemma-verify runs. All rules are BINDING as of 2026-05-11 
 ## Infrastructure constraints (hard)
 
 - **ONE Chromium on `:9222`.** No worker spawns a second browser — not headless, not a second profile, not a second port. The single shared Chromium is canonical.
-- **ONE vite on `:5175` from `B:/M/gemma-architect-master/`.** No worker starts a second vite on :5175 or any port without explicit user approval. `:5175` is the user's URL.
+- **ONE vite on `:5847` from `B:/M/gemma-architect-master/`.** No worker starts a second vite on :5847 or any port without explicit user approval. `:5847` is the user's URL.
 - Violations break the user's active view. There is no workaround.
 
 ## Serving-tree freeze (hard)
@@ -24,7 +24,7 @@ Workers iterate exclusively in `B:/M/gemma-architect/` (feature-dev) on feature 
 
 ## Pre-merge browser-based verify: BANNED
 
-Pre-merge `gemma-verify-raw` against `:5175` is forbidden. The single `:5175` vite serves master HEAD from `gemma-architect-master/`. Running verify against it while a feature branch is under review:
+Pre-merge `gemma-verify-raw` against `:5847` is forbidden. The single `:5847` vite serves master HEAD from `gemma-architect-master/`. Running verify against it while a feature branch is under review:
 
 - Contaminates the verify baseline (wrong-version testing)
 - Forces the serving tree to switch branches (disrupts the user's view)
@@ -68,9 +68,9 @@ bun scripts/gemma-verify.mjs --caller archie
 
 If pre-merge browser-based verify becomes necessary, the candidate approach that respects the one-browser/one-server constraint:
 
-1. Same single `:5175` vite, configured to statically serve per-PR build artifacts at distinct paths (e.g., `:5175/pr-502/` → `gemma-architect-master/web/dist-pr-502/`).
+1. Same single `:5847` vite, configured to statically serve per-PR build artifacts at distinct paths (e.g., `:5847/pr-502/` → `gemma-architect-master/web/dist-pr-502/`).
 2. `bun run build` from a per-PR worktree outputs to that path.
-3. The single `:9222` Chromium opens a **separate tab** at `:5175/pr-502/`. The user's tab on `:5175/` (master HEAD) is a different document and is undisturbed.
+3. The single `:9222` Chromium opens a **separate tab** at `:5847/pr-502/`. The user's tab on `:5847/` (master HEAD) is a different document and is undisturbed.
 4. `gemma-verify-raw` attaches to the PR-specific tab by URL match.
 
 This requires: vite static-serve config change, build-artifact placement convention, per-PR tab management in verify, stale-artifact cleanup. Out of scope until user approves.

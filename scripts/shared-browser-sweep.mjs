@@ -84,7 +84,7 @@ async function closeTab(tab) {
 }
 
 // Kill the vite server listening on `port`, with a guard: never kill a process
-// whose CommandLine contains "--port 5175" (canonical server).
+// whose CommandLine contains "--port 5847" (canonical server).
 function killViteOnPort(port) {
   if (port === DEV_PORT) return false; // hard guard: never kill canonical
   try {
@@ -93,7 +93,7 @@ function killViteOnPort(port) {
       if (!$conn) { exit 1 }
       $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($conn.OwningProcess)" -ErrorAction SilentlyContinue;
       if (!$proc -or $proc.CommandLine -notmatch 'vite') { exit 2 }
-      if ($proc.CommandLine -match '--port 5175') { exit 3 }
+      if ($proc.CommandLine -match '--port 5847') { exit 3 }
       Write-Output "$($proc.ProcessId):$($proc.CommandLine.Substring(0, [Math]::Min(120, $proc.CommandLine.Length)))";
       Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue;
       exit 0
@@ -107,7 +107,7 @@ function killViteOnPort(port) {
     const code = e.status ?? -1;
     if (code === 1) { /* no listener on port */ }
     else if (code === 2) { /* listener is not vite */ }
-    else if (code === 3) { log(`SKIP-CANONICAL-VITE port=${port} — has --port 5175`); }
+    else if (code === 3) { log(`SKIP-CANONICAL-VITE port=${port} — has --port 5847`); }
     else { log(`KILL-VITE-ERR port=${port}: ${String(e.message).slice(0, 80)}`); }
   }
   return false;

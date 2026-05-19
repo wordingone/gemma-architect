@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scripts/demo-drive.mjs — Automated demo driver for D4 hackathon video
 //
-// Drives the :5175 app through the demo flow via CDP:
+// Drives the :5847 app through the demo flow via CDP:
 //   1. Attach image (snapshot PNG) via chat attach button
 //   2. Submit "Design a building like this" prompt
 //   3. Wait for agent response + dispatch completion

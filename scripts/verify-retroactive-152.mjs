@@ -3,11 +3,11 @@
 // Checks for .chat-image-preview DOM element and attach button.
 // NOTE: If D2 (#153) overwrote chat-panel.ts and removed D1's image UI,
 // these checks will FAIL → defect found → file follow-up issue.
-import { connectPage5175, delay, writeReceipt, makeRecorder, SHA } from "./retroactive-cdp-lib.mjs";
+import { connectPage5847, delay, writeReceipt, makeRecorder, SHA } from "./retroactive-cdp-lib.mjs";
 
 const OUT = `state/verify-retroactive-152-${SHA}-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
-const { evaluate, screenshot, close } = await connectPage5175();
-console.log("Connected to :5175");
+const { evaluate, screenshot, close } = await connectPage5847();
+console.log("Connected to :5847");
 
 const checks = [];
 const record = makeRecorder(checks);
