@@ -3251,7 +3251,12 @@ initShellChrome({
     viewer.setGumballEnabled(k === "model");
     viewer.setGridAxesVisible(k !== "layout");
     if (k === "layout") applyDrafting(viewer.getScene());
-    else removeDrafting(viewer.getScene());
+    else {
+      removeDrafting(viewer.getScene());
+      // Reset grid orientation and perspPane camera (may have been overridden by
+      // setView("front"/"right"/etc. keyboard shortcuts active in layout mode).
+      if (k === "model") viewer.setView("persp");
+    }
   },
   onSplitMode: (mode) => viewer.splitMode(mode),
 });
