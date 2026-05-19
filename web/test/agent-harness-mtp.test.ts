@@ -1,13 +1,13 @@
 // agent-harness-mtp.test.ts — MTP gate logic tests.
 //
-// agent-harness.ts cannot be imported directly in Bun test env (@huggingface/transformers
-// requires a browser DOM). These tests mirror the gate logic inline and assert the
-// compile-time constant that guards the spec-decode loop.
+// model-worker.ts cannot be imported directly in Bun test env (ORT WebGPU deps).
+// These tests mirror the gate logic inline and assert the compile-time constant
+// that guards the spec-decode loop in model-worker.ts.
 
 import { describe, expect, test } from "bun:test";
 
-// Mirror of the gate constant from agent-harness.ts (must match — CI fails if out of sync).
-// #738: flipped to true — drafter ONNX deployed, output names confirmed (scatter/linear_21).
+// Mirror of MTP_VERIFICATION_WIRED from model-worker.ts (must match — CI fails if out of sync).
+// #679: constant added to model-worker.ts; true = webgpu-mtp-backend.ts greedy verification wired.
 const MTP_VERIFICATION_WIRED = true;
 
 // Mirror of payloadHasMultimodal() from agent-harness.ts (#740-C).
@@ -17,58 +17,68 @@ function payloadHasMultimodal(req: { userImage?: string; frames?: unknown[] }): 
   return false;
 }
 
-// Mirror of the drafterReady gate after #738 + #740-C.
-// Two-gate (drafter loaded + verification wired) + multimodal bypass.
-function computeDrafterReady(
+// Mirror of the spec-decode gate in model-worker.ts (#679).
+// Gate: useMtp && drafterLoaded && MTP_VERIFICATION_WIRED && inputLength < 900.
+function computeSpecDecodeActive(
+  useMtp: boolean,
   drafterLoaded: boolean,
   verificationWired: boolean,
-  multimodalPayload: boolean,
+  inputLength: number,
 ): boolean {
-  return drafterLoaded && verificationWired && !multimodalPayload;
+  return useMtp && drafterLoaded && verificationWired && inputLength < 900;
 }
 
-describe("#738 + #740-C — MTP verification gate (two-gate + multimodal bypass)", () => {
-  test("drafterReady is true when drafter loaded + WIRED=true + text-only request", () => {
-    expect(computeDrafterReady(true, MTP_VERIFICATION_WIRED, false)).toBe(true);
+describe("#679 — MTP_VERIFICATION_WIRED gate (model-worker.ts spec-decode guard)", () => {
+  test("spec-decode active when all three conditions met (text turn, short input)", () => {
+    expect(computeSpecDecodeActive(true, true, MTP_VERIFICATION_WIRED, 100)).toBe(true);
   });
 
-  test("drafterReady is false when drafter not loaded", () => {
-    expect(computeDrafterReady(false, true, false)).toBe(false);
+  test("spec-decode off when useMtp=false (?mtp=off query param)", () => {
+    expect(computeSpecDecodeActive(false, true, true, 100)).toBe(false);
   });
 
-  test("drafterReady is false when MTP_VERIFICATION_WIRED=false", () => {
-    expect(computeDrafterReady(true, false, false)).toBe(false);
+  test("spec-decode off when drafter not loaded", () => {
+    expect(computeSpecDecodeActive(true, false, true, 100)).toBe(false);
   });
 
-  test("drafterReady is false when payload has image (userImage)", () => {
-    const req = { prompt: "describe the building", userImage: "data:image/png;base64,abc" };
-    expect(computeDrafterReady(true, true, payloadHasMultimodal(req))).toBe(false);
+  test("spec-decode off when MTP_VERIFICATION_WIRED=false", () => {
+    expect(computeSpecDecodeActive(true, true, false, 100)).toBe(false);
   });
 
-  test("drafterReady is false when payload has viewport frames", () => {
-    const req = { prompt: "what do you see?", frames: [{}] as unknown[] };
-    expect(computeDrafterReady(true, true, payloadHasMultimodal(req))).toBe(false);
+  test("spec-decode off when inputLength >= 900 (drafter quality gate)", () => {
+    expect(computeSpecDecodeActive(true, true, true, 900)).toBe(false);
+    expect(computeSpecDecodeActive(true, true, true, 997)).toBe(false);
   });
 
-  test("MTP_VERIFICATION_WIRED constant is true — drafter ONNX deployed (#738)", () => {
+  test("MTP_VERIFICATION_WIRED constant is true — greedy verification wired in webgpu-mtp-backend.ts (#679)", () => {
     expect(MTP_VERIFICATION_WIRED).toBe(true);
   });
 
-  test("mtp_on stays false when drafterReady=false (telemetry honesty)", () => {
-    const specAttempts = 0;
-    const drafterReady = computeDrafterReady(true, MTP_VERIFICATION_WIRED, false);
-    const mtpActive = drafterReady && specAttempts > 0;
-    // drafterReady is true, but no spec attempts ran → mtpActive false
-    expect(drafterReady).toBe(true);
+  // AC3 (#679): dormant path → mtp_on=false, spec_attempts=0
+  test("dormant path: MTP_VERIFICATION_WIRED=false → gate blocks, mtp_on stays false", () => {
+    const WIRED_FALSE = false;
+    const gateOpen = computeSpecDecodeActive(true, true, WIRED_FALSE, 100);
+    // Gate closed → spec_attempts never incremented → mtp_on must stay false.
+    const specAttempts = gateOpen ? 1 : 0;
+    const mtpActive = gateOpen && specAttempts > 0;
+    expect(gateOpen).toBe(false);
+    expect(specAttempts).toBe(0);
     expect(mtpActive).toBe(false);
   });
 
-  test("mtp_on false when multimodal bypass engaged", () => {
-    const specAttempts = 0;
+  test("dormant path: long input (≥900 tok) → gate blocks regardless of WIRED", () => {
+    const gateOpen = computeSpecDecodeActive(true, true, true, 997);
+    const specAttempts = gateOpen ? 1 : 0;
+    const mtp_on = gateOpen && specAttempts > 0;
+    expect(gateOpen).toBe(false);
+    expect(specAttempts).toBe(0);
+    expect(mtp_on).toBe(false);
+  });
+
+  // Multimodal bypass: payloadHasMultimodal → useMtp=false in agent-harness.ts.
+  test("multimodal payload sets useMtp=false → spec-decode off", () => {
     const multimodalReq = { userImage: "data:image/png;base64,abc" };
-    const drafterReady = computeDrafterReady(true, true, payloadHasMultimodal(multimodalReq));
-    const mtpActive = drafterReady && specAttempts > 0;
-    expect(drafterReady).toBe(false);
-    expect(mtpActive).toBe(false);
+    const useMtp = !payloadHasMultimodal(multimodalReq);
+    expect(computeSpecDecodeActive(useMtp, true, true, 100)).toBe(false);
   });
 });

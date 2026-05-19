@@ -37,6 +37,12 @@ let _drafterSession: any = null;
 
 const WEBGPU_CONTEXT_LIMIT = 16384;
 
+// MTP verification gate (#679).  True = real greedy token comparison is wired
+// in webgpu-mtp-backend.ts (runMtpSpecDecode compares argmax(target) vs draftToken).
+// Set false here to keep spec-decode dormant even if drafter loads successfully.
+// Flip to false if verification is ever reverted to the "accept-all" placeholder.
+const MTP_VERIFICATION_WIRED = true;
+
 // Boot-completion tracking — boot-complete fires when all three phases done.
 let _bootModelReady = false;
 let _bootWarmupDone = false;
@@ -328,7 +334,7 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
   // (NaN verifier logits) on large inputs due to drafter KV window mismatch (#979).
   // Threshold 900: conservative safe zone; two-story-house prompt is ~997 tok.
   // WEBGPU_CONTEXT_LIMIT is now 16384 — this threshold is about drafter quality, not ceiling.
-  if (useMtp && _drafterSession && inputLength < 900) {
+  if (useMtp && _drafterSession && MTP_VERIFICATION_WIRED && inputLength < 900) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ort = (globalThis as any).ort ?? await import("onnxruntime-web");
