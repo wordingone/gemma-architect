@@ -623,6 +623,17 @@ const BROWSER_CONFIGS = [
       await cdp.send('Storage.clearDataForOrigin', { origin: TARGET_ORIGIN, storageTypes: 'all' });
       await cdp.send('Network.clearBrowserCache');
       await cdp.send('Network.enable');
+      // Throttle is applied in setupPage() AFTER page.goto — the app bundle loads at full speed,
+      // throttle simulates slow CDN during the model download phase only.
+    },
+    async preGoto(page, cdp) {
+      // Reset throttle before each goto so the page load itself is at full speed.
+      await cdp.send('Network.emulateNetworkConditions', {
+        offline: false, downloadThroughput: -1, uploadThroughput: -1, latency: 0,
+      }).catch(() => {});
+    },
+    async setupPage(page, cdp) {
+      // Apply throttle AFTER page load — active during scenario event injection.
       await cdp.send('Network.emulateNetworkConditions', {
         offline: false,
         downloadThroughput: Math.floor(300 * 1024 / 8),  // 300 kbps → ~37,500 bytes/s
@@ -632,10 +643,7 @@ const BROWSER_CONFIGS = [
     },
     async teardown(page, cdp) {
       await cdp.send('Network.emulateNetworkConditions', {
-        offline: false,
-        downloadThroughput: -1,
-        uploadThroughput: -1,
-        latency: 0,
+        offline: false, downloadThroughput: -1, uploadThroughput: -1, latency: 0,
       }).catch(() => {});
     },
   },
@@ -746,6 +754,7 @@ async function runBrowserConfig(cfg, page, cdp, artifactDir) {
       // Real-clock (inference) scenario runs on the shared page with real timers.
       if (!scenario.useFakeClock) {
         try {
+          if (cfg.preGoto) await cfg.preGoto(page, cdp).catch(() => {});
           await page.goto(TARGET_URL, { timeout: 60_000, waitUntil: 'domcontentloaded' });
           await scenario.inject(page);
           const stalled = await page.evaluate(() => {
@@ -765,12 +774,14 @@ async function runBrowserConfig(cfg, page, cdp, artifactDir) {
 
       // Fake-clock watchdog scenario
       try {
+        // preGoto: reset any lingering per-scenario state (e.g., throttle from previous scenario).
+        if (cfg.preGoto) await cfg.preGoto(page, cdp).catch(() => {});
         await page.goto(TARGET_URL, { timeout: 30_000, waitUntil: 'domcontentloaded' });
 
-        // Per-config page-level setup (seed cache, fill quota, etc.) — runs BEFORE fake timer
-        // so real setTimeout calls inside setupPage complete normally.
+        // Per-config page-level setup (seed cache, fill quota, apply throttle, etc.) — runs BEFORE
+        // fake timer so real setTimeout calls inside setupPage complete normally.
         if (cfg.setupPage) {
-          await cfg.setupPage(page).catch(() => {});
+          await cfg.setupPage(page, cdp).catch(() => {});
         }
 
         // Install fake timer AFTER setupPage
