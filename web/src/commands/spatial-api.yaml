@@ -10,7 +10,7 @@
 #   name           : string  — IFC4 entity OR an SD-defined kernel verb
 #   ifc4_class     : string? — buildingSMART IFC4 entity name when applicable
 #   kernel_op      : string  — internal SD-defined op name (used by dispatch)
-#   args           : list    — { name, type, required, unit?, default? }
+#   parameters     : object  — JSON Schema: { type: object, properties: { <name>: { type, description?, unit?, default? } }, required: [<name>...] }
 #   topology_role  : enum    — host | hosted | void | face | edge | solid |
 #                              compound | curve | surface | annotation |
 #                              transform | view | selection | system
@@ -41,9 +41,14 @@
 
 - name: SdLine
   kernel_op: drawLine
-  args:
-    - {name: start, type: point2, required: true}
-    - {name: end,   type: point2, required: true}
+  parameters:
+    type: object
+    properties:
+      start:
+        type: point2
+      end:
+        type: point2
+    required: [start, end]
   topology_role: edge
   kg_predicates: []
   synonyms: [line, drawline, l, segment]
@@ -53,11 +58,25 @@
 
 - name: SdArc
   kernel_op: drawArc
-  args:
-    - {name: center,     type: point2, required: false, default: "[0,0]"}
-    - {name: radius,     type: number, required: false, default: 1, unit: m}
-    - {name: startAngle, type: number, required: false, default: 0, unit: rad}
-    - {name: endAngle,   type: number, required: false, default: 1.5708, unit: rad}
+  parameters:
+    type: object
+    properties:
+      center:
+        type: point2
+        default: "[0,0]"
+      radius:
+        type: number
+        unit: m
+        default: 1
+      startAngle:
+        type: number
+        unit: rad
+        default: 0
+      endAngle:
+        type: number
+        unit: rad
+        default: 1.5708
+    required: []
   topology_role: edge
   kg_predicates: []
   synonyms: [arc]
@@ -66,9 +85,15 @@
 
 - name: SdCircle
   kernel_op: drawCircle
-  args:
-    - {name: center, type: point2, required: true}
-    - {name: radius, type: number, required: true, unit: m}
+  parameters:
+    type: object
+    properties:
+      center:
+        type: point2
+      radius:
+        type: number
+        unit: m
+    required: [center, radius]
   topology_role: edge
   kg_predicates: []
   synonyms: [circle, c]
@@ -78,10 +103,18 @@
 
 - name: SdPolygon
   kernel_op: drawPolygon
-  args:
-    - {name: center, type: point2, required: true}
-    - {name: radius, type: number, required: true, unit: m}
-    - {name: sides,  type: integer, required: true, default: 6}
+  parameters:
+    type: object
+    properties:
+      center:
+        type: point2
+      radius:
+        type: number
+        unit: m
+      sides:
+        type: integer
+        default: 6
+    required: [center, radius, sides]
   topology_role: edge
   kg_predicates: []
   synonyms: [polygon, ngon]
@@ -90,9 +123,15 @@
 
 - name: SdPolyline
   kernel_op: drawPolyline
-  args:
-    - {name: points, type: list_point2, required: true}
-    - {name: closed, type: boolean, required: false, default: true}
+  parameters:
+    type: object
+    properties:
+      points:
+        type: list_point2
+      closed:
+        type: boolean
+        default: true
+    required: [points]
   topology_role: edge
   kg_predicates: []
   synonyms: [polyline, pline]
@@ -101,10 +140,21 @@
 
 - name: SdRectangle
   kernel_op: drawRectangle
-  args:
-    - {name: width,  type: number, required: false, default: 1, unit: m}
-    - {name: length, type: number, required: false, default: 1, unit: m, synonyms: [depth]}
-    - {name: center, type: point2, required: false, default: [0, 0]}
+  parameters:
+    type: object
+    properties:
+      width:
+        type: number
+        unit: m
+        default: 1
+      length:
+        type: number
+        unit: m
+        default: 1
+      center:
+        type: point2
+        default: "[0, 0]"
+    required: []
   topology_role: edge
   kg_predicates: []
   synonyms: [rectangle, rect, r]
@@ -114,10 +164,20 @@
 
 - name: SdEllipse
   kernel_op: drawEllipse
-  args:
-    - {name: center, type: point2, required: false}
-    - {name: rx,     type: number, required: false, default: 1, unit: m}
-    - {name: ry,     type: number, required: false, default: 0.5, unit: m}
+  parameters:
+    type: object
+    properties:
+      center:
+        type: point2
+      rx:
+        type: number
+        unit: m
+        default: 1
+      ry:
+        type: number
+        unit: m
+        default: 0.5
+    required: []
   topology_role: edge
   kg_predicates: []
   synonyms: [ellipse, oval]
@@ -126,9 +186,15 @@
 
 - name: SdCurve
   kernel_op: drawCurve
-  args:
-    - {name: points, type: list_point2, required: true}
-    - {name: closed, type: boolean,     required: false, default: false}
+  parameters:
+    type: object
+    properties:
+      points:
+        type: list_point2
+      closed:
+        type: boolean
+        default: false
+    required: [points]
   topology_role: curve
   kg_predicates: []
   synonyms: [curve, freeform, catmullrom]
@@ -139,9 +205,15 @@
 
 - name: SdSpline
   kernel_op: drawSpline
-  args:
-    - {name: points, type: list_point2, required: true}
-    - {name: degree, type: integer, required: false, default: 3}
+  parameters:
+    type: object
+    properties:
+      points:
+        type: list_point2
+      degree:
+        type: integer
+        default: 3
+    required: [points]
   topology_role: curve
   kg_predicates: []
   synonyms: [spline, bspline, interpcrv]
@@ -151,8 +223,12 @@
 
 - name: SdPoint
   kernel_op: makePoint
-  args:
-    - {name: position, type: point2, required: true}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point2
+    required: [position]
   topology_role: annotation
   kg_predicates: []
   synonyms: [point, pt, vertex, makepoint]
@@ -166,10 +242,22 @@
 
 - name: SdBox
   kernel_op: makeBox
-  args:
-    - {name: width,  type: number, required: false, default: 1, unit: m}
-    - {name: depth,  type: number, required: false, default: 1, unit: m}
-    - {name: height, type: number, required: false, default: 1, unit: m}
+  parameters:
+    type: object
+    properties:
+      width:
+        type: number
+        unit: m
+        default: 1
+      depth:
+        type: number
+        unit: m
+        default: 1
+      height:
+        type: number
+        unit: m
+        default: 1
+    required: []
   topology_role: solid
   kg_predicates: []
   synonyms: [box, cube, cuboid, makebox]
@@ -178,9 +266,18 @@
 
 - name: SdCylinder
   kernel_op: makeCylinder
-  args:
-    - {name: radius, type: number, required: false, default: 0.5, unit: m}
-    - {name: height, type: number, required: false, default: 2, unit: m}
+  parameters:
+    type: object
+    properties:
+      radius:
+        type: number
+        unit: m
+        default: 0.5
+      height:
+        type: number
+        unit: m
+        default: 2
+    required: []
   topology_role: solid
   kg_predicates: []
   synonyms: [cylinder, cyl, makecylinder]
@@ -189,8 +286,14 @@
 
 - name: SdSphere
   kernel_op: makeSphere
-  args:
-    - {name: radius, type: number, required: false, default: 1, unit: m}
+  parameters:
+    type: object
+    properties:
+      radius:
+        type: number
+        unit: m
+        default: 1
+    required: []
   topology_role: solid
   kg_predicates: []
   synonyms: [sphere, ball]
@@ -199,10 +302,22 @@
 
 - name: SdCone
   kernel_op: makeCone
-  args:
-    - {name: radius,  type: number, required: false, default: 0.5, unit: m}
-    - {name: radius2, type: number, required: false, default: 0, unit: m}
-    - {name: height,  type: number, required: false, default: 2, unit: m}
+  parameters:
+    type: object
+    properties:
+      radius:
+        type: number
+        unit: m
+        default: 0.5
+      radius2:
+        type: number
+        unit: m
+        default: 0
+      height:
+        type: number
+        unit: m
+        default: 2
+    required: []
   topology_role: solid
   kg_predicates: []
   synonyms: [cone]
@@ -211,9 +326,15 @@
 
 - name: SdPrism
   kernel_op: makePrism
-  args:
-    - {name: profile, type: polyline, required: true}
-    - {name: height,  type: number, required: true, unit: m}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: polyline
+      height:
+        type: number
+        unit: m
+    required: [profile, height]
   topology_role: solid
   kg_predicates: []
   synonyms: [prism]
@@ -227,11 +348,21 @@
 - name: SdExtrude
   ifc4_class: IfcExtrudedAreaSolid
   kernel_op: extrude
-  args:
-    - {name: profile,   type: edge_or_surface, required: false}
-    - {name: object_id, type: string,          required: false, note: "UUID of existing scene Line/curve object to use as profile"}
-    - {name: distance,  type: number,          required: false, default: 1, unit: m}
-    - {name: direction, type: vector3,         required: false, default: [0, 0, 1]}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: edge_or_surface
+      object_id:
+        type: string
+      distance:
+        type: number
+        unit: m
+        default: 1
+      direction:
+        type: vector3
+        default: "[0, 0, 1]"
+    required: []
   topology_role: solid
   kg_predicates: [aggregatedBy]
   synonyms: [extrude, e, push]
@@ -242,12 +373,26 @@
 - name: SdRevolve
   ifc4_class: IfcRevolvedAreaSolid
   kernel_op: revolve
-  args:
-    - {name: profile,    type: edge_or_surface, required: true}
-    - {name: axisFrom,   type: point3,          required: false, default: "[0,0,0]"}
-    - {name: axisTo,     type: point3,          required: false, default: "[0,0,1]"}
-    - {name: angleStart, type: number,          required: false, default: 0, unit: rad}
-    - {name: angleEnd,   type: number,          required: false, default: 6.2832, unit: rad}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: edge_or_surface
+      axisFrom:
+        type: point3
+        default: "[0,0,0]"
+      axisTo:
+        type: point3
+        default: "[0,0,1]"
+      angleStart:
+        type: number
+        unit: rad
+        default: 0
+      angleEnd:
+        type: number
+        unit: rad
+        default: 6.2832
+    required: [profile]
   topology_role: solid
   kg_predicates: []
   synonyms: [revolve, lathe]
@@ -257,9 +402,14 @@
 - name: SdSweep
   ifc4_class: IfcSweptDiskSolid
   kernel_op: sweep
-  args:
-    - {name: profile, type: edge_or_surface, required: true}
-    - {name: rail,    type: curve,           required: true}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: edge_or_surface
+      rail:
+        type: curve
+    required: [profile, rail]
   topology_role: solid
   kg_predicates: []
   synonyms: [sweep]
@@ -268,9 +418,15 @@
 
 - name: SdLoft
   kernel_op: loft
-  args:
-    - {name: curves, type: list_edge_or_surface, required: true}
-    - {name: closed, type: boolean, required: false, default: false}
+  parameters:
+    type: object
+    properties:
+      curves:
+        type: list_edge_or_surface
+      closed:
+        type: boolean
+        default: false
+    required: [curves]
   topology_role: solid
   kg_predicates: []
   synonyms: [loft, blend]
@@ -283,9 +439,14 @@
 
 - name: SdBooleanUnion
   kernel_op: fuse
-  args:
-    - {name: a, type: solid, required: true}
-    - {name: b, type: solid, required: true}
+  parameters:
+    type: object
+    properties:
+      a:
+        type: solid
+      b:
+        type: solid
+    required: [a, b]
   topology_role: compound
   kg_predicates: []
   synonyms: [union, fuse, booleanunion, "boolean union", merge, add]
@@ -294,9 +455,14 @@
 
 - name: SdBooleanDifference
   kernel_op: cut
-  args:
-    - {name: outer, type: solid, required: true}
-    - {name: inner, type: solid, required: true}
+  parameters:
+    type: object
+    properties:
+      outer:
+        type: solid
+      inner:
+        type: solid
+    required: [outer, inner]
   topology_role: solid
   kg_predicates: [hosts]
   synonyms: [difference, cut, subtract, "boolean cut", booleandiff]
@@ -305,9 +471,14 @@
 
 - name: SdBooleanIntersection
   kernel_op: intersect
-  args:
-    - {name: a, type: solid, required: true}
-    - {name: b, type: solid, required: true}
+  parameters:
+    type: object
+    properties:
+      a:
+        type: solid
+      b:
+        type: solid
+    required: [a, b]
   topology_role: solid
   kg_predicates: []
   synonyms: [intersection, intersect, common]
@@ -316,10 +487,16 @@
 
 - name: SdBoolean
   kernel_op: boolean
-  args:
-    - {name: op,   type: string,    required: true,  enum: [union, difference, intersection]}
-    - {name: a,    type: object_id, required: true}
-    - {name: b,    type: object_id, required: true}
+  parameters:
+    type: object
+    properties:
+      op:
+        type: string
+      a:
+        type: object_id
+      b:
+        type: object_id
+    required: [op, a, b]
   topology_role: solid
   kg_predicates: []
   synonyms: [boolean, csg, "boolean op"]
@@ -332,10 +509,18 @@
 
 - name: SdFillet
   kernel_op: fillet
-  args:
-    - {name: target, type: object_id, required: true}
-    - {name: radius, type: number,    required: true,  unit: m}
-    - {name: edgeId, type: integer,   required: false, description: "0-based index into the mesh's unique edge list; omit to round all edges"}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: object_id
+      radius:
+        type: number
+        unit: m
+      edgeId:
+        type: integer
+        description: "0-based index into the mesh's unique edge list; omit to round all edges"
+    required: [target, radius]
   topology_role: edge
   kg_predicates: []
   synonyms: [fillet, round]
@@ -344,9 +529,15 @@
 
 - name: SdChamfer
   kernel_op: chamfer
-  args:
-    - {name: edges,    type: list_edge, required: true}
-    - {name: distance, type: number,    required: true, unit: m}
+  parameters:
+    type: object
+    properties:
+      edges:
+        type: list_edge
+      distance:
+        type: number
+        unit: m
+    required: [edges, distance]
   topology_role: edge
   kg_predicates: []
   synonyms: [chamfer, bevel]
@@ -355,9 +546,15 @@
 
 - name: SdOffset
   kernel_op: offset
-  args:
-    - {name: source,   type: edge_or_surface, required: true}
-    - {name: distance, type: number,          required: true, unit: m}
+  parameters:
+    type: object
+    properties:
+      source:
+        type: edge_or_surface
+      distance:
+        type: number
+        unit: m
+    required: [source, distance]
   topology_role: edge
   kg_predicates: []
   synonyms: [offset]
@@ -366,9 +563,14 @@
 
 - name: SdTrim
   kernel_op: trim
-  args:
-    - {name: source, type: edge,   required: true}
-    - {name: cutter, type: edge,   required: true}
+  parameters:
+    type: object
+    properties:
+      source:
+        type: edge
+      cutter:
+        type: edge
+    required: [source, cutter]
   topology_role: edge
   kg_predicates: []
   synonyms: [trim]
@@ -377,9 +579,14 @@
 
 - name: SdExtend
   kernel_op: extend
-  args:
-    - {name: source, type: edge,   required: true}
-    - {name: target, type: edge,   required: true}
+  parameters:
+    type: object
+    properties:
+      source:
+        type: edge
+      target:
+        type: edge
+    required: [source, target]
   topology_role: edge
   kg_predicates: []
   synonyms: [extend]
@@ -388,9 +595,14 @@
 
 - name: SdSplit
   kernel_op: split
-  args:
-    - {name: source, type: solid_or_edge, required: true}
-    - {name: cutter, type: solid_or_edge, required: true}
+  parameters:
+    type: object
+    properties:
+      source:
+        type: solid_or_edge
+      cutter:
+        type: solid_or_edge
+    required: [source, cutter]
   topology_role: solid
   kg_predicates: []
   synonyms: [split, divide]
@@ -399,10 +611,17 @@
 
 - name: SdShell
   kernel_op: shell
-  args:
-    - {name: source,    type: solid, required: true}
-    - {name: thickness, type: number, required: true, unit: m}
-    - {name: openFaces, type: list_face, required: false}
+  parameters:
+    type: object
+    properties:
+      source:
+        type: solid
+      thickness:
+        type: number
+        unit: m
+      openFaces:
+        type: list_face
+    required: [source, thickness]
   topology_role: solid
   kg_predicates: []
   synonyms: [shell, hollow, thicken]
@@ -415,12 +634,26 @@
 
 - name: SdMove
   kernel_op: translate
-  args:
-    - {name: target, type: any,     required: false}
-    - {name: vector, type: vector3, required: false}
-    - {name: x,      type: number,  required: false, unit: m, default: 0}
-    - {name: y,      type: number,  required: false, unit: m, default: 0}
-    - {name: z,      type: number,  required: false, unit: m, default: 0}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      vector:
+        type: vector3
+      x:
+        type: number
+        unit: m
+        default: 0
+      y:
+        type: number
+        unit: m
+        default: 0
+      z:
+        type: number
+        unit: m
+        default: 0
+    required: []
   topology_role: transform
   kg_predicates: []
   synonyms: [move, translate, m, shift]
@@ -430,11 +663,22 @@
 
 - name: SdRotate
   kernel_op: rotate
-  args:
-    - {name: target, type: any,     required: false}
-    - {name: angle,  type: number,  required: false, default: 0, unit: deg}
-    - {name: axis,   type: vector3, required: false, default: [0, 0, 1]}
-    - {name: pivot,  type: point3,  required: false, default: [0, 0, 0]}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      angle:
+        type: number
+        unit: deg
+        default: 0
+      axis:
+        type: vector3
+        default: "[0, 0, 1]"
+      pivot:
+        type: point3
+        default: "[0, 0, 0]"
+    required: []
   topology_role: transform
   kg_predicates: []
   synonyms: [rotate, turn, spin]
@@ -443,11 +687,20 @@
 
 - name: SdScale
   kernel_op: scale
-  args:
-    - {name: target, type: any,     required: false}
-    - {name: factor, type: number_or_vector3, required: false, default: 1}
-    - {name: axis,   type: string,  required: false, default: null, note: "null=uniform 3D; x/y/z=1D axis-locked; xy/xz/yz=2D plane-locked"}
-    - {name: pivot,  type: point3,  required: false, default: [0, 0, 0]}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      factor:
+        type: number_or_vector3
+        default: 1
+      axis:
+        type: string
+      pivot:
+        type: point3
+        default: "[0, 0, 0]"
+    required: []
   topology_role: transform
   kg_predicates: []
   synonyms: [scale, resize]
@@ -456,9 +709,14 @@
 
 - name: SdMirror
   kernel_op: mirror
-  args:
-    - {name: target, type: any,    required: true}
-    - {name: plane,  type: plane3, required: true}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      plane:
+        type: plane3
+    required: [target, plane]
   topology_role: transform
   kg_predicates: []
   synonyms: [mirror, reflect, flip]
@@ -467,13 +725,25 @@
 
 - name: SdArray
   kernel_op: array
-  args:
-    - {name: target,  type: any,     required: false, default: point}
-    - {name: count,   type: integer, required: false, default: 1}
-    - {name: spacing, type: vector3, required: false}
-    - {name: rows,    type: integer, required: false}
-    - {name: cols,    type: integer, required: false}
-    - {name: spacingY,type: vector3, required: false, default: [0, 1, 0]}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+        default: point
+      count:
+        type: integer
+        default: 1
+      spacing:
+        type: vector3
+      rows:
+        type: integer
+      cols:
+        type: integer
+      spacingY:
+        type: vector3
+        default: "[0, 1, 0]"
+    required: []
   topology_role: transform
   kg_predicates: [groupedWith]
   synonyms: [array, repeat, pattern]
@@ -482,12 +752,26 @@
 
 - name: SdCopy
   kernel_op: copy
-  args:
-    - {name: target, type: any,    required: false}
-    - {name: x,      type: number, required: false, default: 0, unit: m}
-    - {name: y,      type: number, required: false, default: 0, unit: m}
-    - {name: z,      type: number, required: false, default: 0, unit: m}
-    - {name: vector, type: vector3, required: false}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      x:
+        type: number
+        unit: m
+        default: 0
+      y:
+        type: number
+        unit: m
+        default: 0
+      z:
+        type: number
+        unit: m
+        default: 0
+      vector:
+        type: vector3
+    required: []
   topology_role: transform
   kg_predicates: [duplicates]
   synonyms: [copy, duplicate, clone]
@@ -496,12 +780,27 @@
 
 - name: SdArrayLinear
   kernel_op: array_linear
-  args:
-    - {name: target, type: any,     required: false}
-    - {name: count,  type: integer, required: false, default: 3}
-    - {name: dx,     type: number,  required: false, default: 1, unit: m}
-    - {name: dy,     type: number,  required: false, default: 0, unit: m}
-    - {name: dz,     type: number,  required: false, default: 0, unit: m}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      count:
+        type: integer
+        default: 3
+      dx:
+        type: number
+        unit: m
+        default: 1
+      dy:
+        type: number
+        unit: m
+        default: 0
+      dz:
+        type: number
+        unit: m
+        default: 0
+    required: []
   topology_role: transform
   kg_predicates: [groupedWith]
   synonyms: [linear array, linear pattern, repeat along axis]
@@ -510,12 +809,26 @@
 
 - name: SdArrayGrid
   kernel_op: array_grid
-  args:
-    - {name: target, type: any,     required: false}
-    - {name: rows,   type: integer, required: false, default: 3}
-    - {name: cols,   type: integer, required: false, default: 3}
-    - {name: dx,     type: number,  required: false, default: 1, unit: m}
-    - {name: dy,     type: number,  required: false, default: 1, unit: m}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      rows:
+        type: integer
+        default: 3
+      cols:
+        type: integer
+        default: 3
+      dx:
+        type: number
+        unit: m
+        default: 1
+      dy:
+        type: number
+        unit: m
+        default: 1
+    required: []
   topology_role: transform
   kg_predicates: [groupedWith]
   synonyms: [grid array, rectangular array, grid pattern]
@@ -524,12 +837,27 @@
 
 - name: SdArrayPolar
   kernel_op: array_polar
-  args:
-    - {name: target, type: any,     required: false}
-    - {name: count,  type: integer, required: false, default: 6}
-    - {name: cx,     type: number,  required: false, default: 0, unit: m}
-    - {name: cy,     type: number,  required: false, default: 0, unit: m}
-    - {name: angle,  type: number,  required: false, default: 360, unit: deg}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      count:
+        type: integer
+        default: 6
+      cx:
+        type: number
+        unit: m
+        default: 0
+      cy:
+        type: number
+        unit: m
+        default: 0
+      angle:
+        type: number
+        unit: deg
+        default: 360
+    required: []
   topology_role: transform
   kg_predicates: [groupedWith]
   synonyms: [polar array, circular array, radial pattern]
@@ -543,15 +871,36 @@
 - name: SdWall
   ifc4_class: IfcWall
   kernel_op: makeWall
-  args:
-    - {name: profile,   type: polyline, required: false}
-    - {name: start,     type: point,    required: false, description: "Start point {x,y,z}. Alternative to profile."}
-    - {name: end,       type: point,    required: false, description: "End point {x,y,z}. Alternative to profile."}
-    - {name: length,    type: number,   required: false, unit: m, default: 4.0}
-    - {name: thickness, type: number,   required: false, unit: m, default: 0.2}
-    - {name: height,    type: number,   required: false, unit: m, default: 3.0}
-    - {name: level,     type: string,   required: false, description: "Level ID or name. Overrides active level."}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: polyline
+      start:
+        type: point
+        description: "Start point {x,y,z}. Alternative to profile."
+      end:
+        type: point
+        description: "End point {x,y,z}. Alternative to profile."
+      length:
+        type: number
+        unit: m
+        default: 4
+      thickness:
+        type: number
+        unit: m
+        default: 0.2
+      height:
+        type: number
+        unit: m
+        default: 3
+      level:
+        type: string
+        description: "Level ID or name. Overrides active level."
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [hosts, containedIn, bounds]
   synonyms: [wall, makewall, drawwall, w, IfcWall]
@@ -562,13 +911,34 @@
 - name: SdSlab
   ifc4_class: IfcSlab
   kernel_op: makeSlab
-  args:
-    - {name: profile,   type: polyline, required: false, description: "Corner points [[x,y],...]. If omitted, width × depth box is used."}
-    - {name: width,     type: number,   required: false, unit: m, default: 4, description: "Box width (X) when profile is omitted. synonyms=[length]"}
-    - {name: depth,     type: number,   required: false, unit: m, default: 4, description: "Box depth (Y) when profile is omitted."}
-    - {name: thickness, type: number,   required: false, unit: m, default: 0.1, description: "Slab thickness (IBC 4\" nominal = 0.1 m)."}
-    - {name: level,     type: string,   required: false, description: "Level ID or name."}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: polyline
+        description: "Corner points [[x,y],...]. If omitted, width × depth box is used."
+      width:
+        type: number
+        description: "Box width (X) when profile is omitted. synonyms=[length]"
+        unit: m
+        default: 4
+      depth:
+        type: number
+        description: "Box depth (Y) when profile is omitted."
+        unit: m
+        default: 4
+      thickness:
+        type: number
+        description: "\"Slab thickness (IBC 4\\\" nominal = 0.1 m).\","
+        unit: m
+        default: 0.1
+      level:
+        type: string
+        description: "Level ID or name."
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [slab, floor, plate, s, IfcSlab]
@@ -579,12 +949,24 @@
 - name: SdColumn
   ifc4_class: IfcColumn
   kernel_op: makeColumn
-  args:
-    - {name: position, type: point3, required: false}
-    - {name: profile,  type: polyline_or_circle, required: false}
-    - {name: height,   type: number, required: false, unit: m, default: 4.0}
-    - {name: level,    type: string, required: false, description: "Level ID or name."}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      profile:
+        type: polyline_or_circle
+      height:
+        type: number
+        unit: m
+        default: 4
+      level:
+        type: string
+        description: "Level ID or name."
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [supports, containedIn]
   synonyms: [column, post, pillar, IfcColumn]
@@ -594,12 +976,23 @@
 - name: SdBeam
   ifc4_class: IfcBeam
   kernel_op: makeBeam
-  args:
-    - {name: start,   type: point3,  required: false}
-    - {name: end,     type: point3,  required: false}
-    - {name: profile, type: polyline, required: false}
-    - {name: size,    type: number,  required: false, unit: m, default: 0.2}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      start:
+        type: point3
+      end:
+        type: point3
+      profile:
+        type: polyline
+      size:
+        type: number
+        unit: m
+        default: 0.2
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [supports, connectedTo]
   synonyms: [beam, joist, girder, IfcBeam]
@@ -609,12 +1002,26 @@
 - name: SdMember
   ifc4_class: IfcMember
   kernel_op: makeMember
-  args:
-    - {name: profile,    type: polyline, required: false, description: "2D cross-section point array [x,y][], default 0.1×0.1 rectangle"}
-    - {name: length,     type: number,  required: false, unit: m, default: 3}
-    - {name: axis_curve, type: vector3, required: false, description: "Unit direction vector [x,y,z], default [0,0,1] vertical"}
-    - {name: level,      type: string,  required: false, description: "Storey name; default ground"}
-    - {name: layer,      type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: polyline
+        description: "2D cross-section point array [x,y][], default 0.1×0.1 rectangle"
+      length:
+        type: number
+        unit: m
+        default: 3
+      axis_curve:
+        type: vector3
+        description: "Unit direction vector [x,y,z], default [0,0,1] vertical"
+      level:
+        type: string
+        description: "Storey name; default ground"
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: solid
   kg_predicates: [supports, connectedTo]
   synonyms: [member, mullion, purlin, secondary steel, facade member, IfcMember]
@@ -624,18 +1031,55 @@
 - name: SdStair
   ifc4_class: IfcStair
   kernel_op: makeStair
-  args:
-    - {name: start,        type: point3,  required: false, description: "Start point [x, y] of stair run."}
-    - {name: end,          type: point3,  required: false, description: "End point [x, y] of stair run."}
-    - {name: type,         type: string,  required: false, default: straight, enum: [straight, L, U], description: "Stair plan shape."}
-    - {name: count,        type: number,  required: false, description: "Total number of risers (overrides targetHeight)."}
-    - {name: rise,         type: number,  required: false, unit: m, description: "Total vertical rise in metres (used when count is absent)."}
-    - {name: width,        type: number,  required: false, unit: m, default: 1.0, description: "Stair width perpendicular to run."}
-    - {name: riser,        type: number,  required: false, unit: m, default: 0.1778, description: "Individual riser height (IBC R311.7.5.1: 7\")."}
-    - {name: tread,        type: number,  required: false, unit: m, default: 0.2794, description: "Individual tread depth (IBC R311.7.5.2: 11\")."}
-    - {name: landingDepth, type: number,  required: false, unit: m, default: 1.0, description: "Depth of intermediate landings (L and U only)."}
-    - {name: targetHeight, type: number,  required: false, unit: m, default: 3.0, description: "Target floor-to-floor height (used when count is absent)."}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      start:
+        type: point3
+        description: "Start point [x, y] of stair run."
+      end:
+        type: point3
+        description: "End point [x, y] of stair run."
+      type:
+        type: string
+        description: "Stair plan shape."
+        default: straight
+      count:
+        type: number
+        description: "Total number of risers (overrides targetHeight)."
+      rise:
+        type: number
+        description: "Total vertical rise in metres (used when count is absent)."
+        unit: m
+      width:
+        type: number
+        description: "Stair width perpendicular to run."
+        unit: m
+        default: 1
+      riser:
+        type: number
+        description: "\"Individual riser height (IBC R311.7.5.1: 7\\\").\","
+        unit: m
+        default: 0.1778
+      tread:
+        type: number
+        description: "\"Individual tread depth (IBC R311.7.5.2: 11\\\").\","
+        unit: m
+        default: 0.2794
+      landingDepth:
+        type: number
+        description: "Depth of intermediate landings (L and U only)."
+        unit: m
+        default: 1
+      targetHeight:
+        type: number
+        description: "Target floor-to-floor height (used when count is absent)."
+        unit: m
+        default: 3
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [containedIn, connectedTo]
   synonyms: [stair, stairs, steps, staircase, IfcStair]
@@ -645,12 +1089,25 @@
 - name: SdDoor
   ifc4_class: IfcDoor
   kernel_op: makeDoor
-  args:
-    - {name: hostWall, type: solid,  required: false}
-    - {name: position, type: point3, required: false}
-    - {name: width,    type: number, required: false, unit: m, default: 0.914}
-    - {name: height,   type: number, required: false, unit: m, default: 2.032}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      hostWall:
+        type: solid
+      position:
+        type: point3
+      width:
+        type: number
+        unit: m
+        default: 0.914
+      height:
+        type: number
+        unit: m
+        default: 2.032
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [door, doorway, opening, IfcDoor]
@@ -660,13 +1117,29 @@
 - name: SdWindow
   ifc4_class: IfcWindow
   kernel_op: makeWindow
-  args:
-    - {name: hostWall, type: solid,  required: false}
-    - {name: position, type: point3, required: false}
-    - {name: width,    type: number, required: false, unit: m, default: 1.2}
-    - {name: height,   type: number, required: false, unit: m, default: 1.4}
-    - {name: sillH,    type: number, required: false, unit: m, default: 0.9}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      hostWall:
+        type: solid
+      position:
+        type: point3
+      width:
+        type: number
+        unit: m
+        default: 1.2
+      height:
+        type: number
+        unit: m
+        default: 1.4
+      sillH:
+        type: number
+        unit: m
+        default: 0.9
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [window, IfcWindow]
@@ -676,22 +1149,32 @@
 - name: SdRoof
   ifc4_class: IfcRoof
   kernel_op: makeRoof
-  args:
-    - name: roofType
-      type: enum_choice
-      required: false
-      default: flat
-      description: "Roof configuration type"
-      options:
-        - {value: flat,        label: "Flat",        description: "Flat deck (no pitch)"}
-        - {value: pitched,     label: "Pitched",     description: "Simple gable roof with two sloped faces"}
-        - {value: hipped,      label: "Hipped",      description: "Hip roof, sloped on all four sides"}
-        - {value: curved,      label: "Curved",      description: "Barrel vault or arched roof"}
-        - {value: combination, label: "Combination", description: "Mixed flat and pitched zones"}
-    - {name: footprint,  type: polyline, required: false}
-    - {name: pitchDeg,   type: number,   required: false, default: 30, unit: deg}
-    - {name: ridgeHeight,type: number,   required: false, unit: m}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      roofType:
+        type: enum_choice
+        description: "Roof configuration type"
+        default: flat
+        options:
+          - {value: flat,        label: "Flat",        description: "Flat deck (no pitch)"}
+          - {value: pitched,     label: "Pitched",     description: "Simple gable roof with two sloped faces"}
+          - {value: hipped,      label: "Hipped",      description: "Hip roof, sloped on all four sides"}
+          - {value: curved,      label: "Curved",      description: "Barrel vault or arched roof"}
+          - {value: combination, label: "Combination", description: "Mixed flat and pitched zones"}
+      footprint:
+        type: polyline
+      pitchDeg:
+        type: number
+        unit: deg
+        default: 30
+      ridgeHeight:
+        type: number
+        unit: m
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [roof, gable, hip, IfcRoof]
@@ -701,11 +1184,21 @@
 - name: SdSpace
   ifc4_class: IfcSpace
   kernel_op: makeSpace
-  args:
-    - {name: footprint, type: polyline, required: false}
-    - {name: height,    type: number,   required: false, default: 3, unit: m}
-    - {name: name,      type: string,   required: false}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      footprint:
+        type: polyline
+      height:
+        type: number
+        unit: m
+        default: 3
+      name:
+        type: string
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [space, room, zone, IfcSpace]
@@ -715,12 +1208,27 @@
 - name: SdFoundation
   ifc4_class: IfcFooting
   kernel_op: makeFoundation
-  args:
-    - {name: position,  type: point3, required: false}
-    - {name: width,     type: number, required: false, unit: m, default: 6.0}
-    - {name: depth,     type: number, required: false, unit: m, default: 6.0}
-    - {name: thickness, type: number, required: false, unit: m, default: 0.5}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      width:
+        type: number
+        unit: m
+        default: 6
+      depth:
+        type: number
+        unit: m
+        default: 6
+      thickness:
+        type: number
+        unit: m
+        default: 0.5
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [supports, containedIn]
   synonyms: [foundation, footing, pile cap, slab on grade, pad footing, IfcFoundation]
@@ -730,13 +1238,31 @@
 - name: SdCeiling
   ifc4_class: IfcCovering
   kernel_op: makeCeiling
-  args:
-    - {name: position,  type: point3, required: false}
-    - {name: width,     type: number, required: false, unit: m, default: 5.0}
-    - {name: depth,     type: number, required: false, unit: m, default: 4.0}
-    - {name: thickness, type: number, required: false, unit: m, default: 0.05}
-    - {name: elevation, type: number, required: false, unit: m, default: 2.8}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      width:
+        type: number
+        unit: m
+        default: 5
+      depth:
+        type: number
+        unit: m
+        default: 4
+      thickness:
+        type: number
+        unit: m
+        default: 0.05
+      elevation:
+        type: number
+        unit: m
+        default: 2.8
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: hosted
   kg_predicates: [containedIn, bounds]
   synonyms: [ceiling, soffit, suspended ceiling, dropped ceiling, IfcCeiling]
@@ -746,11 +1272,23 @@
 - name: SdCurtainWall
   ifc4_class: IfcCurtainWall
   kernel_op: makeCurtainWall
-  args:
-    - {name: position, type: point3, required: false}
-    - {name: length,   type: number, required: false, unit: m, default: 6.0}
-    - {name: height,   type: number, required: false, unit: m, default: 3.0}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      length:
+        type: number
+        unit: m
+        default: 6
+      height:
+        type: number
+        unit: m
+        default: 3
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [containedIn, bounds]
   synonyms: [curtain wall, glass facade, glazed wall, glass wall, curtainwall, IfcCurtainWall]
@@ -760,12 +1298,26 @@
 - name: SdPlate
   ifc4_class: IfcPlate
   kernel_op: makePlate
-  args:
-    - {name: profile,     type: polyline, required: false, description: "2D point array [x,y][] for panel outline; default 1×1 rectangle"}
-    - {name: thickness,   type: number,  required: false, unit: m, default: 0.05}
-    - {name: orientation, type: vector3, required: false, description: "Unit normal of plate face [x,y,z], default [0,1,0] = panel in XZ plane"}
-    - {name: level,       type: string,  required: false, description: "Storey name; default ground"}
-    - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: polyline
+        description: "2D point array [x,y][] for panel outline; default 1×1 rectangle"
+      thickness:
+        type: number
+        unit: m
+        default: 0.05
+      orientation:
+        type: vector3
+        description: "Unit normal of plate face [x,y,z], default [0,1,0] = panel in XZ plane"
+      level:
+        type: string
+        description: "Storey name; default ground"
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: solid
   kg_predicates: [bounds, containedIn]
   synonyms: [plate, cladding panel, facade panel, cassette, glazing infill, panel, IfcPlate]
@@ -775,12 +1327,27 @@
 - name: SdSkylight
   ifc4_class: IfcOpeningElement
   kernel_op: makeSkylight
-  args:
-    - {name: position,  type: point3, required: false}
-    - {name: width,     type: number, required: false, unit: m, default: 1.2}
-    - {name: depth,     type: number, required: false, unit: m, default: 1.2}
-    - {name: elevation, type: number, required: false, unit: m, default: 3.0}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      width:
+        type: number
+        unit: m
+        default: 1.2
+      depth:
+        type: number
+        unit: m
+        default: 1.2
+      elevation:
+        type: number
+        unit: m
+        default: 3
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: hosted
   kg_predicates: [hosts, bounds]
   synonyms: [skylight, rooflight, roof window, velux, overhead glazing, IfcSkylight]
@@ -790,11 +1357,23 @@
 - name: SdOpening
   ifc4_class: IfcOpeningElement
   kernel_op: makeOpening
-  args:
-    - {name: position, type: point3, required: false}
-    - {name: width,    type: number, required: false, unit: m, default: 1.0}
-    - {name: height,   type: number, required: false, unit: m, default: 2.0}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      width:
+        type: number
+        unit: m
+        default: 1
+      height:
+        type: number
+        unit: m
+        default: 2
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [opening, void, cutout, aperture, wall opening, IfcOpening]
@@ -804,12 +1383,25 @@
 - name: SdRamp
   ifc4_class: IfcRamp
   kernel_op: makeRamp
-  args:
-    - {name: start,     type: point3, required: false}
-    - {name: end,       type: point3, required: false}
-    - {name: width,     type: number, required: false, unit: m, default: 1.2}
-    - {name: thickness, type: number, required: false, unit: m, default: 0.15}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      start:
+        type: point3
+      end:
+        type: point3
+      width:
+        type: number
+        unit: m
+        default: 1.2
+      thickness:
+        type: number
+        unit: m
+        default: 0.15
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: host
   kg_predicates: [containedIn, connectedTo]
   synonyms: [ramp, slope, incline, accessibility ramp, ramped surface, IfcRamp]
@@ -819,11 +1411,21 @@
 - name: SdRailing
   ifc4_class: IfcRailing
   kernel_op: makeRailing
-  args:
-    - {name: start,  type: point3, required: false}
-    - {name: end,    type: point3, required: false}
-    - {name: height, type: number, required: false, unit: m, default: 1.0}
-    - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      start:
+        type: point3
+      end:
+        type: point3
+      height:
+        type: number
+        unit: m
+        default: 1
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: hosted
   kg_predicates: [containedIn, connectedTo]
   synonyms: [railing, handrail, balustrade, guardrail, banister, IfcRailing]
@@ -833,12 +1435,30 @@
 - name: SdRefGrid
   ifc4_class: IfcGrid
   kernel_op: makeGrid
-  args:
-    - {name: spacing,   type: number,  required: false, unit: m,  default: 5.0, description: "Distance between grid lines in metres."}
-    - {name: count,     type: number,  required: false,            default: 4,   description: "Number of grid lines per axis (2-10)."}
-    - {name: name,      type: string,  required: false,                          description: "Grid name; defaults to a generated id."}
-    - {name: rotation,  type: number,  required: false, unit: deg, default: 0,   description: "Grid rotation in degrees."}
-    - {name: origin,    type: point2,  required: false,                          description: "World XY origin of the grid."}
+  parameters:
+    type: object
+    properties:
+      spacing:
+        type: number
+        description: "Distance between grid lines in metres."
+        unit: m
+        default: 5
+      count:
+        type: number
+        description: "Number of grid lines per axis (2-10)."
+        default: 4
+      name:
+        type: string
+        description: "Grid name; defaults to a generated id."
+      rotation:
+        type: number
+        description: "Grid rotation in degrees."
+        unit: deg
+        default: 0
+      origin:
+        type: point2
+        description: "World XY origin of the grid."
+    required: []
   topology_role: system
   kg_predicates: []
   synonyms: [grid, structural grid, column grid, reference grid, building grid, IfcGrid]
@@ -849,9 +1469,16 @@
   ifc4_class: null
   kernel_op: setGridVisible
   topology_role: system
-  args:
-    - {name: id,      type: string,  required: true,  description: "Grid id to toggle."}
-    - {name: visible, type: boolean, required: true,  description: "True to show, false to hide."}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: string
+        description: "Grid id to toggle."
+      visible:
+        type: boolean
+        description: "True to show, false to hide."
+    required: [id, visible]
   synonyms: [show grid, hide grid, toggle grid visibility]
   alias_source: generic_cad_vocabulary
 
@@ -859,9 +1486,17 @@
   ifc4_class: null
   kernel_op: setGridSpacing
   topology_role: system
-  args:
-    - {name: id,      type: string, required: true,  description: "Grid id to update."}
-    - {name: spacing, type: number, required: true,  unit: m, description: "New spacing in metres."}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: string
+        description: "Grid id to update."
+      spacing:
+        type: number
+        description: "New spacing in metres."
+        unit: m
+    required: [id, spacing]
   synonyms: [grid spacing, change grid size, adjust grid]
   alias_source: generic_cad_vocabulary
 
@@ -869,19 +1504,37 @@
   ifc4_class: null
   kernel_op: setActiveGrid
   topology_role: system
-  args:
-    - {name: id, type: string, required: true, description: "Grid id to make active for snap."}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: string
+        description: "Grid id to make active for snap."
+    required: [id]
   synonyms: [activate grid, use grid, snap to grid]
   alias_source: generic_cad_vocabulary
 
 - name: SdLevel
   ifc4_class: IfcBuildingStorey
   kernel_op: makeLevel
-  args:
-    - {name: elevation, type: number, required: false, unit: m, default: 0.0}
-    - {name: height,    type: number, required: false, unit: m, default: 3.0}
-    - {name: extent,    type: number, required: false, unit: m, default: 10.0}
-    - {name: name,      type: string, required: false}
+  parameters:
+    type: object
+    properties:
+      elevation:
+        type: number
+        unit: m
+        default: 0
+      height:
+        type: number
+        unit: m
+        default: 3
+      extent:
+        type: number
+        unit: m
+        default: 10
+      name:
+        type: string
+    required: []
   topology_role: system
   kg_predicates: [containedIn]
   synonyms: [level, floor level, storey, building level, datum level, floor plate, IfcLevel]
@@ -891,10 +1544,17 @@
 - name: SdDatum
   ifc4_class: IfcAnnotation
   kernel_op: makeDatum
-  args:
-    - {name: position,  type: point3, required: false}
-    - {name: elevation, type: number, required: false, unit: m}
-    - {name: label,     type: string, required: false}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      elevation:
+        type: number
+        unit: m
+      label:
+        type: string
+    required: []
   topology_role: annotation
   kg_predicates: []
   synonyms: [datum, elevation marker, benchmark, survey point, reference point, IfcDatum]
@@ -904,10 +1564,16 @@
 - name: SdReferenceLine
   ifc4_class: IfcAnnotation
   kernel_op: makeReferenceLine
-  args:
-    - {name: origin, type: point2, required: false}
-    - {name: end,    type: point2, required: false}
-    - {name: label,  type: string, required: false}
+  parameters:
+    type: object
+    properties:
+      origin:
+        type: point2
+      end:
+        type: point2
+      label:
+        type: string
+    required: []
   topology_role: annotation
   kg_predicates: []
   synonyms: [reference line, ref line, datum line, control line, layout line, axis line, IfcReferenceLine]
@@ -921,14 +1587,36 @@
 - name: SdFurnishing
   ifc4_class: IfcFurnishingElement
   kernel_op: makeFurnishingElement
-  args:
-    - {name: width,       type: number,  required: false, unit: m, default: 0.8}
-    - {name: depth,       type: number,  required: false, unit: m, default: 0.6}
-    - {name: height,      type: number,  required: false, unit: m, default: 0.75}
-    - {name: position,    type: point3,  required: false, description: "[x,y,z] plan placement; default origin"}
-    - {name: orientation, type: number,  required: false, unit: deg, default: 0, description: "Rotation about Z-axis in degrees"}
-    - {name: level,       type: string,  required: false, description: "Storey name; default ground"}
-    - {name: layer,       type: string,  required: false, description: "Layer ID to override automatic creator-to-layer routing."}
+  parameters:
+    type: object
+    properties:
+      width:
+        type: number
+        unit: m
+        default: 0.8
+      depth:
+        type: number
+        unit: m
+        default: 0.6
+      height:
+        type: number
+        unit: m
+        default: 0.75
+      position:
+        type: point3
+        description: "[x,y,z] plan placement; default origin"
+      orientation:
+        type: number
+        description: "Rotation about Z-axis in degrees"
+        unit: deg
+        default: 0
+      level:
+        type: string
+        description: "Storey name; default ground"
+      layer:
+        type: string
+        description: "Layer ID to override automatic creator-to-layer routing."
+    required: []
   topology_role: solid
   kg_predicates: [containedIn]
   synonyms: [furnishing, furniture, desk, chair, counter, cabinet, fixture, medical cabinet, reception, IfcFurnishingElement]
@@ -942,10 +1630,16 @@
 - name: SdAnnotationDimension
   ifc4_class: IfcAnnotation
   kernel_op: makeDimension
-  args:
-    - {name: from,  type: point3,  required: true}
-    - {name: to,    type: point3,  required: true}
-    - {name: label, type: string,  required: false}
+  parameters:
+    type: object
+    properties:
+      from:
+        type: point3
+      to:
+        type: point3
+      label:
+        type: string
+    required: [from, to]
   topology_role: annotation
   kg_predicates: []
   synonyms: [dimension, dim, measure, IfcAnnotationDimension]
@@ -954,10 +1648,16 @@
 
 - name: SdLeader
   kernel_op: makeLeader
-  args:
-    - {name: from, type: point3, required: true}
-    - {name: to,   type: point3, required: true}
-    - {name: text, type: string, required: true}
+  parameters:
+    type: object
+    properties:
+      from:
+        type: point3
+      to:
+        type: point3
+      text:
+        type: string
+    required: [from, to, text]
   topology_role: annotation
   kg_predicates: []
   synonyms: [leader, callout, note]
@@ -966,10 +1666,17 @@
 
 - name: SdText
   kernel_op: makeText
-  args:
-    - {name: position, type: point3, required: true}
-    - {name: content,  type: string, required: true}
-    - {name: size,     type: number, required: false, default: 12}
+  parameters:
+    type: object
+    properties:
+      position:
+        type: point3
+      content:
+        type: string
+      size:
+        type: number
+        default: 12
+    required: [position, content]
   topology_role: annotation
   kg_predicates: []
   synonyms: [text, label]
@@ -983,9 +1690,14 @@
 - name: SdGroup
   ifc4_class: IfcGroup
   kernel_op: makeGroup
-  args:
-    - {name: members, type: list_any, required: true}
-    - {name: name,    type: string,   required: false}
+  parameters:
+    type: object
+    properties:
+      members:
+        type: list_any
+      name:
+        type: string
+    required: [members]
   topology_role: system
   kg_predicates: [groupedWith]
   synonyms: [group, block]
@@ -994,8 +1706,12 @@
 
 - name: SdUngroup
   kernel_op: ungroup
-  args:
-    - {name: target, type: any, required: true}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+    required: [target]
   topology_role: system
   kg_predicates: []
   synonyms: [ungroup, explode]
@@ -1004,9 +1720,14 @@
 
 - name: SdLayer
   kernel_op: setLayer
-  args:
-    - {name: target, type: any,    required: true}
-    - {name: layer,  type: string, required: true}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+      layer:
+        type: string
+    required: [target, layer]
   topology_role: system
   kg_predicates: []
   synonyms: [layer, setlayer]
@@ -1015,8 +1736,12 @@
 
 - name: SdLock
   kernel_op: lock
-  args:
-    - {name: target, type: any, required: true}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+    required: [target]
   topology_role: system
   kg_predicates: []
   synonyms: [lock, freeze]
@@ -1025,8 +1750,12 @@
 
 - name: SdHide
   kernel_op: hide
-  args:
-    - {name: target, type: any, required: true}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+    required: [target]
   topology_role: system
   kg_predicates: []
   synonyms: [hide, conceal]
@@ -1039,8 +1768,12 @@
 
 - name: SdSelect
   kernel_op: select
-  args:
-    - {name: id, type: object_id, required: true}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: object_id
+    required: [id]
   topology_role: selection
   kg_predicates: []
   synonyms: [select, pick]
@@ -1049,10 +1782,16 @@
 
 - name: SdSelectByQuery
   kernel_op: selectByQuery
-  args:
-    - {name: creator, type: string,    required: false, note: "e.g. wall, slab, column"}
-    - {name: layerId, type: string,    required: false}
-    - {name: levelId, type: string,    required: false}
+  parameters:
+    type: object
+    properties:
+      creator:
+        type: string
+      layerId:
+        type: string
+      levelId:
+        type: string
+    required: []
   topology_role: selection
   kg_predicates: []
   synonyms: ["select by type", "select walls", "select by layer"]
@@ -1061,7 +1800,10 @@
 
 - name: SdSelectAll
   kernel_op: selectAll
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: selection
   kg_predicates: []
   synonyms: [selectall, "select all"]
@@ -1071,7 +1813,10 @@
 
 - name: SdDelete
   kernel_op: deleteSelected
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: selection
   kg_predicates: []
   synonyms: [delete, erase, remove, del]
@@ -1081,7 +1826,10 @@
 
 - name: SdDeselect
   kernel_op: deselect
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: selection
   kg_predicates: []
   synonyms: [deselect, none]
@@ -1090,8 +1838,13 @@
 
 - name: SdIsolate
   kernel_op: isolate
-  args:
-    - {name: uuid, type: string, required: true, description: "Three.js object uuid to isolate"}
+  parameters:
+    type: object
+    properties:
+      uuid:
+        type: string
+        description: "Three.js object uuid to isolate"
+    required: [uuid]
   topology_role: selection
   kg_predicates: []
   synonyms: [isolate, solo]
@@ -1100,7 +1853,10 @@
 
 - name: SdIsolateOff
   kernel_op: isolateOff
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: selection
   kg_predicates: []
   synonyms: ["isolate off", "unisolate", "show all"]
@@ -1109,8 +1865,13 @@
 
 - name: SdFitToObject
   kernel_op: fitToObject
-  args:
-    - {name: uuid, type: string, required: true, description: "Three.js object uuid to frame"}
+  parameters:
+    type: object
+    properties:
+      uuid:
+        type: string
+        description: "Three.js object uuid to frame"
+    required: [uuid]
   topology_role: view
   kg_predicates: []
   synonyms: ["fit to object", "zoom to object", "frame object"]
@@ -1123,7 +1884,10 @@
 
 - name: SdZoomExtents
   kernel_op: zoomExtents
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [zoomextents, "zoom extents", fit, "fit all"]
@@ -1133,7 +1897,10 @@
 
 - name: SdZoomSelected
   kernel_op: zoomSelected
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [zoomselected, "zoom selected"]
@@ -1142,8 +1909,13 @@
 
 - name: SdSetViewOrtho
   kernel_op: setViewOrtho
-  args:
-    - {name: view, type: string, required: false, default: top, enum: [top, bottom, front, back, left, right, iso]}
+  parameters:
+    type: object
+    properties:
+      view:
+        type: string
+        default: top
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [ortho, orthographic, parallel, "view top", "view front", "view right", "view left", "view back", "view bottom", "view iso", "view isometric"]
@@ -1152,7 +1924,10 @@
 
 - name: SdSetViewPerspective
   kernel_op: setViewPerspective
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [perspective, persp, "view perspective", "view 3d"]
@@ -1161,23 +1936,31 @@
 
 - name: SdSetCPlane
   kernel_op: setCPlane
-  args:
-    - name: mode
-      type: enum_choice
-      required: false
-      default: world
-      description: "Which construction plane to activate"
-      options:
-        - {value: world,        label: "World XY",     description: "Reset to world XY — per-canonical defaults resume"}
-        - {value: top,          label: "Top (XY)",     description: "Lock active CPlane to world XY (top view plane)"}
-        - {value: front,        label: "Front (XZ)",   description: "Lock active CPlane to world XZ (front view plane)"}
-        - {value: right,        label: "Right (YZ)",   description: "Lock active CPlane to world YZ (right view plane)"}
-        - {value: view-derived, label: "Current View", description: "Lock active CPlane to the current orthographic view's plane"}
-        - {value: host-pick,    label: "Pick Surface", description: "Click a face to derive CPlane from its normal (W-6)"}
-        - {value: explicit,     label: "Explicit",     description: "Specify origin + axes directly"}
-    - {name: origin, type: vector3, required: false, description: "Origin point for explicit mode"}
-    - {name: xAxis,  type: vector3, required: false, description: "X axis direction for explicit mode"}
-    - {name: yAxis,  type: vector3, required: false, description: "Y axis direction for explicit mode"}
+  parameters:
+    type: object
+    properties:
+      mode:
+        type: enum_choice
+        description: "Which construction plane to activate"
+        default: world
+        options:
+          - {value: world,        label: "World XY",     description: "Reset to world XY — per-canonical defaults resume"}
+          - {value: top,          label: "Top (XY)",     description: "Lock active CPlane to world XY (top view plane)"}
+          - {value: front,        label: "Front (XZ)",   description: "Lock active CPlane to world XZ (front view plane)"}
+          - {value: right,        label: "Right (YZ)",   description: "Lock active CPlane to world YZ (right view plane)"}
+          - {value: view-derived, label: "Current View", description: "Lock active CPlane to the current orthographic view's plane"}
+          - {value: host-pick,    label: "Pick Surface", description: "Click a face to derive CPlane from its normal (W-6)"}
+          - {value: explicit,     label: "Explicit",     description: "Specify origin + axes directly"}
+      origin:
+        type: vector3
+        description: "Origin point for explicit mode"
+      xAxis:
+        type: vector3
+        description: "X axis direction for explicit mode"
+      yAxis:
+        type: vector3
+        description: "Y axis direction for explicit mode"
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [setcplane, "set cplane", "set construction plane", cplane, workplane, "work plane"]
@@ -1186,7 +1969,10 @@
 
 - name: SdResetCPlane
   kernel_op: resetCPlane
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [resetcplane, "reset cplane", "reset construction plane", "cplane reset"]
@@ -1195,7 +1981,10 @@
 
 - name: SdToggleCPlaneGizmo
   kernel_op: toggleCPlaneGizmo
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: ["view.cplane.toggle", "toggle cplane", "toggle construction plane gizmo", "show cplane", "hide cplane", "cplane gizmo"]
@@ -1204,8 +1993,13 @@
 
 - name: SdRenderMode
   kernel_op: setRenderMode
-  args:
-    - {name: mode, type: string, required: false, default: shaded}
+  parameters:
+    type: object
+    properties:
+      mode:
+        type: string
+        default: shaded
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [render_mode, rendermode, display_mode, displaymode, shading, shaded, wireframe, ghosted, realistic, technical]
@@ -1218,9 +2012,14 @@
 
 - name: SdMeasure
   kernel_op: measure
-  args:
-    - {name: from, type: point3, required: true}
-    - {name: to,   type: point3, required: true}
+  parameters:
+    type: object
+    properties:
+      from:
+        type: point3
+      to:
+        type: point3
+    required: [from, to]
   topology_role: annotation
   kg_predicates: []
   synonyms: [measure, distance]
@@ -1229,8 +2028,12 @@
 
 - name: SdArea
   kernel_op: area
-  args:
-    - {name: target, type: surface_or_face, required: true}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: surface_or_face
+    required: [target]
   topology_role: annotation
   kg_predicates: []
   synonyms: [area]
@@ -1239,8 +2042,12 @@
 
 - name: SdVolume
   kernel_op: volume
-  args:
-    - {name: target, type: solid, required: true}
+  parameters:
+    type: object
+    properties:
+      target:
+        type: solid
+    required: [target]
   topology_role: annotation
   kg_predicates: []
   synonyms: [volume]
@@ -1249,9 +2056,14 @@
 
 - name: SdAlignedDim
   kernel_op: alignedDim
-  args:
-    - {name: a, type: point3, required: true}
-    - {name: b, type: point3, required: true}
+  parameters:
+    type: object
+    properties:
+      a:
+        type: point3
+      b:
+        type: point3
+    required: [a, b]
   topology_role: annotation
   kg_predicates: []
   synonyms: [aligned dim, linear dim, distance, measure length, SdDimAligned, aligned dimension, dim aligned, linear dimension]
@@ -1260,10 +2072,16 @@
 
 - name: SdAngularDim
   kernel_op: angularDim
-  args:
-    - {name: vertex, type: point3, required: true}
-    - {name: ray1,   type: point3, required: true}
-    - {name: ray2,   type: point3, required: true}
+  parameters:
+    type: object
+    properties:
+      vertex:
+        type: point3
+      ray1:
+        type: point3
+      ray2:
+        type: point3
+    required: [vertex, ray1, ray2]
   topology_role: annotation
   kg_predicates: []
   synonyms: [angular dim, angle between, measure angle, SdDimAngular, angular dimension, dim angular, angle dimension]
@@ -1272,8 +2090,12 @@
 
 - name: SdAreaDim
   kernel_op: areaDim
-  args:
-    - {name: points, type: point2_array, required: true}
+  parameters:
+    type: object
+    properties:
+      points:
+        type: point2_array
+    required: [points]
   topology_role: annotation
   kg_predicates: []
   synonyms: [area dim, measure area, polygon area, floor area]
@@ -1282,8 +2104,12 @@
 
 - name: SdVolumeDim
   kernel_op: volumeDim
-  args:
-    - {name: id, type: object_id, required: true}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: object_id
+    required: [id]
   topology_role: annotation
   kg_predicates: []
   synonyms: [volume dim, measure volume, object volume]
@@ -1292,10 +2118,16 @@
 
 - name: SdLabel
   kernel_op: label
-  args:
-    - {name: text,     type: string, required: true}
-    - {name: target,   type: any,    required: false}
-    - {name: position, type: point3, required: false}
+  parameters:
+    type: object
+    properties:
+      text:
+        type: string
+      target:
+        type: any
+      position:
+        type: point3
+    required: [text]
   topology_role: annotation
   kg_predicates: []
   synonyms: [label, annotate, tag, text label, callout label]
@@ -1303,9 +2135,14 @@
 
 - name: SdTransientMeasure
   kernel_op: transientMeasure
-  args:
-    - {name: a, type: point3, required: false}
-    - {name: b, type: point3, required: false}
+  parameters:
+    type: object
+    properties:
+      a:
+        type: point3
+      b:
+        type: point3
+    required: []
   topology_role: annotation
   kg_predicates: []
   synonyms: [transient measure, quick measure, measure distance, measure]
@@ -1317,9 +2154,14 @@
 
 - name: SdImport
   kernel_op: importFile
-  args:
-    - {name: format, type: enum_format, required: true}
-    - {name: bytes,  type: arraybuffer, required: true}
+  parameters:
+    type: object
+    properties:
+      format:
+        type: enum_format
+      bytes:
+        type: arraybuffer
+    required: [format, bytes]
   topology_role: system
   kg_predicates: []
   synonyms: [import, open, load]
@@ -1328,9 +2170,15 @@
 
 - name: SdExport
   kernel_op: exportFile
-  args:
-    - {name: format, type: enum_format, required: true, enum: [ifc, glb, gltf, obj, stl, step, svg, dxf, pdf, usdz]}
-    - {name: target, type: string,      required: false, default: scene, enum: [active, scene, selection]}
+  parameters:
+    type: object
+    properties:
+      format:
+        type: enum_format
+      target:
+        type: string
+        default: scene
+    required: [format]
   topology_role: system
   kg_predicates: []
   synonyms: [export, save, write, "export ifc", "export glb", "save as ifc", "download ifc"]
@@ -1339,8 +2187,12 @@
 
 - name: SdSave
   kernel_op: saveProject
-  args:
-    - {name: filename, type: string, required: false}
+  parameters:
+    type: object
+    properties:
+      filename:
+        type: string
+    required: []
   topology_role: system
   kg_predicates: []
   synonyms: [save]
@@ -1349,8 +2201,12 @@
 
 - name: SdOpen
   kernel_op: openProject
-  args:
-    - {name: filename, type: string, required: false}
+  parameters:
+    type: object
+    properties:
+      filename:
+        type: string
+    required: []
   topology_role: system
   kg_predicates: []
   synonyms: [open]
@@ -1359,7 +2215,10 @@
 
 - name: SdClearScene
   kernel_op: clearScene
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: system
   kg_predicates: []
   synonyms: [clear scene, clear all, unload, unload all, reset scene, new scene]
@@ -1367,7 +2226,10 @@
 
 - name: SdUndo
   kernel_op: undo
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: system
   kg_predicates: []
   synonyms: [undo, ctrl-z]
@@ -1377,7 +2239,10 @@
 
 - name: SdRedo
   kernel_op: redo
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: system
   kg_predicates: []
   synonyms: [redo, ctrl-y, ctrl-shift-z]
@@ -1387,8 +2252,12 @@
 
 - name: setActiveTool
   kernel_op: setActiveTool
-  args:
-    - {name: toolId, type: string, required: true}
+  parameters:
+    type: object
+    properties:
+      toolId:
+        type: string
+    required: [toolId]
   topology_role: system
   kg_predicates: []
   synonyms: [setTool, activateTool, selectTool]
@@ -1397,8 +2266,13 @@
 
 - name: setActiveLevel
   kernel_op: setActiveLevel
-  args:
-    - {name: id, type: string, required: true, description: "Level ID (from IfcLevel dispatch return)"}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: string
+        description: "Level ID (from IfcLevel dispatch return)"
+    required: [id]
   topology_role: system
   kg_predicates: []
   synonyms: [activateLevel, switchLevel, goToLevel]
@@ -1407,9 +2281,14 @@
 
 - name: setLevelVisible
   kernel_op: setLevelVisible
-  args:
-    - {name: id,      type: string,  required: true}
-    - {name: visible, type: boolean, required: true}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: string
+      visible:
+        type: boolean
+    required: [id, visible]
   topology_role: system
   kg_predicates: []
   synonyms: [showLevel, hideLevel, toggleLevel]
@@ -1418,8 +2297,13 @@
 
 - name: removeLevel
   kernel_op: removeLevel
-  args:
-    - {name: id, type: string, required: true, description: "Level ID to delete (level/0 cannot be removed)"}
+  parameters:
+    type: object
+    properties:
+      id:
+        type: string
+        description: "Level ID to delete (level/0 cannot be removed)"
+    required: [id]
   topology_role: system
   kg_predicates: []
   synonyms: [deleteLevel, removeBuildingLevel]
@@ -1428,10 +2312,19 @@
 
 - name: SdSectionBox
   kernel_op: setSectionBox
-  args:
-    - {name: min, type: point3, required: true, description: "Min corner [x,y,z]"}
-    - {name: max, type: point3, required: true, description: "Max corner [x,y,z]"}
-    - {name: enabled, type: boolean, required: false, default: true}
+  parameters:
+    type: object
+    properties:
+      min:
+        type: point3
+        description: "Min corner [x,y,z]"
+      max:
+        type: point3
+        description: "Max corner [x,y,z]"
+      enabled:
+        type: boolean
+        default: true
+    required: [min, max]
   topology_role: view
   kg_predicates: []
   synonyms: [sectionbox, "section box", "crop box", "clip box", "section volume"]
@@ -1440,7 +2333,10 @@
 
 - name: SdSectionBoxOff
   kernel_op: clearSectionBox
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [sectionboxoff, "remove section box", "clear section box", "disable section box"]
@@ -1449,11 +2345,22 @@
 
 - name: SdClippingPlane
   kernel_op: addClippingPlane
-  args:
-    - {name: origin, type: point3, required: true, description: "Point on the plane [x,y,z]"}
-    - {name: normal, type: vector3, required: true, description: "Plane normal vector [x,y,z]"}
-    - {name: enabled, type: boolean, required: false, default: true}
-    - {name: label, type: string, required: false, description: "Named handle for later removal"}
+  parameters:
+    type: object
+    properties:
+      origin:
+        type: point3
+        description: "Point on the plane [x,y,z]"
+      normal:
+        type: vector3
+        description: "Plane normal vector [x,y,z]"
+      enabled:
+        type: boolean
+        default: true
+      label:
+        type: string
+        description: "Named handle for later removal"
+    required: [origin, normal]
   topology_role: view
   kg_predicates: []
   synonyms: [clippingplane, "clipping plane", "cut plane", "section plane", "clip plane"]
@@ -1462,7 +2369,10 @@
 
 - name: SdClippingPlanesClear
   kernel_op: clearClippingPlanes
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [clippingplanesclear, "clear clipping planes", "remove all clip planes", "clear clips"]
@@ -1471,8 +2381,13 @@
 
 - name: SdClippingPlaneRemove
   kernel_op: removeClippingPlane
-  args:
-    - {name: label, type: string, required: true, description: "Label passed to SdClippingPlane"}
+  parameters:
+    type: object
+    properties:
+      label:
+        type: string
+        description: "Label passed to SdClippingPlane"
+    required: [label]
   topology_role: view
   kg_predicates: []
   synonyms: [clippingplaneremove, "remove clipping plane", "delete clip plane"]
@@ -1481,15 +2396,17 @@
 
 - name: SdSetUnits
   kernel_op: setUnits
-  args:
-    - name: system
-      type: enum_choice
-      required: false
-      default: metric
-      description: "Unit system to display"
-      options:
-        - {value: metric,   label: "Metric (m)",   description: "Metric — all dimensions in metres"}
-        - {value: imperial, label: "Imperial (ft)", description: "Imperial — all dimensions in feet"}
+  parameters:
+    type: object
+    properties:
+      system:
+        type: enum_choice
+        description: "Unit system to display"
+        default: metric
+        options:
+          - {value: metric,   label: "Metric (m)",   description: "Metric — all dimensions in metres"}
+          - {value: imperial, label: "Imperial (ft)", description: "Imperial — all dimensions in feet"}
+    required: []
   topology_role: view
   kg_predicates: []
   synonyms: [setunits, "set units", "switch units", "use metric", "use imperial", "use feet", "use meters", "use metres", "metric", "imperial"]
@@ -1498,7 +2415,10 @@
 
 - name: SdListObjects
   kernel_op: listObjects
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: annotation
   kg_predicates: []
   synonyms: [listobjects, "list objects", "list", ls, "what is in the scene", "what's in the scene", "whats in scene", "scene contents", "show objects", "show scene"]
@@ -1507,10 +2427,20 @@
 
 - name: SdRunCluster
   kernel_op: runCluster
-  args:
-    - {name: name, type: string, required: true, description: "Name of the saved skill cluster to run"}
-    - {name: anchor, type: vector3, required: false, description: "XYZ offset applied to all position/point args before dispatching each step"}
-    - {name: repeat, type: integer, required: false, default: 1, description: "Number of times to repeat the cluster"}
+  parameters:
+    type: object
+    properties:
+      name:
+        type: string
+        description: "Name of the saved skill cluster to run"
+      anchor:
+        type: vector3
+        description: "XYZ offset applied to all position/point args before dispatching each step"
+      repeat:
+        type: integer
+        description: "Number of times to repeat the cluster"
+        default: 1
+    required: [name]
   topology_role: system
   kg_predicates: []
   synonyms: [runcluster, "run cluster", "execute cluster", "play cluster", "run macro", "play macro"]
@@ -1519,7 +2449,10 @@
 
 - name: SdListClusters
   kernel_op: listClusters
-  args: []
+  parameters:
+    type: object
+    properties:
+    required: []
   topology_role: annotation
   kg_predicates: []
   synonyms: [listclusters, "list clusters", "show clusters", "list macros", "show macros", "list saved clusters"]

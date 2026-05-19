@@ -9,6 +9,7 @@ import {
   resolveAlias,
   getEntry,
   clearDictionaryCache,
+  flattenParameters,
   type SpatialDictionaryEntry,
 } from "../src/commands/dictionary";
 
@@ -141,5 +142,43 @@ describe("Spatial Dictionary loader", () => {
       ops.some((n) => /diff|cut|sub/i.test(n)),
       "no boolean diff op"
     ).toBe(true);
+  });
+
+  test("parameters block is JSON Schema object with properties + required (P0b2)", () => {
+    const dict = getDictionary();
+    for (const entry of dict) {
+      expect(entry.parameters.type, `${entry.name}.parameters.type`).toBe("object");
+      expect(typeof entry.parameters.properties, `${entry.name}.parameters.properties`).toBe("object");
+      expect(Array.isArray(entry.parameters.required), `${entry.name}.parameters.required`).toBe(true);
+      for (const reqName of entry.parameters.required) {
+        expect(
+          reqName in entry.parameters.properties,
+          `${entry.name}: required "${reqName}" not in properties`
+        ).toBe(true);
+      }
+    }
+  });
+
+  test("flattenParameters round-trips required flag correctly (P0b2)", () => {
+    const wall = getEntry("SdLine");
+    expect(wall).toBeDefined();
+    if (!wall) return;
+    const flat = flattenParameters(wall.parameters);
+    const start = flat.find((a) => a.name === "start");
+    const end = flat.find((a) => a.name === "end");
+    expect(start?.required).toBe(true);
+    expect(end?.required).toBe(true);
+  });
+
+  test("args derived property matches flattenParameters output (P0b2)", () => {
+    const dict = getDictionary();
+    for (const entry of dict) {
+      const flat = flattenParameters(entry.parameters);
+      expect(entry.args.length, `${entry.name} args.length`).toBe(flat.length);
+      for (let i = 0; i < flat.length; i++) {
+        expect(entry.args[i].name).toBe(flat[i].name);
+        expect(entry.args[i].required).toBe(flat[i].required);
+      }
+    }
   });
 });

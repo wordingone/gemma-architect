@@ -10,7 +10,7 @@
 //   - scalar key:value pairs
 //   - inline lists `[a, b, c]` (with optional quoting on commas-or-spaces)
 //   - inline maps `{key: value, key: value, key: [a, b]}`
-//   - nested list-of-maps under `args:` and similar fields
+//   - nested block maps under `parameters.properties:` and `options:` fields
 //   - line comments (`#`) and blank lines
 //
 // If the YAML grows new constructs (anchors, multi-line strings, etc.)
@@ -40,6 +40,22 @@ export type ChoiceOption = {
   description: string;
 };
 
+export type SdParamSchema = {
+  type: SdArgType | string;
+  description?: string;
+  unit?: string;
+  default?: unknown;
+  options?: ChoiceOption[];
+};
+
+export type SdParameters = {
+  type: "object";
+  properties: Record<string, SdParamSchema>;
+  required: string[];
+};
+
+// Legacy flat type — kept for command-session.ts coercion loop.
+// Derived from SdParameters by flattenParameters().
 export type SdArg = {
   name: string;
   type: SdArgType | string;
@@ -62,7 +78,8 @@ export type SpatialDictionaryEntry = {
   name: string;
   ifc4_class?: string;
   kernel_op: string;
-  args: SdArg[];
+  parameters: SdParameters;
+  args: SdArg[]; // derived: flattenParameters(parameters)
   topology_role: SdTopologyRole | string;
   kg_predicates: string[];
   synonyms: string[];
@@ -70,6 +87,19 @@ export type SpatialDictionaryEntry = {
   kernel: SdKernel | string;
   alias_source: string;
 };
+
+/** Flatten JSON Schema parameters → legacy SdArg[] for backwards-compat consumers. */
+export function flattenParameters(p: SdParameters): SdArg[] {
+  return Object.entries(p.properties).map(([name, schema]) => ({
+    name,
+    type: schema.type,
+    required: p.required.includes(name),
+    ...(schema.unit !== undefined ? { unit: schema.unit } : {}),
+    ...(schema.default !== undefined ? { default: schema.default } : {}),
+    ...(schema.description !== undefined ? { description: schema.description } : {}),
+    ...(schema.options !== undefined ? { options: schema.options } : {}),
+  }));
+}
 
 // ============================================================
 // Parser
@@ -329,36 +359,49 @@ function asStringList(n: ParsedNode | undefined): string[] {
   if (n.kind === "list") return n.items.map((it) => asString(it));
   return [];
 }
-function asArgList(n: ParsedNode | undefined): SdArg[] {
-  if (!n || n.kind !== "list") return [];
-  const out: SdArg[] = [];
-  for (const it of n.items) {
-    if (it.kind !== "map") continue;
-    const e = it.entries;
-    const arg: SdArg = {
-      name: asString(e.name),
-      type: asString(e.type),
-      required: e.required && e.required.kind === "scalar" ? e.required.value === true : false,
-    };
-    if (e.unit) arg.unit = asString(e.unit);
-    if (e.description) arg.description = asString(e.description);
-    if (e.default !== undefined) {
-      const d = e.default;
-      if (d.kind === "scalar") arg.default = d.value;
-      else if (d.kind === "list") arg.default = d.items.map((x) => x.kind === "scalar" ? x.value : null);
-    }
-    if (e.options && e.options.kind === "list") {
-      arg.options = e.options.items
-        .filter((o): o is ParsedMap => o.kind === "map")
-        .map((o) => ({
-          value: asString(o.entries.value),
-          label: asString(o.entries.label),
-          description: asString(o.entries.description),
-        }));
-    }
-    out.push(arg);
+function asParamSchema(n: ParsedNode): SdParamSchema {
+  if (n.kind !== "map") return { type: "any" };
+  const e = n.entries;
+  const schema: SdParamSchema = { type: asString(e.type) || "any" };
+  if (e.description) schema.description = asString(e.description);
+  if (e.unit) schema.unit = asString(e.unit);
+  if (e.default !== undefined) {
+    const d = e.default;
+    if (d.kind === "scalar") schema.default = d.value;
+    else if (d.kind === "list") schema.default = d.items.map((x) => x.kind === "scalar" ? x.value : null);
   }
-  return out;
+  if (e.options && e.options.kind === "list") {
+    schema.options = e.options.items
+      .filter((o): o is ParsedMap => o.kind === "map")
+      .map((o) => ({
+        value: asString(o.entries.value),
+        label: asString(o.entries.label),
+        description: asString(o.entries.description),
+      }));
+  }
+  return schema;
+}
+
+function asParametersObject(n: ParsedNode | undefined): SdParameters {
+  const empty: SdParameters = { type: "object", properties: {}, required: [] };
+  if (!n || n.kind !== "map") return empty;
+  const e = n.entries;
+  const propertiesNode = e.properties;
+  const requiredNode = e.required;
+  const properties: Record<string, SdParamSchema> = {};
+  if (propertiesNode && propertiesNode.kind === "map") {
+    for (const [k, v] of Object.entries(propertiesNode.entries)) {
+      properties[k] = asParamSchema(v);
+    }
+  }
+  const required: string[] = [];
+  if (requiredNode && requiredNode.kind === "list") {
+    for (const it of requiredNode.items) {
+      const s = asString(it);
+      if (s) required.push(s);
+    }
+  }
+  return { type: "object", properties, required };
 }
 
 function coerceEntry(node: ParsedNode): SpatialDictionaryEntry | null {
@@ -367,10 +410,12 @@ function coerceEntry(node: ParsedNode): SpatialDictionaryEntry | null {
   const name = asString(e.name);
   const kernel_op = asString(e.kernel_op);
   if (!name || !kernel_op) return null;
+  const parameters = asParametersObject(e.parameters);
   const entry: SpatialDictionaryEntry = {
     name,
     kernel_op,
-    args: asArgList(e.args),
+    parameters,
+    args: flattenParameters(parameters),
     topology_role: asString(e.topology_role),
     kg_predicates: asStringList(e.kg_predicates),
     synonyms: asStringList(e.synonyms),
