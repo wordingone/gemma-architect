@@ -281,7 +281,7 @@ function _buildOverlay(): void {
   dimPath.setAttribute('d', ghostPath);
   dimPath.setAttribute('fill', 'none');
   dimPath.setAttribute('stroke', '#1e1e1e');
-  dimPath.setAttribute('stroke-width', '0.3');
+  dimPath.setAttribute('stroke-width', '0.12');
   dimPath.setAttribute('stroke-linecap', 'square');
   svg.appendChild(dimPath);
 
@@ -290,9 +290,9 @@ function _buildOverlay(): void {
   headPath.setAttribute('d', ghostPath);
   headPath.setAttribute('fill', 'none');
   headPath.setAttribute('stroke', '#4ca6ff');
-  headPath.setAttribute('stroke-width', '0.5');
+  headPath.setAttribute('stroke-width', '0.18');
   headPath.setAttribute('stroke-linecap', 'round');
-  headPath.setAttribute('opacity', '0.8');
+  headPath.setAttribute('opacity', '0.9');
   svg.appendChild(headPath);
   _headPath = headPath;
 
