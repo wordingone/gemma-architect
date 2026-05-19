@@ -5314,6 +5314,72 @@ await resetScene('before-box-inject');
   await resetScene('post-S106');
 }
 
+// ── S107 — hidden-level-unselectable (#950) ────────────────────────────────────
+// Create a wall on Level 2, hide Level 2, assert:
+// (a) mesh.visible === false (setLevelVisible propagates to scene objects),
+// (b) clicking at the wall screen position does not select the hidden wall.
+{
+  const s107 = await evaluate(`
+    (async () => {
+      try {
+        // 1. Create Level 2 at elevation 5.0; SdLevel auto-activates it.
+        const lvlResult = window.__dispatch('SdLevel', { name: 'Upper', elevation: 5.0, height: 3.0 });
+        const levelId = lvlResult?.levelId ?? 'level/1';
+        await new Promise(r => setTimeout(r, 50));
+
+        // 2. Create wall on Level 2 (active).
+        window.__dispatch('setActiveTool', { toolId: 'wall' });
+        const _w1 = window.__emitClickWorld({ x: 0, y: 0 }, { tool: 'wall' });
+        const _w2 = window.__emitClickWorld({ x: 5, y: 0 }, { tool: 'wall' });
+        if (!_w2?.mesh) return { passed: false, evidence: { reason: 'wall not created on Level 2', levelId } };
+
+        const wallMesh = _w2.mesh;
+        const wallUuid = wallMesh.uuid;
+
+        // 3. Return to Level 1 so Level 2 can be safely hidden.
+        window.__dispatch('setActiveLevel', { id: 'level/0' });
+
+        // 4. Hide Level 2 — sets mesh.visible = false on all levelId-matched scene children.
+        window.__dispatch('setLevelVisible', { id: levelId, visible: false });
+
+        // 4a. Structural: wall mesh.visible must be false.
+        const meshVisible = wallMesh.visible;
+
+        // 4b. Behavioral: click at the wall position, assert no hidden wall selected.
+        window.__dispatch('setActiveTool', { toolId: 'select' });
+        // Clear any existing selection from wall-creation auto-select.
+        window.__viewer.selectObject(null);
+        await new Promise(r => setTimeout(r, 30));
+
+        const sc = window.__projectToScreen(2.5, 0, 0);
+        if (!sc) return { passed: meshVisible === false, evidence: { reason: 'projectToScreen null — structural check only', meshVisible, levelId } };
+
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+          canvas.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+            button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+          }));
+          canvas.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+            button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+          }));
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        const selected = window.__viewer.getTargetObject();
+        const hiddenWallSelected = selected !== null && selected.uuid === wallUuid;
+        const passed = !meshVisible && !hiddenWallSelected;
+        return { passed, evidence: { levelId, meshVisible, selectedUuid: selected?.uuid ?? null, wallUuid } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s107) record('hidden-level-unselectable', false, { reason: 'evaluate returned null' });
+  else record('hidden-level-unselectable', s107.passed, s107.evidence);
+  await resetScene('post-S107');
+}
+
 } finally {
   await cleanup();
 }
