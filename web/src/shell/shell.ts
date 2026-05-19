@@ -155,15 +155,18 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
 
 // SAMPLES displayed as ribbon asset cards in MODEL mode (far right of ribbon-tools).
 // Projects = full building scenes; Elements = individual components.
+// Use BASE_URL prefix so thumbnail paths resolve correctly on GitHub Pages
+// (base: "./" in vite.config.ts means absolute "/thumbnails/..." paths 404).
+const _BASE = import.meta.env.BASE_URL;
 const RIBBON_SCENE_SAMPLES = [
-  { name: "Schultz Residence",  v: "schultz-residence", thumb: "/thumbnails/schultz-residence.png" },
-  { name: "KIT FZK-Haus",       v: "kit-fzk-haus",      thumb: "/thumbnails/kit-fzk-haus.png" },
-  { name: "KIT Institute",      v: "kit-office",         thumb: "/thumbnails/kit-office.png" },
-  { name: "Bonsai House",       v: "bonsai-openings",    thumb: "/thumbnails/bonsai-openings.png" },
+  { name: "Schultz Residence",  v: "schultz-residence", thumb: `${_BASE}thumbnails/schultz-residence.png` },
+  { name: "KIT FZK-Haus",       v: "kit-fzk-haus",      thumb: `${_BASE}thumbnails/kit-fzk-haus.png` },
+  { name: "KIT Institute",      v: "kit-office",         thumb: `${_BASE}thumbnails/kit-office.png` },
+  { name: "Bonsai House",       v: "bonsai-openings",    thumb: `${_BASE}thumbnails/bonsai-openings.png` },
 ];
 const RIBBON_ELEMENT_SAMPLES = [
-  { name: "Wall",  v: "wall-with-opening", thumb: "/thumbnails/wall-with-opening.png" },
-  { name: "Sweep", v: "simple-sweep",      thumb: "/thumbnails/simple-sweep.png" },
+  { name: "Wall",  v: "wall-with-opening", thumb: `${_BASE}thumbnails/wall-with-opening.png` },
+  { name: "Sweep", v: "simple-sweep",      thumb: `${_BASE}thumbnails/simple-sweep.png` },
 ];
 
 function buildAssetCard(
