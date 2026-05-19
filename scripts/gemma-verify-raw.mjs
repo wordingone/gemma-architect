@@ -5679,6 +5679,56 @@ await resetScene('before-box-inject');
   await resetScene('post-S114');
 }
 
+// ── S118 — walls-from-object-single-click (#952) ──────────────────────────────
+// Activate wall-pick mode, hover over a rect → hover highlight, single click →
+// walls generated (4 wall segments for a rectangle footprint), no preview-point.
+{
+  const s118 = await evaluate(`
+    (async () => {
+      try {
+        // 1. Create a rect as the footprint to trace walls around.
+        window.__dispatch('SdRect', { x: 0, y: 0, w: 4, d: 3 });
+        await new Promise(r => setTimeout(r, 30));
+        const rects = window.__viewer.scene.children.filter(c => c.userData.creator === 'rect');
+        if (rects.length === 0) return { passed: false, evidence: { reason: 'rect not created' } };
+
+        // 2. Activate wall-pick mode (Walls from Object sub-tool).
+        window.__dispatch('setActiveTool', { toolId: 'wall-pick' });
+        await new Promise(r => setTimeout(r, 40));
+
+        // 3. Count walls before click.
+        const wallsBefore = window.__viewer.scene.children.filter(c => c.userData.creator === 'wall').length;
+
+        // 4. Single click on the rect at its center.
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+        const sc = window.__projectToScreen(2, 1.5, 0);
+        if (!sc) return { passed: false, evidence: { reason: 'projectToScreen failed for rect center' } };
+
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+        }));
+        canvas.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+        }));
+        await new Promise(r => setTimeout(r, 80));
+
+        // 5. Assert 4 wall segments were generated (rect has 4 sides).
+        const wallsAfter = window.__viewer.scene.children.filter(c => c.userData.creator === 'wall').length;
+        const newWalls = wallsAfter - wallsBefore;
+        const passed = newWalls >= 4;
+        return { passed, evidence: { wallsBefore, wallsAfter, newWalls } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s118) record('walls-from-object-single-click', false, { reason: 'evaluate returned null' });
+  else record('walls-from-object-single-click', s118.passed, s118.evidence);
+  await resetScene('post-S118');
+}
+
 } finally {
   await cleanup();
 }
