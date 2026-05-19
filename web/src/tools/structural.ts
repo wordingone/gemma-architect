@@ -672,8 +672,9 @@ export function buildRoof(
   const cy = (a.y + b.y) / 2;
 
   const roofType = params.type ?? "pitched";
-  const pitchDeg = Math.max(5, Math.min(70, params.pitchDeg ?? 30));
-  const overhang = params.overhang ?? 0.6;
+  // FZK-Haus reference: ~31.4° pitch, 0.5m overhang per side (#1161).
+  const pitchDeg = Math.max(5, Math.min(70, params.pitchDeg ?? 31));
+  const overhang = params.overhang ?? 0.5;
 
   const pitchRad = (pitchDeg * Math.PI) / 180;
   // Eave half-extents include overhang.
@@ -871,8 +872,9 @@ export function buildRoof(
     // ridgeH scoped to the actual span (portrait uses hw, not hd).
     const rH = spanHalf * Math.tan(pitchRad);
     const rafterLen = Math.sqrt(spanHalf ** 2 + rH ** 2);
-    const rafterW = 0.05, rafterD = 0.15;
-    const rafterSpacing = 0.5;
+    // FZK-Haus reference: 0.08m rafter width, ~0.65m on-centre spacing (#1161).
+    const rafterW = 0.08, rafterD = 0.15;
+    const rafterSpacing = 0.65;
     const nRafters = Math.max(4, Math.round(ridgeLenHalf * 2 / rafterSpacing) + 1);
 
     // Rafter rotation: BoxGeometry local Z aligns with slope direction.
@@ -880,11 +882,14 @@ export function buildRoof(
     // This correctly spans from ridge (0, 0, rH) to eave (0, −spanHalf, 0).
     const slopeRx = Math.PI / 2 + pitchRad;  // rafter only — do NOT use for sheathing
 
-    // Ridge beam
+    // Ridge beam — sits on the INSIDE of the sheathing at the apex.
+    // Position at rH − 0.06 (half beam height) so the beam top aligns with
+    // the inner sheathing face; putting it at rH + 0.06 placed it above
+    // the panels (#1136 / #1161).
     const ridgeBeam = landscape
       ? member(ridgeLenHalf * 2, 0.10, 0.12, frameMat.clone())
       : member(0.10, ridgeLenHalf * 2, 0.12, frameMat.clone());
-    ridgeBeam.position.set(0, 0, rH + 0.06);
+    ridgeBeam.position.set(0, 0, rH - 0.06);
     ridgeBeam.visible = params.showStructure !== false;
     group.add(ridgeBeam);
 
@@ -909,12 +914,10 @@ export function buildRoof(
       : new THREE.Mesh(new THREE.BoxGeometry(fW, ridgeLenHalf * 2, fH), soffitMat.clone());
     fasciaA.userData.ifcClass = "IfcCovering";
     fasciaA.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, -fH / 2);
-    fasciaA.visible = false;
     group.add(fasciaA);
     const fasciaB = fasciaA.clone();
     (fasciaB.material as THREE.Material) = (fasciaA.material as THREE.Material).clone();
     fasciaB.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, -fH / 2);
-    fasciaB.visible = false;
     group.add(fasciaB);
 
     // Soffit under eave overhang (2 sides)
@@ -928,7 +931,6 @@ export function buildRoof(
       landscape ? -(spanHalf - overhang / 2) : 0,
       -0.01,
     );
-    soffitA.visible = false;
     group.add(soffitA);
     const soffitB = soffitA.clone();
     (soffitB.material as THREE.Material) = (soffitA.material as THREE.Material).clone();
@@ -937,7 +939,6 @@ export function buildRoof(
       landscape ? (spanHalf - overhang / 2) : 0,
       -0.01,
     );
-    soffitB.visible = false;
     group.add(soffitB);
 
     // Rafters — two slopes

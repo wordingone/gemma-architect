@@ -467,7 +467,7 @@ function updateRoofFootprint(
   live: { x: number; y: number },
 ): void {
   clearRoofFootprint(viewer);
-  const overhang = 0.4;  // matches buildRoof default
+  const overhang = 0.5;  // FZK-derived default (#1161)
   const elev = levelStore.getActive().elevation;
   const minX = Math.min(anchor.x, live.x) - overhang;
   const maxX = Math.max(anchor.x, live.x) + overhang;
