@@ -670,7 +670,9 @@ export function buildStairOnCurve(
   }
 
   // Each step is a single-riser box at its correct height (not cumulative).
+  // Skip steps whose index matches a landing position to avoid Z-overlap.
   for (let i = 0; i < nRisers; i++) {
+    if (_landingStepIndices.has(i)) continue;
     const s = sampleAt((i + 0.5) * actualT);
     const stepBot = i * riser;
     const step = new THREE.Mesh(new THREE.BoxGeometry(actualT, stairW, riser), _stepMat());
