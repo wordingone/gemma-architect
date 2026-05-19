@@ -294,6 +294,11 @@ export function prefetchModel(): void {
     void prefillSystemPromptAsync();
     return;
   }
+  // Emit an early loading event so the overlay mounts BEFORE the worker
+  // triggers the browser storage-permission prompt on the first ONNX fetch.
+  // Returning-user path (cached model): worker posts "returning-user" within
+  // milliseconds → overlay fades immediately via agentmodel:returning-user.
+  window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
   initWorkerIfNeeded();
 }
 
