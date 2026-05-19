@@ -5063,6 +5063,42 @@ await resetScene('before-box-inject');
   await resetScene('post-S102');
 }
 
+// ── S104: dim verb-name alignment — SdAlignedDim + SdAngularDim produce geometry ─
+// Verifies that the canonical handlers (not the deleted SdDimAligned/SdDimAngular
+// stubs) are reachable and create annotation objects.
+{
+  await resetScene('pre-S104');
+  const s104 = await evaluate(`(async () => {
+    try {
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      function creatorCount(kind) {
+        let n = 0;
+        v.scene.traverse(obj => { if (obj.userData?.creator === kind) n++; });
+        return n;
+      }
+
+      // SdAlignedDim — measures distance between two points
+      window.__dispatch('SdAlignedDim', { a: [0,0,0], b: [3,0,0] });
+      await new Promise(r => setTimeout(r, 300));
+      const aligned = creatorCount('SdAlignedDim');
+
+      // SdAngularDim — measures angle at vertex between two rays
+      window.__dispatch('SdAngularDim', { vertex: [0,0,0], ray1: [1,0,0], ray2: [0,1,0] });
+      await new Promise(r => setTimeout(r, 300));
+      const angular = creatorCount('SdAngularDim');
+
+      const passed = aligned > 0 && angular > 0;
+      return { passed, evidence: { aligned, angular } };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('dim-verb-alignment', !!(s104?.passed), s104 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S104');
+}
+
 // ── S94 — section-box-handle-tracks (#943 Sub-bug 3): pushing a section face ─
 // updates the wireframe mesh scale so the visible box matches the cut AABB.
 {

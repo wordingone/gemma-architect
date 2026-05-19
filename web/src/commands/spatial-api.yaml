@@ -1246,30 +1246,6 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
-- canonical_name: SdDimAligned
-  kernel_op: dimAligned
-  args:
-    - {name: from,     type: point3, required: true}
-    - {name: to,       type: point3, required: true}
-    - {name: offset,   type: number, required: false, default: 0.5}
-  topology_role: annotation
-  kg_predicates: []
-  synonyms: [aligned dim, aligned dimension, dim aligned, linear dimension]
-  kernel: replicad
-  alias_source: generic_cad_vocabulary
-
-- canonical_name: SdDimAngular
-  kernel_op: dimAngular
-  args:
-    - {name: vertex, type: point3, required: true}
-    - {name: from,   type: point3, required: true}
-    - {name: to,     type: point3, required: true}
-  topology_role: annotation
-  kg_predicates: []
-  synonyms: [angular dim, angular dimension, dim angular, angle dimension]
-  kernel: replicad
-  alias_source: generic_cad_vocabulary
-
 - canonical_name: SdAlignedDim
   kernel_op: alignedDim
   args:
@@ -1277,7 +1253,7 @@
     - {name: b, type: point3, required: true}
   topology_role: annotation
   kg_predicates: []
-  synonyms: [aligned dim, linear dim, distance, measure length]
+  synonyms: [aligned dim, linear dim, distance, measure length, SdDimAligned, aligned dimension, dim aligned, linear dimension]
   returns: {measured: length, distance: number, unit: m}
   alias_source: generic_cad_vocabulary
 
@@ -1289,7 +1265,7 @@
     - {name: ray2,   type: point3, required: true}
   topology_role: annotation
   kg_predicates: []
-  synonyms: [angular dim, angle between, measure angle]
+  synonyms: [angular dim, angle between, measure angle, SdDimAngular, angular dimension, dim angular, angle dimension]
   returns: {measured: angle, angleDeg: number, unit: deg}
   alias_source: generic_cad_vocabulary
 
