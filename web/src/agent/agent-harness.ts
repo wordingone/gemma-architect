@@ -934,13 +934,8 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
-    DIMENSION_RULES,
     WEBGPU_HOUSE_FEW_SHOT,
     verbList,
-    `Current scene: ${buildSceneContext()}`,
-    summariseSkills(skills),
-    summariseClusters(),
-    "SCENE QUERY — if the user asks what is in the scene, what you see, or about colors/shapes/appearance: write PLAIN TEXT ONLY, NO tool_call blocks. Describe the viewport image in detail: building form and silhouette, roof shape and exact color, wall color and material, visible windows (count, position, color), site/ground pad color, background grid. State colors precisely (e.g. 'brown', 'gray', 'green'). Then in one sentence summarize the 'Current scene:' object list. If the viewport is literally empty (no geometry, only grid lines and axis arrows) say so.",
   ].filter(Boolean).join("\n\n");
 }
 
