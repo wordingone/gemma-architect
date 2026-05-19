@@ -929,7 +929,7 @@ export function initCreateMode(viewer: Viewer): void {
     if (!isSelHLOwned()) { clearMultiSelHighlights(); clearMultiSelected(); }
   });
 
-  const WALL_SUB_TOOLS = new Set(["wall-polyline", "wall-curve", "wall-pick", "stair-polyline", "stair-curve"]);
+  const WALL_SUB_TOOLS = new Set(["wall-polyline", "wall-curve", "wall-pick", "stair-polyline", "stair-curve", "clip-section"]);
 
   // When activeTool changes to a PT or op tool, start the state machine.
   subscribe("activeTool", (tool) => {
@@ -964,6 +964,8 @@ export function initCreateMode(viewer: Viewer): void {
         setPickerHint(`wall-polyline — click first wall start point  [Esc] cancel`);
       } else if (tool === "wall-pick") {
         setPickerHint("wall-pick — click a polygon, polyline, circle, or line to trace walls");
+      } else if (tool === "clip-section") {
+        setPickerHint("Clip Section — click point A then point B to define section line  [Esc] cancel");
       }
     }
   });

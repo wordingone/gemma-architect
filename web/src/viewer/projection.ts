@@ -81,7 +81,11 @@ export function unprojectForClipTool(viewer: Viewer, clientX: number, clientY: n
     plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   }
   const point = new THREE.Vector3();
-  return raycaster.ray.intersectPlane(plane, point);
+  const hit = raycaster.ray.intersectPlane(plane, point);
+  if (hit) return point;
+  const fallback = new THREE.Vector3();
+  plane.projectPoint(camera.position, fallback);
+  return fallback;
 }
 
 // View-aware grid snap for the active working plane.
