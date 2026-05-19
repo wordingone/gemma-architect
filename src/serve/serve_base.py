@@ -21,7 +21,7 @@ import time
 
 MODEL_ID = os.environ.get(
     "BASE_MODEL_ID",
-    "C:/Users/Admin/.cache/huggingface/hub/models--google--gemma-4-E2B-it/snapshots/b324173c7d5721c2baba7f3b17b3b9b3d34ab1e9",
+    os.path.expanduser("~/.cache/huggingface/hub/models--google--gemma-4-E2B-it/snapshots/b324173c7d5721c2baba7f3b17b3b9b3d34ab1e9"),
 )
 HOST = os.environ.get("BASE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("BASE_PORT", "8089"))

@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // parity-loop.ts — W-P4 visual parity iteration driver (#319) + W-P7 tiered state machine (#322)
 //
-// Reads:  B:/M/avir/leo/state/parity-experiment.json  (config)
-// Writes: B:/M/avir/leo/state/parity-experiment-iterations.jsonl  (per-iteration log)
-//         B:/M/avir/leo/state/parity-bank/tier-<N>-<ts>/  (banked artifacts on tier pass)
+// Reads:  $PARITY_STATE_PATH (config)  default: ./state/parity-experiment.json
+// Writes: $ITERATIONS_JSONL            default: ./state/parity-experiment-iterations.jsonl
+//         $PARITY_BANK_DIR/tier-<N>-<ts>/  default: ./state/parity-bank/
 //
 // Usage:
 //   bun scripts/parity-loop.ts [--mock] [--max-iterations N]
@@ -20,9 +20,9 @@ import { CDP_PORT, DEV_PORT } from "./ports";
 
 //  Paths 
 
-const PARITY_STATE_PATH = "B:/M/avir/leo/state/parity-experiment.json";
-const ITERATIONS_JSONL  = "B:/M/avir/leo/state/parity-experiment-iterations.jsonl";
-const PARITY_BANK_DIR   = "B:/M/avir/leo/state/parity-bank";
+const PARITY_STATE_PATH = process.env.PARITY_STATE_PATH ?? "./state/parity-experiment.json";
+const ITERATIONS_JSONL  = process.env.ITERATIONS_JSONL  ?? "./state/parity-experiment-iterations.jsonl";
+const PARITY_BANK_DIR   = process.env.PARITY_BANK_DIR   ?? "./state/parity-bank";
 
 //  CLI args ─
 

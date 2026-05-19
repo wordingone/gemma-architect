@@ -64,7 +64,7 @@ more focused; a static base prompt with a runtime injection hook covers the use 
 - Exit 2 → tool is cancelled; stderr injected as a tool-error message visible to the model.
 - Exit 0 → tool proceeds normally.
 
-Real-world examples from `B:/M/avir/eli/.claude/hooks/`:
+Real-world examples from the project hooks directory (`.claude/hooks/`):
 - `gemma-verify-gate.sh` — blocks `gh pr create|merge` unless a PASS JSON exists.
 - `pretooluse-block-playwright.sh` — blocks direct playwright calls.
 - `block-prod-write.sh` — blocks writes to production paths.

@@ -11,7 +11,7 @@
 //
 // Prerequisites:
 //   - Shared Chromium running at :9222 with :5175 tab
-//   - /visual-check skill installed at B:/M/avir/eli/.claude/skills/visual-check/
+//   - /visual-check skill installed at .claude/skills/visual-check/
 //   - All 4 new surfaces (S13-S16) must pass in gemma-verify-raw.mjs first
 //
 // Invoked by Eli session; not run in automated CI (Step 1 verify is CI gate).

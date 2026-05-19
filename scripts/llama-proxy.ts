@@ -16,9 +16,9 @@ const SERVER_PORT  = 8089;
 const SERVER_HOST  = "127.0.0.1";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-const LLAMA_CMD  = "B:/M/avir-cli/vendor/llama-turboquant/build/bin/llama-server.exe";
+const LLAMA_CMD  = process.env.LLAMA_SERVER_BIN ?? "llama-server";
 const LLAMA_ARGS = [
-  "--model",         "B:/M/avir-cli/models/gemma-4-E2B-it-Q8_0.gguf",
+  "--model",         process.env.LLAMA_MODEL_PATH ?? "gemma-4-E2B-it-Q8_0.gguf",
   "--host",          SERVER_HOST,
   "--port",          String(SERVER_PORT),
   "--n-gpu-layers",  "999",

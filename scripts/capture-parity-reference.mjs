@@ -10,12 +10,12 @@
 //   bun scripts/capture-parity-reference.mjs \
 //     [--ifc Schultz_Residence.ifc] \
 //     [--views perspective,iso] \
-//     [--out B:/M/avir/leo/state/]
+//     [--out ./state/]
 //
 // Defaults:
 //   --ifc  → schultz-residence (uses built-in sample dropdown)
 //   --views → perspective,iso
-//   --out  → B:/M/avir/leo/state/
+//   --out  → ./state/  (override with $PARITY_STATE_DIR or --out flag)
 
 import { writeFileSync, mkdirSync } from "fs";
 import { CDP_PORT, DEV_PORT, CDP_BASE } from "./ports.mjs";
@@ -28,7 +28,7 @@ function getArg(flag, def) {
   return i !== -1 ? args[i + 1] : def;
 }
 
-const OUT_DIR = getArg("--out", "B:/M/avir/leo/state").replace(/\\/g, "/").replace(/\/$/, "");
+const OUT_DIR = getArg("--out", process.env.PARITY_STATE_DIR ?? "./state").replace(/\\/g, "/").replace(/\/$/, "");
 const VIEWS   = getArg("--views", "perspective,iso").split(",").map(v => v.trim());
 const MIN_BYTES = 50_000; // 50 KB minimum (JPEG — 1 MB PNG threshold does not apply)
 

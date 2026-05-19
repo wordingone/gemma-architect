@@ -30,11 +30,11 @@ from typing import Any, Union
 
 TARGET_MODEL_ID = os.environ.get(
     "MTP_TARGET_MODEL",
-    "C:/Users/Admin/.cache/huggingface/hub/models--google--gemma-4-E2B-it/snapshots/b324173c7d5721c2baba7f3b17b3b9b3d34ab1e9",
+    os.path.expanduser("~/.cache/huggingface/hub/models--google--gemma-4-E2B-it/snapshots/b324173c7d5721c2baba7f3b17b3b9b3d34ab1e9"),
 )
 DRAFTER_MODEL_ID = os.environ.get(
     "MTP_DRAFTER_MODEL",
-    "C:/Users/Admin/.cache/huggingface/hub/models--google--gemma-4-E2B-it-assistant/snapshots/5810c41a67974da9c7bd6f3e6c69d5d13854d9f0",
+    os.path.expanduser("~/.cache/huggingface/hub/models--google--gemma-4-E2B-it-assistant/snapshots/5810c41a67974da9c7bd6f3e6c69d5d13854d9f0"),
 )
 HOST = os.environ.get("MTP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("MTP_PORT", "8088"))

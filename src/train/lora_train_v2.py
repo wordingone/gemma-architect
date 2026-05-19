@@ -24,7 +24,7 @@ from pathlib import Path
 
 os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 os.environ.setdefault("UNSLOTH_COMPILE_DISABLE", "1")
-os.environ.setdefault("CC", "C:/Users/Admin/bin/gcc.exe")
+os.environ.setdefault("CC", "gcc")
 
 import unsloth  # noqa: F401
 from unsloth import FastModel

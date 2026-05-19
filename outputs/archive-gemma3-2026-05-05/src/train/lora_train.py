@@ -15,7 +15,7 @@ from pathlib import Path
 # falls back to CC env var. Plain eager-mode QLoRA training is plenty fast.
 os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 os.environ.setdefault("UNSLOTH_COMPILE_DISABLE", "1")
-os.environ.setdefault("CC", "C:/Users/Admin/bin/gcc.exe")
+os.environ.setdefault("CC", "gcc")
 
 # Unsloth must be imported BEFORE transformers/trl per their warning.
 import unsloth  # noqa: F401

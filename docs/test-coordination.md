@@ -53,7 +53,7 @@ Stale detection: age > 15 min OR `process.kill(pid, 0)` throws ESRCH.
 
 ## Gate hook
 
-`B:/M/avir/eli/.claude/hooks/gemma-verify-gate.sh` blocks `gh pr create/merge` against gemma-architect-master until a SHA-matching `state/gemma-verify-<sha>-*.json` exists. Produce it by running the wrapper before opening a PR:
+The gate hook (`.claude/hooks/gemma-verify-gate.sh`) blocks `gh pr create/merge` against gemma-architect-master until a SHA-matching `state/gemma-verify-<sha>-*.json` exists. Produce it by running the wrapper before opening a PR:
 
 ```bash
 cd B:/M/gemma-architect-master

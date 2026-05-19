@@ -16,7 +16,7 @@
 
 ## Workarounds
 
-- **Windows torch.compile crash.** First training attempt died at step 1 because torch's inductor codegen invoked triton's CC backend, which couldn't find a C compiler on PATH. Resolved by setting `TORCHDYNAMO_DISABLE=1` + `UNSLOTH_COMPILE_DISABLE=1` and pointing `CC` at the existing MSYS2 gcc at `C:/Users/Admin/bin/gcc.exe`. Plain eager-mode QLoRA finetuning is plenty fast on this dataset size; compile speedups would matter on a real production run, not a 30-step spike.
+- **Windows torch.compile crash.** First training attempt died at step 1 because torch's inductor codegen invoked triton's CC backend, which couldn't find a C compiler on PATH. Resolved by setting `TORCHDYNAMO_DISABLE=1` + `UNSLOTH_COMPILE_DISABLE=1` and pointing `CC` at the local gcc executable (e.g. via `set CC=<path-to-gcc>`). Plain eager-mode QLoRA finetuning is plenty fast on this dataset size; compile speedups would matter on a real production run, not a 30-step spike.
 
 ## Training results
 
