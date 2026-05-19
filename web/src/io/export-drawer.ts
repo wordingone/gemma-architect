@@ -1,11 +1,11 @@
 // Export drawer (#178) — bundle port. Slides in from the right with
 // 12 formats grouped by BIM / 3D-MESH / 2D-DRAWING. Each .ed-fmt button
-// proxies to the legacy .exp-btn[data-fmt="X"] click handler so existing
-// IFC/GLB/OBJ/STL/STEP export pipelines keep working.
+// dispatches SdExport({ format }) — the handler in main.ts owns the pipeline.
 
 import { iconSVG } from "../ui/icons";
 import { isBonsaiAvailable, validateIFC, type BonsaiValidation } from "./bonsai-client";
 import { unitLabel } from "../units";
+import { dispatchSync } from "../commands/dispatch";
 
 type Fmt = { ext: string; sub: string; fmt: string };
 
@@ -113,23 +113,13 @@ function build(): HTMLDivElement {
   // Wire close
   root.querySelector(".ed-close")?.addEventListener("click", close);
 
-  // Wire each format button to the legacy .exp-btn[data-fmt=...]
+  // Wire each format button directly via SdExport dispatch.
   root.querySelectorAll<HTMLButtonElement>(".ed-fmt").forEach((edFmt) => {
     const fmt = edFmt.dataset.fmt!;
-    const legacy = document.querySelector<HTMLButtonElement>(`.exp-btn[data-fmt="${fmt}"]`);
-    if (!legacy) {
-      // Format not yet wired — no export pipeline available in the browser.
-      edFmt.classList.add("disabled");
-      edFmt.disabled = true;
-      edFmt.title = "Coming soon";
-    } else {
-      // Mirror disabled state at open-time.
-      edFmt.disabled = legacy.disabled;
-      edFmt.addEventListener("click", () => {
-        if (legacy.disabled) return;
-        legacy.click();
-      });
-    }
+    edFmt.addEventListener("click", () => {
+      close();
+      dispatchSync("SdExport", { format: fmt });
+    });
   });
 
   // #151 — wire the Bonsai validate link if the row was rendered.
@@ -179,11 +169,8 @@ function build(): HTMLDivElement {
 
   // DOWNLOAD ALL — for now just a stub.
   root.querySelector("#ed-download-all")?.addEventListener("click", () => {
-    const enabled = SECTIONS.flatMap((s) => s.items).filter((it) => {
-      const b = document.querySelector<HTMLButtonElement>(`.exp-btn[data-fmt="${it.fmt}"]`);
-      return b && !b.disabled;
-    });
-    alert(`Bulk download — would export ${enabled.length} formats: ${enabled.map((f) => f.ext).join(", ")}`);
+    const fmts = SECTIONS.flatMap((s) => s.items).map((f) => f.ext);
+    alert(`Bulk download — would export ${fmts.length} formats: ${fmts.join(", ")}`);
   });
 
   return root;

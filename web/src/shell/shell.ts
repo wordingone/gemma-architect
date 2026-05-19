@@ -1,6 +1,7 @@
 import { iconSVG } from "../ui/icons.js";
 import { dispatchSync } from "../commands/dispatch.js";
 import { getState, subscribe } from "../app-state.js";
+import { openExportDrawer } from "../io/export-drawer.js";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -15,7 +16,7 @@ function escapeHtml(s: string): string {
 // .app, .menubar, .modebar, .ribbon, .ribbon-tabs, .ribbon-tools, .statusbar,
 // .menu-item / .menu-dropdown / .menu-row / .menu-row-kbd / .menu-sep, etc.
 
-type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; toolId?: string; onAction?: () => void; stub?: boolean } | { separator: true };
+type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; canonicalArgs?: Record<string, unknown>; toolId?: string; onAction?: () => void; stub?: boolean; submenu?: MenuEntry[] } | { separator: true };
 type MenuItem = {
   label: string;
   entries: MenuEntry[];
@@ -28,7 +29,17 @@ const MENUS: MenuItem[] = [
     { label: "Save project",    shortcut: "⌘S", onAction: () => saveProjectGemarch(_currentFileName) },
     { label: "Save As…",       shortcut: "⇧⌘S", onAction: () => saveProjectGemarch(null) },
     { separator: true },
-    { label: "Export…",         shortcut: "⌘E", canonical: "SdExport" },
+    { label: "Export…",         shortcut: "⌘E", onAction: () => openExportDrawer() },
+    { label: "Export ▶", submenu: [
+      { label: "IFC4 / STEP-21", onAction: () => dispatchSync("SdExport", { format: "ifc" }) },
+      { label: "Rhino 3DM",      onAction: () => dispatchSync("SdExport", { format: "3dm" }) },
+      { label: "DWG / DXF",      onAction: () => dispatchSync("SdExport", { format: "dwg" }) },
+      { label: "OBJ",            onAction: () => dispatchSync("SdExport", { format: "obj" }) },
+      { label: "STL",            onAction: () => dispatchSync("SdExport", { format: "stl" }) },
+      { label: "USDZ / AR",      onAction: () => dispatchSync("SdExport", { format: "usdz" }) },
+      { label: "SVG",            onAction: () => dispatchSync("SdExport", { format: "svg" }) },
+      { label: "PDF",            onAction: () => dispatchSync("SdExport", { format: "pdf" }) },
+    ]},
     { separator: true },
     { label: "Units: Metric ↔ Imperial", onAction: () => {
       const cur = getState("unitSystem") ?? "metric";
@@ -509,7 +520,7 @@ function buildMenubar(host: HTMLElement) {
         panel.appendChild(sep);
         continue;
       }
-      const e = entry as { label: string; shortcut?: string; canonical?: string; toolId?: string; onAction?: () => void; stub?: boolean };
+      const e = entry as { label: string; shortcut?: string; canonical?: string; canonicalArgs?: Record<string, unknown>; toolId?: string; onAction?: () => void; stub?: boolean; submenu?: MenuEntry[] };
       const row = document.createElement("div");
       row.className = "menu-row";
       row.setAttribute("role", "menuitem");
@@ -529,16 +540,49 @@ function buildMenubar(host: HTMLElement) {
         row.appendChild(kbd);
       }
 
-      row.addEventListener("click", () => {
-        if (e.toolId) {
-          dispatchSync("setActiveTool", { toolId: e.toolId });
-        } else if (e.canonical) {
-          dispatchSync(e.canonical, {});
-        } else if (e.onAction) {
-          e.onAction();
+      if (e.submenu?.length) {
+        // Submenu flyout: show on mouseenter, close on mouseleave of row+flyout.
+        const fly = document.createElement("div");
+        fly.className = "menu-dropdown menu-submenu";
+        fly.setAttribute("role", "menu");
+        for (const sub of e.submenu) {
+          if ("separator" in sub && sub.separator) {
+            const sep = document.createElement("div");
+            sep.className = "menu-sep";
+            fly.appendChild(sep);
+            continue;
+          }
+          const se = sub as { label: string; onAction?: () => void; canonical?: string; canonicalArgs?: Record<string, unknown> };
+          const srow = document.createElement("div");
+          srow.className = "menu-row";
+          srow.setAttribute("role", "menuitem");
+          const slabel = document.createElement("span");
+          slabel.className = "menu-row-label";
+          slabel.textContent = se.label;
+          srow.appendChild(slabel);
+          srow.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (se.canonical) dispatchSync(se.canonical, se.canonicalArgs ?? {});
+            else if (se.onAction) se.onAction();
+            closeMenu();
+          });
+          fly.appendChild(srow);
         }
-        closeMenu();
-      });
+        row.appendChild(fly);
+        row.classList.add("has-submenu");
+        row.addEventListener("click", (ev) => { ev.stopPropagation(); });
+      } else {
+        row.addEventListener("click", () => {
+          if (e.toolId) {
+            dispatchSync("setActiveTool", { toolId: e.toolId });
+          } else if (e.canonical) {
+            dispatchSync(e.canonical, e.canonicalArgs ?? {});
+          } else if (e.onAction) {
+            e.onAction();
+          }
+          closeMenu();
+        });
+      }
       panel.appendChild(row);
     }
 
