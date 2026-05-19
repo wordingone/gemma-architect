@@ -105,13 +105,18 @@ function _wireEvents(): void {
     // After first real bytes: reset 30s window on ANY loading event, including shard-boundary
     // events where bytes=0 (new shard starting) — these prove the connection is alive.
     // Without this, inter-shard gaps on slow CDN nodes exceed 30s and fire false STALLED.
+    //
+    // model-init phase: ORT/WebGPU deserialization is CPU/GPU-bound, not network-bound.
+    // It takes 60-180s and fires no intermediate progress — use 180s window so a genuine
+    // init stall still surfaces, but normal GPU load doesn't false-trigger STALLED.
+    const watchdogMs = d.phase === 'model-init' ? 180_000 : 30_000;
     if (!_firstLoadingReceived && _loadedBytes > 0) {
       _firstLoadingReceived = true;
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
-      _watchdogId = setTimeout(_showStalled, 30_000);
+      _watchdogId = setTimeout(_showStalled, watchdogMs);
     } else if (_firstLoadingReceived) {
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
-      _watchdogId = setTimeout(_showStalled, 30_000);
+      _watchdogId = setTimeout(_showStalled, watchdogMs);
     }
     _updateProgress();
   });
