@@ -135,7 +135,7 @@ const _generateCallbacks = new Map<string, {
 }>();
 
 // CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#811).
-// TODO(#811): replace placeholder with actual HF Hub URL after drafter-e4b.onnx is uploaded.
+// Replace placeholder with actual HF Hub URL after drafter-e4b.onnx is uploaded.
 //   Recommended host: https://huggingface.co/<user>/<repo>/resolve/main/drafter-e4b.onnx
 //   Set VITE_DRAFTER_ONNX_URL in the production deploy environment to activate the CDN path.
 const _DRAFTER_CDN_PLACEHOLDER = "https://huggingface.co/TODO-set-after-upload/resolve/main/drafter-e4b.onnx";
