@@ -1345,6 +1345,57 @@ export function buildClipPlane(
   };
 }
 
+export function buildClipPlanePlan(
+  p: { x: number; y: number; z?: number },
+): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+  const label = `clip-${Date.now()}`;
+  const planZ = p.z ?? 0;
+  const size = 5;
+  const geom = new THREE.PlaneGeometry(size, size);
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(p.x, p.y, planZ);
+  const origin: [number, number, number] = [round(p.x), round(p.y), round(planZ)];
+  const normal: [number, number, number] = [0, 0, 1];
+  mesh.userData.kind = "clip-plane";
+  mesh.userData.creator = "SdClippingPlane";
+  mesh.userData.excludeFromClip = true;
+  mesh.userData.clipLabel = label;
+  return {
+    mesh,
+    chain: `SdClippingPlane({origin:[${origin}],normal:[${normal}],label:"${label}"})`,
+    dispatchOnCommit: { verb: "SdClippingPlane", args: { origin, normal, label } },
+  };
+}
+
+export function buildClipPlaneSection(
+  a: { x: number; y: number; z?: number },
+  b: { x: number; y: number; z?: number },
+): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+  const label = `clip-${Date.now()}`;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const lineLen = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / lineLen, ny = dx / lineLen;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+  const planeH = 5;
+  const geom = new THREE.PlaneGeometry(lineLen, planeH);
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(cx, cy, planeH / 2);
+  mesh.rotation.set(Math.PI / 2, 0, Math.atan2(dy, dx));
+  const origin: [number, number, number] = [round(cx), round(cy), 0];
+  const normal: [number, number, number] = [round(nx), round(ny), 0];
+  mesh.userData.kind = "clip-plane";
+  mesh.userData.creator = "SdClippingPlane";
+  mesh.userData.excludeFromClip = true;
+  mesh.userData.clipLabel = label;
+  return {
+    mesh,
+    chain: `SdClippingPlane({origin:[${origin}],normal:[${normal}],label:"${label}"})`,
+    dispatchOnCommit: { verb: "SdClippingPlane", args: { origin, normal, label } },
+  };
+}
+
 export function buildBox(
   c1: { x: number; y: number },
   c2: { x: number; y: number },

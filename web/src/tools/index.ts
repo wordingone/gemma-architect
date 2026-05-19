@@ -18,7 +18,7 @@ import { initPickerHint, setPickerHint, setChooserHint, getChooserEl, readActive
 import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPrompt, ptShowCoordInput, ptHideCoordInput, ptStartTool, ptHandlePoint, ptHandleCoordSubmit as _ptHandleCoordSubmit, ptHandleEnter as _ptHandleEnter, ptCancel, ptFinish, ptPhaseIsObjectSelect, _ptPhase, _ptAxisLock, _ptCoordInputEl, ptGetAxisBase, ptEffectiveAxisDir, ptSetAxisLockLine, ptClearAxisLockLine, _ptViewer, _lastPtTool, unprojectToAxisLine } from "../viewer/transforms";
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, opUpdateDimPreview, opUpdateCopyPreview, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
-import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildStairOnPolyline, buildStairOnCurve, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildBox, buildExtrude } from "./structural";
+import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildStairOnPolyline, buildStairOnCurve, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildClipPlanePlan, buildClipPlaneSection, buildBox, buildExtrude } from "./structural";
 import { onElementCommitted, cutRectVoidFromBoxMesh } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
@@ -395,8 +395,9 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   grid:        { clicks: 2, handler: ([a, b]) => buildGridLine(a, b) },          // grid always at Z=0
   level:       { clicks: 1, handler: ([p]) => buildLevel(p) },                   // level uses getGeometryZ
   datum:       { clicks: 2, handler: ([a, b]) => buildReferenceLine(a, b) },     // datum always at Z=0
-  section:     { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b, _viewer?.getSceneBounds()) },
-  clip:        { clicks: 2, handler: ([a, b]) => buildClipPlane(a, b, _viewer?.activeView ?? "top") },
+  section:      { clicks: 2, handler: ([a, b]) => buildSectionBox(a, b, _viewer?.getSceneBounds()) },
+  clip:         { clicks: 1, handler: ([p]) => buildClipPlanePlan(p) },
+  "clip-section": { clicks: 2, handler: ([a, b]) => buildClipPlaneSection(a, b) },
 };
 
 const TOOL_TODOS: Record<string, string> = {
@@ -1102,7 +1103,7 @@ export function initCreateMode(viewer: Viewer): void {
       return;
     }
 
-    const world = (tool === "clip" ? unprojectForClipTool : unprojectToXY)(viewer, ev.clientX, ev.clientY);
+    const world = (tool === "clip-section" ? unprojectForClipTool : unprojectToXY)(viewer, ev.clientX, ev.clientY);
     if (!world) return;
     ev.stopImmediatePropagation();
     _lastPointerClient = { x: ev.clientX, y: ev.clientY };
@@ -1116,7 +1117,7 @@ export function initCreateMode(viewer: Viewer): void {
     } else {
       snapped = snapWorldForView(viewer, world);
     }
-    if (tool === "clip" && !vertex) {
+    if (tool === "clip-section" && !vertex) {
       const av = viewer.activeView;
       const isElevation = av === "front" || av === "back" || av === "left" || av === "right";
       if (!isElevation) snapped = { ...snapped, z: world.z };
@@ -1258,7 +1259,7 @@ export function initCreateMode(viewer: Viewer): void {
       return;
     }
 
-    const world = (tool === "clip" ? unprojectForClipTool : unprojectToXY)(viewer, ev.clientX, ev.clientY);
+    const world = (tool === "clip-section" ? unprojectForClipTool : unprojectToXY)(viewer, ev.clientX, ev.clientY);
     if (!world) {
       if (_ptAxisLock && _ptPhase && _ptPhase.kind !== "start") {
         const axisBase = ptGetAxisBase();
@@ -1291,7 +1292,7 @@ export function initCreateMode(viewer: Viewer): void {
           : snapWorldForView(viewer, world);
       }
     }
-    if (tool === "clip") {
+    if (tool === "clip-section") {
       const av = viewer.activeView;
       const isElevation = av === "front" || av === "back" || av === "left" || av === "right";
       if (!isElevation) snapped = { ...snapped, z: world.z };
