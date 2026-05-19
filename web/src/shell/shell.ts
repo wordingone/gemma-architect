@@ -1,6 +1,5 @@
 import { iconSVG } from "../ui/icons.js";
 import { dispatchSync } from "../commands/dispatch.js";
-import { buildPhoneSlider } from "../ui/phone-slider.js";
 import { getState, subscribe } from "../app-state.js";
 
 function escapeHtml(s: string): string {
@@ -298,21 +297,6 @@ export function resetRibbonElementTypes(): void {
   _elemChipsEl.innerHTML = "";
 }
 
-// Append the ARCH|COMP toggle into the ribbon tabs strip (MODEL mode only).
-function appendArchCompSlider(tabsEl: HTMLElement) {
-  tabsEl.querySelector(".yin-toggle")?.remove();
-  const { root } = buildPhoneSlider({
-    initial: "ARCH",
-    onChange: (tab) => {
-      window.dispatchEvent(new CustomEvent("ribbon:section-tab", { detail: { tab } }));
-    },
-  });
-  tabsEl.appendChild(root);
-  // Sync palette on every (re-)mount — no-op at first paint (buildPalette not yet
-  // registered); on MODEL re-entry keeps slider+palette in sync.
-  window.dispatchEvent(new CustomEvent("ribbon:section-tab", { detail: { tab: "ARCH" } }));
-}
-
 export function setRibbonMode(mode: "model" | "layout" | "research") {
   if (!_ribbonTabsEl || !_ribbonToolsEl) {
     // Refs lost (HMR or race before buildRibbon ran). Re-query rather than silently drop.
@@ -332,7 +316,6 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   } else {
     _ribbonTabsEl.style.display = "";      // restore tabs column for model mode
     fillRibbonTabs(_ribbonTabsEl, RIBBON_TABS, "");
-    appendArchCompSlider(_ribbonTabsEl);
     fillRibbonTools(_ribbonToolsEl, []);
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
     if (_ribbonEl) appendRibbonAssets(_ribbonEl);
@@ -688,7 +671,6 @@ function buildRibbon(ribbonHost: HTMLElement, onSplitMode?: (mode: "single" | "q
 
   // Fill with model ribbon content initially.
   fillRibbonTabs(tabsEl, RIBBON_TABS, "");
-  appendArchCompSlider(tabsEl);
   fillRibbonTools(toolsEl, []);
   appendRibbonAssets(ribbonHost);
 
