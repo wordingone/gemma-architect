@@ -5729,6 +5729,83 @@ await resetScene('before-box-inject');
   await resetScene('post-S118');
 }
 
+// ── S119 — fillet-selected-edge (#889): mesh click → edge-select phase, chamfer applied ──
+// Creates a box, activates fillet, clicks the box → phase transitions to fillet_edge.
+// Then clicks at a known face position to pick the nearest edge → types radius → asserts
+// the resulting mesh geometry has more vertices (bevel strip added).
+{
+  const s119 = await evaluate(`
+    (async () => {
+      try {
+        // 1. Create a box solid (1×1×1 at origin).
+        window.__dispatch('SdBox', { x: 0, y: 0, z: 0, w: 1, d: 1, h: 1 });
+        await new Promise(r => setTimeout(r, 40));
+        const boxes = window.__viewer.scene.children.filter(c => c.userData.creator === 'box');
+        if (!boxes.length) return { passed: false, evidence: { reason: 'SdBox not created' } };
+        const box = boxes[boxes.length - 1];
+
+        const possBefore = box.geometry.getAttribute('position').count;
+
+        // 2. Activate fillet tool.
+        window.__dispatch('setActiveTool', { toolId: 'fillet' });
+        await new Promise(r => setTimeout(r, 30));
+
+        // 3. Click the box to transition to fillet_edge phase.
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+        const sc = window.__projectToScreen(0, 0, 0.5);
+        if (!sc) return { passed: false, evidence: { reason: 'projectToScreen failed' } };
+
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+        }));
+        canvas.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+        }));
+        await new Promise(r => setTimeout(r, 60));
+
+        // 4. Simulate a pointermove over the box face so _opHoverEdgePts is populated.
+        canvas.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+        }));
+        await new Promise(r => setTimeout(r, 30));
+
+        // 5. Click to confirm edge selection (uses _opHoverEdgePts from pointermove).
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+        }));
+        canvas.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+        }));
+        await new Promise(r => setTimeout(r, 60));
+
+        // 6. Submit radius via the coord input.
+        const ci = document.querySelector('#coord-input');
+        if (!ci) return { passed: false, evidence: { reason: 'coord-input not found' } };
+        ci.value = '0.05';
+        ci.dispatchEvent(new Event('input', { bubbles: true }));
+        ci.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+        await new Promise(r => setTimeout(r, 100));
+
+        // 7. Assert the box was replaced by a new mesh with more geometry.
+        const newBrepMeshes = window.__viewer.scene.children.filter(c => c.userData.creator === 'box' || c.userData.kind === 'brep');
+        const anyChanged = newBrepMeshes.some(m => m.geometry && m.geometry.getAttribute('position').count > possBefore);
+        const passed = anyChanged;
+        return { passed, evidence: { possBefore, newMeshCount: newBrepMeshes.length, anyChanged } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s119) record('fillet-selected-edge', false, { reason: 'evaluate returned null' });
+  else record('fillet-selected-edge', s119.passed, s119.evidence);
+  await resetScene('post-S119');
+}
+
 } finally {
   await cleanup();
 }

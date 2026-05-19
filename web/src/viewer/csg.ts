@@ -164,6 +164,137 @@ export function csgIntersection(a: THREE.Mesh, b: THREE.Mesh, mat: THREE.Materia
 }
 
 /**
+ * Chamfer a single edge of a mesh: `edgeAWorld` and `edgeBWorld` are the two
+ * endpoints of the target edge in world space. The two triangles adjacent to
+ * that edge are pulled back by `radius` and a bevel strip is inserted between
+ * them. Falls back to `filletMesh` (all-edge round) if the geometry does not
+ * have exactly 2 adjacent triangles for the given edge.
+ *
+ * The caller must replace the old mesh in the scene and history.
+ */
+export function chamferEdge(
+  mesh: THREE.Mesh,
+  edgeAWorld: THREE.Vector3,
+  edgeBWorld: THREE.Vector3,
+  radius: number,
+): THREE.Mesh {
+  const invMat = mesh.matrixWorld.clone().invert();
+  const edgeA = edgeAWorld.clone().applyMatrix4(invMat);
+  const edgeB = edgeBWorld.clone().applyMatrix4(invMat);
+
+  const srcGeo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+  const srcPos = srcGeo.getAttribute("position") as THREE.BufferAttribute;
+
+  const EPS = 1e-3;
+  const edgeDir = new THREE.Vector3().subVectors(edgeB, edgeA).normalize();
+
+  type AdjTri = { base: number; other: THREE.Vector3 };
+  const adjTris: AdjTri[] = [];
+
+  for (let i = 0; i < srcPos.count; i += 3) {
+    const pa = new THREE.Vector3().fromBufferAttribute(srcPos, i);
+    const pb = new THREE.Vector3().fromBufferAttribute(srcPos, i + 1);
+    const pc = new THREE.Vector3().fromBufferAttribute(srcPos, i + 2);
+    const vs = [pa, pb, pc];
+    let ai = -1, bi = -1;
+    for (let k = 0; k < 3; k++) {
+      if (vs[k].distanceTo(edgeA) < EPS) ai = k;
+      if (vs[k].distanceTo(edgeB) < EPS) bi = k;
+    }
+    if (ai >= 0 && bi >= 0 && ai !== bi) {
+      const oi = [0, 1, 2].find(k => k !== ai && k !== bi)!;
+      adjTris.push({ base: i, other: vs[oi] });
+    }
+  }
+
+  if (adjTris.length !== 2) {
+    srcGeo.dispose();
+    return filletMesh(mesh, radius);
+  }
+
+  // Inset direction for each adjacent face (perpendicular to edge, pointing into face).
+  const insetDirs = adjTris.map(tri => {
+    const toOther = new THREE.Vector3().subVectors(tri.other, edgeA);
+    return toOther.sub(edgeDir.clone().multiplyScalar(toOther.dot(edgeDir))).normalize();
+  });
+
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  // Half-lengths along the edge direction for each edge endpoint
+  const eLen = edgeA.distanceTo(edgeB);
+  const r = clamp(radius, 0.001, eLen / 2);
+
+  const iA0 = edgeA.clone().addScaledVector(insetDirs[0], r);
+  const iB0 = edgeB.clone().addScaledVector(insetDirs[0], r);
+  const iA1 = edgeA.clone().addScaledVector(insetDirs[1], r);
+  const iB1 = edgeB.clone().addScaledVector(insetDirs[1], r);
+
+  const adjBases = new Set(adjTris.map(a => a.base));
+  const newPts: number[] = [];
+
+  for (let i = 0; i < srcPos.count; i += 3) {
+    const pa = new THREE.Vector3().fromBufferAttribute(srcPos, i);
+    const pb = new THREE.Vector3().fromBufferAttribute(srcPos, i + 1);
+    const pc = new THREE.Vector3().fromBufferAttribute(srcPos, i + 2);
+
+    if (!adjBases.has(i)) {
+      newPts.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z, pc.x, pc.y, pc.z);
+      continue;
+    }
+
+    const ai = adjTris.findIndex(a => a.base === i);
+    const iA = ai === 0 ? iA0 : iA1;
+    const iB = ai === 0 ? iB0 : iB1;
+
+    const remap = (v: THREE.Vector3) => {
+      if (v.distanceTo(edgeA) < EPS) return iA;
+      if (v.distanceTo(edgeB) < EPS) return iB;
+      return v;
+    };
+    const ra = remap(pa), rb = remap(pb), rc = remap(pc);
+    newPts.push(ra.x, ra.y, ra.z, rb.x, rb.y, rb.z, rc.x, rc.y, rc.z);
+  }
+
+  // Bevel strip: quad (iA0, iB0, iB1, iA1). Determine outward winding via centroid test.
+  mesh.geometry.computeBoundingBox();
+  const meshCentroid = new THREE.Vector3();
+  mesh.geometry.boundingBox!.getCenter(meshCentroid);
+
+  const bevelNormal = new THREE.Vector3()
+    .crossVectors(
+      new THREE.Vector3().subVectors(iB0, iA0),
+      new THREE.Vector3().subVectors(iB1, iA0),
+    );
+  const bevelCenter = new THREE.Vector3(
+    (iA0.x + iB0.x + iA1.x + iB1.x) / 4,
+    (iA0.y + iB0.y + iA1.y + iB1.y) / 4,
+    (iA0.z + iB0.z + iA1.z + iB1.z) / 4,
+  );
+  const flip = bevelNormal.dot(new THREE.Vector3().subVectors(meshCentroid, bevelCenter)) > 0;
+
+  if (!flip) {
+    newPts.push(iA0.x, iA0.y, iA0.z, iB0.x, iB0.y, iB0.z, iB1.x, iB1.y, iB1.z);
+    newPts.push(iA0.x, iA0.y, iA0.z, iB1.x, iB1.y, iB1.z, iA1.x, iA1.y, iA1.z);
+  } else {
+    newPts.push(iB1.x, iB1.y, iB1.z, iB0.x, iB0.y, iB0.z, iA0.x, iA0.y, iA0.z);
+    newPts.push(iA1.x, iA1.y, iA1.z, iB1.x, iB1.y, iB1.z, iA0.x, iA0.y, iA0.z);
+  }
+
+  srcGeo.dispose();
+
+  const newGeo = new THREE.BufferGeometry();
+  newGeo.setAttribute("position", new THREE.Float32BufferAttribute(newPts, 3));
+  newGeo.computeVertexNormals();
+
+  const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  const result = new THREE.Mesh(newGeo, mat.clone());
+  result.position.copy(mesh.position);
+  result.rotation.copy(mesh.rotation);
+  result.scale.copy(mesh.scale);
+  result.userData = { ...mesh.userData };
+  return result;
+}
+
+/**
  * Return a new Mesh whose geometry has all edges rounded by `radius`.
  * Computes the bounding box in local space and builds a RoundedBoxGeometry
  * centred at the same local origin with matching dimensions. For non-box

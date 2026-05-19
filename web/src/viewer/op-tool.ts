@@ -3,7 +3,7 @@
 // Does NOT import from selection-ops.ts — runPolySel/overlay fns injected via registerOpToolHooks.
 
 import * as THREE from "three";
-import { csgUnion, csgDifference, csgIntersection, filletMesh } from "./csg";
+import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge } from "./csg";
 import type { Viewer } from "./viewer";
 import { getSnap } from "./snap-state";
 import { nearestSnapVertex, closestPtOnSegToRay } from "./snap-state";
@@ -83,6 +83,8 @@ export type OpPhase =
   | { kind: "bool_b"; objA: THREE.Object3D }
   | { kind: "bool_op"; objA: THREE.Object3D; objB: THREE.Object3D }
   | { kind: "fillet_select" }
+  | { kind: "fillet_edge";        target: THREE.Mesh }
+  | { kind: "fillet_edge_radius"; target: THREE.Mesh; edgeA: THREE.Vector3; edgeB: THREE.Vector3 }
   | { kind: "fillet_radius"; target: THREE.Object3D }
   | { kind: "sel_window_sub" }
   | { kind: "sel_window"; subMode: "crossing" | "window"; startX: number; startY: number }
@@ -120,6 +122,7 @@ export type OpPhase =
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
+let _opHoverEdgePts: [THREE.Vector3, THREE.Vector3] | null = null;
 let _opLabels: HTMLElement[] = [];
 let _rawChooserDefault: (() => void) | null = null;
 export let _selDragging = false;
@@ -297,6 +300,58 @@ export function opUpdateCopyPreview(viewer: Viewer, clientX: number, clientY: nu
   ghost.userData.noSnap = true;
   _opPreview = ghost;
   viewer.getScene().add(ghost);
+}
+
+// ── Fillet edge hover ─────────────────────────────────────────────────────────
+
+export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: number): void {
+  const phase = _opPhase;
+  if (!phase || phase.kind !== "fillet_edge") { _opHoverEdgePts = null; return; }
+
+  opSetHover(phase.target);
+
+  const canvas = viewer.getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1,
+  );
+  const rc = new THREE.Raycaster();
+  rc.setFromCamera(ndc, viewer.getActiveCamera());
+
+  const hits = rc.intersectObject(phase.target, false);
+  if (!hits.length || !hits[0].face) { opClearPreview(viewer); _opHoverEdgePts = null; return; }
+
+  const face = hits[0].face;
+  const pos = phase.target.geometry.getAttribute("position") as THREE.BufferAttribute;
+  const mat4 = phase.target.matrixWorld;
+
+  const va = new THREE.Vector3().fromBufferAttribute(pos, face.a).applyMatrix4(mat4);
+  const vb = new THREE.Vector3().fromBufferAttribute(pos, face.b).applyMatrix4(mat4);
+  const vc = new THREE.Vector3().fromBufferAttribute(pos, face.c).applyMatrix4(mat4);
+
+  const edges: [THREE.Vector3, THREE.Vector3][] = [[va, vb], [vb, vc], [vc, va]];
+  let bestEdge: [THREE.Vector3, THREE.Vector3] | null = null;
+  let bestDist = Infinity;
+
+  for (const [a, b] of edges) {
+    const ep = closestPtOnSegToRay(viewer, clientX, clientY, a, b);
+    if (!ep) continue;
+    const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
+    if (!sc) continue;
+    const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+    if (d < bestDist) { bestDist = d; bestEdge = [a, b]; }
+  }
+
+  if (!bestEdge) { opClearPreview(viewer); _opHoverEdgePts = null; return; }
+  _opHoverEdgePts = bestEdge;
+
+  opClearPreview(viewer);
+  const geo = new THREE.BufferGeometry().setFromPoints(bestEdge);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x44aaff, depthTest: false });
+  _opPreview = new THREE.Line(geo, lineMat);
+  (_opPreview as THREE.Line).renderOrder = 999;
+  viewer.getScene().add(_opPreview);
 }
 
 function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
@@ -525,6 +580,7 @@ export function opPhaseIsObjectSelect(phase: OpPhase): boolean {
 export function opPhaseSupressesSnap(phase: OpPhase): boolean {
   if (opPhaseIsObjectSelect(phase)) return true;
   switch (phase.kind) {
+    case "fillet_edge":
     case "sel_window_sub":
     case "sel_window":
     case "sel_lasso_sub":
@@ -713,7 +769,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     ? new THREE.Vector3(sv.x, sv.y, sv.z)
     : world ? (() => { const s = snapWorldForView(viewer, world); return new THREE.Vector3(s.x, s.y, s.z); })()
              : null;
-  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select") return false;
+  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select") return false;
 
   if (phase.kind === "extrude_select") {
     const hit = opRaycastObject(viewer, clientX, clientY, true);
@@ -795,10 +851,26 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
       ptPrompt("Fillet requires a solid mesh — extrude your curves first to create a solid");
       return true;
     }
-    _opPhase = { kind: "fillet_radius", target: hit.obj };
+    opSetHover(null);
+    _opPhase = { kind: "fillet_edge", target: hit.obj as THREE.Mesh };
+    ptPrompt("Fillet — hover an edge to highlight it, click to select");
+    return true;
+  }
+
+  if (phase.kind === "fillet_edge") {
+    if (!_opHoverEdgePts) { ptPrompt("Fillet — move cursor over an edge first, then click"); return true; }
+    const [edgeA, edgeB] = _opHoverEdgePts;
+    opClearPreview(viewer);
+    _opHoverEdgePts = null;
+    opSetHover(null);
+    _opPhase = { kind: "fillet_edge_radius", target: phase.target, edgeA, edgeB };
     ptPrompt("Fillet radius — type a value and press Enter");
     ptShowCoordInput("radius");
     return true;
+  }
+
+  if (phase.kind === "fillet_edge_radius") {
+    return true; // consume click; user should be typing in coord input
   }
 
   if (phase.kind === "label_pick") {
@@ -1116,7 +1188,7 @@ export function opHandleEnter(viewer: Viewer): void {
     return;
   }
 
-  if (phase.kind === "fillet_radius") {
+  if (phase.kind === "fillet_radius" || phase.kind === "fillet_edge_radius") {
     ptPrompt("Fillet radius — type a value and press Enter");
     return;
   }
@@ -1144,6 +1216,16 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
     const filleted = filletMesh(target, r);
     viewer.addMesh(filleted, "brep", { noHistory: true });
     pushReplaceAction(filleted, [target], "fillet");
+    ptPrompt(`Fillet r=${formatLength(r)} applied`);
+    setTimeout(() => opFinish(viewer), 400);
+  }
+
+  if (phase.kind === "fillet_edge_radius") {
+    const r = parseFloat(raw);
+    if (!Number.isFinite(r) || r <= 0) { ptPrompt("Fillet radius — enter a positive number"); return; }
+    const filleted = chamferEdge(phase.target, phase.edgeA, phase.edgeB, r);
+    viewer.addMesh(filleted, "brep", { noHistory: true });
+    pushReplaceAction(filleted, [phase.target], "fillet");
     ptPrompt(`Fillet r=${formatLength(r)} applied`);
     setTimeout(() => opFinish(viewer), 400);
   }
