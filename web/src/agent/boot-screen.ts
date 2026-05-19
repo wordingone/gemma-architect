@@ -212,7 +212,14 @@ function _onReturningUser(): void {
     _statusEl.style.color = '#6ef2b0';
     _statusEl.style.display = 'block';
   }
-  setTimeout(_onDone, READY_HOLD_MS);
+  // Wait for boot-complete before dismissing the overlay. returning-user fires when
+  // cached weights are *detected* in Cache API, not when the model is loaded into the
+  // ORT/WebGPU runtime — dismissing here causes "Model is still loading" on first prompt.
+  // boot-complete fires after model-ready + warmup-done + drafter-done, so inference is
+  // guaranteed usable when the overlay fades.
+  window.addEventListener('agentmodel:boot-complete', () => {
+    setTimeout(_onDone, READY_HOLD_MS);
+  }, { once: true });
 }
 
 function _onDone(): void {

@@ -37,6 +37,7 @@ console.log('\n[1/3] Clearing IDB (fresh-device simulation)...');
 await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
 await page.evaluate(async () => {
+  // Clear IDB stores
   const dbs = ['transformers-cache', 'model-cache', 'gemma-cache'];
   for (const name of dbs) {
     await new Promise(res => {
@@ -44,8 +45,13 @@ await page.evaluate(async () => {
       r.onsuccess = res; r.onerror = res; r.onblocked = res;
     });
   }
+  // Clear Cache API (transformers.js stores model weights here, not in IDB)
+  if ('caches' in globalThis) {
+    const names = await caches.keys();
+    await Promise.all(names.map(n => caches.delete(n)));
+  }
 });
-console.log('  IDB cleared');
+console.log('  IDB + Cache API cleared (true fresh device)');
 
 // ── Step 2: Reload → real fresh-device download ───────────────────────────────
 console.log('\n[2/3] Reloading (fresh device)…');
