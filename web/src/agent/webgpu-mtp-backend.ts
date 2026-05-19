@@ -289,8 +289,9 @@ export async function runMtpSpecDecode(
     kvCache[`present.${i}.value`] = prefillOut[`present.${i}.value`];
   }
 
-  // First predicted token from prefill logits
+  // First predicted token from prefill logits — dispose logits tensor after argmax read.
   let nextToken = argmax(prefillOut["logits"].data as Float32Array);
+  try { prefillOut["logits"]?.dispose?.(); } catch { /* non-fatal */ }
   tokens.push(nextToken);
   if (nextToken === eosTokenId || tokens.length >= maxNew) {
     return { tokens, specAttempts, specAccepts };
@@ -450,10 +451,20 @@ export async function runMtpSpecDecode(
     // verifyOut present dims[2] = kvSeqLen + K2 (includes all K2 draft positions).
     // Rejected drafts at the tail must be dropped; otherwise pastKeyDims[2] diverges
     // from kvSeqLen and the next iteration's attention_mask length mismatches scores.
+    // §A-KV (#990): dispose both the old cache tensors (GPU-backed, overwritten) and the
+    // unsliced verifyOut tensors (.data already read by sliceKvAxis2) to release VRAM.
     const newCacheLen = kvSeqLen + accepted;
     for (let i = 0; i < config.numKvLayers; i++) {
-      kvCache[`present.${i}.key`]   = sliceKvAxis2(verifyOut[`present.${i}.key`],   newCacheLen, O);
-      kvCache[`present.${i}.value`] = sliceKvAxis2(verifyOut[`present.${i}.value`], newCacheLen, O);
+      const oldKey    = kvCache[`present.${i}.key`];
+      const oldVal    = kvCache[`present.${i}.value`];
+      const verifyKey = verifyOut[`present.${i}.key`];
+      const verifyVal = verifyOut[`present.${i}.value`];
+      kvCache[`present.${i}.key`]   = sliceKvAxis2(verifyKey, newCacheLen, O);
+      kvCache[`present.${i}.value`] = sliceKvAxis2(verifyVal, newCacheLen, O);
+      try { oldKey?.dispose?.();    } catch { /* non-fatal */ }
+      try { oldVal?.dispose?.();    } catch { /* non-fatal */ }
+      try { verifyKey?.dispose?.(); } catch { /* non-fatal */ }
+      try { verifyVal?.dispose?.(); } catch { /* non-fatal */ }
     }
     kvSeqLen = newCacheLen;
 
