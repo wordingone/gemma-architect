@@ -54,10 +54,10 @@
 - canonical_name: SdArc
   kernel_op: drawArc
   args:
-    - {name: center, type: point2, required: true}
-    - {name: radius, type: number, required: true, unit: m}
-    - {name: angleStart, type: number, required: true, unit: deg}
-    - {name: angleEnd,   type: number, required: true, unit: deg}
+    - {name: center,     type: point2, required: false, default: "[0,0]"}
+    - {name: radius,     type: number, required: false, default: 1, unit: m}
+    - {name: startAngle, type: number, required: false, default: 0, unit: rad}
+    - {name: endAngle,   type: number, required: false, default: 1.5708, unit: rad}
   topology_role: edge
   kg_predicates: []
   synonyms: [arc]
@@ -200,9 +200,9 @@
 - canonical_name: SdCone
   kernel_op: makeCone
   args:
-    - {name: radius1, type: number, required: true, unit: m}
-    - {name: radius2, type: number, required: true, unit: m, default: 0}
-    - {name: height,  type: number, required: true, unit: m}
+    - {name: radius,  type: number, required: false, default: 0.5, unit: m}
+    - {name: radius2, type: number, required: false, default: 0, unit: m}
+    - {name: height,  type: number, required: false, default: 2, unit: m}
   topology_role: solid
   kg_predicates: []
   synonyms: [cone]
@@ -243,9 +243,11 @@
   ifc4_class: IfcRevolvedAreaSolid
   kernel_op: revolve
   args:
-    - {name: profile, type: edge_or_surface, required: true}
-    - {name: axis,    type: line3,           required: true}
-    - {name: angle,   type: number,          required: false, default: 360, unit: deg}
+    - {name: profile,    type: edge_or_surface, required: true}
+    - {name: axisFrom,   type: point3,          required: false, default: "[0,0,0]"}
+    - {name: axisTo,     type: point3,          required: false, default: "[0,0,1]"}
+    - {name: angleStart, type: number,          required: false, default: 0, unit: rad}
+    - {name: angleEnd,   type: number,          required: false, default: 6.2832, unit: rad}
   topology_role: solid
   kg_predicates: []
   synonyms: [revolve, lathe]
@@ -257,7 +259,7 @@
   kernel_op: sweep
   args:
     - {name: profile, type: edge_or_surface, required: true}
-    - {name: path,    type: curve,           required: true}
+    - {name: rail,    type: curve,           required: true}
   topology_role: solid
   kg_predicates: []
   synonyms: [sweep]
@@ -267,8 +269,8 @@
 - canonical_name: SdLoft
   kernel_op: loft
   args:
-    - {name: sections, type: list_edge_or_surface, required: true}
-    - {name: closed,   type: boolean, required: false, default: false}
+    - {name: curves, type: list_edge_or_surface, required: true}
+    - {name: closed, type: boolean, required: false, default: false}
   topology_role: solid
   kg_predicates: []
   synonyms: [loft, blend]
@@ -331,8 +333,8 @@
 - canonical_name: SdFillet
   kernel_op: fillet
   args:
-    - {name: edges,  type: list_edge, required: true}
-    - {name: radius, type: number,    required: true, unit: m}
+    - {name: target, type: object_id, required: false}
+    - {name: radius, type: number,    required: false, default: 0.05, unit: m}
   topology_role: edge
   kg_predicates: []
   synonyms: [fillet, round]

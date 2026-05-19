@@ -671,7 +671,7 @@ registerHandler("SdCylinder", (args) => {
 });
 
 registerHandler("SdCone", (args) => {
-  const r = (args.radius as number | undefined) ?? 0.5;
+  const r = ((args.radius ?? args.radius1) as number | undefined) ?? 0.5;
   const h = (args.height as number | undefined) ?? 2;
   const cplane = resolveCPlane("SdCone", args as Record<string, unknown>, viewer);
   const geom = new THREE.ConeGeometry(r, h, 32);
@@ -1895,7 +1895,7 @@ registerHandler("SdRevolve", (args) => {
 registerHandler("SdSweep", (args) => {
   try {
     const profile = resolveCurve(args.profile);
-    const rail    = resolveCurve(args.rail);
+    const rail    = resolveCurve((args.rail ?? args.path) as unknown);
     const surface = sweepSurface(profile, rail, { keepFrame: (args.keepFrame as boolean) ?? false });
     const tess = tessellateSurface(surface, 32, 32);
     const obj = surfaceToMesh(tess);
@@ -1910,7 +1910,7 @@ registerHandler("SdSweep", (args) => {
 
 registerHandler("SdLoft", (args) => {
   try {
-    const rawCurves = (args.curves as unknown[] | undefined) ?? [];
+    const rawCurves = ((args.curves ?? args.sections) as unknown[] | undefined) ?? [];
     if (rawCurves.length < 2) return { error: "SdLoft requires at least 2 curves", created: null };
     const curves = rawCurves.map((c) => resolveCurve(c));
     const surface = loftSurfaces(curves, {
