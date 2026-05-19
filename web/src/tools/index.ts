@@ -926,16 +926,16 @@ export function initCreateMode(viewer: Viewer): void {
     setSubToolOverride(WALL_SUB_TOOLS.has(tool) ? tool : null);
 
     if (tool === "move" || tool === "rotate" || tool === "scale" || tool === "scale-1d" || tool === "scale-2d") {
-      if (_ptPhase) ptCancel(viewer);
-      if (getOpPhase()) opCancel(viewer);
+      if (_ptPhase) ptCancel(viewer, false);
+      if (getOpPhase()) opCancel(viewer, false);
       viewer.setGumballEnabled(false);
       ptStartTool(tool as "move" | "rotate" | "scale" | "scale-1d" | "scale-2d");
     } else if (OP_TOOLS.has(tool)) {
-      if (_ptPhase) ptCancel(viewer);
+      if (_ptPhase) ptCancel(viewer, false);
       opStartTool(viewer, tool);
     } else {
-      if (_ptPhase) ptCancel(viewer);
-      if (getOpPhase()) opCancel(viewer);
+      if (_ptPhase) ptCancel(viewer, false);
+      if (getOpPhase()) opCancel(viewer, false);
       const h = tool ? TOOL_HANDLERS[tool] : null;
       if (h?.clicks === -1) {
         const label = tool === "wall-curve"

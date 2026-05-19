@@ -145,7 +145,7 @@ function opClearLabels(): void {
   _opLabels = [];
 }
 
-export function opFinish(viewer: Viewer): void {
+export function opFinish(viewer: Viewer, resetTool = true): void {
   opClearPreview(viewer);
   opSetHover(null);
   const _finishedKind = _opPhase?.kind;
@@ -164,10 +164,10 @@ export function opFinish(viewer: Viewer): void {
     viewer.deselectCurrent();
   }
   viewer.setGumballEnabled(true);
-  dispatchSync("setActiveTool", { toolId: "select" });
+  if (resetTool) dispatchSync("setActiveTool", { toolId: "select" });
 }
 
-export function opCancel(viewer: Viewer): void {
+export function opCancel(viewer: Viewer, resetTool = true): void {
   opSetHover(null);
   const restoreEmissive = (obj: THREE.Object3D) => {
     const m = obj as THREE.Mesh;
@@ -180,7 +180,7 @@ export function opCancel(viewer: Viewer): void {
   };
   if (_opPhase?.kind === "bool_b") restoreEmissive(_opPhase.objA);
   if (_opPhase?.kind === "bool_op") { restoreEmissive(_opPhase.objA); restoreEmissive(_opPhase.objB); }
-  opFinish(viewer);
+  opFinish(viewer, resetTool);
 }
 
 export function opAddLabel(text: string, worldPt: THREE.Vector3, viewer: Viewer): HTMLElement {

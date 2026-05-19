@@ -419,7 +419,7 @@ export function ptPhaseIsObjectSelect(): boolean {
   return _ptPhase?.kind === "start" && !ptGetTarget();
 }
 
-export function ptFinish(viewer: Viewer): void {
+export function ptFinish(viewer: Viewer, resetTool = true): void {
   _ptInitPos = null; _ptInitQuat = null; _ptInitScale = null;
   _ptAxisLock = null;
   ptClearAxisLockLine(viewer);
@@ -429,10 +429,10 @@ export function ptFinish(viewer: Viewer): void {
   _hideCursorDot();
   ptClearPreviewLine(viewer);
   viewer.setGumballEnabled(true);
-  dispatchSync("setActiveTool", { toolId: "select" });
+  if (resetTool) dispatchSync("setActiveTool", { toolId: "select" });
 }
 
-export function ptCancel(viewer: Viewer): void {
+export function ptCancel(viewer: Viewer, resetTool = true): void {
   const obj = ptGetTarget();
   if (obj && _ptInitPos) {
     obj.position.copy(_ptInitPos);
@@ -441,7 +441,7 @@ export function ptCancel(viewer: Viewer): void {
     obj.updateMatrix();
     obj.updateMatrixWorld(true);
   }
-  ptFinish(viewer);
+  ptFinish(viewer, resetTool);
 }
 
 function ptCommitMove(obj: THREE.Object3D, delta: THREE.Vector3): void {
