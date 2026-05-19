@@ -83,8 +83,8 @@ export type OpPhase =
   | { kind: "bool_b"; objA: THREE.Object3D }
   | { kind: "bool_op"; objA: THREE.Object3D; objB: THREE.Object3D }
   | { kind: "fillet_select" }
-  | { kind: "fillet_edge";        target: THREE.Mesh }
-  | { kind: "fillet_edge_radius"; target: THREE.Mesh; edgeA: THREE.Vector3; edgeB: THREE.Vector3 }
+  | { kind: "fillet_edge";        target: THREE.Mesh | THREE.Line }
+  | { kind: "fillet_edge_radius"; target: THREE.Mesh | THREE.Line; edgeA: THREE.Vector3; edgeB: THREE.Vector3; cornerV?: THREE.Vector3 }
   | { kind: "fillet_radius"; target: THREE.Object3D }
   | { kind: "sel_window_sub" }
   | { kind: "sel_window"; subMode: "crossing" | "window"; startX: number; startY: number }
@@ -123,6 +123,7 @@ export type OpPhase =
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
 let _opHoverEdgePts: [THREE.Vector3, THREE.Vector3] | null = null;
+let _opHoverCornerPts: [THREE.Vector3, THREE.Vector3, THREE.Vector3] | null = null; // [prev, corner, next] for 2D fillet
 let _opLabels: HTMLElement[] = [];
 let _rawChooserDefault: (() => void) | null = null;
 export let _selDragging = false;
@@ -162,6 +163,8 @@ function opClearLabels(): void {
 export function opFinish(viewer: Viewer, resetTool = true): void {
   opClearPreview(viewer);
   opSetHover(null);
+  _opHoverEdgePts = null;
+  _opHoverCornerPts = null;
   const _finishedKind = _opPhase?.kind;
   _opPhase = null;
   _lastOpFinishMs = Date.now();
@@ -308,14 +311,144 @@ export function opUpdateCopyPreview(viewer: Viewer, clientX: number, clientY: nu
   viewer.getScene().add(ghost);
 }
 
+// ── 2D polyline corner fillet ─────────────────────────────────────────────────
+
+function opApply2DFillet(
+  viewer: Viewer,
+  line: THREE.Line,
+  prevPtWorld: THREE.Vector3,
+  cornerPtWorld: THREE.Vector3,
+  nextPtWorld: THREE.Vector3,
+  r: number,
+): void {
+  // Directions from corner toward each adjacent vertex
+  const d1 = prevPtWorld.clone().sub(cornerPtWorld).normalize();
+  const d2 = nextPtWorld.clone().sub(cornerPtWorld).normalize();
+
+  // Dot product → half-angle of the corner opening
+  const dotD = Math.max(-1, Math.min(1, d1.dot(d2)));
+  const theta = Math.acos(dotD);          // angle at corner (between the two segments)
+  const halfAngle = theta / 2;
+  if (halfAngle < 1e-4 || Math.PI - halfAngle < 1e-4) return; // collinear — skip
+
+  // Standard arc fillet: tangent distance from corner to each tangent point
+  const tanDist = r / Math.tan(halfAngle);
+  // Clamp to 90% of the shorter adjacent segment so we don't overshoot
+  const maxDist = Math.min(prevPtWorld.distanceTo(cornerPtWorld), nextPtWorld.distanceTo(cornerPtWorld)) * 0.9;
+  const td = Math.min(tanDist, maxDist);
+  const actualR = td * Math.tan(halfAngle);
+
+  const t1 = cornerPtWorld.clone().add(d1.clone().multiplyScalar(td));
+  const t2 = cornerPtWorld.clone().add(d2.clone().multiplyScalar(td));
+
+  // Arc center: along bisector at distance r / sin(halfAngle) from corner
+  const bisect = d1.clone().add(d2).normalize();
+  const centerDist = actualR / Math.sin(halfAngle);
+  const center = cornerPtWorld.clone().add(bisect.clone().multiplyScalar(centerDist));
+
+  // Arc sweep using the cross-product z-sign to determine orientation
+  const crossZ = d1.x * d2.y - d1.y * d2.x;
+  const arcAngle = Math.PI - theta;
+  const sweep    = arcAngle * (crossZ > 0 ? -1 : 1);
+
+  const a1 = Math.atan2(t1.y - center.y, t1.x - center.x);
+  const ARC_SEGS = 12;
+  const arcPtsWorld: THREE.Vector3[] = [];
+  for (let i = 0; i <= ARC_SEGS; i++) {
+    const a = a1 + (sweep * i) / ARC_SEGS;
+    arcPtsWorld.push(new THREE.Vector3(
+      center.x + actualR * Math.cos(a),
+      center.y + actualR * Math.sin(a),
+      cornerPtWorld.z,
+    ));
+  }
+
+  // Map world arc points into line-local space
+  const invMat = line.matrixWorld.clone().invert();
+  const localT1  = t1.clone().applyMatrix4(invMat);
+  const localT2  = t2.clone().applyMatrix4(invMat);
+  const localCorner = cornerPtWorld.clone().applyMatrix4(invMat);
+  const localArcPts = arcPtsWorld.map((p) => p.clone().applyMatrix4(invMat));
+
+  // Find corner vertex index in existing geometry
+  const pos = line.geometry.getAttribute("position") as THREE.BufferAttribute;
+  const allVerts: THREE.Vector3[] = [];
+  for (let i = 0; i < pos.count; i++) {
+    allVerts.push(new THREE.Vector3().fromBufferAttribute(pos, i));
+  }
+  let cornerIdx = -1;
+  let minD = Infinity;
+  for (let i = 0; i < allVerts.length; i++) {
+    const d = allVerts[i].distanceTo(localCorner);
+    if (d < minD) { minD = d; cornerIdx = i; }
+  }
+  if (cornerIdx <= 0 || cornerIdx >= allVerts.length - 1) return;
+
+  // Rebuild vertex array with arc replacing the corner
+  const newVerts: THREE.Vector3[] = [
+    ...allVerts.slice(0, cornerIdx),
+    localT1,
+    ...localArcPts,
+    localT2,
+    ...allVerts.slice(cornerIdx + 1),
+  ];
+
+  const lineGeo = new THREE.BufferGeometry().setFromPoints(newVerts);
+  const lineMat = (line.material as THREE.LineBasicMaterial).clone();
+  const newLine = new THREE.Line(lineGeo, lineMat);
+  newLine.position.copy(line.position);
+  newLine.rotation.copy(line.rotation);
+  newLine.scale.copy(line.scale);
+  newLine.userData = { ...line.userData, endpoints: newVerts.map((v) => ({ x: v.x, y: v.y, z: v.z })) };
+
+  viewer.getScene().remove(line);
+  viewer.addMesh(newLine as unknown as THREE.Mesh, "line", { noHistory: true });
+  pushReplaceAction(newLine as unknown as THREE.Mesh, [line as unknown as THREE.Mesh], "fillet");
+}
+
 // ── Fillet edge hover ─────────────────────────────────────────────────────────
 
 export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: number): void {
   const phase = _opPhase;
-  if (!phase || phase.kind !== "fillet_edge") { _opHoverEdgePts = null; return; }
+  if (!phase || phase.kind !== "fillet_edge") { _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
 
   opSetHover(phase.target);
 
+  // ── 2D fillet: vertex-proximity corner detection for Line/LineLoop objects ──
+  if (phase.target instanceof THREE.Line) {
+    const pos = phase.target.geometry.getAttribute("position") as THREE.BufferAttribute;
+    if (!pos || pos.count < 3) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
+    const mat4 = phase.target.matrixWorld;
+
+    let bestIdx = -1;
+    let bestDist = 64; // px — wider search radius than regular snap for corners
+    for (let i = 1; i < pos.count - 1; i++) { // skip first and last (endpoints can't be filleted)
+      const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mat4);
+      const sc = projectToScreen(viewer, v.x, v.y, v.z);
+      if (!sc) continue;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+
+    if (bestIdx < 0) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
+
+    const prev   = new THREE.Vector3().fromBufferAttribute(pos, bestIdx - 1).applyMatrix4(mat4);
+    const corner = new THREE.Vector3().fromBufferAttribute(pos, bestIdx).applyMatrix4(mat4);
+    const next   = new THREE.Vector3().fromBufferAttribute(pos, bestIdx + 1).applyMatrix4(mat4);
+
+    _opHoverCornerPts = [prev, corner, next];
+    _opHoverEdgePts   = [prev, next]; // stored for click handler compatibility
+
+    opClearPreview(viewer);
+    const previewGeo = new THREE.BufferGeometry().setFromPoints([prev, corner, next]);
+    const previewMat = new THREE.LineBasicMaterial({ color: 0x44aaff, depthTest: false });
+    _opPreview = new THREE.Line(previewGeo, previewMat);
+    (_opPreview as THREE.Line).renderOrder = 999;
+    viewer.getScene().add(_opPreview);
+    return;
+  }
+
+  // ── 3D fillet: face-intersect + closest edge on Mesh ──
   const canvas = viewer.getCanvas();
   const rect = canvas.getBoundingClientRect();
   const ndc = new THREE.Vector2(
@@ -325,12 +458,13 @@ export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: num
   const rc = new THREE.Raycaster();
   rc.setFromCamera(ndc, viewer.getActiveCamera());
 
-  const hits = rc.intersectObject(phase.target, false);
-  if (!hits.length || !hits[0].face) { opClearPreview(viewer); _opHoverEdgePts = null; return; }
+  const meshTarget = phase.target as THREE.Mesh;
+  const hits = rc.intersectObject(meshTarget, false);
+  if (!hits.length || !hits[0].face) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
 
   const face = hits[0].face;
-  const pos = phase.target.geometry.getAttribute("position") as THREE.BufferAttribute;
-  const mat4 = phase.target.matrixWorld;
+  const pos = meshTarget.geometry.getAttribute("position") as THREE.BufferAttribute;
+  const mat4 = meshTarget.matrixWorld;
 
   const va = new THREE.Vector3().fromBufferAttribute(pos, face.a).applyMatrix4(mat4);
   const vb = new THREE.Vector3().fromBufferAttribute(pos, face.b).applyMatrix4(mat4);
@@ -349,8 +483,9 @@ export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: num
     if (d < bestDist) { bestDist = d; bestEdge = [a, b]; }
   }
 
-  if (!bestEdge) { opClearPreview(viewer); _opHoverEdgePts = null; return; }
+  if (!bestEdge) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
   _opHoverEdgePts = bestEdge;
+  _opHoverCornerPts = null;
 
   opClearPreview(viewer);
   const geo = new THREE.BufferGeometry().setFromPoints(bestEdge);
@@ -863,7 +998,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
       !!(m as THREE.MeshStandardMaterial).emissive);
     if (firstStd) {
       mB.userData._savedEmissive = firstStd.emissive.getHex();
-      firstStd.emissive.setHex(0x883300); // warm orange — distinct from first object's blue
+      firstStd.emissive.setHex(0xcc6600); // bright amber — distinct from first object's blue
     }
     _opPhase = { kind: "bool_op", objA: phase.objA, objB };
     opShowBoolChooser(viewer, phase.objA, objB);
@@ -876,25 +1011,37 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   }
 
   if (phase.kind === "fillet_select") {
-    const hit = opRaycastObject(viewer, clientX, clientY);
-    if (!hit) { ptPrompt("Fillet — click a solid mesh to fillet"); return true; }
-    if (!(hit.obj instanceof THREE.Mesh)) {
-      ptPrompt("Fillet requires a solid mesh — extrude your curves first to create a solid");
+    const hit = opRaycastObject(viewer, clientX, clientY, true);
+    if (!hit) { ptPrompt("Fillet — click a solid or a polyline/curve"); return true; }
+    if (!(hit.obj instanceof THREE.Mesh) && !(hit.obj instanceof THREE.Line)) {
+      ptPrompt("Fillet — click a solid mesh or 2D polyline/curve");
       return true;
     }
     opSetHover(null);
-    _opPhase = { kind: "fillet_edge", target: hit.obj as THREE.Mesh };
-    ptPrompt("Fillet — hover an edge to highlight it, click to select");
+    if (hit.obj instanceof THREE.Mesh) {
+      _opPhase = { kind: "fillet_edge", target: hit.obj as THREE.Mesh };
+      ptPrompt("Fillet — hover an edge to highlight it, click to select");
+    } else {
+      _opPhase = { kind: "fillet_edge", target: hit.obj as THREE.Line };
+      ptPrompt("Fillet — hover a corner vertex to highlight it, click to select");
+    }
     return true;
   }
 
   if (phase.kind === "fillet_edge") {
-    if (!_opHoverEdgePts) { ptPrompt("Fillet — move cursor over an edge first, then click"); return true; }
+    if (!_opHoverEdgePts) {
+      ptPrompt(phase.target instanceof THREE.Line
+        ? "Fillet — move cursor over a corner vertex first, then click"
+        : "Fillet — move cursor over an edge first, then click");
+      return true;
+    }
     const [edgeA, edgeB] = _opHoverEdgePts;
+    const cornerV = _opHoverCornerPts ? _opHoverCornerPts[1] : undefined;
     opClearPreview(viewer);
     _opHoverEdgePts = null;
+    _opHoverCornerPts = null;
     opSetHover(null);
-    _opPhase = { kind: "fillet_edge_radius", target: phase.target, edgeA, edgeB };
+    _opPhase = { kind: "fillet_edge_radius", target: phase.target, edgeA, edgeB, cornerV };
     ptPrompt("Fillet radius — type a value and press Enter");
     ptShowCoordInput("radius");
     return true;
@@ -1255,24 +1402,34 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
   if (phase.kind === "fillet_edge_radius") {
     const r = parseFloat(raw);
     if (!Number.isFinite(r) || r <= 0) { ptPrompt("Fillet radius — enter a positive number"); return; }
-    // Resolve edgeId from world-space endpoints so the schema dispatch is self-contained.
-    const invMat = phase.target.matrixWorld.clone().invert();
+
+    if (phase.target instanceof THREE.Line && phase.cornerV) {
+      // 2D polyline corner fillet
+      opApply2DFillet(viewer, phase.target, phase.edgeA, phase.cornerV, phase.edgeB, r);
+      ptPrompt(`Fillet r=${formatLength(r)} applied`);
+      setTimeout(() => opFinish(viewer), 400);
+      return;
+    }
+
+    // 3D solid edge fillet — resolve edgeId from world-space endpoints.
+    const meshTarget = phase.target as THREE.Mesh;
+    const invMat = meshTarget.matrixWorld.clone().invert();
     const localA = phase.edgeA.clone().applyMatrix4(invMat);
     const localB = phase.edgeB.clone().applyMatrix4(invMat);
-    const edges = getUniqueEdges(phase.target);
+    const edges = getUniqueEdges(meshTarget);
     const EPS_ID = 1e-3;
     const edgeId = edges.findIndex(([ea, eb]) =>
       (ea.distanceTo(localA) < EPS_ID && eb.distanceTo(localB) < EPS_ID) ||
       (ea.distanceTo(localB) < EPS_ID && eb.distanceTo(localA) < EPS_ID),
     );
     if (edgeId >= 0) {
-      dispatchSync("SdFillet", { target: phase.target.uuid, edgeId, radius: r });
+      dispatchSync("SdFillet", { target: meshTarget.uuid, edgeId, radius: r });
     } else {
       // Fallback: direct chamfer when edge not found in enumeration (degenerate geometry).
-      const filleted = chamferEdge(phase.target, phase.edgeA, phase.edgeB, r);
-      viewer.getScene().remove(phase.target); // audit-undo-ok: tracked by pushReplaceAction below
+      const filleted = chamferEdge(meshTarget, phase.edgeA, phase.edgeB, r);
+      viewer.getScene().remove(meshTarget); // audit-undo-ok: tracked by pushReplaceAction below
       viewer.addMesh(filleted, "brep", { noHistory: true });
-      pushReplaceAction(filleted, [phase.target], "fillet");
+      pushReplaceAction(filleted, [meshTarget], "fillet");
     }
     ptPrompt(`Fillet r=${formatLength(r)} applied`);
     setTimeout(() => opFinish(viewer), 400);
@@ -1390,7 +1547,7 @@ export function opStartTool(viewer: Viewer, tool: string): void {
     ptPrompt("Boolean — click the first solid");
   } else if (tool === "fillet") {
     _opPhase = { kind: "fillet_select" };
-    ptPrompt("Fillet — click an edge, corner, or object");
+    ptPrompt("Fillet — click a solid mesh or a polyline/curve corner  [Escape = cancel]");
   } else if (tool === "aligned-dim" || tool === "angular-dim" || tool === "area-dim" || tool === "volume-dim") {
     const t = tool as "aligned-dim" | "angular-dim" | "area-dim" | "volume-dim";
     _opPhase = { kind: "dim_a", tool: t };
