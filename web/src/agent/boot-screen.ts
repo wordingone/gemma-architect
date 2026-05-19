@@ -474,7 +474,7 @@ function _buildOverlay(): void {
 //
 // At 1366×768 reference: 1px ≈ 0.1171 SVG units
 //   menubar:   y 0–2.8    (24px)
-//   modebar:   y 2.8–6.3  (30px) — view presets: PERSPECTIVE / TOP / FRONT / RIGHT
+//   modebar:   y 2.8–6.3  (30px) — mode tabs: MODEL / LAYOUT / RESEARCH (shell.ts MODES)
 //   ribbon:    y 6.3–16.9 (90px) — tool buttons (inner y 7.4–15.8)
 //   palette:   x 0–9.4    (80px) — 2 col × 8 row icon grid
 //   viewport:  x 9.4–122.5         — floor plan
@@ -501,15 +501,13 @@ function _ghostPathData(): string {
   segs.push('M148 0.5 H153');
   segs.push('M154.5 0.5 H159');
 
-  // ── Modebar: view preset buttons (inner y 3.2–5.9) ──
-  segs.push('M9 3.2 H24 V5.9 H9 Z');           // PERSPECTIVE
-  segs.push('M25.5 3.2 H35 V5.9 H25.5 Z');     // TOP
-  segs.push('M36.5 3.2 H47 V5.9 H36.5 Z');     // FRONT
-  segs.push('M48.5 3.2 H58 V5.9 H48.5 Z');     // RIGHT
-  segs.push('M59.5 3.2 H68 V5.9 H59.5 Z');     // LEFT
-  segs.push('M146 3.2 H151 V5.9 H146 Z');      // zoom fit
-  segs.push('M152 3.2 H157 V5.9 H152 Z');      // zoom controls
-  segs.push('M158 3.2 H160 V5.9 H158 Z');
+  // ── Modebar: mode tabs (inner y 3.2–5.9) — shell.ts MODES: MODEL/LAYOUT/RESEARCH ──
+  // mode-tab: padding 0 18px (≈2.1u each side), ~80px text ≈ 9.4u → total ~13.5u per tab
+  segs.push('M0 3.2 H13.5 V5.9 H0 Z');         // MODEL (01)
+  segs.push('M13.5 3.2 H28 V5.9 H13.5 Z');     // LAYOUT (02)
+  segs.push('M28 3.2 H44 V5.9 H28 Z');          // RESEARCH (03)
+  // modebar-meta cluster (right side — "CONTEXT · 3D · IFC4 · m")
+  segs.push('M130 3.7 H158');
 
   // ── Ribbon: tool buttons (inner y 7.4–15.8, h≈8.4u) ──
   // BW=5.5u (47px), step=6.2u. Groups separated by 1.4u gap.
