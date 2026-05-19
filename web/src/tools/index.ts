@@ -4,11 +4,11 @@
 
 import * as THREE from "three";
 import type { Viewer } from "../viewer/viewer";
-import { setState, subscribe } from "../app-state";
+import { getState, setState, subscribe } from "../app-state";
 import { dispatchSync } from "../commands/dispatch";
 import { getSnap, snapPoint } from "../viewer/snap-state";
 import { getSnapTarget, setSnapTarget, getLastSnapEdgeDir, getLastSurfaceHit, HOST_TOOL_CREATORS, getPendingHostId, setPendingHostId, findHostMesh, nearestSnapVertex } from "../viewer/snap-state";
-import { pushAction, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "../history";
+import { pushAction, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction, setOnActionPushed } from "../history";
 import { getActiveCommandSession, provideSessionPick, provideSessionChoice, clearCommandSession, commitCommandSession } from "../commands/command-session";
 import type { ChoiceOption } from "../commands/dictionary";
 import { levelStore, getActiveLevelId } from "../geometry/levels";
@@ -58,6 +58,13 @@ let _pending: Array<{ x: number; y: number; z?: number }> = [];
 let _sectionDragging = false;
 // #951: last non-select tool activated — spacebar re-activates it.
 let _lastActivatedTool: string | null = null;
+// #951: last tool that COMPLETED (pushed an action) — used by spacebar repeat.
+// Cancel paths do NOT update this; only successful pushAction/endTransaction do.
+let _lastCompletedTool: string | null = null;
+setOnActionPushed(() => {
+  const tool = getState("activeTool");
+  if (tool && tool !== "select") _lastCompletedTool = tool;
+});
 
 // Shift-axis constraint: when Shift is held and ≥1 pending point exists, lock to the
 // dominant world axis (X or Y) from the last pending point and grid-snap along it.
@@ -1505,7 +1512,7 @@ export function initCreateMode(viewer: Viewer): void {
     }
     if (ev.key === "Enter" || (ev.key === " " && document.activeElement !== ptInput)) {
       if (ev.key === " ") {
-        const repeatTool = _lastPtTool ?? _lastActivatedTool;
+        const repeatTool = _lastPtTool ?? _lastCompletedTool;
         if (!_ptPhase && !getOpPhase() && !readActiveTool() && repeatTool) {
           ev.preventDefault();
           dispatchSync("setActiveTool", { toolId: repeatTool });

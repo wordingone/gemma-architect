@@ -4826,6 +4826,33 @@ await resetScene('before-box-inject');
   await resetScene('post-S112');
 }
 
+// ── S115 — spacebar-repeats-last-command (#951) ───────────────────────────────
+// Creates an SdWall (commits history action → _lastCompletedTool = 'wall'),
+// auto-returns to select (C7), then fires Space → active tool should be 'wall'.
+{
+  await resetScene('pre-S115');
+  await resetToBaseState('S115-start');
+  const s115 = await evaluate(`(async () => {
+    try {
+      window.__dispatch('setActiveTool', { toolId: 'wall' });
+      await new Promise(r => setTimeout(r, 200));
+      window.__dispatch('SdWall', { start: [0, 0, 0], end: [3, 0, 0] });
+      await new Promise(r => setTimeout(r, 500));
+      const activeBefore = document.querySelector('[data-tool].active')?.dataset?.tool ?? null;
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', keyCode: 32, bubbles: true }));
+      await new Promise(r => setTimeout(r, 200));
+      const activeAfter = document.querySelector('[data-tool].active')?.dataset?.tool ?? null;
+
+      return { passed: activeAfter === 'wall', evidence: { activeBefore, activeAfter } };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('spacebar-repeats-last-command', !!(s115?.passed), s115 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S115');
+}
+
 } finally {
   await cleanup();
 }

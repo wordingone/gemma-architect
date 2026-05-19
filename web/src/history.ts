@@ -43,12 +43,16 @@ const _redo: Action[] = [];
 let _txBuffer: LeafAction[] | null = null;
 let _txLabel  = "";
 
+let _onActionPushed: (() => void) | null = null;
+export function setOnActionPushed(cb: () => void): void { _onActionPushed = cb; }
+
 function _push(a: LeafAction): void {
   if (_txBuffer !== null) {
     _txBuffer.push(a);
   } else {
     _undo.push(a);
     _redo.length = 0;
+    _onActionPushed?.();
   }
 }
 
@@ -70,6 +74,7 @@ export function endTransaction(): void {
     _undo.push({ kind: "group", label: _txLabel, actions });
   }
   _redo.length = 0;
+  _onActionPushed?.();
 }
 
 // ── Push helpers ───────────────────────────────────────────────────────────────
