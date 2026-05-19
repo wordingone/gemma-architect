@@ -59,29 +59,21 @@ function _showStalled(): void {
   if (_done) return;
   _watchdogId = null;
   if (!_statusEl) return;
-  Object.assign(_statusEl.style, { color: '#ff9900', display: 'flex', flexDirection: 'column', gap: '6px' });
+  Object.assign(_statusEl.style, { color: '#ff9900', display: 'block' });
+  _statusEl.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
 
-  const msg = document.createElement('div');
-  msg.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
-  _statusEl.appendChild(msg);
-
-  // Diagnostic trace — copyable block so the user can paste it for triage.
-  const traceJson = JSON.stringify(_trace, null, 2);
-  const details = document.createElement('details');
-  details.style.cssText = 'margin-top:6px;font-size:9px;text-align:left;';
-  const summary = document.createElement('summary');
-  summary.textContent = 'Copy diagnostic trace';
-  summary.style.cssText = 'cursor:pointer;color:#ff9900;opacity:.7;letter-spacing:.04em;';
-  details.appendChild(summary);
-  const pre = document.createElement('pre');
-  Object.assign(pre.style, {
-    maxHeight: '120px', overflowY: 'auto', background: '#111', color: '#888',
-    padding: '6px', borderRadius: '3px', fontSize: '8px', lineHeight: '1.3',
-    userSelect: 'all', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-  });
-  pre.textContent = traceJson;
-  details.appendChild(pre);
-  _statusEl.appendChild(details);
+  // Trace persisted silently — forensic if we can access the device, never user-facing.
+  try {
+    console.warn('[gemma-cad] stall trace', JSON.stringify(_trace));
+    const req = indexedDB.open('gemma-cad-diagnostics', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('stall-traces');
+    req.onsuccess = () => {
+      const db = req.result;
+      db.transaction('stall-traces', 'readwrite')
+        .objectStore('stall-traces')
+        .put(_trace, new Date().toISOString());
+    };
+  } catch (_) {}
 }
 
 // ---------------------------------------------------------------------------
