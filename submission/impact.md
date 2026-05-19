@@ -81,7 +81,7 @@ The submission is not a research artifact; it's a deployable web app.
   building primitives a small-shop architect produces in a typical
   schematic-design phase.
 
-**Phase 2 (post-hackathon, 1–3 months)**
+**Phase 2 (1–3 months out)**
 - Tier 2 vocabulary: revolves (cylindrical tanks, tapered silos, toroidal
   forms), multi-hole boolean cuts, more sophisticated boolean chains.
 - Sketch-to-IFC: wire the `reconstructFromImage` agent (exists in `main.ts`,

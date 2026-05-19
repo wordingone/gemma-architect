@@ -167,7 +167,8 @@ No LoRA adapter is loaded at runtime.
 
 The 60-row prompt cache was built from a precursor Gemma 3 4B LoRA's eval outputs
 (see `outputs/archive-gemma3-2026-05-05/`) and remains as a deterministic
-single-element demo path. A Gemma 4 retrain is planned post-submission.
+single-element demo path. A Gemma 4 retrain is future work — the precursor
+Gemma 3 LoRA is archived in the repo for reproducibility, not loaded at runtime.
 
 Training scripts are scaffolded in `src/train/` (Unsloth FastModel, QLoRA, full
 dataset pipeline). The dataset (`fixtures/`, `data/`) is fully deterministic and
@@ -269,8 +270,8 @@ distinct per-part translations.
 
 ## Why this works specifically because of Gemma 4
 
-- **On-device path.** Gemma 4 E2B (and the 4b-it baseline we shipped) fit
-  inside the WebGPU memory budget of a mid-tier laptop GPU. There is no
+- **On-device path.** Gemma 4 E4B-it (and the smaller E2B variant available via
+  `?gemma_model=e2b`) fit inside the WebGPU memory budget of a mid-tier laptop GPU. There is no
   paid API in the deployment, no server we have to host. The submission
   ships as a static page on GitHub Pages today (single-thread WASM
   fallback because GH Pages can't serve COOP+COEP); HuggingFace Spaces
