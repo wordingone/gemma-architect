@@ -187,7 +187,10 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   const snap = getSnap();
   if (!snap.snapOn) return null;
 
-  // ── Occlusion pre-pass ──────────────────────────────────────────────────────
+  // ── Raycast pre-pass (occlusion + face vertices) ────────────────────────────
+  // One shared raycaster for: (a) surface-hit fallback position, (b) face vertex
+  // snap (section 1c below). Running it once avoids duplicate scene traversals.
+  let _hitFacePts: THREE.Vector3[] = [];
   {
     const _occCanvas = viewer.getCanvas();
     const _occRect = _occCanvas.getBoundingClientRect();
@@ -205,7 +208,18 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
       _occMeshes.push(o);
     });
     const _occHits = _occRay.intersectObjects(_occMeshes, false);
-    if (_occHits.length > 0) _lastSurfaceHit = _occHits[0].point.clone();
+    if (_occHits.length > 0) {
+      _lastSurfaceHit = _occHits[0].point.clone();
+      const h = _occHits[0];
+      if (h.face) {
+        const m = h.object as THREE.Mesh;
+        const pa = m.geometry.getAttribute("position") as THREE.BufferAttribute;
+        const mw = m.matrixWorld;
+        _hitFacePts = [h.face.a, h.face.b, h.face.c].map(
+          i => new THREE.Vector3().fromBufferAttribute(pa, i).applyMatrix4(mw),
+        );
+      }
+    }
   }
 
   // ── 0. Point objects ────────────────────────────────────────────────────────
@@ -241,7 +255,7 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
     if (best) return best;
   }
 
-  // ── 1b. Midpoint snap from stored endpoints (independent of vertexSnapOn) ──
+  // ── 1b. Midpoint snap from stored endpoints ──────────────────────────────────
   if (snap.midpointSnapOn) {
     const midState = { best: null as THREE.Vector3 | null, bestD: VERTEX_SNAP_PX };
     viewer.getScene().traverse((obj) => {
@@ -263,7 +277,26 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
     }
   }
 
-  // ── 1c. Edge snap from stored endpoints (covers walls + other Mesh objects) ─
+  // ── 1c. Face-vertex snap from raycast hit (before edge snap) ─────────────────
+  // Runs before centerline edge snap so geometry corners (visible box corners,
+  // extrusion caps, etc.) take precedence over wall-axis projections. Fixes
+  // "snaps to unknown location" when hovering over a wall face near a corner.
+  if (snap.vertexSnapOn && _hitFacePts.length > 0) {
+    let candidate: THREE.Vector3 | null = null;
+    let candidateD = VERTEX_SNAP_PX;
+    for (const fv of _hitFacePts) {
+      const sc = projectToScreen(viewer, fv.x, fv.y, fv.z);
+      if (!sc) continue;
+      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+      if (d < candidateD) { candidateD = d; candidate = fv; }
+    }
+    if (candidate) {
+      return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
+    }
+  }
+
+  // ── 1d. Edge snap from stored endpoints (centerline; walls + other Mesh) ─────
+  // Runs after face-vertex so surface corners take priority over axis projection.
   // Line/curve geometry is handled in section 2 with full tessellation fidelity.
   if (snap.edgeSnapOn) {
     let epEdgeBest: SnapVertex | null = null;
@@ -295,13 +328,11 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   }
 
   // ── 2. Line/curve vertex + edge snap ────────────────────────────────────────
-  const snapExclude = null;
   if (snap.vertexSnapOn || snap.edgeSnapOn) {
     let lineVBest: SnapVertex | null = null;
     let lineVBestD = VERTEX_SNAP_PX;
     viewer.getScene().traverse((obj) => {
       if (obj.userData.noSnap) return;
-      if (obj === snapExclude) return;
       if (!(obj instanceof THREE.Line)) return;
       const posAttr = obj.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
       if (!posAttr) return;
@@ -339,53 +370,6 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
       return lineVBest;
     }
   }
-
-  // ── 3. Geometry raycasting ───────────────────────────────────────────────────
-  const canvas = viewer.getCanvas();
-  const rect = canvas.getBoundingClientRect();
-  const ndc = new THREE.Vector2(
-    ((clientX - rect.left) / rect.width) * 2 - 1,
-    -((clientY - rect.top) / rect.height) * 2 + 1,
-  );
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(ndc, viewer.getActiveCamera());
-
-  const meshes: THREE.Mesh[] = [];
-  viewer.getScene().traverse((obj) => {
-    if (obj.userData.noSnap) return;
-    if (obj === snapExclude) return;
-    if (!(obj instanceof THREE.Mesh)) return;
-    if (!obj.geometry || !obj.geometry.getAttribute("position")) return;
-    meshes.push(obj);
-  });
-
-  const hits = raycaster.intersectObjects(meshes, false);
-  if (hits.length === 0) return null;
-  const hit = hits[0];
-  if (!hit.face) return null;
-  const mesh = hit.object as THREE.Mesh;
-  const posAttr = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
-  const matW = mesh.matrixWorld;
-  const faceIdx = [hit.face.a, hit.face.b, hit.face.c];
-  const facePts = faceIdx.map(i => new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(matW));
-
-  let candidate: THREE.Vector3 | null = null;
-  let candidateD = VERTEX_SNAP_PX;
-
-  if (snap.vertexSnapOn) {
-    for (const fv of facePts) {
-      const sc = projectToScreen(viewer, fv.x, fv.y, fv.z);
-      if (!sc) continue;
-      const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-      if (d < candidateD) { candidateD = d; candidate = fv; }
-    }
-    if (candidate) return { id: makeSnapId(candidate.x, candidate.y, candidate.z), x: candidate.x, y: candidate.y, z: candidate.z };
-  }
-
-  // Face-edge snap intentionally omitted here: mesh faces contain internal
-  // triangulation diagonals that are not visible to the user, so snapping to
-  // arbitrary face-edge midpoints produces confusing "snaps to unknown location"
-  // behaviour. Visible edge snap on Line/curve geometry is handled in section 2.
 
   return null;
 }

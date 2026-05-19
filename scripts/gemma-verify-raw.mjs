@@ -5259,6 +5259,61 @@ await resetScene('before-box-inject');
   await resetScene('post-Sstairv');
 }
 
+// ── S106 — snap-face-vertex-priority (#955) ────────────────────────────────────
+// Draw a wall, hover cursor at a face vertex (box corner, y != 0 i.e. off centerline).
+// Asserts section 1c (face-vertex from raycast) fires before section 1d (centerline
+// edge snap), so snap lands on visible geometry — not an axis-interior projection.
+{
+  const s106 = await evaluate(`
+    (() => {
+      try {
+        window.__dispatch('setActiveTool', { toolId: 'wall' });
+        const _w1 = window.__emitClickWorld({ x: 0, y: 0 }, { tool: 'wall' });
+        const _w2 = window.__emitClickWorld({ x: 5, y: 0 }, { tool: 'wall' });
+        if (!_w2?.mesh) return { passed: false, evidence: { reason: 'wall not created' } };
+
+        // Extract face vertices from box geometry; find one off the centerline (|y| > 0.05)
+        const pos = _w2.mesh.geometry.getAttribute('position');
+        const mw  = _w2.mesh.matrixWorld;
+        function applyM4(x, y, z, m) {
+          const e = m.elements, dw = 1 / (e[3]*x + e[7]*y + e[11]*z + e[15]);
+          return { x: (e[0]*x + e[4]*y + e[8]*z  + e[12]) * dw,
+                   y: (e[1]*x + e[5]*y + e[9]*z  + e[13]) * dw,
+                   z: (e[2]*x + e[6]*y + e[10]*z + e[14]) * dw };
+        }
+        let fv = null;
+        for (let i = 0; i < Math.min(pos.count, 24); i++) {
+          const v = applyM4(pos.getX(i), pos.getY(i), pos.getZ(i), mw);
+          if (Math.abs(v.y) > 0.05) { fv = v; break; }
+        }
+        if (!fv) return { passed: false, evidence: { reason: 'no off-axis face vertex in wall geometry' } };
+
+        window.__dispatch('setActiveTool', { toolId: 'line' });
+
+        const sc = window.__projectToScreen(fv.x, fv.y, fv.z);
+        if (!sc) return { passed: false, evidence: { reason: 'projectToScreen null for face vertex', fv } };
+
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+        canvas.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true, cancelable: true,
+          clientX: sc.x, clientY: sc.y, pointerId: 1, pointerType: 'mouse',
+        }));
+
+        const target = window.__getSnapTarget();
+        // Face-vertex snap (section 1c) returns a vertex with |y| > 0.05.
+        // Centerline edge snap (old bug) would return y ≈ 0 (axis interior).
+        const passed = target !== null && Math.abs(target.y) > 0.05;
+        return { passed, evidence: { target, faceVertex: fv, screenCoord: sc } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s106) record('snap-face-vertex-priority', false, { reason: 'evaluate returned null' });
+  else record('snap-face-vertex-priority', s106.passed, s106.evidence);
+  await resetScene('post-S106');
+}
+
 } finally {
   await cleanup();
 }
