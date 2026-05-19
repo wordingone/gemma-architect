@@ -150,7 +150,8 @@ function estimateMaxTokens(prompt: string): number {
   // Multi-step design requests need headroom for plan + multiple tool_calls.
   // Covers all 10 P8a benchmark prompt categories (fire-station→station,
   // hospitality-cabin→cabin, walkup-4story→apartment, community-center→center/hall).
-  if (/\b(design|pavilion|room|building|house|complex|floor|facade|station|cabin|apartment|center|hall|clinic|library|residence|create|model)\b/.test(p)) return 1024;
+  // 4096 (#1048): full two-story house needs ~1700 output tokens; 1024 was truncating early.
+  if (/\b(design|pavilion|room|building|house|complex|floor|facade|station|cabin|apartment|center|hall|clinic|library|residence|create|model)\b/.test(p)) return 4096;
   // Default: single geometry command fits in 512.
   return 512;
 }
