@@ -306,8 +306,10 @@ function _buildOverlay(): void {
   // --- Ghost UI SVG — fills the entire viewport ---
   const svgNS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('viewBox', '0 0 160 90');
-  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const vw = window.innerWidth, vh = window.innerHeight;
+  svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
+  // preserveAspectRatio=none: stretch to fill viewport so fixed-pixel layout rows/cols align
+  svg.setAttribute('preserveAspectRatio', 'none');
   svg.setAttribute('aria-hidden', 'true');
   Object.assign(svg.style, {
     position: 'absolute',
@@ -318,7 +320,7 @@ function _buildOverlay(): void {
     pointerEvents: 'none',
   });
 
-  const ghostPath = _ghostPathData();
+  const ghostPath = _ghostPathData(vw, vh);
 
   // Dim static outline (structural shape reference)
   const dimPath = document.createElementNS(svgNS, 'path');
@@ -466,134 +468,144 @@ function _buildOverlay(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Ghost UI path data (viewBox 0 0 160 90)
+// Ghost UI path data — viewport-aware pixel coordinates.
 //
-// Layout proportions derived from actual shell.css / tokens.css:
-//   grid-template-rows: 24px 30px 90px 1fr 22px
-//   --palette-w: 80px  --sidebar-w: 320px
+// CSS fixed row heights (grid-template-rows: 24px 30px 90px 1fr 22px):
+//   menubar=24, modebar=30, ribbon=90, statusbar=22
+// CSS fixed col widths (--palette-w: 80px, --sidebar-w default 320px):
+//   palette=80, sidebar=320
 //
-// At 1366×768 reference: 1px ≈ 0.1171 SVG units
-//   menubar:   y 0–2.8    (24px)
-//   modebar:   y 2.8–6.3  (30px) — mode tabs: MODEL / LAYOUT / RESEARCH (shell.ts MODES)
-//   ribbon:    y 6.3–16.9 (90px) — tool buttons (inner y 7.4–15.8)
-//   palette:   x 0–9.4    (80px) — 2 col × 8 row icon grid
-//   viewport:  x 9.4–122.5         — floor plan
-//   sidebar:   x 122.5–160 (320px) — property panel
-//   statusbar: y 87.4–90  (22px)
+// Uses actual vw×vh so the SVG (viewBox=0 0 vw vh, preserveAspectRatio=none)
+// aligns with the real shell at any viewport size.
 
-function _ghostPathData(): string {
+function _ghostPathData(vw: number, vh: number): string {
   const segs: string[] = [];
+  const r = (n: number) => Math.round(n);  // round to integer pixel
+
+  // ── Layout boundaries (actual pixels) ──
+  const menuH = 24, modeH = 30, ribH = 90, statH = 22;
+  const palW = 80;
+  const sideW = 320; // --sidebar-w default; approximation for animation
+  const y1 = menuH;               // menubar bottom = 24
+  const y2 = menuH + modeH;       // modebar bottom = 54
+  const y3 = menuH + modeH + ribH;// ribbon bottom = 144
+  const y4 = vh - statH;          // statusbar top = vh-22
+  const x1 = palW;                // palette right = 80
+  const x2 = vw - sideW;         // sidebar left = vw-320
 
   // ── Chrome borders ──
-  segs.push('M0 2.8 H160');          // menubar bottom
-  segs.push('M0 6.3 H160');          // modebar bottom
-  segs.push('M0 16.9 H160');         // ribbon bottom
-  segs.push('M9.4 16.9 V87.4');      // palette right edge
-  segs.push('M122.5 16.9 V87.4');    // sidebar left edge
-  segs.push('M0 87.4 H160');         // statusbar top
+  segs.push(`M0 ${y1} H${vw}`);          // menubar bottom
+  segs.push(`M0 ${y2} H${vw}`);          // modebar bottom
+  segs.push(`M0 ${y3} H${vw}`);          // ribbon bottom
+  segs.push(`M${x1} ${y3} V${y4}`);      // palette right edge
+  segs.push(`M${x2} ${y3} V${y4}`);      // sidebar left edge
+  segs.push(`M0 ${y4} H${vw}`);          // statusbar top
 
-  // ── Menubar: app name + menu items (midpoint y≈1.4) ──
-  segs.push('M1.5 0.7 H9');
-  segs.push('M11 0.7 H16');
-  segs.push('M18 0.7 H23');
-  segs.push('M25 0.7 H31');
-  segs.push('M33 0.7 H37');
-  segs.push('M148 0.5 H153');
-  segs.push('M154.5 0.5 H159');
+  // ── Menubar: app name + menu items (midpoint y ≈ 12) ──
+  const myM = Math.round(menuH / 2);
+  segs.push(`M12 ${myM-4} H80`);         // app name/logo
+  segs.push(`M90 ${myM-4} H130`);        // menu items
+  segs.push(`M${vw-120} ${myM-3} H${vw-80}`);
+  segs.push(`M${vw-75} ${myM-3} H${vw-20}`);
 
-  // ── Modebar: mode tabs (inner y 3.2–5.9) — shell.ts MODES: MODEL/LAYOUT/RESEARCH ──
-  // mode-tab: padding 0 18px (≈2.1u each side), ~80px text ≈ 9.4u → total ~13.5u per tab
-  segs.push('M0 3.2 H13.5 V5.9 H0 Z');         // MODEL (01)
-  segs.push('M13.5 3.2 H28 V5.9 H13.5 Z');     // LAYOUT (02)
-  segs.push('M28 3.2 H44 V5.9 H28 Z');          // RESEARCH (03)
-  // modebar-meta cluster (right side — "CONTEXT · 3D · IFC4 · m")
-  segs.push('M130 3.7 H158');
+  // ── Modebar: mode tabs (inner y y1+4 to y2-4) ──
+  // Three tabs: MODEL / LAYOUT / RESEARCH, each ~116px wide
+  const mt1 = y1 + 4, mt2 = y2 - 4;
+  const tabW = 116;
+  segs.push(`M0 ${mt1} H${tabW} V${mt2} H0 Z`);              // MODEL
+  segs.push(`M${tabW} ${mt1} H${tabW*2} V${mt2} H${tabW} Z`); // LAYOUT
+  segs.push(`M${tabW*2} ${mt1} H${tabW*3} V${mt2} H${tabW*2} Z`); // RESEARCH
+  // modebar-meta cluster (right side)
+  segs.push(`M${vw-240} ${y1+9} H${vw-20}`);
 
-  // ── Ribbon: tool buttons (inner y 7.4–15.8, h≈8.4u) ──
-  // BW=5.5u (47px), step=6.2u. Groups separated by 1.4u gap.
-  const BY1 = 7.4, BY2 = 15.8, BW = 5.5;
-  function btn(x: number) {
-    const r = (n: number) => +n.toFixed(1);
-    segs.push(`M${r(x)} ${BY1} H${r(x+BW)} V${BY2} H${r(x)} Z`);
-  }
-  function sep(x: number) { segs.push(`M${+x.toFixed(1)} ${BY1} V${BY2}`); }
-
+  // ── Ribbon: tool button clusters (inner y y2+8 to y3-8) ──
+  const RY1 = y2 + 8, RY2 = y3 - 8;
+  const BW = 22, BSP = 2, GSEP = 8; // button 20px + 2×1px margin, group separator 8px
+  let bx = 4;
+  const btn = (x: number) => segs.push(`M${x} ${RY1} H${x+BW} V${RY2} H${x} Z`);
+  const sep = (x: number) => segs.push(`M${x} ${RY1} V${RY2}`);
   // Group 1: Select/Move/Rotate (3)
-  btn(0.5); btn(6.7); btn(12.9); sep(20.2);
+  btn(bx); bx += BW+BSP; btn(bx); bx += BW+BSP; btn(bx); bx += BW+GSEP; sep(bx);
   // Group 2: Wall/Floor/Roof/Column/Beam (5)
-  btn(20.7); btn(26.9); btn(33.1); btn(39.3); btn(45.5); sep(52.8);
+  bx += 4; btn(bx); bx += BW+BSP; btn(bx); bx += BW+BSP; btn(bx); bx += BW+BSP;
+  btn(bx); bx += BW+BSP; btn(bx); bx += BW+GSEP; sep(bx);
   // Group 3: Door/Window/Stair/Ramp (4)
-  btn(53.3); btn(59.5); btn(65.7); btn(71.9); sep(79.2);
+  bx += 4; btn(bx); bx += BW+BSP; btn(bx); bx += BW+BSP; btn(bx); bx += BW+BSP; btn(bx); bx += BW+GSEP; sep(bx);
   // Group 4: Line/Polyline/Arc (3)
-  btn(79.7); btn(85.9); btn(92.1); sep(99.4);
+  bx += 4; btn(bx); bx += BW+BSP; btn(bx); bx += BW+BSP; btn(bx); bx += BW+GSEP; sep(bx);
   // Group 5: Extrude/Boolean (2)
-  btn(99.9); btn(106.1);
+  bx += 4; btn(bx); bx += BW+BSP; btn(bx); bx += BW+GSEP;
   // Render mode block
-  segs.push(`M109 ${BY1} H121 V${BY2} H109 Z`);
-  // Right-side display controls (in sidebar column — ribbon spans full width)
-  btn(123.5); btn(129.7); btn(135.9); btn(142.1);
-  segs.push(`M150 ${BY1} H159 V${BY2} H150 Z`);
+  segs.push(`M${bx+4} ${RY1} H${bx+70} V${RY2} H${bx+4} Z`);
+  // Right-side display controls (in sidebar region — ribbon spans full width)
+  const rx = x2 + 4;
+  btn(rx); btn(rx+BW+BSP); btn(rx+2*(BW+BSP)); btn(rx+3*(BW+BSP));
+  segs.push(`M${rx+4*(BW+BSP)+8} ${RY1} H${vw-8} V${RY2} H${rx+4*(BW+BSP)+8} Z`);
 
-  // ── Palette: 2 col × 8 row icon grid (x 0–9.4, y 16.9–87.4) ──
-  // Icon 3.8w × 3.2h. Cols at x=0.4, x=5.0. Row step 3.7. Start y=18.0
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 2; c++) {
-      const x = +(0.4 + c * 4.6).toFixed(1);
-      const y = +(18.0 + r * 3.7).toFixed(1);
-      segs.push(`M${x} ${y} H${+(x+3.8).toFixed(1)} V${+(y+3.0).toFixed(1)} H${x} Z`);
+  // ── Palette: 2 col × 8 row icon grid (x 0–80, y y3–y4) ──
+  // Icon cells: ~36px wide × 28px tall, 2 cols, rows start at y3+8
+  const ICON_W = 34, ICON_H = 26, ICON_SX = 4, ICON_SY = 8, ICON_GAP = 4;
+  const colX = [ICON_SX, ICON_SX + ICON_W + ICON_GAP];
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 2; col++) {
+      const px = colX[col], py = y3 + ICON_SY + row * (ICON_H + ICON_GAP);
+      if (py + ICON_H > y4 - 4) break;
+      segs.push(`M${px} ${py} H${px+ICON_W} V${py+ICON_H} H${px} Z`);
     }
   }
-  // Section label dividers below icon grid
-  segs.push('M0.4 48.0 H9.0');
-  segs.push('M0.4 52.5 H9.0');
-  segs.push('M0.4 57.0 H9.0');
+  // Section label dividers
+  const dY1 = y3 + ICON_SY + 3*(ICON_H+ICON_GAP) + ICON_H + 2;
+  segs.push(`M4 ${dY1} H${palW-4}`);
+  segs.push(`M4 ${dY1 + 30} H${palW-4}`);
+  segs.push(`M4 ${dY1 + 60} H${palW-4}`);
 
-  // ── Viewport: floor plan (x 9.4–122.5, y 16.9–87.4) ──
-  // Building outline (with viewport margin)
-  segs.push('M22 25 H114 V82 H22 Z');
-  // Interior walls
-  segs.push('M22 52 H86');       // main horizontal division
-  segs.push('M22 66 H65');       // lower horizontal
-  segs.push('M62 25 V52');       // left vertical
-  segs.push('M79 52 V82');       // lower-right vertical
-  segs.push('M46 52 V82');       // lower-left vertical
-  // Door gaps
-  segs.push('M62 34 L62 41');
-  segs.push('M43 52 L50 52');
-  // Window ticks on exterior
-  segs.push('M42 25 V27'); segs.push('M53 25 V27');
-  segs.push('M79 25 V27'); segs.push('M95 25 V27');
-  segs.push('M114 41 H112'); segs.push('M114 60 H112');
-  segs.push('M56 82 V80'); segs.push('M72 82 V80');
-  // Stair block
-  segs.push('M91 25 H114 V42 H91 Z');
-  segs.push('M93 27 H112'); segs.push('M93 29.5 H112'); segs.push('M93 32 H112');
-  segs.push('M93 34.5 H112'); segs.push('M93 37 H112');
-  // Furniture
-  segs.push('M28 28 H58 V42 H28 Z');
-  segs.push('M30 30 H40 V40 H30 Z');
-  segs.push('M28 55 H60 V66 H28 Z');
-  // Compass (top-right corner of viewport area)
-  segs.push('M118 19 L118 23');
-  segs.push('M118 19 L116.5 21.5'); segs.push('M118 19 L119.5 21.5');
+  // ── Viewport: floor plan schematic (x x1–x2, y y3–y4) ──
+  // Scale floor plan outline proportionally within the viewport region
+  const vpW = x2 - x1, vpH = y4 - y3;
+  const fpX1 = r(x1 + vpW*0.10), fpX2 = r(x1 + vpW*0.88);
+  const fpY1 = r(y3 + vpH*0.12), fpY2 = r(y3 + vpH*0.92);
+  const fpW = fpX2 - fpX1, fpH = fpY2 - fpY1;
+  segs.push(`M${fpX1} ${fpY1} H${fpX2} V${fpY2} H${fpX1} Z`); // building outline
+  // Interior walls (proportional)
+  const hmid = r(fpY1 + fpH*0.38);
+  const hlow = r(fpY1 + fpH*0.58);
+  const vleft = r(fpX1 + fpW*0.48);
+  const vright1 = r(fpX1 + fpW*0.67);
+  const vright2 = r(fpX1 + fpW*0.31);
+  segs.push(`M${fpX1} ${hmid} H${vright1}`);
+  segs.push(`M${fpX1} ${hlow} H${vleft}`);
+  segs.push(`M${vleft} ${fpY1} V${hmid}`);
+  segs.push(`M${vright1} ${hmid} V${fpY2}`);
+  segs.push(`M${vright2} ${hmid} V${fpY2}`);
+  // Compass (top-right of viewport area)
+  const cpx = r(x2 - vpW*0.04), cpy = r(y3 + vpH*0.06);
+  segs.push(`M${cpx} ${cpy-16} L${cpx} ${cpy+16}`);
+  segs.push(`M${cpx} ${cpy-16} L${cpx-10} ${cpy+4}`);
+  segs.push(`M${cpx} ${cpy-16} L${cpx+10} ${cpy+4}`);
 
-  // ── Sidebar: header + 3 tabs + 10 property rows (x 122.5–160) ──
-  segs.push('M123.5 18 H159 V22 H123.5 Z');
-  segs.push('M124.5 22.5 H136 V24.5 H124.5 Z');
-  segs.push('M137 22.5 H149 V24.5 H137 Z');
-  segs.push('M150 22.5 H158.5 V24.5 H150 Z');
+  // ── Sidebar: header + 3 tabs + property rows (x x2–vw) ──
+  const sx = x2 + 8, sw = vw - 8;
+  segs.push(`M${sx} ${y3+8} H${sw} V${y3+28} H${sx} Z`); // header
+  const tabH2 = 16, tabW2 = r((vw - x2 - 16) / 3);
+  for (let t = 0; t < 3; t++) {
+    const tx = sx + t*tabW2;
+    segs.push(`M${tx} ${y3+30} H${tx+tabW2-4} V${y3+30+tabH2} H${tx} Z`);
+  }
+  const rowStep = Math.min(36, Math.floor((y4 - (y3+50)) / 10));
   for (let i = 0; i < 10; i++) {
-    const y = +(26 + i * 6.0).toFixed(1);
-    segs.push(`M125.5 ${y} H143`);
-    segs.push(`M125.5 ${+(+y + 3.0).toFixed(1)} H158.5`);
+    const ry = y3 + 50 + i * rowStep;
+    if (ry + rowStep > y4 - 4) break;
+    segs.push(`M${sx} ${ry} H${r(sx + (vw-x2)*0.50)}`);
+    segs.push(`M${sx} ${ry+rowStep-4} H${sw}`);
   }
 
-  // ── Statusbar: 5 indicator segments (midpoint y≈88.7) ──
-  segs.push('M2 88.7 H28');
-  segs.push('M30 88.7 H50');
-  segs.push('M52 88.7 H72');
-  segs.push('M120 88.7 H140');
-  segs.push('M142 88.7 H158');
+  // ── Statusbar: indicator segments (midpoint y ≈ y4 + statH/2) ──
+  const sy = y4 + Math.round(statH / 2);
+  segs.push(`M12 ${sy-3} H${r(vw*0.18)}`);
+  segs.push(`M${r(vw*0.20)} ${sy-3} H${r(vw*0.35)}`);
+  segs.push(`M${r(vw*0.37)} ${sy-3} H${r(vw*0.50)}`);
+  segs.push(`M${r(vw*0.75)} ${sy-3} H${r(vw*0.88)}`);
+  segs.push(`M${r(vw*0.90)} ${sy-3} H${r(vw-12)}`);
 
   return segs.join(' ');
 }
