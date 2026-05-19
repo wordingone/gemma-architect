@@ -5163,6 +5163,48 @@ await resetScene('before-box-inject');
   await resetScene('post-S96');
 }
 
+// ── S_stair_void (#986 §C): SdStair handler tags the upper slab with ceilingHole=true ──
+// When a stair rises to an upper slab, cutSlabVoidFromBoxMesh cuts the geometry and
+// userData.ceilingHole=true is set on the slab so the two-story-house AC surface can detect it.
+{
+  await resetScene('pre-Sstairv');
+  const sstairv = await evaluate(`(async () => {
+    try {
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+      // Create a two-level scene: level/0 at 0m, level/1 at 3m.
+      window.__dispatch('SdLevel', { name: 'Ground', elevation: 0, height: 3.0 });
+      await new Promise(r => setTimeout(r, 100));
+      window.__dispatch('SdLevel', { name: 'Upper', elevation: 3.0, height: 3.0 });
+      await new Promise(r => setTimeout(r, 100));
+      // Place upper slab at level/1 (position.z = 3.0).
+      window.__dispatch('setActiveLevel', { id: 'level/1' });
+      await new Promise(r => setTimeout(r, 100));
+      window.__dispatch('SdSlab', { profile: [[0,0],[8,0],[8,6],[0,6]], thickness: 0.1 });
+      await new Promise(r => setTimeout(r, 200));
+      // Switch back to ground level and place a stair that rises 3.0m.
+      window.__dispatch('setActiveLevel', { id: 'level/0' });
+      await new Promise(r => setTimeout(r, 100));
+      window.__dispatch('SdStair', { start: [2, 1], end: [2, 4], type: 'straight', riser: 0.1778, tread: 0.2794, width: 0.914, targetHeight: 3.0 });
+      await new Promise(r => setTimeout(r, 300));
+      // Assert: slab with ceilingHole=true exists, and stair creator exists.
+      let ceilingHoleUuid = null;
+      let stairUuid = null;
+      v.scene.traverse(obj => {
+        if (obj.userData?.ceilingHole === true) ceilingHoleUuid = obj.uuid;
+        if (obj.userData?.creator === 'stair') stairUuid = obj.uuid;
+      });
+      const passed = ceilingHoleUuid !== null && stairUuid !== null;
+      return { passed, evidence: { ceilingHoleUuid, stairUuid } };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  if (!sstairv) record('stair-ceiling-hole', false, { reason: 'evaluate returned null' });
+  else record('stair-ceiling-hole', sstairv.passed, sstairv.evidence ?? { error: sstairv.error });
+  await resetScene('post-Sstairv');
+}
+
 } finally {
   await cleanup();
 }

@@ -961,6 +961,7 @@ registerHandler("SdStair", (args) => {
       footprint.minX - clearance, footprint.minY - clearance,
       footprint.maxX + clearance, footprint.maxY + clearance,
     );
+    child.userData.ceilingHole = true;
   });
 
   return { created: "stair", type: stairParams.type };
