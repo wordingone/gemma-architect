@@ -13,6 +13,7 @@ export const OP_TOOL_IDS = new Set([
   "aligned-dim", "angular-dim", "area-dim", "volume-dim",
   "label", "transient-measure",
   "sel-window", "sel-lasso", "sel-boundary",
+  "copy", "array",
 ]);
 
 export function initPickerHint(vpBody: HTMLElement): void {

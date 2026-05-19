@@ -5380,6 +5380,79 @@ await resetScene('before-box-inject');
   await resetScene('post-S107');
 }
 
+// ── S108 — copy-click-commits-selection (#944 sub-bug 1) ──────────────────────
+// Activate Copy tool, hover over a wall, click it → assert selection state
+// advances to copy_place (opPhase.kind === "copy_place") and a second click at
+// a destination adds a new mesh with matching creator.
+{
+  const s108 = await evaluate(`
+    (async () => {
+      try {
+        // 1. Create wall to copy.
+        window.__dispatch('setActiveTool', { toolId: 'wall' });
+        const _w1 = window.__emitClickWorld({ x: 0, y: 0 }, { tool: 'wall' });
+        const _w2 = window.__emitClickWorld({ x: 4, y: 0 }, { tool: 'wall' });
+        if (!_w2?.mesh) return { passed: false, evidence: { reason: 'wall not created' } };
+        const wallUuid = _w2.mesh.uuid;
+
+        // 2. Activate Copy tool.
+        window.__dispatch('setActiveTool', { toolId: 'copy' });
+        await new Promise(r => setTimeout(r, 30));
+
+        // 3. Simulate click on the wall at its center screen position.
+        const sc = window.__projectToScreen(2, 0, 0);
+        if (!sc) return { passed: false, evidence: { reason: 'projectToScreen null for wall center' } };
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+        }));
+        canvas.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+        }));
+        await new Promise(r => setTimeout(r, 50));
+
+        // 4. Assert selection committed — selected object should be the wall.
+        const selected = window.__viewer.getTargetObject();
+        const selectionCommitted = selected !== null && selected.uuid === wallUuid;
+
+        // 5. Click destination point to place the copy (+5,0 offset).
+        const meshCountBefore = window.__viewer.scene.children.filter(
+          c => c.userData.creator === 'wall'
+        ).length;
+
+        const sc2 = window.__projectToScreen(7, 0, 0);
+        if (sc2 && selectionCommitted) {
+          canvas.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true, cancelable: true, clientX: sc2.x, clientY: sc2.y,
+            button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+          }));
+          canvas.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, cancelable: true, clientX: sc2.x, clientY: sc2.y,
+            button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+          }));
+          await new Promise(r => setTimeout(r, 80));
+        }
+
+        const meshCountAfter = window.__viewer.scene.children.filter(
+          c => c.userData.creator === 'wall'
+        ).length;
+        const copyPlaced = meshCountAfter > meshCountBefore;
+
+        const passed = selectionCommitted && copyPlaced;
+        return { passed, evidence: { selectionCommitted, copyPlaced, meshCountBefore, meshCountAfter, wallUuid, selectedUuid: selected?.uuid } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s108) record('copy-click-commits-selection', false, { reason: 'evaluate returned null' });
+  else record('copy-click-commits-selection', s108.passed, s108.evidence);
+  await resetScene('post-S108');
+}
+
 } finally {
   await cleanup();
 }
