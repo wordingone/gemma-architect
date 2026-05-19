@@ -4382,7 +4382,7 @@ await resetScene('before-box-inject');
     const hasBootEvent = window.__bootCompleteTs !== null;
     if (!hasBootEvent) {
       // agentmodel:boot-complete not present — overlay PR not yet merged.
-      // Soft-pass to avoid blocking CI on Eli's surfaces alone.
+      // Soft-pass to avoid blocking CI on frontend-overlay scope alone.
       return { passed: true, evidence: { skipReason: 'boot-complete event not fired — overlay PR pending (frontend scope)', softPass: true } };
     }
     const blocked = !window.__toolActivateBeforeBoot;
