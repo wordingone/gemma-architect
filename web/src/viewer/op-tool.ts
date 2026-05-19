@@ -130,6 +130,11 @@ export let _selDragging = false;
 export function getOpPhase(): OpPhase | null { return _opPhase; }
 export function setSelDragging(v: boolean): void { _selDragging = v; }
 
+// Timestamp of most recent opFinish call. Used by main.ts view-shortcut handler
+// to suppress digit-key shortcuts for 300ms after an op-tool completes (#1186).
+let _lastOpFinishMs = 0;
+export function getLastOpFinishMs(): number { return _lastOpFinishMs; }
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function round(n: number, digits = 4): number {
@@ -159,6 +164,7 @@ export function opFinish(viewer: Viewer, resetTool = true): void {
   opSetHover(null);
   const _finishedKind = _opPhase?.kind;
   _opPhase = null;
+  _lastOpFinishMs = Date.now();
   ptClearPrompt();
   ptHideCoordInput();
   _hooks.hideCursorDot();
@@ -788,13 +794,21 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
 
   if (phase.kind === "extrude_select") {
     const hit = opRaycastObject(viewer, clientX, clientY, true);
-    if (!hit) { ptPrompt("Extrude — click a curve, rectangle, circle, or polygon profile"); return true; }
+    if (!hit) { ptPrompt("Extrude — click a curve, rectangle, circle, or polygon profile  [Escape = cancel]"); return true; }
     const box = new THREE.Box3().setFromObject(hit.obj);
     const size = new THREE.Vector3(); box.getSize(size);
     const ctr = new THREE.Vector3(); box.getCenter(ctr);
+    // Guard: reject degenerate or implausibly large profiles (#1182). A valid 2D
+    // sketch profile has a near-zero Z extent; 3D solids should not be used as profiles.
+    const creator = (hit.obj.userData.creator as string | undefined) ?? "";
+    const SKETCH_PROFILE_ONLY = new Set(["rect", "circle", "polygon", "polyline", "curve", "line"]);
+    if (!SKETCH_PROFILE_ONLY.has(creator)) {
+      ptPrompt("Extrude — select a 2D sketch profile (circle, rect, curve, polygon, polyline, line)");
+      return true;
+    }
     opSetHover(null);
     _opPhase = { kind: "extrude_height", profile: hit.obj, cx: ctr.x, cy: ctr.y, w: size.x, d: size.y };
-    ptPrompt("Extrude height — move cursor up/down to set height, click to commit");
+    ptPrompt("Extrude height — move cursor up/down to set height, click to commit  [Escape = cancel]");
     return true;
   }
 

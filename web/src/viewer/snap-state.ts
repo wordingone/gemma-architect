@@ -256,10 +256,15 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   }
 
   // ── 1b. Midpoint snap from stored endpoints ──────────────────────────────────
+  // Only applies to linear segment objects (line, polyline). Curves store ALL
+  // tessellation points in endpoints; computing midpoints between adjacent
+  // tessellation vertices yields phantom positions along the arc (#1183).
   if (snap.midpointSnapOn) {
+    const LINEAR_CREATORS = new Set(["line", "polyline"]);
     const midState = { best: null as THREE.Vector3 | null, bestD: VERTEX_SNAP_PX };
     viewer.getScene().traverse((obj) => {
       if (obj.userData.noSnap) return;
+      if (!LINEAR_CREATORS.has((obj.userData as { creator?: string }).creator ?? "")) return;
       const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
       if (!eps || eps.length < 2) return;
       for (let i = 0; i < eps.length - 1; i++) {
