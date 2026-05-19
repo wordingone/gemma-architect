@@ -585,6 +585,7 @@ registerHandler("SdFillet", (args) => {
   } else {
     filleted = filletMesh(obj, radius);
   }
+  viewer.getScene().remove(obj); // audit-undo-ok: tracked by pushReplaceAction below
   viewer.addMesh(filleted, "brep", { noHistory: true });
   pushReplaceAction(filleted, [obj], "fillet");
   return { modified: filleted.uuid, edgeCount: edgeId !== undefined ? 1 : "all" };

@@ -278,13 +278,24 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   }
 
   // ── 1c. Face-vertex snap from raycast hit (before edge snap) ─────────────────
-  // Runs before centerline edge snap so geometry corners (visible box corners,
-  // extrusion caps, etc.) take precedence over wall-axis projections. Fixes
-  // "snaps to unknown location" when hovering over a wall face near a corner.
+  // Only fires for vertices that also appear in stored endpoints — avoids
+  // snapping to interior triangulation vertices on large slabs/faces.
   if (snap.vertexSnapOn && _hitFacePts.length > 0) {
+    const allEndpoints: SnapVertex[] = [];
+    viewer.getScene().traverse((obj) => {
+      if (obj.userData.noSnap) return;
+      const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
+      if (eps) for (const ep of eps) allEndpoints.push(ep);
+    });
+    const EPS_MATCH = 0.02; // 2 cm tolerance for endpoint-membership test
     let candidate: THREE.Vector3 | null = null;
     let candidateD = VERTEX_SNAP_PX;
     for (const fv of _hitFacePts) {
+      // Only snap to face vertex if it's a known boundary/endpoint vertex.
+      const isEndpoint = allEndpoints.some(
+        ep => Math.abs(ep.x - fv.x) < EPS_MATCH && Math.abs(ep.y - fv.y) < EPS_MATCH && Math.abs(ep.z - fv.z) < EPS_MATCH,
+      );
+      if (!isEndpoint) continue;
       const sc = projectToScreen(viewer, fv.x, fv.y, fv.z);
       if (!sc) continue;
       const d = Math.hypot(sc.x - clientX, sc.y - clientY);

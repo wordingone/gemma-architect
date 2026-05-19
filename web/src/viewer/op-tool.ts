@@ -410,6 +410,21 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     }
   }
 
+  if (creator === "polygon") {
+    const cpLocal: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
+    if (cpLocal.length >= 3) {
+      profile.updateMatrixWorld();
+      const cpWorld = cpLocal.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
+      const shape = new THREE.Shape();
+      shape.moveTo(cpWorld[0].x, cpWorld[0].y);
+      for (let i = 1; i < cpWorld.length; i++) shape.lineTo(cpWorld[i].x, cpWorld[i].y);
+      shape.closePath();
+      const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+      const mat = new THREE.MeshStandardMaterial({ color: 0xd0a868, roughness: 0.55, metalness: 0.05 });
+      return new THREE.Mesh(geom, mat);
+    }
+  }
+
   if (creator === "line" || creator === "polyline") {
     const pts: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
     const worldPts = pts.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
@@ -806,12 +821,14 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     }
     opSetHover(null);
     const m = hit.obj as THREE.Mesh;
-    if (m.material && !Array.isArray(m.material) && (m.material as THREE.MeshStandardMaterial).emissive) {
-      m.userData._savedEmissive = ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color).getHex();
-      ((m.material as THREE.MeshStandardMaterial).emissive as THREE.Color).setHex(0x003399);
+    const mAMats = Array.isArray(m.material) ? m.material : (m.material ? [m.material] : []);
+    const mAStd = mAMats.find((mt): mt is THREE.MeshStandardMaterial => !!(mt as THREE.MeshStandardMaterial).emissive);
+    if (mAStd) {
+      m.userData._savedEmissive = mAStd.emissive.getHex();
+      mAStd.emissive.setHex(0x003399);
     }
     _opPhase = { kind: "bool_b", objA: hit.obj };
-    ptPrompt("Boolean — click the second solid (selected: first highlighted)");
+    ptPrompt("Boolean — click the second solid (selected: first highlighted in blue)");
     return true;
   }
 
@@ -1214,6 +1231,7 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
       return;
     }
     const filleted = filletMesh(target, r);
+    viewer.getScene().remove(target); // audit-undo-ok: tracked by pushReplaceAction below
     viewer.addMesh(filleted, "brep", { noHistory: true });
     pushReplaceAction(filleted, [target], "fillet");
     ptPrompt(`Fillet r=${formatLength(r)} applied`);
@@ -1238,6 +1256,7 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
     } else {
       // Fallback: direct chamfer when edge not found in enumeration (degenerate geometry).
       const filleted = chamferEdge(phase.target, phase.edgeA, phase.edgeB, r);
+      viewer.getScene().remove(phase.target); // audit-undo-ok: tracked by pushReplaceAction below
       viewer.addMesh(filleted, "brep", { noHistory: true });
       pushReplaceAction(filleted, [phase.target], "fillet");
     }

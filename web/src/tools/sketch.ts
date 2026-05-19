@@ -113,6 +113,8 @@ export function buildPolygon(center: { x: number; y: number }, radial: { x: numb
   mesh.position.set(center.x, center.y, 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "polygon";
+  mesh.userData.controlPoints = verts.map(([x, y]) => new THREE.Vector3(x, y, 0));
+  mesh.userData.isClosed = true;
   const worldVerts = verts.map(([x, y]) => `[${round(center.x + x)}, ${round(center.y + y)}]`).join(", ");
   const chain = `const poly = drawPolyline([${worldVerts}], { close: true }).sketchOnPlane("XY").extrude(${round(h)});`;
   return { mesh, chain };
