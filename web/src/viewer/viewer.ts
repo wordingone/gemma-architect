@@ -3057,11 +3057,14 @@ export class Viewer {
     // draft state is never active when this renders in the background.
     const needUndraftForThumb = displayMode !== "technical" && isDrafting(this.scene);
     const thumbRenderer = this._thumbRenderer!;
+    const gizmoWasVisible = this.gizmos.map(g => g.visible);
+    this.gizmos.forEach(g => { g.visible = false; });
     if (needUndraftForThumb) {
       withoutDrafting(this.scene, () => thumbRenderer.render(this.scene, cam));
     } else {
       thumbRenderer.render(this.scene, cam);
     }
+    this.gizmos.forEach((g, i) => { g.visible = gizmoWasVisible[i]; });
     this.scene.overrideMaterial = prevOverride;
     const ctx = dest.getContext("2d");
     if (ctx) ctx.drawImage(this._thumbCanvas!, 0, 0, w, h);

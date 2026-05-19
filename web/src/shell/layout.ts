@@ -297,7 +297,7 @@ class LayoutController {
 
   constructor(host: HTMLElement, opts: LayoutOptions) {
     this.host = host;
-    const size = opts.size ?? "A1";
+    const size = opts.size ?? "Tabloid";
     const orientation = opts.orientation ?? "landscape";
     const customMm = opts.customMm ?? { ...DEFAULT_CUSTOM };
     // 5 default sheets — one per canonical view type (W3.1).
@@ -459,10 +459,10 @@ class LayoutController {
     const sizeSel = document.createElement("select");
     sizeSel.className = "paper-tool";
     sizeSel.setAttribute("aria-label", "Sheet size");
-    const sizes: SheetSizeId[] = ["A0", "A1", "A2", "A3", "A4", "Letter", "Legal", "Tabloid", "Custom"];
+    const sizes: SheetSizeId[] = ["Tabloid", "Letter", "Legal", "A0", "A1", "A2", "A3", "A4", "Custom"];
     for (const s of sizes) {
       const opt = document.createElement("option");
-      opt.value = s; opt.textContent = s;
+      opt.value = s; opt.textContent = s === "Tabloid" ? "11×17" : s;
       if (s === this.size) opt.selected = true;
       sizeSel.appendChild(opt);
     }
@@ -592,7 +592,7 @@ class LayoutController {
 
   private _spawnPresetPanel(viewport: ViewportId, scale: ScaleId, displayMode: DisplayMode): void {
     const mm = sheetMm(this.size, this.orientation, this.customMm);
-    const r = 0.07; // 7% margin → ~86% content area (AC1: default fills most of the sheet)
+    const r = 0.015; // 1.5% margin → ~97% content area
     this.addPanel({
       x: Math.round(mm.w * MM_TO_PX * r),
       y: Math.round(mm.h * MM_TO_PX * r),

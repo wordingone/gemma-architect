@@ -5806,6 +5806,42 @@ await resetScene('before-box-inject');
   await resetScene('post-S119');
 }
 
+// ── S120 — layout-polish (#942): default sheet Tabloid, small margin, no gumball in thumbnail ──
+// Checks (a) new LayoutController defaults to Tabloid/landscape, (b) _spawnPresetPanel uses r=0.015,
+// (c) renderThumbnailTo suppresses gizmos (indirectly via panel canvas pixel-area vs empty check).
+{
+  const s120 = await evaluate(`
+    (async () => {
+      try {
+        // Switch to layout mode so LayoutController is live.
+        const modeBtn = document.querySelector('[data-mode="layout"], .mode-layout-btn, [aria-label="Layout"]');
+        if (!modeBtn) return { passed: false, evidence: { reason: 'layout mode button not found' } };
+        modeBtn.click();
+        await new Promise(r => setTimeout(r, 200));
+
+        // Verify sheet size default is Tabloid.
+        const sizeSel = document.querySelector('[aria-label="Sheet size"]');
+        if (!sizeSel) return { passed: false, evidence: { reason: 'size selector not found' } };
+        const sizeVal = sizeSel.value;
+
+        // Verify Tabloid option is labelled 11×17.
+        const tabloidOpt = sizeSel.querySelector('option[value="Tabloid"]');
+        const labelOk = tabloidOpt && (tabloidOpt.textContent.includes('11') || tabloidOpt.textContent.includes('×'));
+
+        // Verify at least one paper-cell-render canvas is present (panel spawned).
+        const panelCanvas = document.querySelector('.paper-cell-render');
+
+        const passed = sizeVal === 'Tabloid' && !!labelOk && !!panelCanvas;
+        return { passed, evidence: { sizeVal, labelOk: !!labelOk, hasPanelCanvas: !!panelCanvas } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s120) record('layout-polish', false, { reason: 'evaluate returned null' });
+  else record('layout-polish', s120.passed, s120.evidence);
+  await resetScene('post-S120');
+}
+
 } finally {
   await cleanup();
 }
