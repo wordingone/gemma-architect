@@ -47,7 +47,7 @@ export type AgentRequest = {
   skills?: Skill[];
   skillsTotal?: number; // total registered skills before keyword filtering
   model?: string;
-  maxNewTokens?: number; // default 512; pass 1024 for plan turns
+  maxNewTokens?: number; // default 4096 (#1048)
 };
 
 export type AgentResponse = {
@@ -866,37 +866,24 @@ Assistant:
 <tool_call>{"command":"SdAlignedDim","parameters":{"a":[0,0,0],"b":[3,4,0]},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
-// WebGPU-only few-shot: one example (two-story residential house) to stay under
-// the 2048-position ONNX bake limit. buildSystemPrompt uses full FEW_SHOT_EXAMPLES.
-// #980: No <plan> block — emit <tool_call> blocks directly. Level naming: Level 1 = ground.
+// WebGPU-only few-shot: skeleton (12 calls) trimmed from 26 for faster generation.
+// Path A (#1097): drops ~14 calls × ~24 tok = ~336 tok from input; model extrapolates
+// remaining walls/windows from the pattern. buildSystemPrompt uses full FEW_SHOT_EXAMPLES.
+// #980: No <plan> block. Level naming: Level 1 = ground.
 const WEBGPU_HOUSE_FEW_SHOT = `
 Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan> block):
 
 User: build a two-story residential house, 26 feet wide by 20 feet deep
-Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows on L1; 4 windows on L2; stair at NE corner.
+Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof.
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":9.0,"extent":26}}</tool_call>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
 <tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdDoor","parameters":{"position":[5,0,0],"width":3.0,"height":7.0,"sillH":0}}</tool_call>
 <tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"}}</tool_call>
 <tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
 <tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
 <tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0}}</tool_call>
@@ -1175,7 +1162,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   const t0 = Date.now();
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
 
-  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 1024 });
+  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 4096 });
   // Drain the token stream (satisfies AC: tokens stream back via postMessage inside worker)
   for await (const _tok of stream) { /* tokens flow via postMessage internally */ }
 
@@ -1255,7 +1242,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         turnId,
         messages,
         imageUrl,
-        maxNewTokens:  req.maxNewTokens ?? 1024,
+        maxNewTokens:  req.maxNewTokens ?? 4096,
         eosId:         1, // Gemma 4 EOS; worker also reads model.config as fallback
         draftK:        MTP_DRAFT_N,
         useMtp,
