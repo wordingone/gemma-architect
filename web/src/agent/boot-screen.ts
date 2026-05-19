@@ -31,6 +31,7 @@ let _headDashLen = 0;
 let _startTime = 0;
 let _rafId = 0;
 let _watchdogId: ReturnType<typeof setTimeout> | null = null;
+let _firstLoadingReceived = false;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -45,31 +46,48 @@ export function initBootScreen(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Stall display
+
+function _showStalled(): void {
+  if (_done) return;
+  _watchdogId = null;
+  if (_statusEl) {
+    _statusEl.style.color = '#ff9900';
+    _statusEl.style.display = 'block';
+    _statusEl.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Event wiring
 
 function _wireEvents(): void {
   window.addEventListener('agentmodel:manifest', (ev: Event) => {
     const detail = (ev as CustomEvent<{ totalBytesExpected?: number }>).detail;
     if (detail?.totalBytesExpected) _totalBytes = detail.totalBytesExpected;
-    _watchdogId = setTimeout(() => {
-      if (_done || _loadedBytes > 0) return;
-      if (_statusEl) {
-        _statusEl.style.color = '#ff9900';
-        _statusEl.style.display = 'block';
-        _statusEl.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
-      }
-    }, 60_000);
+    // Initial grace: 90s from manifest to first byte (covers CDN warmup + redirect chain).
+    _watchdogId = setTimeout(_showStalled, 90_000);
   });
 
   window.addEventListener('agentmodel:loading', (ev: Event) => {
-    if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
     const d = (ev as CustomEvent<{
       bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string;
     }>).detail ?? {};
+    const prevLoaded = _loadedBytes;
     if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, d.bytes!);
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     if (d.file) _currentFile = d.file;
     if (!_totalBytes && d.total) _totalBytes = d.total;
+    // Sliding-window: on first loading event switch from 90s initial grace to 30s window;
+    // reset the 30s timer on each event with real byte progress.
+    if (!_firstLoadingReceived) {
+      _firstLoadingReceived = true;
+      if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
+      _watchdogId = setTimeout(_showStalled, 30_000);
+    } else if (_loadedBytes > prevLoaded) {
+      if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
+      _watchdogId = setTimeout(_showStalled, 30_000);
+    }
     _updateProgress();
   });
 
@@ -77,9 +95,15 @@ function _wireEvents(): void {
     const d = (ev as CustomEvent<{
       bytes?: number; total?: number; throughputBytesPerSec?: number;
     }>).detail ?? {};
+    const prevLoaded = _loadedBytes;
     if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, (_totalBytes * 0.85) + (d.bytes! * 0.15));
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     _currentFile = 'drafter';
+    // Also slide the watchdog window on drafter progress (drafter = active connection).
+    if (_loadedBytes > prevLoaded) {
+      if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
+      _watchdogId = setTimeout(_showStalled, 30_000);
+    }
     _updateProgress();
   });
 
