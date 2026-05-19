@@ -10,7 +10,7 @@
 # Exits 0 (allow) otherwise, or if shared browser is not reachable.
 
 MAX_TABS=2
-CDP_HOST="http://localhost:9222"
+CDP_HOST="http://localhost:${CDP_PORT:-9222}"
 
 # Only fire on verify commands
 TOOL_INPUT="${TOOL_INPUT_COMMAND:-}"

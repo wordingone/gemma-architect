@@ -47,10 +47,11 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { DEV_URL as _DEFAULT_DEV_URL } from "./ports";
 
 const CDP_JSON  = "B:/M/gemma-architect-master/.shared-browser/cdp.json";
 const STATE_DIR = `${process.cwd()}/state`;
-const DEV_URL   = process.env.GEMMA_DEV_URL ?? "http://localhost:5175/";
+const DEV_URL   = process.env.GEMMA_DEV_URL ?? _DEFAULT_DEV_URL;
 
 const isolated = process.argv.includes("--isolated");
 

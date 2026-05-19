@@ -7,16 +7,17 @@
 // Timeout: 240 seconds for model generation.
 
 import { execSync } from "child_process";
+import { CDP_PORT, DEV_PORT, CDP_BASE, DEV_URL } from "./ports.mjs";
 
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222"); const CDP_URL = `http://localhost:${CDP_PORT}`;
-const APP_URL = "http://localhost:5175/";
+const CDP_URL = CDP_BASE;
+const APP_URL = DEV_URL;
 const TIMEOUT_MS = 240_000;
 
 // ── Find :5175 tab ─────────────────────────────────────────────────────────────
 const tabs = await fetch(`${CDP_URL}/json`).then(r => r.json());
 const tab = tabs.find(t => t.url?.startsWith(APP_URL) && t.type === "page");
 if (!tab) {
-  console.error("ERROR: no :5175 tab found in shared browser. Open http://localhost:5175/ first.");
+  console.error(`ERROR: no :${DEV_PORT} tab found in shared browser. Open ${DEV_URL} first.`);
   process.exit(1);
 }
 console.log("Tab found:", tab.url, "id:", tab.id);

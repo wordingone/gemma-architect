@@ -5,6 +5,7 @@
  */
 import { WebSocket } from "ws";
 import { readFileSync } from "fs";
+import { DEV_PORT } from "./ports.mjs";
 
 const cdpJson = JSON.parse(readFileSync("B:/M/gemma-architect-master/.shared-browser/cdp.json", "utf8").replace(/^﻿/, ""));
 const EP = cdpJson.endpoint;
@@ -31,10 +32,10 @@ ws.on("message", raw => {
   }
 });
 
-// Attach to :5175 tab
+// Attach to app tab
 const { targetInfos } = await browserSend("Target.getTargets");
-const target = targetInfos.find(t => t.url?.includes("localhost:5175") && t.type === "page");
-if (!target) { console.error("No :5175 page target"); process.exit(1); }
+const target = targetInfos.find(t => t.url?.includes(`localhost:${DEV_PORT}`) && t.type === "page");
+if (!target) { console.error(`No :${DEV_PORT} page target`); process.exit(1); }
 const { sessionId } = await browserSend("Target.attachToTarget", { targetId: target.targetId, flatten: true });
 
 const pageSend = (method, params = {}) => new Promise((resolve, reject) => {

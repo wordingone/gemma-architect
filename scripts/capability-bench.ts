@@ -24,7 +24,7 @@
 //   # 2. Start Vite dev server pointing at the remote agent
 //   VITE_GEMMA_AGENT_URL=http://localhost:8088 bun run web:dev
 //
-//   # 3. Run bench (shared browser must be open at localhost:5175)
+//   # 3. Run bench (shared browser must be open at the dev server URL)
 //   bun run capability-bench
 //
 //   # 4. Run P8d judge over the exported IFCs
@@ -38,13 +38,13 @@ import { readdir, readFile, writeFile, mkdir, rm, copyFile } from "node:fs/promi
 import { join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 import WebSocket from "ws";
+import { CDP_PORT, CDP_BASE } from "./ports";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const REPO = resolve(import.meta.dir, "..");
 const PROMPTS_DIR = join(REPO, "web/test/capability/prompts");
 const STATE_DIR = join(REPO, "state");
 const DOWNLOAD_TMP = join(REPO, ".tmp-bench-downloads");
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
 const AGENT_TIMEOUT_MS = 5 * 60 * 1000; // 5 min per prompt
 const PAGE_READY_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 30_000;

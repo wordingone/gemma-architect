@@ -1,6 +1,6 @@
 # scripts/shared-browser/start.ps1
-# Launch a persistent headed Chromium at http://localhost:5175/ with CDP on port 9222.
-# Idempotent: if 9222 already answers, writes cdp.json and exits without spawning a new Chrome.
+# Launch a persistent headed Chromium at the configured dev URL with CDP on the configured port.
+# Idempotent: if CDP_PORT already answers, writes cdp.json and exits without spawning a new Chrome.
 #
 # Usage: powershell -File scripts/shared-browser/start.ps1
 #
@@ -9,8 +9,9 @@
 
 param([switch]$Force)
 
-$CDP_PORT      = 9222
-$DEV_URL       = "http://localhost:5175/"
+$CDP_PORT      = if ($env:CDP_PORT) { [int]$env:CDP_PORT } else { 9222 }
+$DEV_PORT      = if ($env:DEV_PORT) { $env:DEV_PORT } else { '5175' }
+$DEV_URL       = "http://localhost:$DEV_PORT/"
 $ChromeDataDir = "B:\M\gemma-architect-master\.shared-browser\profile"
 $CDP_JSON      = "B:\M\gemma-architect-master\.shared-browser\cdp.json"
 

@@ -7,17 +7,18 @@
 //   - LocalStorage + SessionStorage
 //   - Service worker registrations
 //
-// Usage: bun scripts/clear-cache.mjs [--port 9222] [--target-url http://localhost:5175/]
+// Usage: bun scripts/clear-cache.mjs [--port CDP_PORT] [--target-url DEV_URL]
 //
 // Used by gemma-verify-raw.mjs --fresh-user flag before running the suite.
 
 import WebSocket from "ws";
+import { CDP_PORT as _DEFAULT_CDP_PORT, DEV_PORT as _DEFAULT_DEV_PORT } from "./ports.mjs";
 
 const args = process.argv.slice(2);
 const portIdx = args.indexOf("--port");
-const CDP_PORT = portIdx !== -1 ? args[portIdx + 1] : (process.env.CDP_PORT ?? "9222");
+const CDP_PORT = portIdx !== -1 ? Number(args[portIdx + 1]) : _DEFAULT_CDP_PORT;
 const targetIdx = args.indexOf("--target-url");
-const TARGET_HINT = targetIdx !== -1 ? args[targetIdx + 1] : (process.env.GEMMA_DEV_URL ?? "localhost:5175");
+const TARGET_HINT = targetIdx !== -1 ? args[targetIdx + 1] : (process.env.GEMMA_DEV_URL ?? `localhost:${_DEFAULT_DEV_PORT}`);
 
 // ── Connect to CDP ────────────────────────────────────────────────────────────
 const targets = await fetch(`http://localhost:${CDP_PORT}/json`).then((r) => r.json()).catch(() => null);
@@ -27,7 +28,7 @@ if (!targets) {
 }
 
 const target = targets.find(
-  (t) => t.type === "page" && (t.url?.includes("5175") || t.url?.includes(TARGET_HINT)),
+  (t) => t.type === "page" && (t.url?.includes(`${_DEFAULT_DEV_PORT}`) || t.url?.includes(TARGET_HINT)),
 );
 if (!target?.webSocketDebuggerUrl) {
   console.error(`[clear-cache] ERROR: no matching page target for ${TARGET_HINT}. Targets:`, targets.map((t) => t.url));

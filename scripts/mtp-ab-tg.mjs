@@ -26,11 +26,11 @@ import { writeFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { WebSocket } from "ws";
+import { CDP_PORT, DEV_URL } from "./ports.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const CDP_PORT = parseInt(process.env.CDP_PORT ?? "9222", 10);
-const BASE_URL = process.env.APP_URL ?? "http://localhost:5175/";
+const BASE_URL = process.env.APP_URL ?? DEV_URL;
 // Scenario 1: text-only build prompt — does NOT match VISUAL_RE in chat-panel.ts.
 // /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i
 const PROMPT_TEXT   = "Build a 5m wall at the origin, then add a 5x5 floor slab beneath it.";

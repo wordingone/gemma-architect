@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // haiku-rehearsal.mjs — Step 2 of #229: Perceptual narration via /visual-check Haiku skill.
 //
-// Drives the W1 user flow against localhost:5175 (canonical user URL).
+// Drives the W1 user flow against the canonical dev server URL.
 // At each step, captures a CDP screenshot and spawns a Haiku subagent via the
 // /visual-check skill to describe + evaluate the viewport.
 //
@@ -18,6 +18,7 @@
 
 import { writeFileSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
+import { CDP_PORT, DEV_PORT } from "./ports.mjs";
 
 const STATE_DIR = `${process.cwd()}/state`;
 mkdirSync(STATE_DIR, { recursive: true });
@@ -35,11 +36,10 @@ mkdirSync(screenshotDir, { recursive: true });
 
 // ── CDP connection ───────────────────────────────────────────────────────────
 
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
 const targets = await fetch(`http://localhost:${CDP_PORT}/json`).then(r => r.json());
-const target = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
+const target = targets.find(t => t.url?.includes(`localhost:${DEV_PORT}`) && t.type === "page");
 if (!target) {
-  console.error("ERROR: no :5175 page target — start shared Chromium first");
+  console.error(`ERROR: no :${DEV_PORT} page target — start shared Chromium first`);
   process.exit(1);
 }
 

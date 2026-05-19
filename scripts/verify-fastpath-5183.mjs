@@ -6,9 +6,7 @@
 import { WebSocket } from "ws";
 import { mkdirSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
-
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
-const CDP_BASE = `http://localhost:${CDP_PORT}`;
+import { CDP_PORT, CDP_BASE } from "./ports.mjs";
 
 const SHA = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
 const TS  = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);

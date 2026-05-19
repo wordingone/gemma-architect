@@ -46,9 +46,9 @@
     // Replace with a locally-served GGUF if the CDN URL is inaccessible.
     //
     // NOTE: no HF-hosted Gemma 4 GGUF at a known stable CDN URL as of 2026-05-08.
-    // Swap MODEL_URL for a local path: e.g. "http://localhost:5175/models/gemma4-e2b.Q4_K_M.gguf"
+    // Swap MODEL_URL for a local path served by the dev server (e.g. /models/gemma4-e2b.Q4_K_M.gguf)
     // after downloading from https://huggingface.co/ggml-org/gemma-4-2b-GGUF
-    const MODEL_URL  = "http://localhost:5175/models/gemma4-e2b-Q4_K_M.gguf";  // serve locally
+    const MODEL_URL  = `${window.location.protocol}//${window.location.host}/models/gemma4-e2b-Q4_K_M.gguf`;  // serve locally
     const PROMPT     = "Create a box 4m wide, 3m tall, 2m deep.";
     const MAX_TOKENS = 128;
 

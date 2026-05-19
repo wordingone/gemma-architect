@@ -23,7 +23,10 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "websocket-client", "-q"])
     import websocket
 
-CDP_PORT = int(os.environ.get("CDP_PORT", "9222"))
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from ports import CDP_PORT, DEV_PORT, CDP_BASE, DEV_URL
+
 DEV_URL = "http://localhost:5182/"
 SHA = "1b9fc43"
 STATE_DIR = Path("B:/M/gemma-architect-master/state")

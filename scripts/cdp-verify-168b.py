@@ -2,8 +2,11 @@
 """CDP verification script for PR #181 fix/168b-layers-sidebar LAYERS tab evidence."""
 import json, time, datetime, urllib.request, websocket, sys, os
 
-CDP_HOST = f"http://localhost:{int(os.environ.get('CDP_PORT', '9222'))}"
-DEV_URL = "http://localhost:5175/"
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from ports import CDP_PORT, DEV_PORT, CDP_BASE, DEV_URL
+
+CDP_HOST = CDP_BASE
 OUT_DIR = "B:/M/gemma-architect-master/state"
 SHA = "4003c9a"
 
@@ -62,8 +65,8 @@ def main():
 
     ws = cdp_connect(ws_url)
 
-    # If not already on 5175, navigate
-    if "5175" not in current_url:
+    # If not already on the dev server, navigate
+    if str(DEV_PORT) not in current_url:
         print(f"Navigating to {DEV_URL}")
         cdp_send(ws, "Page.navigate", {"url": DEV_URL}, msg_id=10)
         time.sleep(3)

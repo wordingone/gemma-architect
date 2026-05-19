@@ -21,6 +21,7 @@
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { execSync, spawnSync } from "child_process";
 import { WebSocket } from "ws";
+import { CDP_PORT, DEV_PORT } from "./ports.mjs";
 
 // ── Args ──────────────────────────────────────────────────────────────────────
 function arg(name, def) {
@@ -42,11 +43,10 @@ console.log(`[demo-record] Output dir: ${outDir}`);
 console.log(`[demo-record] Video: ${fps}fps, JPEG quality ${quality}, max ${maxW}×${maxH}`);
 
 // ── CDP connection ────────────────────────────────────────────────────────────
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
 const targets = await fetch(`http://localhost:${CDP_PORT}/json`).then(r => r.json());
-const target  = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
+const target  = targets.find(t => t.url?.includes(`localhost:${DEV_PORT}`) && t.type === "page");
 if (!target) {
-  console.error("ERROR: no :5175 page target found — is the shared browser running?");
+  console.error(`ERROR: no :${DEV_PORT} page target found — is the shared browser running?`);
   process.exit(1);
 }
 console.log(`[demo-record] Connected to: ${target.url}`);
@@ -102,7 +102,7 @@ await send("Page.startScreencast", {
 });
 
 console.log(`\n[demo-record] Recording started. Ctrl+C to stop and assemble video.`);
-console.log(`[demo-record] Run your demo now at localhost:5175`);
+console.log(`[demo-record] Run your demo now at localhost:${DEV_PORT}`);
 
 // ── Shutdown + assemble ───────────────────────────────────────────────────────
 async function shutdown() {

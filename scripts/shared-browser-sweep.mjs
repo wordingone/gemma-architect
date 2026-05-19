@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // shared-browser-sweep.mjs — close stale non-canonical tabs on :9222.
 //
-// Canonical tab: http://localhost:5175/* (gemma-architect-master build).
+// Canonical tab: the DEV_PORT page target (gemma-architect-master build).
 // Any other page-type tab older than --max-age-ms is closed and logged.
 // Tabs without a recorded first-seen time are treated as new (age=0).
 //
@@ -23,6 +23,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
+import { CDP_PORT, DEV_PORT } from "./ports.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const STATE_DIR = join(ROOT, "state");
@@ -30,7 +31,6 @@ mkdirSync(STATE_DIR, { recursive: true });
 const LOG_FILE      = join(STATE_DIR, "shared-browser-sweep.log");
 const SIDECAR_FILE  = join(STATE_DIR, "shared-browser-tabs-seen.json");
 
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
 const CDP_HOST  = `http://localhost:${CDP_PORT}`;
 const MAX_AGE_MS = Number(
   process.argv.find((a) => a.startsWith("--max-age-ms="))?.split("=")[1] ?? 300_000,
@@ -86,7 +86,7 @@ async function closeTab(tab) {
 // Kill the vite server listening on `port`, with a guard: never kill a process
 // whose CommandLine contains "--port 5175" (canonical server).
 function killViteOnPort(port) {
-  if (port === 5175) return false; // hard guard: never kill canonical
+  if (port === DEV_PORT) return false; // hard guard: never kill canonical
   try {
     const ps = `
       $conn = Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1;
@@ -140,7 +140,7 @@ async function sweep() {
 
   for (const tab of pageTabs) {
     const url = tab.url ?? "";
-    if (url.startsWith("http://localhost:5175/") || url === "about:blank") continue;
+    if (url.startsWith(`http://localhost:${DEV_PORT}/`) || url === "about:blank") continue;
 
     const firstSeen = seen[tab.id] ?? now;
     const ageMs = now - firstSeen;

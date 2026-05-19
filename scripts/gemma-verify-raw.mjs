@@ -23,6 +23,7 @@ if (new Date() < SUSPEND_UNTIL) {
 
 import { writeFileSync, mkdirSync, readFileSync } from "fs";
 import { execSync } from "child_process";
+import { CDP_PORT, CDP_BASE, DEV_URL as _DEFAULT_DEV_URL } from "./ports.mjs";
 
 // ── Flags ─────────────────────────────────────────────────────────────────────
 // --fresh-user    : clear all caches before running (simulates first-time visitor)
@@ -31,12 +32,9 @@ const FRESH_USER = process.argv.includes("--fresh-user");
 
 // ── Connection ────────────────────────────────────────────────────────────────
 
-const CDP_PORT  = Number(process.env.CDP_PORT ?? "9222");
-const CDP_BASE  = `http://localhost:${CDP_PORT}`;
-
 const targetUrlIdx = process.argv.indexOf("--target-url");
 const DEV_URL   = targetUrlIdx !== -1 ? process.argv[targetUrlIdx + 1]
-                : (process.env.GEMMA_DEV_URL ?? "http://localhost:5175/");
+                : (process.env.GEMMA_DEV_URL ?? _DEFAULT_DEV_URL);
 const STATE_DIR = `${process.cwd()}/state`;
 
 function getSHA() {

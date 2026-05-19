@@ -3,6 +3,7 @@
 import { WebSocket } from "ws";
 import { mkdirSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
+import { CDP_PORT, DEV_PORT } from "./ports.mjs";
 
 export const SHA = execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
 mkdirSync("state", { recursive: true });
@@ -11,9 +12,9 @@ export function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 /** Connect to the :5175 page target in the shared browser. */
 export async function connectPage5175() {
-  const targets = JSON.parse(execSync("curl -s http://localhost:${CDP_PORT}/json", { encoding: "utf8" }));
-  const target = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
-  if (!target) throw new Error("No :5175 page target — is the shared browser running?");
+  const targets = JSON.parse(execSync(`curl -s http://localhost:${CDP_PORT}/json`, { encoding: "utf8" }));
+  const target = targets.find(t => t.url?.includes(`localhost:${DEV_PORT}`) && t.type === "page");
+  if (!target) throw new Error(`No :${DEV_PORT} page target — is the shared browser running?`);
   return connectWS(target.webSocketDebuggerUrl);
 }
 

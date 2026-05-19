@@ -8,8 +8,9 @@
 
 import { WebSocket } from "ws";
 import { writeFileSync, mkdirSync } from "fs";
+import { CDP_PORT, DEV_PORT, CDP_BASE } from "./ports.mjs";
 
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222"); const CDP_URL = `http://localhost:${CDP_PORT}`;
+const CDP_URL = CDP_BASE;
 const OUT_DIR = "web/public/thumbnails";
 
 // Scenes = full buildings; Elements = individual components
@@ -26,8 +27,8 @@ const SAMPLES = [
 
 // ── CDP connection ────────────────────────────────────────────────────────────
 const targets = await fetch(`${CDP_URL}/json`).then(r => r.json());
-const target  = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
-if (!target) { console.error("No :5175 page target"); process.exit(1); }
+const target  = targets.find(t => t.url?.includes(`localhost:${DEV_PORT}`) && t.type === "page");
+if (!target) { console.error(`No :${DEV_PORT} page target`); process.exit(1); }
 console.log(`Connected to: ${target.url}`);
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);

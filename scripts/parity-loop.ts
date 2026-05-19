@@ -16,6 +16,7 @@
 import { writeFileSync, readFileSync, appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { CDP_PORT, DEV_PORT } from "./ports";
 
 //  Paths 
 
@@ -52,8 +53,7 @@ const TIER_LADDER      = [90, 95, 99];
 const _startTierIdx    = TIER_LADDER.findIndex(t => t >= (cfg.parity_threshold.current_tier ?? 90));
 const START_TIER_IDX   = _startTierIdx < 0 ? TIER_LADDER.length - 1 : _startTierIdx;
 
-//  CDP connection 
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
+//  CDP connection
 
 type CdpTarget = { url?: string; type?: string; webSocketDebuggerUrl?: string };
 
@@ -66,9 +66,9 @@ if (!targets) {
   process.exit(1);
 }
 
-const target = targets.find(t => t.url?.includes("localhost:5175") && t.type === "page");
+const target = targets.find(t => t.url?.includes(`localhost:${DEV_PORT}`) && t.type === "page");
 if (!target?.webSocketDebuggerUrl) {
-  console.error("ERROR: No :5175 page tab found. Start dev server and shared browser first.");
+  console.error(`ERROR: No :${DEV_PORT} page tab found. Start dev server and shared browser first.`);
   process.exit(1);
 }
 
