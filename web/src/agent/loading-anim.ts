@@ -32,7 +32,8 @@ function _wireEvents(): void {
   window.addEventListener("agentmodel:loading", _onFirst, { once: true });
   window.addEventListener("agentmodel:ready", _onModelReady, { once: true });
   window.addEventListener("agentmodel:drafter:ready", _onDrafterReady, { once: true });
-  window.addEventListener("agentmodel:error", _onModelReady, { once: true });
+  // #1036: error shows a red state instead of silently "completing" (looked like success)
+  window.addEventListener("agentmodel:error", _onModelError, { once: true });
   window.addEventListener("agentmodel:drafter:error", _onDrafterReady, { once: true });
   // returning-user: skip animation entirely (model already cached)
   window.addEventListener("agentmodel:returning-user", _onDone, { once: true });
@@ -60,6 +61,24 @@ function _onDrafterReady(): void {
 
 function _maybeComplete(): void {
   if (_modelReady && _drafterReady) _onDone();
+}
+
+function _onModelError(): void {
+  // #1036: model load failed — flash red stroke briefly so the user sees an error,
+  // not a "success" completion. Then fade out. The badge + chat panel surface the
+  // actual error text; the animation just needs to not look like it succeeded.
+  if (_done) return;
+  _done = true;
+  cancelAnimationFrame(_rafId);
+  if (!_svg || !_path) return;
+  _path.setAttribute("stroke", "#e05c5c"); // red
+  _path.style.strokeDashoffset = "0";      // snap to fully drawn (red)
+  setTimeout(() => {
+    if (!_svg) return;
+    _svg.style.transition = "opacity 1.2s ease";
+    _svg.style.opacity = "0";
+    setTimeout(() => { _svg?.remove(); _svg = null; }, 1300);
+  }, 1200); // hold red for 1.2s so user notices
 }
 
 function _onDone(): void {

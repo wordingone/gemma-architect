@@ -116,6 +116,9 @@ const BADGE_ID = "ai-model-badge";
 // ── Worker state (#936) ──────────────────────────────────────────────────────
 let _inferenceWorker: Worker | null = null;
 let _workerReady = false;
+// #1036: load error + readiness guards for chip-click-before-ready case.
+let _modelLoadError: string | null = null; // set when worker posts type:"error"
+let _bootComplete = false;                 // set when worker posts type:"ready" (all phases done)
 type WorkerGenResult = {
   text: string; specAttempts: number; specAccepts: number;
   prefillMs: number; decodeMs: number; inputLength: number; tokensOut: number;
@@ -219,6 +222,7 @@ function initWorkerIfNeeded(): Worker {
         break;
       case "ready":
         _workerReady = true;
+        _bootComplete = true;
         break;
       case "generate-progress":
         window.dispatchEvent(new CustomEvent("agentmodel:generate-progress", {
@@ -256,6 +260,9 @@ function initWorkerIfNeeded(): Worker {
       }
       case "error":
         _webgpuFallbackEngaged = true;
+        _modelLoadError = (msg.error as string) ?? "Unknown model load error";
+        _bootComplete = true; // boot sequence ended (with error)
+        console.error("[gemma] model load failed:", _modelLoadError); // #1036 DevTools AC1
         updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
         window.dispatchEvent(new CustomEvent("agentmodel:error", { detail: msg.error }));
         for (const [, cb] of _generateCallbacks) cb.reject(new Error(msg.error as string));
@@ -1200,6 +1207,20 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // ── On-device path via Web Worker (#936) ─────────────────────────────────
   // Worker owns: from_pretrained, WebGPU probe, warmup, drafter load, tokenization,
   // generate, decode. Main thread never blocks during model load or inference.
+
+  // #1036: Guard against chip-click-before-ready (loading bar "done" but model not loaded).
+  // _bootComplete is set when worker posts type:"ready" (all phases done) OR type:"error".
+  // _modelLoadError is set on failure — surface a helpful message instead of "model not loaded".
+  if (_modelLoadError) {
+    throw new Error(
+      `Model failed to load — WebGPU may not be supported on this device. ` +
+      `Try Chrome 115+ on a desktop with a dedicated GPU. (${_modelLoadError})`
+    );
+  }
+  if (!_bootComplete) {
+    throw new Error("Model is still loading — please wait a moment and try again.");
+  }
+
   const worker = initWorkerIfNeeded();
 
   // Get imageUrl for vision turns (worker loads RawImage internally — no transfer needed).
