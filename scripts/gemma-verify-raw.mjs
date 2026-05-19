@@ -5009,6 +5009,60 @@ await resetScene('before-box-inject');
   await resetScene('post-S101');
 }
 
+// ── S102: C2 schema-handler minimum-args smoke ────────────────────────────────
+// Dispatches SdWall/SdSlab/SdRoof/SdDoor/SdWindow with minimum valid args.
+// SdWall+SdSlab: CLEAN (no required fields). SdRoof/SdDoor/SdWindow: use
+// schema-required args until P2 fix PRs make them optional.
+// Asserts creator count > 0 for each command (handler actually ran).
+{
+  await resetScene('pre-S102');
+  const s102 = await evaluate(`(async () => {
+    try {
+      const counts = {};
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      function creatorCount(kind) {
+        let n = 0;
+        v.scene.traverse(obj => { if (obj.userData?.creator === kind) n++; });
+        return n;
+      }
+
+      // SdWall — CLEAN, no required args
+      window.__dispatch('SdWall', {});
+      await new Promise(r => setTimeout(r, 200));
+      counts.SdWall = creatorCount('wall');
+
+      // SdSlab — CLEAN, no required args
+      window.__dispatch('SdSlab', {});
+      await new Promise(r => setTimeout(r, 200));
+      counts.SdSlab = creatorCount('slab');
+
+      // SdRoof — footprint required in schema (P2 divergence); provide it
+      window.__dispatch('SdRoof', { footprint: [[0,0],[8,0],[8,6],[0,6]] });
+      await new Promise(r => setTimeout(r, 200));
+      counts.SdRoof = creatorCount('roof');
+
+      // SdDoor — position required in schema (P2 divergence); provide it
+      window.__dispatch('SdDoor', { position: [0, 0] });
+      await new Promise(r => setTimeout(r, 200));
+      counts.SdDoor = creatorCount('door');
+
+      // SdWindow — position required in schema (P2 divergence); provide it
+      window.__dispatch('SdWindow', { position: [2, 0] });
+      await new Promise(r => setTimeout(r, 200));
+      counts.SdWindow = creatorCount('window');
+
+      const passed = Object.values(counts).every(n => n > 0);
+      return { passed, evidence: counts };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('c2-minimum-args-smoke', !!(s102?.passed), s102 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S102');
+}
+
 } finally {
   await cleanup();
 }
