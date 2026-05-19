@@ -921,41 +921,6 @@ Assistant:
 <tool_call>{"command":"SdAlignedDim","parameters":{"a":[0,0,0],"b":[3,4,0]},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
-// WebGPU-only few-shot: full 26-call example for quality; maxNewTokens=4096 (#1048) gives
-// the model room to emit all walls/windows before EOS. buildSystemPrompt uses FEW_SHOT_EXAMPLES.
-// #980: No <plan> block — emit <tool_call> blocks directly. Level naming: Level 1 = ground.
-const WEBGPU_HOUSE_FEW_SHOT = `
-Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan> block):
-
-User: build a two-story residential house, 26 feet wide by 20 feet deep
-Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows on L1; 4 windows on L2; stair at NE corner.
-<tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":9.0,"extent":26}}</tool_call>
-<tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26}}</tool_call>
-<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
-<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdDoor","parameters":{"position":[5,0,0],"width":3.0,"height":7.0,"sillH":0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"}}</tool_call>
-<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30}}</tool_call>
-<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
-<tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0}}</tool_call>
-`.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
@@ -977,9 +942,10 @@ export function buildSystemPrompt(skills?: Skill[]): string {
   ].filter(Boolean).join("\n\n");
 }
 
-// On-device WebGPU system prompt. TRIAGE: uses WEBGPU_HOUSE_FEW_SHOT (one example,
-// ~450 tok) instead of full FEW_SHOT_EXAMPLES (~1900 tok after #1063 imperial example) to stay under the 2048-position
-// ONNX bake limit (SafeInt overflow at safeint.h:17 confirmed 2026-05-18). Real fix: #998.
+// On-device WebGPU system prompt. Uses full FEW_SHOT_EXAMPLES (#999):
+// ONNX model (onnx-community/gemma-4-E4B-it-ONNX) has RoPE caches at [131072, 128/256]
+// and config max_position_embeddings=131072 — not baked at 2048. The earlier SafeInt
+// overflow was from pre-#992 WEBGPU_CONTEXT_LIMIT=2048 in model-worker.ts (now 16384).
 export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
   const dict = getDictionary();
   const implemented = new Set(listHandlers());
@@ -1000,7 +966,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
-    WEBGPU_HOUSE_FEW_SHOT,
+    FEW_SHOT_EXAMPLES,
     verbList,
   ].filter(Boolean).join("\n\n");
 }
