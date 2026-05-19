@@ -33,6 +33,13 @@ let _rafId = 0;
 let _watchdogId: ReturnType<typeof setTimeout> | null = null;
 let _firstLoadingReceived = false;
 
+// Download trace — in-memory log of all agentmodel:* events for STALLED diagnostics.
+type TraceEntry = { t: number; event: string; bytes?: number; total?: number; phase?: string };
+const _trace: TraceEntry[] = [];
+function _traceEvent(event: string, extra?: Omit<TraceEntry, 't' | 'event'>): void {
+  _trace.push({ t: Math.round(performance.now()), event, ...extra });
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 
@@ -51,11 +58,30 @@ export function initBootScreen(): void {
 function _showStalled(): void {
   if (_done) return;
   _watchdogId = null;
-  if (_statusEl) {
-    _statusEl.style.color = '#ff9900';
-    _statusEl.style.display = 'block';
-    _statusEl.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
-  }
+  if (!_statusEl) return;
+  Object.assign(_statusEl.style, { color: '#ff9900', display: 'flex', flexDirection: 'column', gap: '6px' });
+
+  const msg = document.createElement('div');
+  msg.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
+  _statusEl.appendChild(msg);
+
+  // Diagnostic trace — copyable block so the user can paste it for triage.
+  const traceJson = JSON.stringify(_trace, null, 2);
+  const details = document.createElement('details');
+  details.style.cssText = 'margin-top:6px;font-size:9px;text-align:left;';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Copy diagnostic trace';
+  summary.style.cssText = 'cursor:pointer;color:#ff9900;opacity:.7;letter-spacing:.04em;';
+  details.appendChild(summary);
+  const pre = document.createElement('pre');
+  Object.assign(pre.style, {
+    maxHeight: '120px', overflowY: 'auto', background: '#111', color: '#888',
+    padding: '6px', borderRadius: '3px', fontSize: '8px', lineHeight: '1.3',
+    userSelect: 'all', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+  });
+  pre.textContent = traceJson;
+  details.appendChild(pre);
+  _statusEl.appendChild(details);
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +91,7 @@ function _wireEvents(): void {
   window.addEventListener('agentmodel:manifest', (ev: Event) => {
     const detail = (ev as CustomEvent<{ totalBytesExpected?: number }>).detail;
     if (detail?.totalBytesExpected) _totalBytes = detail.totalBytesExpected;
+    _traceEvent('manifest', { total: detail?.totalBytesExpected });
     // Cancel any watchdog set by pre-manifest loading events (they carry no bytes).
     if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
     // Initial grace: 90s from manifest to first byte (covers CDN warmup + redirect chain).
@@ -73,21 +100,25 @@ function _wireEvents(): void {
 
   window.addEventListener('agentmodel:loading', (ev: Event) => {
     const d = (ev as CustomEvent<{
-      bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string;
+      bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string; phase?: string;
     }>).detail ?? {};
     const prevLoaded = _loadedBytes;
     if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, d.bytes!);
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     if (d.file) _currentFile = d.file;
     if (!_totalBytes && d.total) _totalBytes = d.total;
+    _traceEvent('loading', { bytes: d.bytes, total: d.total, phase: d.phase });
     // Sliding-window: switch from 90s initial grace to 30s window only on first event
     // with real bytes (pre-manifest loading events fire with empty detail and must not
-    // trigger the transition). Reset the 30s timer on each subsequent event with progress.
+    // trigger the transition).
+    // After first real bytes: reset 30s window on ANY loading event, including shard-boundary
+    // events where bytes=0 (new shard starting) — these prove the connection is alive.
+    // Without this, inter-shard gaps on slow CDN nodes exceed 30s and fire false STALLED.
     if (!_firstLoadingReceived && _loadedBytes > 0) {
       _firstLoadingReceived = true;
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
       _watchdogId = setTimeout(_showStalled, 30_000);
-    } else if (_firstLoadingReceived && _loadedBytes > prevLoaded) {
+    } else if (_firstLoadingReceived) {
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
       _watchdogId = setTimeout(_showStalled, 30_000);
     }
@@ -102,6 +133,7 @@ function _wireEvents(): void {
     if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, (_totalBytes * 0.85) + (d.bytes! * 0.15));
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     _currentFile = 'drafter';
+    _traceEvent('drafter:loading', { bytes: d.bytes, total: d.total });
     // Also slide the watchdog window on drafter progress (drafter = active connection).
     if (_loadedBytes > prevLoaded) {
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
@@ -110,9 +142,18 @@ function _wireEvents(): void {
     _updateProgress();
   });
 
-  window.addEventListener('agentmodel:returning-user', _onReturningUser, { once: true });
-  window.addEventListener('agentmodel:boot-complete', _onDone, { once: true });
-  window.addEventListener('agentmodel:error', _onError, { once: true });
+  window.addEventListener('agentmodel:returning-user', () => {
+    _traceEvent('returning-user');
+    _onReturningUser();
+  }, { once: true });
+  window.addEventListener('agentmodel:boot-complete', () => {
+    _traceEvent('boot-complete');
+    _onDone();
+  }, { once: true });
+  window.addEventListener('agentmodel:error', (ev: Event) => {
+    _traceEvent('error');
+    _onError(ev);
+  }, { once: true });
 }
 
 // ---------------------------------------------------------------------------
