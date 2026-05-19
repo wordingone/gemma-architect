@@ -5,7 +5,7 @@
 //
 // Protocol (main → worker):
 //   {type:"init", modelId, drafterUrl, drafterCacheKey}
-//   {type:"generate", turnId, messages, imageUrl?, maxNewTokens, eosId, draftK, useMtp}
+//   {type:"generate", turnId, messages, imageUrl?, videoUrls?, maxNewTokens, eosId, draftK, useMtp}
 //   {type:"abort", turnId}
 //
 // Protocol (worker → main):
@@ -297,6 +297,7 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
   const turnId      = data.turnId as string;
   const messages    = data.messages as Array<{ role: string; content: string }>;
   const imageUrl    = data.imageUrl as string | undefined;
+  const videoUrls   = data.videoUrls as string[] | undefined; // §#693 video content blocks
   const maxNewTokens = data.maxNewTokens as number;
   const eosId       = data.eosId as number;
   const draftK      = data.draftK as number;
@@ -312,10 +313,32 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
     try { imageList = [await RawImage.fromURL(imageUrl)]; } catch { /* skip on failure */ }
   }
 
+  // §#693 Video: load each frame URL as RawImage[] for the video content block.
+  // Gemma 4 processor accepts: proc(chatText, images=null, videos=[[frame, ...]])
+  let videoFrames: unknown[] = [];
+  if (videoUrls && videoUrls.length > 0) {
+    for (const url of videoUrls) {
+      try { videoFrames.push(await RawImage.fromURL(url)); } catch { /* skip bad frame */ }
+    }
+  }
+  const hasVideo = videoFrames.length > 0;
+
   // Format messages into a single string via apply_chat_template
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let messagesForTemplate: any[] = messages;
-  if (imageUrl && imageList.length > 0) {
+  if (hasVideo) {
+    // Video content block: { type: "video", video: RawImage[] } in last user message.
+    const lastUser = [...messages];
+    let ui = -1;
+    for (let i = lastUser.length - 1; i >= 0; i--) {
+      if (lastUser[i].role === "user") { ui = i; break; }
+    }
+    if (ui >= 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      lastUser[ui] = { role: "user", content: [{ type: "video", video: videoFrames }, { type: "text", text: lastUser[ui].content }] as any };
+      messagesForTemplate = lastUser;
+    }
+  } else if (imageUrl && imageList.length > 0) {
     // Splice image into the last user message as a multimodal content array
     const lastUser = [...messages];
     let ui = -1;
@@ -334,9 +357,12 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
     enable_thinking: false, // #1044: skip <|think|> → all output budget for <tool_call> blocks
   }) as string;
 
-  // Tokenize (pass image list separately for processor's vision encoder)
+  // Tokenize (pass image/video lists separately for processor's vision encoder).
+  // Video: proc(chatText, images=null, videos=[[frame, ...]]) per transformers.js v4 API.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inputs: any = await proc(chatText, imageList.length > 0 ? imageList : null);
+  const inputs: any = hasVideo
+    ? await proc(chatText, null, [videoFrames])
+    : await proc(chatText, imageList.length > 0 ? imageList : null);
   const tProc = performance.now();
   const inputLength: number = inputs.input_ids?.dims?.[1] ?? 0;
 

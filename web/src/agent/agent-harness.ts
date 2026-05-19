@@ -27,6 +27,7 @@ import {
   loadWasmBackend,
   wasmChatCompletion,
 } from "./wasm-backend";
+import { VIDEO_INPUT_ENABLED, buildVideoDataUrls } from "./video-input";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -47,7 +48,7 @@ export type AgentDispatch = {
 export type AgentRequest = {
   prompt: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
-  frames?: ImageBitmap[];   // in-browser WebGPU path (RawImage)
+  frames?: ImageBitmap[];   // video frames from ring buffer (#693) — gated by VITE_VIDEO_INPUT
   userImage?: string;       // remote path — pre-encoded data URL from chat-panel
   maxTurns?: number;
   skills?: Skill[];
@@ -1325,7 +1326,16 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   let imageUrl: string | undefined;
   if (req.userImage) {
     imageUrl = req.userImage;
-  } else if (req.frames && req.frames.length > 0) {
+  }
+
+  // §#693 Video: when VITE_VIDEO_INPUT is set and ring-buffer frames are present,
+  // sample + encode frames to data URLs for the worker's video content block path.
+  // imageUrl is intentionally NOT set for video turns — worker uses videoUrls instead.
+  let videoUrls: string[] | undefined;
+  if (VIDEO_INPUT_ENABLED && req.frames && req.frames.length > 0) {
+    videoUrls = await buildVideoDataUrls(req.frames);
+  } else if (!req.userImage && req.frames && req.frames.length > 0) {
+    // Fallback when video gate is off: single viewport capture (prior behavior).
     imageUrl = captureViewport() ?? undefined;
   }
 
@@ -1352,6 +1362,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         turnId,
         messages,
         imageUrl,
+        videoUrls,     // §#693 — defined when VITE_VIDEO_INPUT + req.frames
         maxNewTokens:  req.maxNewTokens ?? 4096,
         eosId:         1, // Gemma 4 EOS; worker also reads model.config as fallback
         draftK:        MTP_DRAFT_N,
