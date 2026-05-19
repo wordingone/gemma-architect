@@ -239,14 +239,14 @@ export function parseToolEnvelope(raw: unknown): CommandEnvelope | null {
   const obj = raw as Record<string, unknown>;
   const command = typeof obj.command === "string"
     ? obj.command
-    : typeof obj.verb === "string"
-      ? obj.verb
+    : typeof obj.name === "string"
+      ? obj.name
       : null;
   if (!command) return null;
   const parameters = obj.parameters && typeof obj.parameters === "object"
     ? (obj.parameters as Record<string, unknown>)
-    : obj.args && typeof obj.args === "object"
-      ? (obj.args as Record<string, unknown>)
+    : obj.arguments && typeof obj.arguments === "object"
+      ? (obj.arguments as Record<string, unknown>)
       : {};
   const metadata = obj.metadata && typeof obj.metadata === "object"
     ? (obj.metadata as { source?: InvocationSource; sessionId?: string })

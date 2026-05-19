@@ -18,9 +18,9 @@ beforeEach(() => {
 });
 
 describe("command session", () => {
-  test("parses function envelope and legacy envelope", () => {
+  test("parses Gemma-4-native envelope (name/arguments) and command/parameters envelope", () => {
     const a = parseToolEnvelope({ command: "SdLine", parameters: { start: [0, 0] } });
-    const b = parseToolEnvelope({ verb: "SdLine", args: { start: [0, 0] } });
+    const b = parseToolEnvelope({ name: "SdLine", arguments: { start: [0, 0] } });
     expect(a?.command).toBe("SdLine");
     expect(b?.command).toBe("SdLine");
   });

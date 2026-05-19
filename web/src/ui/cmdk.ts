@@ -66,7 +66,7 @@ const ALL_CMDS: Cmd[] = [
           return;
         }
         for (const d of resp.dispatches) {
-          dispatch(d.verb, d.args).catch((e) => console.warn("[agent dispatch]", e));
+          dispatch(d.name, d.arguments).catch((e) => console.warn("[agent dispatch]", e));
         }
       }).catch((e) => console.error("[agent]", e));
     },

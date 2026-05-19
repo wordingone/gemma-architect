@@ -15,5 +15,5 @@ function isDestructiveVerb(verb: string): boolean {
  */
 export function isSimplePlan(dispatches: AgentDispatch[]): boolean {
   if (dispatches.length === 0 || dispatches.length > 3) return false;
-  return !dispatches.some((d) => isDestructiveVerb(d.verb));
+  return !dispatches.some((d) => isDestructiveVerb(d.name));
 }

@@ -66,7 +66,7 @@ export function buildDispatchSummary(
   const counts = new Map<string, number>();
   for (let i = 0; i < dispatches.length; i++) {
     if (!fired[i].endsWith("(err)")) {
-      const v = dispatches[i].verb;
+      const v = dispatches[i].name;
       if (!QUERY_VERBS.has(v)) counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
@@ -82,6 +82,6 @@ export function buildDispatchSummary(
     parts.push(`Built: ${built.join(", ")}.`);
   }
   // Return "Nothing was built." only when dispatches were attempted but all failed/errored.
-  const hadAttempts = dispatches.some((_, i) => !QUERY_VERBS.has(dispatches[i].verb));
+  const hadAttempts = dispatches.some((_, i) => !QUERY_VERBS.has(dispatches[i].name));
   return parts.length > 0 ? parts.join(" ") : (hadAttempts && counts.size === 0 ? "Nothing was built." : "");
 }

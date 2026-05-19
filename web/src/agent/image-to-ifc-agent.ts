@@ -121,7 +121,7 @@ export async function imageToIFCAgent(
       // Dispatch handler keeps scene-kg in sync as a side-effect (T6).
       // Failures are captured in the log via dispatchLog above; we do
       // not propagate them — the next turn can recover.
-      await dispatch(d.verb, d.args);
+      await dispatch(d.name, d.arguments);
     }
   }
 

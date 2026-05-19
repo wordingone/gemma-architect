@@ -379,7 +379,7 @@ export class ChatPanel {
 
     const dispatchBlock = allDispatches.length > 0
       ? allDispatches
-          .map((d) => `[${d.verb}(${JSON.stringify(d.args)})]`)
+          .map((d) => `[${d.name}(${JSON.stringify(d.arguments)})]`)
           .join("\n")
       : "(no dispatches yet)";
 
@@ -571,7 +571,7 @@ export class ChatPanel {
     }
 
     window.dispatchEvent(new CustomEvent("skill:animate", { detail: { steps } }));
-    const dispatches: AgentDispatch[] = steps.map((s) => ({ verb: s.verb, args: s.args }));
+    const dispatches: AgentDispatch[] = steps.map((s) => ({ name: s.verb, arguments: s.args }));
     const content = `${skill.name} (${steps.length} steps)`;
     this._pushMsg({ role: "assistant", content, dispatches });
     this._history.push({ role: "assistant", content });
@@ -588,11 +588,11 @@ export class ChatPanel {
       // QW-1: call each registered pre-dispatch hook before invoking the command.
       for (const hook of preHooks) { try { hook(d); } catch { /* silenced */ } }
       const out = await invokeCommand({
-        command: d.verb,
-        parameters: isImperial ? imperialArgsToMetric(d.args) : d.args,
+        command: d.name,
+        parameters: isImperial ? imperialArgsToMetric(d.arguments) : d.arguments,
         metadata: { source: "agent" },
       });
-      const cls = classifyDispatchResult(d.verb, out);
+      const cls = classifyDispatchResult(d.name, out);
       fired.push(cls.fired);
       if (out.status === "success") setPickerHint(null);
       if (cls.error) errors.push(cls.error);
@@ -623,7 +623,7 @@ export class ChatPanel {
     // QW-2 (#409): emit turn-complete event — mirrors avir-cli Stop hook turn visibility.
     window.dispatchEvent(new CustomEvent("agent:turn-complete", {
       detail: {
-        verbs: resp.dispatches.map((d) => d.verb),
+        verbs: resp.dispatches.map((d) => d.name),
         sceneObjects: (window as unknown as { __viewer?: { scene?: { children?: unknown[] } } }).__viewer?.scene?.children?.length ?? 0,
         turnMs: turnStartMs != null ? Date.now() - turnStartMs : undefined,
       },
@@ -631,7 +631,7 @@ export class ChatPanel {
   }
 
   private _pushPlanMsg(resp: AgentResponse): void {
-    const planText = resp.plan ?? resp.dispatches.map((d, i) => `${i + 1}. ${d.verb}`).join("\n");
+    const planText = resp.plan ?? resp.dispatches.map((d, i) => `${i + 1}. ${d.name}`).join("\n");
 
     const item = document.createElement("div");
     item.className = "chat-msg chat-msg-assistant chat-plan-pending";
@@ -678,7 +678,7 @@ export class ChatPanel {
 
           await this._runDispatches(currentResp);
 
-          const verbs = currentResp.dispatches.map((d) => d.verb);
+          const verbs = currentResp.dispatches.map((d) => d.name);
           allVerbs.push(...verbs);
           const turnEl = document.createElement("div");
           turnEl.className = "chat-plan-turn";
@@ -743,7 +743,7 @@ export class ChatPanel {
         for (const d of msg.dispatches) {
           const pill = document.createElement("span");
           pill.className = "chat-dispatch-pill";
-          pill.textContent = d.verb;
+          pill.textContent = d.name;
           pills.appendChild(pill);
         }
         item.appendChild(pills);
@@ -756,7 +756,7 @@ export class ChatPanel {
           saveBtn.textContent = "Save as skill…";
           const capturedDispatches = msg.dispatches;
           saveBtn.addEventListener("click", () => {
-            const steps = capturedDispatches.map((d) => ({ verb: d.verb, args: d.args }));
+            const steps = capturedDispatches.map((d) => ({ verb: d.name, args: d.arguments }));
             openSaveSkillModal(steps);
           });
           item.appendChild(saveBtn);
@@ -796,7 +796,7 @@ export async function runIteration(
   recentDispatches: AgentDispatch[],
 ): Promise<AgentResponse> {
   const recentText = recentDispatches.length > 0
-    ? `Recent commands: ${recentDispatches.slice(-8).map((d) => `${d.verb}(${JSON.stringify(d.args)})`).join("; ")}`
+    ? `Recent commands: ${recentDispatches.slice(-8).map((d) => `${d.name}(${JSON.stringify(d.arguments)})`).join("; ")}`
     : "";
 
   const lines = [
@@ -853,7 +853,7 @@ export async function runDesignLoop(
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const isFirst = turn === 0;
-    const dispatchedSoFar = allDispatches.map((d) => d.verb).join(", ");
+    const dispatchedSoFar = allDispatches.map((d) => d.name).join(", ");
     const continuationHint = dispatchedSoFar
       ? `Already dispatched: ${dispatchedSoFar}.`
       : "";
@@ -876,7 +876,7 @@ export async function runDesignLoop(
     localHistory.push({ role: "user", content: req.prompt });
     localHistory.push({ role: "assistant", content: resp.text });
 
-    if (resp.dispatches.some((d) => d.verb === "SdExport")) break;
+    if (resp.dispatches.some((d) => d.name === "SdExport")) break;
     if (resp.dispatches.length === 0) break;
   }
 

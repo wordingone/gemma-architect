@@ -3,7 +3,7 @@ import { buildDispatchSummary } from "../src/chat/chat-dispatch-summary";
 import type { AgentDispatch } from "../src/agent/agent-harness";
 
 function d(verb: string): AgentDispatch {
-  return { verb, args: {} };
+  return { name: verb, arguments: {} };
 }
 
 describe("buildDispatchSummary", () => {

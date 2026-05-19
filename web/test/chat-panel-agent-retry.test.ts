@@ -68,7 +68,7 @@ describe("#271 — agent self-correct loop regression net", () => {
 
   describe("Layer 2: summary output (buildDispatchSummary)", () => {
     test("needs_input error appears in summary — agent can self-correct", () => {
-      const dispatches = [{ verb: "SdRectangle", args: {} }];
+      const dispatches = [{ name: "SdRectangle", arguments: {} }];
       const fired = ["SdRectangle(err)"];
       const errors = ["Failed SdRectangle: missing width, height."];
 
@@ -85,7 +85,7 @@ describe("#271 — agent self-correct loop regression net", () => {
     });
 
     test("success dispatch produces 'Built:' summary, no error text", () => {
-      const dispatches = [{ verb: "IfcWall", args: { length: 5, thickness: 0.2, height: 2.8 } }];
+      const dispatches = [{ name: "IfcWall", arguments: { length: 5, thickness: 0.2, height: 2.8 } }];
       const fired = ["IfcWall"];
       const errors: string[] = [];
 
@@ -97,8 +97,8 @@ describe("#271 — agent self-correct loop regression net", () => {
 
     test("mixed turn: one success, one needs_input → error and built both appear", () => {
       const dispatches = [
-        { verb: "IfcWall", args: { length: 5 } },
-        { verb: "SdExport", args: {} },
+        { name: "IfcWall", arguments: { length: 5 } },
+        { name: "SdExport", arguments: {} },
       ];
       const fired = ["IfcWall", "SdExport(err)"];
       const errors = ["Failed SdExport: missing required args."];
@@ -111,7 +111,7 @@ describe("#271 — agent self-correct loop regression net", () => {
   });
 
   describe("Layer 3: audience channel split", () => {
-    const dispatches = [{ verb: "SdRectangle", args: {} }];
+    const dispatches = [{ name: "SdRectangle", arguments: {} }];
     const fired = ["SdRectangle(err)"];
     const errors = ["Failed SdRectangle: missing width, height."];
 
