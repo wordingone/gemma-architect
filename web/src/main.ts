@@ -3404,7 +3404,16 @@ initShellChrome({
       removeDrafting(viewer.getScene());
       // Reset grid orientation and perspPane camera (may have been overridden by
       // setView("front"/"right"/etc. keyboard shortcuts active in layout mode).
-      if (k === "model") viewer.setView("persp");
+      if (k === "model") {
+        viewer.setView("persp");
+        // Reset CPlane — LAYOUT arms an XZ cplane; returning to MODEL must restore
+        // the default WORLD_XY so the cplane gizmo auto-show logic tears down (#1159).
+        viewer.activeCPlane = { ...WORLD_XY };
+        window.dispatchEvent(new CustomEvent("viewer:cplane-changed", {
+          detail: { cplane: viewer.activeCPlane, mode: "world" },
+          bubbles: false,
+        }));
+      }
     }
   },
   onSplitMode: (mode) => viewer.splitMode(mode),
