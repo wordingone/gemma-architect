@@ -299,6 +299,18 @@ export function initPtOverlay(ptWrap: HTMLElement, ptInput: HTMLInputElement): v
   _ptCoordWrapEl = ptWrap;
   _ptCoordInputEl = ptInput;
   _ptViewer = null; // will be set on first ptStartTool call
+
+  // Capture-phase mousedown: whenever the user clicks outside the coord input
+  // while it is visible, steal focus back immediately. Without this, clicking
+  // the viewport canvas during fillet_edge_radius could redirect keyboard events
+  // away from the input, causing number keys (e.g. "1") to fire nav shortcuts.
+  document.addEventListener("mousedown", (e) => {
+    if (!_ptCoordWrapEl?.classList.contains("visible")) return;
+    const t = e.target as Node | null;
+    if (t && _ptCoordWrapEl.contains(t)) return; // click inside the input — leave alone
+    // Re-focus after the click event fully processes so we don't fight with it.
+    setTimeout(() => _ptCoordInputEl?.focus({ preventScroll: true }), 0);
+  }, true); // capture = true: fires before canvas/viewer handlers
 }
 
 export function ptGetTarget(): THREE.Object3D | null {
@@ -338,7 +350,12 @@ export function ptShowCoordInput(placeholder: string): void {
   if (!_ptCoordWrapEl) return;
   if (_ptCoordInputEl) _ptCoordInputEl.placeholder = placeholder;
   _ptCoordWrapEl.classList.add("visible");
-  setTimeout(() => _ptCoordInputEl?.focus(), 0);
+  // Two-phase focus: setTimeout fires after current click event stack, rAF
+  // fires after the next paint — covers cases where the browser's pointer
+  // handling steals focus back to the canvas between the two.
+  const doFocus = () => _ptCoordInputEl?.focus({ preventScroll: true });
+  setTimeout(doFocus, 0);
+  requestAnimationFrame(() => setTimeout(doFocus, 0));
 }
 
 export function ptHideCoordInput(): void {
