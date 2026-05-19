@@ -96,7 +96,7 @@ function makeGroup(children: MockMesh[]): MockMesh {
 
 function _disposeMaterial(mat: MockMaterial): void {
   for (const k of ["map", "normalMap", "roughnessMap", "aoMap", "emissiveMap"] as const) {
-    (mat as Record<string, MockTexture | undefined>)[k]?.dispose?.();
+    (mat as unknown as Record<string, MockTexture | undefined>)[k]?.dispose?.();
   }
   mat.dispose();
 }
