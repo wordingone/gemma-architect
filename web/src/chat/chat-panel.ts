@@ -363,6 +363,9 @@ export class ChatPanel {
 
   // §D-pre (#988): compact conversation when approaching context limit.
   // Preserves all Sd* dispatches verbatim + goal + last 4 turns.
+  // §B-compact (#990 audit): no closure retains the pre-compact _history array —
+  // verified: no shadow field, no event handler capture, no telemetry reference.
+  // Reassignment at `this._history = [...]` drops the old array for GC.
   private _compactHistory(): void {
     const preTokens = this._estimateHistoryTokens();
 

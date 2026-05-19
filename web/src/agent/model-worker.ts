@@ -91,8 +91,9 @@ async function checkReturningUser(modelId: string): Promise<boolean> {
 self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
   const { type, ...data } = ev.data;
   try {
-    if (type === "init")     await handleInit(data);
-    else if (type === "generate") await handleGenerate(data);
+    if (type === "init")          await handleInit(data);
+    else if (type === "generate")  await handleGenerate(data);
+    else if (type === "shutdown")  await handleShutdown();
     // "abort" is handled via the AbortController in handleGenerate (future work)
   } catch (e) {
     post({ type: "error", error: (e as Error).message });
@@ -101,6 +102,17 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
 
 // ── Init: from_pretrained + warmup probe + drafter ───────────────────────────
 async function handleInit(data: Record<string, unknown>): Promise<void> {
+  // §A-init (#990): dispose prior ORT sessions on re-init (model swap) — prevents VRAM leak.
+  if (_drafterSession) {
+    try { await (_drafterSession as any).release?.(); } catch { /* non-fatal */ }
+    _drafterSession = null;
+  }
+  if (_model) {
+    try { await (_model as any).dispose?.(); } catch { /* non-fatal */ }
+    _model = null;
+  }
+  _processor = null;
+
   const modelId = data.modelId as string;
   const drafterUrl = data.drafterUrl as string;
   const drafterCacheKey = data.drafterCacheKey as string;
@@ -256,6 +268,23 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 
   checkBootComplete();
   post({ type: "ready", device: loadedLabel });
+}
+
+// ── Shutdown: release ORT sessions when worker is terminated ─────────────────
+// §A-shutdown (#990): called via {type:"shutdown"} message before terminateWorker().
+// Releases _drafterSession (ORT InferenceSession) and disposes _model (transformers.js).
+// Non-fatal on any release error — worker still posts shutdown-complete.
+async function handleShutdown(): Promise<void> {
+  if (_drafterSession) {
+    try { await (_drafterSession as any).release?.(); } catch { /* non-fatal */ }
+    _drafterSession = null;
+  }
+  if (_model) {
+    try { await (_model as any).dispose?.(); } catch { /* non-fatal */ }
+    _model = null;
+  }
+  _processor = null;
+  post({ type: "shutdown-complete" });
 }
 
 // ── Generate: apply_chat_template + tokenize + (MTP or standard) + decode ────

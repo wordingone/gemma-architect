@@ -50,6 +50,59 @@ export type CanvasCluster = {
 
 let _db: IDBDatabase | null = null;
 
+// ── §C-idb (#990): IDB quota guard ───────────────────────────────────────────
+// Check storage fill before writes; evict oldest skills/clusters if >90%.
+// Eviction uses createdAt as LRU proxy (oldest created = first evicted).
+// Cap per-write evictions at 3 to avoid stall on large skill sets.
+
+const IDB_QUOTA_THRESHOLD = 0.9;
+const IDB_EVICT_PER_WRITE = 3;
+
+async function _storageUsageFraction(): Promise<number> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) return 0;
+  try {
+    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+    return quota > 0 ? usage / quota : 0;
+  } catch { return 0; }
+}
+
+async function _evictOldestFrom(db: IDBDatabase, storeName: string, n: number): Promise<number> {
+  const all: Array<{ id: string; createdAt: number }> = await new Promise((res, rej) => {
+    const tx = db.transaction(storeName, "readonly");
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => res(req.result as Array<{ id: string; createdAt: number }>);
+    req.onerror = () => rej(req.error);
+  });
+  all.sort((a, b) => a.createdAt - b.createdAt);
+  const toEvict = all.slice(0, Math.min(n, all.length));
+  if (toEvict.length === 0) return 0;
+  return new Promise((res, rej) => {
+    const tx = db.transaction(storeName, "readwrite");
+    let evicted = 0;
+    for (const entry of toEvict) {
+      const req = tx.objectStore(storeName).delete(entry.id);
+      req.onsuccess = () => { evicted++; };
+    }
+    tx.oncomplete = () => res(evicted);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function _guardQuota(db: IDBDatabase, storeName: string): Promise<void> {
+  const fill = await _storageUsageFraction();
+  if (fill <= IDB_QUOTA_THRESHOLD) return;
+  await _evictOldestFrom(db, storeName, IDB_EVICT_PER_WRITE);
+  const afterFill = await _storageUsageFraction();
+  if (afterFill > IDB_QUOTA_THRESHOLD) {
+    const msg = `[skill-store] IDB quota at ${(afterFill * 100).toFixed(0)}% after eviction — write skipped`;
+    console.warn(msg);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("skill-store:quota-exceeded", { detail: { fill: afterFill } }));
+    }
+    throw new Error("IDB quota exceeded: storage full after eviction");
+  }
+}
+
 function openDB(): Promise<IDBDatabase> {
   if (_db) return Promise.resolve(_db);
   return new Promise((resolve, reject) => {
@@ -87,6 +140,7 @@ export async function listSavedSkills(): Promise<SavedSkill[]> {
 
 export async function saveSkill(skill: Omit<SavedSkill, "id" | "createdAt">): Promise<SavedSkill> {
   const db = await openDB();
+  await _guardQuota(db, STORE); // §C-idb (#990)
   const full: SavedSkill = {
     ...skill,
     id: crypto.randomUUID(),
@@ -128,6 +182,7 @@ export async function listClusters(): Promise<SkillCluster[]> {
 
 export async function saveCluster(cluster: Omit<SkillCluster, "id" | "createdAt">): Promise<SkillCluster> {
   const db = await openDB();
+  await _guardQuota(db, CLUSTER_STORE); // §C-idb (#990)
   const full: SkillCluster = {
     ...cluster,
     id: crypto.randomUUID(),
@@ -174,6 +229,7 @@ export async function listCanvasClusters(): Promise<CanvasCluster[]> {
 
 export async function saveCanvasCluster(cluster: Omit<CanvasCluster, "id" | "createdAt">): Promise<CanvasCluster> {
   const db = await openDB();
+  await _guardQuota(db, CANVAS_CLUSTER_STORE); // §C-idb (#990)
   const full: CanvasCluster = {
     ...cluster,
     id: crypto.randomUUID(),

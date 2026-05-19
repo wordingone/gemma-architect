@@ -105,8 +105,19 @@ export async function fetchDrafterCached(
 
   if (db) {
     try {
-      await idbPut(db, cacheKey, buf);
-      console.info(`[drafter-cache] stored ${cacheKey} (${(buf.byteLength / 1e6).toFixed(1)} MB)`);
+      // §C-idb (#990): guard 158 MB write — skip if storage is ≥85% full.
+      let canStore = true;
+      if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
+        const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+        if (quota > 0 && usage / quota >= 0.85) {
+          console.warn(`[drafter-cache] IDB quota at ${((usage / quota) * 100).toFixed(0)}% — skipping drafter store (${(buf.byteLength / 1e6).toFixed(1)} MB)`);
+          canStore = false;
+        }
+      }
+      if (canStore) {
+        await idbPut(db, cacheKey, buf);
+        console.info(`[drafter-cache] stored ${cacheKey} (${(buf.byteLength / 1e6).toFixed(1)} MB)`);
+      }
     } catch {
       // Non-fatal — store failure means next reload re-fetches, which is fine.
     }
