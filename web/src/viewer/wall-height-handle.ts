@@ -5,7 +5,7 @@
 
 import * as THREE from "three";
 import type { Viewer } from "./viewer.js";
-import { rebuildWallParams } from "../tools/structural.js";
+import { rebuildWallParams, rebuildGroupWallHeight } from "../tools/structural.js";
 import { attemptWallCornerJoins } from "../tools/wall-corners.js";
 
 let _viewer: Viewer | null = null;
@@ -13,7 +13,7 @@ let _vpEl: HTMLElement | null = null;
 let _handleEl: HTMLElement | null = null;
 let _rafId: number | null = null;
 
-let _targetMesh: THREE.Mesh | null = null;
+let _targetMesh: THREE.Mesh | THREE.Group | null = null;
 let _drag: { prevY: number } | null = null;
 
 export function initWallHeightHandle(viewer: Viewer, vpEl: HTMLElement): void {
@@ -64,15 +64,19 @@ export function initWallHeightHandle(viewer: Viewer, vpEl: HTMLElement): void {
 
     const curH = (_targetMesh.userData.wallHeight as number | undefined) ?? 3;
     const newH = Math.max(0.1, curH + dy * worldPerPx);
-    rebuildWallParams(_targetMesh, { height: parseFloat(newH.toFixed(3)) });
+    if (_targetMesh instanceof THREE.Group) {
+      rebuildGroupWallHeight(_targetMesh, parseFloat(newH.toFixed(3)));
+    } else {
+      rebuildWallParams(_targetMesh, { height: parseFloat(newH.toFixed(3)) });
+    }
     window.dispatchEvent(new CustomEvent("wall:params-changed", { detail: { mesh: _targetMesh } }));
   });
 
   div.addEventListener("pointerup", () => {
     _drag = null;
-    // Re-apply corner joins after height drag — rebuildWallParams resets geometry
-    // to BoxGeometry which drops mitre cuts from the original join.
-    if (_targetMesh && _viewer) {
+    // Re-apply corner joins after height drag — rebuildWallParams resets geometry.
+    // Skip for Group (void-cut) walls; their segments don't participate in miter joins.
+    if (_targetMesh instanceof THREE.Mesh && _viewer) {
       attemptWallCornerJoins(_targetMesh, _viewer.getScene());
     }
   });
@@ -109,7 +113,7 @@ function _tick(): void {
   _handleEl.style.top = `${sy}px`;
 }
 
-export function showWallHeightHandle(mesh: THREE.Mesh): void { _targetMesh = mesh; }
+export function showWallHeightHandle(mesh: THREE.Mesh | THREE.Group): void { _targetMesh = mesh; }
 export function hideWallHeightHandle(): void {
   _targetMesh = null;
   if (_handleEl) _handleEl.style.display = "none";

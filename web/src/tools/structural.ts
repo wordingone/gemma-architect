@@ -82,6 +82,34 @@ export function rebuildWallParams(
   ];
 }
 
+// Resize a void-cut Group wall's segments to a new height.
+// Segments that reach the current wall top are extended/shrunk;
+// sill-only segments (below void) are left unchanged.
+export function rebuildGroupWallHeight(group: THREE.Group, newHt: number): void {
+  const curHt = (group.userData.wallHeight as number | undefined) ?? 3;
+  if (Math.abs(newHt - curHt) < 0.001) return;
+  for (const child of group.children) {
+    if (!(child instanceof THREE.Mesh)) continue;
+    const bGeom = child.geometry as THREE.BoxGeometry;
+    if (!bGeom?.parameters) continue;
+    const segW = bGeom.parameters.width;
+    const segD = bGeom.parameters.height; // Y = thickness
+    const segH = bGeom.parameters.depth;  // Z = segment height
+    const topZ = child.position.z + segH / 2;
+    if (Math.abs(topZ - curHt) < 0.05) {
+      // Segment extends to wall top → resize.
+      const botZ = child.position.z - segH / 2;
+      const newSegH = Math.max(0.001, newHt - botZ);
+      child.geometry.dispose();
+      child.geometry = new THREE.BoxGeometry(segW, segD, newSegH);
+      child.position.z = botZ + newSegH / 2;
+    }
+  }
+  group.userData.wallHeight = newHt;
+  const dims = group.userData.originalWallDims as { w: number; d: number; h: number } | undefined;
+  if (dims) group.userData.originalWallDims = { ...dims, h: newHt };
+}
+
 export function buildWall(a: { x: number; y: number }, b: { x: number; y: number }, height?: number): { mesh: THREE.Mesh; chain: string } {
   const t = DEFAULT_WALL_THICKNESS, h = height ?? DEFAULT_WALL_HEIGHT;
   const dx = b.x - a.x, dy = b.y - a.y;

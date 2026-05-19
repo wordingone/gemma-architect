@@ -74,11 +74,44 @@ export function isSubObjectHandle(obj: THREE.Object3D): boolean {
 }
 
 // Rebuild the parent mesh's geometry in-place after a control point has moved.
-// Works for line (2 CPs), polyline (N CPs), curve/spline (N CPs via B-spline).
+// Works for line (2 CPs), polyline (N CPs), curve/spline (N CPs via B-spline),
+// and wall Mesh/Group (Group = void-cut wall: only transform updates, no segment rebuild).
 export function refitParentGeometry(parent: THREE.Object3D): void {
   const cps = parent.userData.controlPoints as THREE.Vector3[] | undefined;
   if (!cps || cps.length < 2) return;
   const creator = parent.userData.creator as string;
+
+  // Wall branch — handled before the geometry guard so Group (void-cut) walls work too.
+  if (creator === "wall" && cps.length >= 2) {
+    const t = (parent.userData.wallThickness as number | undefined) ?? 0.2;
+    const h = (parent.userData.wallHeight as number | undefined) ?? 3;
+    parent.updateMatrixWorld(true);
+    const wA = cps[0].clone().applyMatrix4(parent.matrixWorld);
+    const wB = cps[1].clone().applyMatrix4(parent.matrixWorld);
+    const len = wA.distanceTo(wB);
+    if (len < 0.01) return;
+    const cx = (wA.x + wB.x) / 2, cy = (wA.y + wB.y) / 2;
+    const angRad = Math.atan2(wB.y - wA.y, wB.x - wA.x);
+    if (parent instanceof THREE.Mesh) {
+      const wallGeom = new THREE.BoxGeometry(len, t, h);
+      wallGeom.translate(0, 0, h / 2);
+      parent.geometry.dispose();
+      parent.geometry = wallGeom;
+    }
+    // Both Mesh and Group: update transform + snap data.
+    parent.position.set(cx, cy, 0);
+    parent.rotation.z = angRad;
+    parent.updateMatrixWorld(true);
+    cps[0].set(-len / 2, 0, 0);
+    cps[1].set(len / 2, 0, 0);
+    parent.userData.endpoints = [
+      { x: wA.x, y: wA.y, z: 0, id: makeSnapId(wA.x, wA.y, 0) },
+      { x: wB.x, y: wB.y, z: 0, id: makeSnapId(wB.x, wB.y, 0) },
+    ];
+    return;
+  }
+
+  // Non-wall curves: require a geometry object.
   const obj = parent as THREE.Object3D & { geometry?: THREE.BufferGeometry };
   if (!obj.geometry) return;
 
@@ -108,34 +141,6 @@ export function refitParentGeometry(parent: THREE.Object3D): void {
     const sampled = raw.map((p) => new THREE.Vector3(p.x, p.y, p.z));
     if (isClosed && sampled.length > 1) sampled[sampled.length - 1].copy(sampled[0]);
     newGeom = new THREE.BufferGeometry().setFromPoints(sampled);
-  }
-  if (creator === "wall" && cps.length >= 2) {
-    const parentMesh = parent as THREE.Mesh;
-    // Convert local-space CPs to world space, then refit geometry + transform.
-    const wA = cps[0].clone().applyMatrix4(parent.matrixWorld);
-    const wB = cps[1].clone().applyMatrix4(parent.matrixWorld);
-    const len = wA.distanceTo(wB);
-    if (len < 0.01) return;
-    const t = (parent.userData.wallThickness as number | undefined) ?? 0.2;
-    const h = (parent.userData.wallHeight as number | undefined) ?? 3;
-    const cx = (wA.x + wB.x) / 2, cy = (wA.y + wB.y) / 2;
-    const angRad = Math.atan2(wB.y - wA.y, wB.x - wA.x);
-    const wallGeom = new THREE.BoxGeometry(len, t, h);
-    wallGeom.translate(0, 0, h / 2);
-    parentMesh.geometry.dispose();
-    parentMesh.geometry = wallGeom;
-    parentMesh.position.set(cx, cy, 0);
-    parentMesh.rotation.z = angRad;
-    parentMesh.updateMatrixWorld(true);
-    // Re-anchor CPs in local space (wall X-axis runs endpoint-to-endpoint).
-    cps[0].set(-len / 2, 0, 0);
-    cps[1].set(len / 2, 0, 0);
-    // Refresh snap endpoints.
-    parentMesh.userData.endpoints = [
-      { x: wA.x, y: wA.y, z: 0, id: makeSnapId(wA.x, wA.y, 0) },
-      { x: wB.x, y: wB.y, z: 0, id: makeSnapId(wB.x, wB.y, 0) },
-    ];
-    return;
   }
 
   if (!newGeom) return;

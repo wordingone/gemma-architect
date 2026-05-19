@@ -1138,8 +1138,8 @@ function buildInspectTab(): HTMLElement {
 
     // Wall params section
     if (obj.userData?.creator === "wall") {
-      updateWallSection([obj as THREE.Mesh]);
-      showWallHeightHandle(obj as THREE.Mesh);
+      updateWallSection(obj instanceof THREE.Mesh ? [obj] : []);
+      showWallHeightHandle(obj instanceof THREE.Mesh ? obj : obj as unknown as THREE.Group);
     } else {
       updateWallSection([]);
       hideWallHeightHandle();
