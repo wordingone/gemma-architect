@@ -6165,6 +6165,40 @@ await resetScene('before-box-inject');
   await resetScene('post-S126');
 }
 
+// ── S127 — unit-awareness statusbar (#1120): sb-units + sb-snap cells reflect unit toggle ──
+{
+  const s127 = await evaluate(`
+    (async () => {
+      try {
+        const sbUnitsV = document.querySelector('#sb-units .v');
+        const sbSnapV  = document.querySelector('#sb-snap .v');
+        if (!sbUnitsV || !sbSnapV) return { passed: false, evidence: { reason: 'status-bar cells not found' } };
+
+        // Switch to imperial
+        await window.__dispatch('SdSetUnits', { system: 'imperial' });
+        await new Promise(r => setTimeout(r, 60));
+        const unitsImperial = sbUnitsV.textContent ?? '';
+        const snapImperial  = sbSnapV.textContent  ?? '';
+
+        // Switch back to metric
+        await window.__dispatch('SdSetUnits', { system: 'metric' });
+        await new Promise(r => setTimeout(r, 60));
+        const unitsMetric = sbUnitsV.textContent ?? '';
+        const snapMetric  = sbSnapV.textContent  ?? '';
+
+        const imperialOk = unitsImperial.includes('ft') && snapImperial.includes('ft');
+        const metricOk   = unitsMetric.includes('m')   && snapMetric.includes('m');
+        const passed = imperialOk && metricOk;
+        return { passed, evidence: { unitsImperial, snapImperial, imperialOk, unitsMetric, snapMetric, metricOk } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s127) record('unit-awareness-statusbar', false, { reason: 'evaluate returned null' });
+  else record('unit-awareness-statusbar', s127.passed, s127.evidence);
+  await resetScene('post-S127');
+}
+
 } finally {
   await cleanup();
 }

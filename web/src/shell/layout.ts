@@ -23,6 +23,7 @@
 //     SVG when LibreDWG-WASM isn't bundled (it isn't, today — clear note).
 
 import { iconSVG } from "../ui/icons";
+import { formatLength } from "../units.js";
 import type { Viewer } from "../viewer/viewer";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
@@ -1482,8 +1483,7 @@ function renderScaleBar(p: PanelState): string {
   const drawingMm = barMm * ratio;
   let label: string;
   if (p.scale === "NTS") label = "NTS";
-  else if (drawingMm >= 1000) label = `${(drawingMm / 1000).toFixed(1)} m`;
-  else label = `${Math.round(drawingMm)} mm`;
+  else label = formatLength(drawingMm / 1000);
   const half = barPx / 2;
   return `<svg viewBox="0 0 ${barPx + 14} 14" width="${barPx + 14}" height="14" aria-label="scale bar">
     <g stroke="#1a1a22" fill="#1a1a22" font-family="monospace" font-size="7">

@@ -1043,24 +1043,24 @@ function buildInspectTab(): HTMLElement {
     if (isFinite(box.min.x)) {
       const center = new THREE.Vector3();
       box.getCenter(center);
-      if (posAxes[0]) posAxes[0].textContent = center.x.toFixed(3);
-      if (posAxes[1]) posAxes[1].textContent = center.y.toFixed(3);
-      if (posAxes[2]) posAxes[2].textContent = center.z.toFixed(3);
+      if (posAxes[0]) posAxes[0].textContent = formatLength(center.x);
+      if (posAxes[1]) posAxes[1].textContent = formatLength(center.y);
+      if (posAxes[2]) posAxes[2].textContent = formatLength(center.z);
     } else {
       const pos = new THREE.Vector3();
       obj.getWorldPosition(pos);
-      if (posAxes[0]) posAxes[0].textContent = pos.x.toFixed(3);
-      if (posAxes[1]) posAxes[1].textContent = pos.y.toFixed(3);
-      if (posAxes[2]) posAxes[2].textContent = pos.z.toFixed(3);
+      if (posAxes[0]) posAxes[0].textContent = formatLength(pos.x);
+      if (posAxes[1]) posAxes[1].textContent = formatLength(pos.y);
+      if (posAxes[2]) posAxes[2].textContent = formatLength(pos.z);
     }
     // Bounds
     const sizeAxes = wrap.querySelectorAll<HTMLElement>('.prop-vec3:nth-of-type(3) .axis');
     if (isFinite(box.min.x)) {
       const sz = new THREE.Vector3();
       box.getSize(sz);
-      if (sizeAxes[0]) sizeAxes[0].textContent = sz.x.toFixed(3);
-      if (sizeAxes[1]) sizeAxes[1].textContent = sz.y.toFixed(3);
-      if (sizeAxes[2]) sizeAxes[2].textContent = sz.z.toFixed(3);
+      if (sizeAxes[0]) sizeAxes[0].textContent = formatLength(sz.x);
+      if (sizeAxes[1]) sizeAxes[1].textContent = formatLength(sz.y);
+      if (sizeAxes[2]) sizeAxes[2].textContent = formatLength(sz.z);
     } else {
       sizeAxes.forEach((a) => (a.textContent = "—"));
     }
@@ -2591,7 +2591,7 @@ function initLiveTabSubscriptions(): void {
 
     const argStr = Object.entries(args as Record<string, unknown>)
       .filter(([k]) => !["canonical", "kernel"].includes(k))
-      .map(([k, v]) => `${k}=${typeof v === "number" ? (v as number).toFixed(2) : String(v)}`)
+      .map(([k, v]) => `${k}=${typeof v === "number" ? fmtParam(k, v as number) : String(v)}`)
       .slice(0, 4)
       .join(" ");
     appendHistory(id, argStr);

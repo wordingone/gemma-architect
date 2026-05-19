@@ -2,6 +2,8 @@ import { iconSVG } from "../ui/icons.js";
 import { dispatchSync } from "../commands/dispatch.js";
 import { getState, subscribe } from "../app-state.js";
 import { openExportDrawer } from "../io/export-drawer.js";
+import { subscribeSnap } from "../viewer/snap-state.js";
+import { formatLength } from "../units.js";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -840,6 +842,20 @@ function wireUnitsCell(): void {
   });
 }
 
+function wireSnapCell(): void {
+  const cell = document.getElementById("sb-snap");
+  const v = cell?.querySelector(".v") as HTMLElement | null;
+  if (!v) return;
+  subscribeSnap((s) => {
+    if (!s.snapOn) { v.textContent = "off"; return; }
+    const parts: string[] = [];
+    if (s.gridOn)  parts.push(`grid · ${formatLength(s.step)}`);
+    if (s.orthoOn) parts.push("ortho");
+    if (s.polarOn) parts.push(`polar · ${s.angleStep}°`);
+    v.textContent = parts.length > 0 ? parts.join(" · ") : "on";
+  });
+}
+
 export function initShellChrome(opts?: { onModeChange?: (k: string) => void; onSplitMode?: (mode: "single" | "quad") => void }) {
   const menubar = document.querySelector(".menubar") as HTMLElement | null;
   const modebar = document.querySelector(".modebar") as HTMLElement | null;
@@ -850,6 +866,7 @@ export function initShellChrome(opts?: { onModeChange?: (k: string) => void; onS
   wireThemeToggle();
   wireFpsCounter();
   wireUnitsCell();
+  wireSnapCell();
 
   // File keyboard shortcuts: Ctrl/Cmd+O (open), Ctrl/Cmd+S (save), Ctrl/Cmd+Shift+S (save as).
   window.addEventListener("keydown", (e) => {
