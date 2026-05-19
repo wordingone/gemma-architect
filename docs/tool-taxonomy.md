@@ -4,6 +4,9 @@ Pre-plan asset for #96 (repo bootstrap). 39 mcp-rhino tools cataloged with
 replicad equivalents and IFC training-data coverage. Determines what the
 fine-tuned Gemma 4 emits and what the user can request.
 
+**See also:** `docs/palette-coverage-audit.md` — current 42-tool interactive palette mapped
+to Sd* dispatch verbs, with interactive-vs-agent parity gap analysis (SOUL-17, #933).
+
 Source: `B:/M/ArtificialArchitecture/artificialdesigner/mcp-rhino/src/tools/`
 (grep on `^\s*name:` patterns, all 39 tools located).
 
