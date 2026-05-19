@@ -1388,7 +1388,7 @@ export function buildClipPlanePlan(
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(p.x, p.y, planZ);
   const origin: [number, number, number] = [round(p.x), round(p.y), round(planZ)];
-  const normal: [number, number, number] = [0, 0, 1];
+  const normal: [number, number, number] = [0, 0, -1]; // clip z > planZ so floor-plan below cut remains visible
   mesh.userData.kind = "clip-plane";
   mesh.userData.creator = "SdClippingPlane";
   mesh.userData.excludeFromClip = true;
