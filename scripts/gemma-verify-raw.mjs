@@ -6064,6 +6064,72 @@ await resetScene('before-box-inject');
   await resetScene('post-S124');
 }
 
+// ── S125 — starter-library-node-instantiate (#1113/SU-6): right-click → BuildWall node appears + re-dispatch emits SdWall ──
+{
+  const s125 = await evaluate(`
+    (async () => {
+      try {
+        // Activate SKILLS tab.
+        const skillsTab = document.querySelector('[data-tab="skills"]');
+        if (!skillsTab) return { passed: false, evidence: { reason: 'skills tab not found' } };
+        skillsTab.click();
+        await new Promise(r => setTimeout(r, 200));
+
+        const canvas = window.__skillCanvas;
+        if (!canvas) return { passed: false, evidence: { reason: '__skillCanvas not exposed' } };
+
+        // Clear graph so node count is unambiguous.
+        const graph = canvas.getGraph();
+        graph.nodes = [];
+        graph.edges = [];
+        graph.groups = [];
+
+        const beforeCount = graph.nodes.length; // 0
+
+        // Simulate right-click on the canvas viewport to open the starter menu.
+        const viewport = document.querySelector('.skill-canvas-viewport');
+        if (!viewport) return { passed: false, evidence: { reason: 'viewport element not found' } };
+        const vpRect = viewport.getBoundingClientRect();
+        const cx = vpRect.left + vpRect.width / 2;
+        const cy = vpRect.top  + vpRect.height / 2;
+        viewport.dispatchEvent(new MouseEvent('contextmenu', { clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+        await new Promise(r => setTimeout(r, 80));
+
+        // Find the BuildWall item in the starter menu.
+        const menu = document.getElementById('sc-starter-menu');
+        if (!menu) return { passed: false, evidence: { reason: 'starter menu did not open' } };
+        const items = Array.from(menu.querySelectorAll('.sc-context-item'));
+        const buildWallItem = items.find(el => el.textContent.trim() === 'BuildWall');
+        if (!buildWallItem) {
+          menu.remove();
+          return { passed: false, evidence: { reason: 'BuildWall item not found', itemTexts: items.map(el => el.textContent.trim()) } };
+        }
+
+        // Click the BuildWall item.
+        buildWallItem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+        await new Promise(r => setTimeout(r, 80));
+
+        const afterCount = graph.nodes.length;
+        const node = graph.nodes[0];
+        const hasCorrectVerb = node?.skillSteps?.[0]?.verb === 'SdWall';
+        const passed = afterCount === beforeCount + 1 && hasCorrectVerb;
+        return { passed, evidence: {
+          beforeCount,
+          afterCount,
+          nodeName: node?.skillName,
+          verb: node?.skillSteps?.[0]?.verb,
+          inPorts: node?.inPorts,
+          outPorts: node?.outPorts,
+        } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s125) record('starter-library-node-instantiate', false, { reason: 'evaluate returned null' });
+  else record('starter-library-node-instantiate', s125.passed, s125.evidence);
+  await resetScene('post-S125');
+}
+
 } finally {
   await cleanup();
 }
