@@ -14,7 +14,7 @@
 // visual gap closure this is sufficient.
 //
 // Designed to land independently of any viewer.ts refactor — no changes
-// to viewer.ts required. Wiring after Eli's quad-split PR is a 5-line diff.
+// to viewer.ts required. Wiring after the quad-split PR is a 5-line diff.
 //
 // Usage:
 //   applyDrafting(viewer.getActiveObject()!);   // turn on

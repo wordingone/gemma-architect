@@ -39,7 +39,7 @@ function _wireEvents(): void {
   window.addEventListener("agentmodel:drafter:error", _onDrafterReady, { once: true });
   // returning-user: skip animation entirely (model already cached)
   window.addEventListener("agentmodel:returning-user", _onDone, { once: true });
-  // boot-complete: from Eli #938 richer events — treat as full completion
+  // boot-complete: richer boot event (#938) — treat as full completion
   window.addEventListener("agentmodel:boot-complete", _onDone, { once: true });
 }
 

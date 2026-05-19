@@ -24,7 +24,7 @@ The DSL is the **intermediate representation**. The model writes DSL;
 the pipeline lowers DSL → replicad solid graph → any of the export
 formats the app already supports (IFC4, STEP, OBJ, STL, GLB, glTF,
 USDZ, SVG, DXF, PDF). IFC is one target among many — the DSL doesn't
-favor it. Per Jun 2026-05-03: input modality (image / text / both) and
+favor it. Per user directive 2026-05-03: input modality (image / text / both) and
 output modality (any export format) are both open dimensions. The DSL
 is the narrow waist between them.
 

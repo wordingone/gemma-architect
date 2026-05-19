@@ -2146,7 +2146,7 @@ the same file + `web/src/scene-panel.ts` `buildSelectionFiltersPanel`
    for IFC) and falls back to topology/uuid otherwise. Position
    uses `Box3.getCenter` (correct for world-space-baked IFC vertices,
    which is how web-ifc emits them).
-6. **Live smoke verification:** Jun runs the click in the web app —
+6. **Live smoke verification:** user runs the click in the web app —
    load Schultz, click wall id 316472 in viewport (or via SCENE
    tree), confirm INSPECT shows the table-derived values within
    1mm tolerance. Failures here surface as element-pairing or
@@ -4665,7 +4665,7 @@ each walk, file every FAIL as a new bug citing the beat number.
 
 ## Cross-references
 
-- `mail #6554` — initial 10 UI defects from Jun's 2026-05-03 walkthrough
+- `mail #6554` — initial 10 UI defects from 2026-05-03 walkthrough
 - `mail #6555` — merge decision + revised starting order
 - `web/src/spatial-api.yaml` — canonical names per tool
 - `web/src/dispatch.ts` — verb resolution + handler registry

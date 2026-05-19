@@ -42,4 +42,4 @@ Each file at `web/test/capability/prompts/<id>.json` encodes one architect-grade
 - Checks are intentionally coarse — ±10–15% tolerance where noted — to account for inference variability.
 - `min_pass_threshold` of 0.7 means 70% of checks must pass for the prompt to score a K (pass).
 - The harness (`web/scripts/capability-bench.ts`) reads these files and scores the IFC exported from the agent's response.
-- Prompts deliberately exclude trivial commands ("draw a wall", "draw a box") per Jun directive 2026-05-08.
+- Prompts deliberately exclude trivial commands ("draw a wall", "draw a box") — per user directive 2026-05-08.
