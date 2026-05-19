@@ -206,12 +206,12 @@ export function attemptWallJoins(_newMesh: THREE.Mesh, _viewer: Viewer): void {
   // Intentionally empty — superseded by onElementCommitted in join-groups.ts.
 }
 
-export function buildSlab(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
+export function buildSlab(a: { x: number; y: number }, b: { x: number; y: number }, thickness?: number): { mesh: THREE.Mesh; chain: string } {
   const w = Math.abs(b.x - a.x);
   const d = Math.abs(b.y - a.y);
   const cx = (a.x + b.x) / 2;
   const cy = (a.y + b.y) / 2;
-  const t = DEFAULT_SLAB_THICKNESS;
+  const t = thickness ?? DEFAULT_SLAB_THICKNESS;
   const geom = new THREE.BoxGeometry(w, d, t);
   geom.translate(0, 0, t / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0xa8a097, roughness: 0.7, metalness: 0.05 });

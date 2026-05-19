@@ -560,8 +560,10 @@
   ifc4_class: IfcSlab
   kernel_op: makeSlab
   args:
-    - {name: profile,   type: polyline, required: true}
-    - {name: thickness, type: number,   required: true, unit: m, default: 0.2}
+    - {name: profile,   type: polyline, required: false, description: "Corner points [[x,y],...]. If omitted, width × depth box is used."}
+    - {name: width,     type: number,   required: false, unit: m, default: 4, description: "Box width (X) when profile is omitted. synonyms=[length]"}
+    - {name: depth,     type: number,   required: false, unit: m, default: 4, description: "Box depth (Y) when profile is omitted."}
+    - {name: thickness, type: number,   required: false, unit: m, default: 0.1, description: "Slab thickness (IBC 4\" nominal = 0.1 m)."}
     - {name: level,     type: string,   required: false, description: "Level ID or name."}
     - {name: layer, type: string, required: false, description: "Layer ID to override automatic creator-to-layer routing."}
   topology_role: host

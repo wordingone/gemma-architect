@@ -814,10 +814,11 @@ registerHandler("SdSlab", (args) => {
     a = { x: Math.min(...xs), y: Math.min(...ys) };
     b = { x: Math.max(...xs), y: Math.max(...ys) };
   }
-  const { mesh, chain } = buildSlab(a, b);
+  const t = (args.thickness as number | undefined) ?? DEFAULT_SLAB_THICKNESS;
+  const { mesh, chain } = buildSlab(a, b, t);
   // Architectural convention: slab top face = level plane.
-  // buildSlab geometry has bottom at z=0, top at z=thickness. Offset so top = elev.
-  mesh.position.z = elev - DEFAULT_SLAB_THICKNESS;
+  // buildSlab geometry has bottom at z=0, top at z=t. Offset so top = elev.
+  mesh.position.z = elev - t;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdSlab", args);
   mesh.userData.levelId = getActiveLevelId();
