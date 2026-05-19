@@ -236,6 +236,16 @@
   text-transform: uppercase;
 }
 .ed-fmt:disabled { opacity: 0.35; cursor: not-allowed; }
+.ed-layout-tag {
+  font-family: var(--mono);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--sanguine);
+  vertical-align: super;
+  margin-left: 3px;
+  opacity: 0.8;
+}
 
 .ed-footer {
   display: flex;

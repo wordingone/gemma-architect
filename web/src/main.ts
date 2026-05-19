@@ -17,7 +17,7 @@ import { opAddLabel, opBuildAnnotLine, getOpPhase } from "./viewer/op-tool";
 import { ptIsCoordInputActive } from "./viewer/transforms";
 import { buildWorkbench } from "./shell/workbench";
 import { buildModes, activateMode, getLayoutHost } from "./shell/modes";
-import { exportLayoutAsSvg, exportLayoutAsPdf } from "./shell/layout";
+import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback } from "./shell/layout";
 import { initCmdK } from "./ui/cmdk";
 import { initExportDrawer, openExportDrawer } from "./io/export-drawer";
 import { Viewer } from "./viewer/viewer";
@@ -3086,22 +3086,33 @@ function refreshExportButtons(disabledOverride: boolean = false): void {
 }
 
 async function handleExport(fmt: string): Promise<void> {
-  // Layout mode: route svg/pdf to the sheet export functions.
-  if (workbenchEl?.dataset.mode === "layout") {
+  // 2D formats always route through the Layout sheet pipeline (vector, not raster).
+  // Auto-activate Layout mode if not already active.
+  const is2D = fmt === "svg" || fmt === "pdf" || fmt === "dwg" || fmt === "dxf";
+  if (is2D) {
+    if (workbenchEl?.dataset.mode !== "layout") {
+      activateMode("layout", workbenchEl);
+      // Allow layout to initialize before reading the host.
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    }
     const host = getLayoutHost();
     if (!host) { setStatus("Layout not initialized.", "warn"); return; }
     const stem = "sheet";
     try {
       if (fmt === "svg") {
         const text = exportLayoutAsSvg(host);
+        (window as unknown as Record<string, unknown>).__lastLayoutSvg = text;
         downloadBlob(new Blob([text], { type: "image/svg+xml" }), `${stem}.svg`);
         setStatus(`Layout SVG · ${(text.length / 1024).toFixed(1)} KB`, "ok");
       } else if (fmt === "pdf") {
         const buf = await exportLayoutAsPdf(host);
         downloadBlob(new Blob([buf], { type: "application/pdf" }), `${stem}.pdf`);
         setStatus(`Layout PDF · ${(buf.byteLength / 1024).toFixed(1)} KB`, "ok");
-      } else {
-        setStatus(`${fmt.toUpperCase()} not available in Layout mode — use SVG or PDF.`, "warn");
+      } else if (fmt === "dwg" || fmt === "dxf") {
+        const text = exportLayoutAsDwgFallback(host);
+        const ext = "dxf";
+        downloadBlob(new Blob([text], { type: "image/vnd.dxf" }), `${stem}.${ext}`);
+        setStatus(`DXF (AutoCAD-compatible from Layout sheet) · ${(text.length / 1024).toFixed(1)} KB`, "ok");
       }
     } catch (e) {
       setStatus(`Layout export ${fmt.toUpperCase()} failed: ${(e as Error).message}`, "err");
