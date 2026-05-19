@@ -2673,11 +2673,12 @@ export class Viewer {
       if (obj.userData.noRenderMode) return;  // grid, axes — always unclipped
       const exclude = obj.userData.excludeFromClip === true || gizmoObjs.has(obj);
       const planes = exclude ? [] : all;
-      const mats = Array.isArray((obj as THREE.Mesh).material) ? (obj as THREE.Mesh).material : [(obj as THREE.Mesh).material];
+      const mat = (obj as THREE.Mesh).material;
+      const mats: THREE.Material[] = Array.isArray(mat) ? mat : [mat];
       for (const m of mats) {
-        if ((m as THREE.Material).clippingPlanes !== planes) {
-          (m as THREE.Material).clippingPlanes = planes;
-          (m as THREE.Material).needsUpdate = true;
+        if (m.clippingPlanes !== planes) {
+          m.clippingPlanes = planes;
+          m.needsUpdate = true;
         }
       }
     });
@@ -2695,10 +2696,11 @@ export class Viewer {
       if (!isM && !isL) return;
       if (obj.userData.noRenderMode) return;
       if (obj.userData.excludeFromClip) return;
-      const mats = Array.isArray((obj as THREE.Mesh).material) ? (obj as THREE.Mesh).material : [(obj as THREE.Mesh).material];
+      const mat2 = (obj as THREE.Mesh).material;
+      const mats: THREE.Material[] = Array.isArray(mat2) ? mat2 : [mat2];
       for (const m of mats) {
-        (m as THREE.Material).clippingPlanes = all;
-        (m as THREE.Material).needsUpdate = true;
+        m.clippingPlanes = all;
+        m.needsUpdate = true;
       }
     });
   }
