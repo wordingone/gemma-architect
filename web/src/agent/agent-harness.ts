@@ -20,6 +20,8 @@
 import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
 import { getState } from "../app-state";
+import { makeAgentInstanceFactory } from "./agent-instance";
+export type { AgentInstance, AgentTurn } from "./agent-instance";
 import { StandardBackend } from "./standard-backend";
 import {
   WASM_BACKEND_ENABLED,
@@ -1446,3 +1448,8 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const { dispatches, text } = parseDispatches(afterPlan);
   return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
 }
+
+// ── Multi-instance factory (#1122) ────────────────────────────────────────────
+// Bound to runAgentTurn so all instances share the single loaded model worker.
+// N=2 VRAM delta ≈ 0 — only CPU-RAM history arrays are added per instance.
+export const createAgentInstance = makeAgentInstanceFactory(runAgentTurn);
