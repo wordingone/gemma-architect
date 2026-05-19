@@ -17,7 +17,7 @@ export function setStructuralViewer(v: Viewer | null): void { _viewer = v; }
 // Default heights / sizes — IBC residential compliance (R311, R305).
 export const DEFAULT_WALL_HEIGHT = 3;
 const DEFAULT_WALL_THICKNESS = 0.2;
-const DEFAULT_SLAB_THICKNESS = 0.1;   // IBC 4" residential floor (was 0.2 = 7.87")
+export const DEFAULT_SLAB_THICKNESS = 0.1;   // IBC 4" residential floor (was 0.2 = 7.87")
 const DEFAULT_COLUMN_HEIGHT = 4;
 const DEFAULT_RECT_HEIGHT = 2.8;
 const DEFAULT_STAIR_RISE = 0.1778;    // IBC R311.7.5.1: 7" per user directive

@@ -58,7 +58,7 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
@@ -817,8 +817,7 @@ registerHandler("SdSlab", (args) => {
   const { mesh, chain } = buildSlab(a, b);
   // Architectural convention: slab top face = level plane.
   // buildSlab geometry has bottom at z=0, top at z=thickness. Offset so top = elev.
-  const DEFAULT_SLAB_T = 0.2;
-  mesh.position.z = elev - DEFAULT_SLAB_T;
+  mesh.position.z = elev - DEFAULT_SLAB_THICKNESS;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdSlab", args);
   mesh.userData.levelId = getActiveLevelId();

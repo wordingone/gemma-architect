@@ -4899,6 +4899,43 @@ await resetScene('before-box-inject');
   await resetScene('post-S116');
 }
 
+// ── S117 — wall-slab-interface (#948): slab top face = level plane ────────────
+// Dispatches a slab at base level; asserts slab top Z = 0 (level elevation).
+// buildSlab geometry: bottom at local z=0, top at local z=thickness (0.1m).
+// SdSlab handler places mesh at elev - thickness → world top = elev = 0.
+{
+  await resetScene('pre-S117');
+  const s117 = await evaluate(`(async () => {
+    try {
+      window.__dispatch('SdSlab', { width: 5, depth: 4 });
+      await new Promise(r => setTimeout(r, 400));
+
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      let slabPosZ = null;
+      v.scene.traverse(obj => {
+        if (obj.userData?.creator === 'slab' && slabPosZ === null) {
+          slabPosZ = obj.position.z;
+        }
+      });
+
+      if (slabPosZ === null) return { passed: false, evidence: { reason: 'no slab found' } };
+      // DEFAULT_SLAB_THICKNESS = 0.1; slab top = slabPosZ + 0.1; expect ≈ 0 (base level).
+      const SLAB_T = 0.1;
+      const slabTopZ = Math.round((slabPosZ + SLAB_T) * 1000) / 1000;
+      return {
+        passed: Math.abs(slabTopZ) < 0.005,
+        evidence: { slabPosZ: Math.round(slabPosZ * 1000) / 1000, slabTopZ, expectedTopZ: 0 }
+      };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('wall-slab-interface', !!(s117?.passed), s117 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S117');
+}
+
 } finally {
   await cleanup();
 }
