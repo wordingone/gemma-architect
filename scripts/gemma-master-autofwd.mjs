@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // gemma-master-autofwd.mjs — auto-fast-forward the gemma-architect-master serving
 // tree when origin/master advances. Fixes the recurring stale-branch drift where
-// Jun's :5175 window shows outdated UI (issue #239, third recurrence 2026-05-09).
+// the :5175 window shows outdated UI (issue #239, third recurrence 2026-05-09).
 //
 // Design:
 //   Poll origin/master every 30s. On SHA change:

@@ -1,8 +1,8 @@
 # Shared Browser — Lifecycle Guide
 
-A single persistent headed Chromium window at `http://localhost:5175/` serves as the common visual target for the user and agent teams (Wren/Vigil/Kit/Faye/Quinn/Hart/Aria). When any agent runs gemma-verify, cursor movement is visible in this window in real time.
+A single persistent headed Chromium window at `http://localhost:5175/` serves as the common visual target for the project team. When any agent runs gemma-verify, cursor movement is visible in this window in real time.
 
-Per user directive 2026-05-06.
+Per project directive 2026-05-06.
 
 ---
 
@@ -76,7 +76,7 @@ When `attached_via_cdp: true`, the JSON satisfies the gemma-verify-gate hook. Th
 
 ### Canonical tab
 
-In CDP mode the runner finds the existing tab whose URL starts with `http://localhost:5175/` and reuses it — it never opens a new tab. If no such tab exists the runner exits 2 with `BLOCKED: no canonical tab found`. The tab is never closed after the run; the window and tab survive every `verify:raw` invocation. To restore a closed canonical tab, run `stop.ps1` then `start.ps1`.
+In CDP mode the runner finds the existing tab whose URL starts with `http://localhost:5175/` and reuses it — it never opens a new tab. If no such tab exists the runner exits 2 with `BLOCKED: no canonical tab found`. The tab is never closed after the run; the shared window and tab survive every `verify:raw` invocation. To restore a closed canonical tab, run `stop.ps1` then `start.ps1`.
 
 ---
 
@@ -152,8 +152,8 @@ gh pr create ...  # gate reads GEMMA_ISOLATED and skips cdp.json check
 
 ---
 
-## Shared window is the test target
+## the shared window is the test target
 
 Closing the shared Chrome window kills the shared session for everyone. Don't close it manually unless running `stop.ps1`.
 
-Agent teams (Wren/Kit/Vigil etc.) connect to the same window — their Playwright cursors are visible to the user in real time. The `gemma-verify-cdp.ts` runner does **not** close the browser after the run; it disconnects from the CDP session, leaving the window open.
+Agent teams (Wren/Kit/Vigil etc.) connect to the same window — their Playwright cursors are visible in real time. The `gemma-verify-cdp.ts` runner does **not** close the browser after the run; it disconnects from the CDP session, leaving the window open.

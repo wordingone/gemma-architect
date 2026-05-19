@@ -219,5 +219,5 @@ If B passes but A fails: model isn't learning the construction sequence
 
 ---
 
-Status: design complete, ready to implement once user signs off on track
+Status: design complete, ready to implement once project sign-off on track
 + repo location + team composition (#95).

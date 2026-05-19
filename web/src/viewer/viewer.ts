@@ -1438,8 +1438,8 @@ export class Viewer {
     if (this.controls) this.controls.enabled = false;
     this.updateRelocateBadge();
     // Visible breadcrumb in the browser console — use this to verify the
-    // entry path is firing (look for it in the Chrome DevTools Console
-    // after a dblclick).
+    // entry path is actually firing on the dev session (look for it in the
+    // Chrome DevTools Console after a dblclick).
     console.log("[relocate] entered:", mode, axis);
   }
 

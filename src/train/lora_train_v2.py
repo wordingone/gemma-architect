@@ -1,7 +1,7 @@
 """
 v2 LoRA training — base-model-agnostic Unsloth QLoRA scaffold.
 
-Per Jun directive 2026-05-05: legacy MODEL_VARIANTS entries were purged
+Per project directive 2026-05-05: legacy MODEL_VARIANTS entries were purged
 (hackathon eligibility drift). MODEL_VARIANTS is empty until a
 Gemma 4 base is selected — set GEMMA4_BASE_MODEL + GEMMA4_BASE_TAG +
 GEMMA4_CHAT_TEMPLATE before running, or extend MODEL_VARIANTS with the chosen
@@ -50,7 +50,7 @@ else:
     TAG = os.environ.get("GEMMA4_BASE_TAG", "")
     if not MODEL_NAME or not TAG:
         print(
-            "No model selected. Legacy bases purged 2026-05-05 per Jun "
+            "No model selected. Legacy bases purged 2026-05-05 per project decision "
             "directive (hackathon eligibility drift). Either:\n"
             "  - set GEMMA_V2_MODEL to a key in MODEL_VARIANTS (currently empty), or\n"
             "  - set GEMMA4_BASE_MODEL and GEMMA4_BASE_TAG.",

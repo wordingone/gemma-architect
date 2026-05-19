@@ -234,5 +234,5 @@ if (cmd === "inspect") {
   );
 }
 
-// Never close page or browser — Jun's canonical tab and window survive every invocation.
+// Never close page or browser — the canonical tab and window survive every invocation.
 process.exit(0);

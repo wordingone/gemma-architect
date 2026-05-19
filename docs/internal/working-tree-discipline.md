@@ -1,10 +1,10 @@
 # Working-Tree Discipline
 
-`B:/M/gemma-architect/` is the **shared working tree** — Archie develops in it and the vite dev server at `localhost:5175` serves from it. Whatever branch is checked out there is what the user sees.
+`B:/M/gemma-architect/` is the **shared working tree** — the engineer develops in it and the vite dev server at `localhost:5175` serves from it. Whatever branch is checked out there is what the user sees.
 
 ## Rules
 
-1. **Never `git checkout <branch>` in `B:/M/gemma-architect/`** unless you're Archie and are deliberately switching what the user sees. `bash`'s `cd` resets between invocations; `git checkout` writes to disk and persists across them.
+1. **Never `git checkout <branch>` in `B:/M/gemma-architect/`** unless you're the assigned engineer and are deliberately switching what the user sees. `bash`'s `cd` resets between invocations; `git checkout` writes to disk and persists across them.
 2. **All other work goes in a `git worktree`** off the shared clone:
    ```bash
    cd B:/M/gemma-architect
@@ -12,15 +12,15 @@
    ```
    This creates an isolated working tree at the new path. The shared tree's checkout is unaffected.
 3. **Verify with `git worktree list`** before any branch operation. If you see your topic branch already checked out somewhere, work there. If you don't, add it.
-4. **Never run a parallel vite from a worktree on the same port (5175)**. Either use a different port, or don't run vite at all from the worktree.
+4. **Never run a parallel vite from a worktree on the same port (5175)**. Either use a different port (and confirm before pointing at it — see gate-discipline rule about port redirects), or don't run vite at all from the worktree.
 
 ## When the shared tree's branch DOES need to change
 
-Only when verifying a different PR end-to-end at the canonical URL. Coordinate first:
+Only when verifying a different PR end-to-end on the dev URL. Coordinate with the team first:
 
-1. Confirm the user is ready to switch the view (mail or chat; wait for ack).
+1. Confirm the user is ready to switch his view (mail him; wait for ack).
 2. Switch the shared tree to the target branch.
-3. Verify the new state is visible.
+3. Verify the user sees the new state.
 4. Switch back to the prior branch when done.
 
 For PR review without user-side verification, use a worktree + a separate dev server on a different port; never touch the shared tree.
@@ -38,7 +38,7 @@ cd B:/M/gemma-architect && git rev-parse --abbrev-ref HEAD
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5175 -State Listen | ForEach-Object { Get-CimInstance Win32_Process -Filter ('ProcessId=' + $_.OwningProcess) | Select-Object ProcessId, CommandLine }"
 ```
 
-The third command returns the process serving `:5175`; its working directory is in the CommandLine. Cross-check that working dir's HEAD before assuming what the user sees.
+The third command returns the process serving the dev URL; its working directory is in the CommandLine. Cross-check that working dir's HEAD before assuming what the user sees.
 
 ## Removing a worktree when done
 
@@ -51,5 +51,5 @@ Only after the branch is merged or abandoned. `git worktree remove` errors out i
 ## Cross-refs
 
 - `docs/github-flow.md` — branching policy
-- Leo's `gate-discipline.md` self-catch 2026-05-05 — the canonical incident
+- the `gate-discipline.md` self-catch 2026-05-05 — the canonical incident
 - Issue #103 — LAYOUT-mode click bug surfaced when this rule was violated 2026-05-08

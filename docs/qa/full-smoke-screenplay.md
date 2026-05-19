@@ -4404,7 +4404,7 @@ work. Three scripts must exist before walking §25:
    tessellation pipeline (web-ifc → vertex/triangle arrays → voxelize
    on a uniform grid → set-intersection/union per-voxel).
 
-These scripts are Leo's authoring lane (gate-shape definition). #195
+These scripts are reviewer authoring lane (gate-shape definition). #195
 tracks the remaining two (`extract-schultz-parameters.ts` +
 `voxel-iou.ts`); they unblock §25 walkthrough.
 

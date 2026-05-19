@@ -109,7 +109,7 @@ The submission is not a research artifact; it's a deployable web app.
   Single-element demos emit one `IfcBuildingElementProxy` /
   `IfcFacetedBrep` / `IfcClosedShell`; the Schultz hero emits 566 IFC
   entities across the multi-element compound. A hand-written companion
-  harness (`bun scripts/leo-as-architect.ts`, 8/8) exercises Tier 2 ops
+  harness (`bun scripts/dev-as-architect.ts`, 8/8) exercises Tier 2 ops
   the canned demos don't (revolves, gables, T-junctions, octagonal
   columns). Run via `bun scripts/web-self-harness.ts`.
 - **Bundle size** (verified 2026-05-05 against the deployed

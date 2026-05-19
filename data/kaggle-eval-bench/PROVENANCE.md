@@ -12,7 +12,7 @@
 
 **EVAL ONLY — NOT USED FOR TRAINING.**
 
-Per Jun directive 2026-05-05: *"we could use the kaggle dataset as pure eval and
+Per project directive 2026-05-05: *"we could use the kaggle dataset as pure eval and
 targets"*. The IFC files in this directory are held-out ground-truth geometry used
 to score LoRA-generated outputs. No file from this corpus was or will be used as
 training input.

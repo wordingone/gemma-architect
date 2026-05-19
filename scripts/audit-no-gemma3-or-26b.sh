@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # audit-no-gemma3-or-26b.sh — fails on any Gemma 3 / Gemma 3n / Gemma 4 26B reference
 #
-# Verification gate for the 2026-05-05 purge per Jun directive ("huge drift").
+# Verification gate for the 2026-05-05 purge per project directive ("huge drift").
 # Exits 1 on any match outside the allowlist; exits 0 clean.
 #
 # Allowlist (excluded from the scan):

@@ -2,7 +2,7 @@
 
 ## Why coordination matters
 
-Eli and Archie can both invoke `gemma-verify-raw.mjs` — directly or via the `/gemma-verify` skill. Without coordination, two concurrent runs hit the same shared Chromium page (`:9222`) and stomp on each other's DOM state: one run loads an IFC model while the other dispatches a wall, producing false-fail signals that eat signoff cycles.
+Both engineers can invoke `gemma-verify-raw.mjs` — directly or via the `/gemma-verify` skill. Without coordination, two concurrent runs hit the same shared Chromium page (`:9222`) and stomp on each other's DOM state: one run loads an IFC model while the other dispatches a wall, producing false-fail signals that eat signoff cycles.
 
 ## Normal invocation: always use the wrapper
 

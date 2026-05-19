@@ -36,7 +36,7 @@ _adapter_env = os.environ.get("ADAPTER_DIR")
 if not _adapter_env:
     print(
         "ADAPTER_DIR unset. Legacy LoRA adapters purged 2026-05-05 "
-        "per Jun directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
+        "per project directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
         "Gemma 4 LoRA adapter path before evaluating.",
         file=sys.stderr,
     )
@@ -134,7 +134,7 @@ _chat_template = os.environ.get("GEMMA4_CHAT_TEMPLATE")
 if not _chat_template:
     print(
         "GEMMA4_CHAT_TEMPLATE unset. Legacy chat template purged 2026-05-05 "
-        "per Jun directive (hackathon eligibility drift). "
+        "per project directive (hackathon eligibility drift). "
         "Set GEMMA4_CHAT_TEMPLATE to chosen Gemma 4 template before eval.",
         file=sys.stderr,
     )

@@ -4346,7 +4346,7 @@ await resetScene('before-box-inject');
 // Arm agentmodel:boot-complete listener BEFORE navigation, navigate, then
 // immediately try to click #palette-wall. Until boot-complete fires, any
 // tool-activate event would indicate the overlay failed to block interaction.
-// If agentmodel:boot-complete is not present (Archie's overlay not yet merged),
+// If agentmodel:boot-complete is not present (overlay PR not yet merged),
 // this surface soft-passes with skipReason.
 {
   // Arm boot-complete listener
@@ -4381,9 +4381,9 @@ await resetScene('before-box-inject');
   const r80 = await evaluate(`(function() {
     const hasBootEvent = window.__bootCompleteTs !== null;
     if (!hasBootEvent) {
-      // agentmodel:boot-complete not present — Archie's overlay not yet merged.
+      // agentmodel:boot-complete not present — overlay PR not yet merged.
       // Soft-pass to avoid blocking CI on Eli's surfaces alone.
-      return { passed: true, evidence: { skipReason: 'boot-complete event not fired — overlay PR pending (Archie scope)', softPass: true } };
+      return { passed: true, evidence: { skipReason: 'boot-complete event not fired — overlay PR pending (frontend scope)', softPass: true } };
     }
     const blocked = !window.__toolActivateBeforeBoot;
     return { passed: blocked, evidence: { blocked, bootCompleteTs: window.__bootCompleteTs, toolActivateBeforeBoot: window.__toolActivateBeforeBoot } };

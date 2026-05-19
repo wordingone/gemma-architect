@@ -1599,8 +1599,8 @@ registerHandler("SdFurnishing", (args) => {
 
 // ── Tier 1 handlers: SdPoint / SdLine / SdRectangle / SdPolyline (#64) ───────
 // These replace the fan-out shims installed by installDefaultHandlers() below.
-// Render using THREE line/point primitives (not mesh geometry) — per user feedback:
-// lines = LineSegments, points = sprite-style Points (no tubes/spheres mesh overhead).
+// Render using THREE line/point primitives (not mesh geometry) per the project direction
+// "tubes / spheres" feedback: lines = LineSegments, points = sprite-style Points.
 
 function buildPointMaterial(sizePx = 14): THREE.PointsMaterial {
   const canvas = document.createElement("canvas");

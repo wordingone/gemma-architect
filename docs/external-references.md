@@ -62,7 +62,7 @@ Full investigation in 5 parallel haiku agent reports (2026-05-01). Headline find
 
 - `google/gemma-4-e2b` — primary in-browser inference target (~2B effective).
 - `google/gemma-4-e4b` — alt target (~4B).
-- Gemma 4 base TBD — awaiting base selection per user directive 2026-05-05. Legacy base training purged 2026-05-05.
+- Gemma 4 base TBD — awaiting base selection per 2026-05-05 directive. Legacy base training purged 2026-05-05.
 
 ## 8. Hackathon target
 
@@ -109,20 +109,20 @@ Sourced 2026-05-01 from user-supplied URL list + 5-agent haiku investigation of 
 
 ### 13.1 Fact-check log (2026-05-01 Pass 1 → 2 → 3)
 
-Three iterative fact-check passes (haiku agents, then Leo primary-source verification) corrected the following original claims:
+Three iterative fact-check passes (haiku agents, then manual primary-source verification) corrected the following original claims:
 
 | # | Section | Original | Corrected | Verified by |
 |---|---|---|---|---|
 | 1 | §1 BRepNet URL | `research.autodesk.com/.../BRepNet-...pdf` (404 dead) | arXiv [2104.00706](https://arxiv.org/abs/2104.00706), CVPR 2021 | Pass 1A WebFetch + Pass 2 confirm |
 | 2 | §2 NIST description | "Reference geometry" | "Wind-tunnel aerodynamic test data (UWO), organised by building model dimensions" | Pass 1B + Pass 2 WebFetch of `nist.gov/el/data-sets-model-dimensions` |
-| 3 | §3 pascal LOC | "~30K LOC" | "11,058 LOC TS/TSX" | Leo `find ... wc -l` on local clone (Pass 3 ground-truth) |
-| 4 | §3 pascal contributors | "14+ contributors" (ambiguous) | "14 credited handles in CHANGELOG / 26 git commit authors all-time" | Leo `git log --format='%an' \| sort -u` on local clone |
+| 3 | §3 pascal LOC | "~30K LOC" | "11,058 LOC TS/TSX" | manual `find ... wc -l` on local clone (Pass 3 ground-truth) |
+| 4 | §3 pascal contributors | "14+ contributors" (ambiguous) | "14 credited handles in CHANGELOG / 26 git commit authors all-time" | manual `git log --format='%an' \| sort -u` on local clone |
 | 5 | §4 buildingSMART access | implicit assumption: live URL | 403 on both `/gallery` and parent domain as of 2026-05-01 | Pass 1B + Pass 2 WebFetch |
-| 6 | §5 pascal renderer | "WebGPU-only (no WebGL fallback)" | "WebGPU-primary with WebGL2 fallback" + file:line citations | Leo grep of `packages/viewer/src` (Pass 3 ground-truth) |
+| 6 | §5 pascal renderer | "WebGPU-only (no WebGL fallback)" | "WebGPU-primary with WebGL2 fallback" + file:line citations | manual grep of `packages/viewer/src` (Pass 3 ground-truth) |
 
 Confirmed-clean (no correction needed): Pointer-CAD / DreamCAD / ArchCAD-400K arXiv papers, ABC mirror, Fusion360 Gallery dataset content, BIMNet statistics (116.5M / 25 / 382 / 8,700+), WBDG common BIM files presence, pascal v0.6.0 date (2026-04-21 16:57 EDT), pascal stars (14,991) / forks (1,925), MCP server model-agnostic + zero-LLM-bundled claim.
 
-Lessons: (a) Pass 1 surfaced 6 issues but introduced 1 false positive (contributor count); Pass 2 + Pass 3 + primary-source verification refuted the false positive and surfaced 3 new corrections. (b) Multi-pass fact-check converges on truth ≠ "delegate verification to one agent." (c) Even Pass 2 and Pass 3 produced date-related hallucinations (Pass 2: "2025-04-22"; Pass 3: "2026-04-22 06:05 UTC") — only Leo's direct `git log` matched the original catalogue ("2026-04-21"). The closest source of truth wins.
+Lessons: (a) Pass 1 surfaced 6 issues but introduced 1 false positive (contributor count); Pass 2 + Pass 3 + primary-source verification refuted the false positive and surfaced 3 new corrections. (b) Multi-pass fact-check converges on truth ≠ "delegate verification to one agent." (c) Even Pass 2 and Pass 3 produced date-related hallucinations (Pass 2: "2025-04-22"; Pass 3: "2026-04-22 06:05 UTC") — only the manual `git log` matched the original catalogue ("2026-04-21"). The closest source of truth wins.
 
 ## 14. Maintenance
 

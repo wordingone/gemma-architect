@@ -260,7 +260,7 @@ post-hackathon roadmap item to close it.
 
 - `scripts/probe-conventions.ts` — print empirical bounds for each
   primitive in isolation. Run when in doubt.
-- `scripts/leo-as-architect.ts` — 8 hand-written designs exercising
+- `scripts/dev-as-architect.ts` — 8 hand-written designs exercising
   the tool surface end-to-end (execute → mesh → IFC → validate →
   bounds-check). Useful when sanity-checking a tier1.ts change or a
   fixture change.
@@ -268,6 +268,6 @@ post-hackathon roadmap item to close it.
   hero), end-to-end. The CI hook for the model itself.
 
 The harness suite was exactly how the asymmetric Z convention got
-caught — `leo-as-architect.ts` flagged 5 of 8 designs with bounds
+caught — `dev-as-architect.ts` flagged 5 of 8 designs with bounds
 drift, the probe pinned the asymmetry, and the fix landed in this
 doc + the harness expected bounds.

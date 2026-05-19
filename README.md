@@ -155,7 +155,7 @@ but our app code that *uses* web-ifc has no copyleft obligation.
 | `data/dsl-demo-corpus.jsonl` | 19-row DSL corpus that broadens cache coverage. |
 | `data/` | Built training/eval JSONL (gitignored — produced by `build_dataset_v2.py`). |
 | `outputs/` | LoRA adapter + train stats + eval results (gitignored — produced by training). |
-| `scripts/` | Bun scripts: `validate-fixtures.ts`, `web-self-harness.ts`, `generate-v2.ts`, `leo-as-architect.ts`, `probe-conventions.ts`, `build-ai-cache.ts`, `test-ai-match.ts`, `test-ifc-bounds.ts`, `verify-dsl-corpus.ts`. |
+| `scripts/` | Bun scripts: `validate-fixtures.ts`, `web-self-harness.ts`, `generate-v2.ts`, `dev-as-architect.ts`, `probe-conventions.ts`, `build-ai-cache.ts`, `test-ai-match.ts`, `test-ifc-bounds.ts`, `verify-dsl-corpus.ts`. |
 | `submission/` | Hackathon submission docs + screenshots. |
 | `docs/` | Design docs (`ai-pipeline.md`, `console-dsl.md`, **`tier1-conventions.md`**, tool taxonomy, training-pair format, 18-day plan, retrospectives). |
 
@@ -182,7 +182,7 @@ takes):
 
 ```bash
 bun scripts/web-self-harness.ts          # 9/9 canned demos pass
-bun scripts/leo-as-architect.ts          # 8/8 hand-written designs (revolve, gables, T-junctions)
+bun scripts/dev-as-architect.ts          # 8/8 hand-written designs (revolve, gables, T-junctions)
 bun scripts/probe-conventions.ts         # primitive-by-primitive bounds — run when in doubt
 bun scripts/build-ai-cache.ts            # rebuild the 60-row prompt → JS cache
 bun scripts/test-ai-match.ts             # F1-similarity smoke test for the matcher

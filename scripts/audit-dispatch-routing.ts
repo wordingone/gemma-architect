@@ -8,7 +8,7 @@
 // that render the wrong primitive (text instead of icon, statusbar instead
 // of menubar). Both pass audit-stubs.ts; both break the bundle's contract.
 //
-// Why this exists: 2026-05-04 Jun caught 3 regressions in the live playwright
+// Why this exists: 2026-05-04 review caught 3 regressions in the live playwright
 // window — ribbon shows TEXT not ICONS, BLUEPRINT/VELLUM toggle gone, palette
 // buttons inert / no scene selection / no transform gizmo. All 3 trace to
 // silly-baking-yeti.md plan tasks T1/T3/T4/T7 that were marked closed via
@@ -211,7 +211,7 @@ function checkViewerSelection(): Violation[] {
   return violations;
 }
 
-// R4 — viewport cropping. silly-baking-yeti.md T2. Jun 2026-05-04: "the
+// R4 — viewport cropping. silly-baking-yeti.md T2. project review 2026-05-04: "the
 // applications bottom part of the ui is cut off." Statusbar gets clipped on
 // short windows (Macbook Air, devtools open, 13" laptop) which makes the
 // dock divider grip and bottom status cells unreachable.
@@ -315,13 +315,13 @@ function checkCropping(): Violation[] {
   return violations;
 }
 
-// R5 — Console DSL scope reduction. Jun 2026-05-04 localhost review: console
+// R5 — Console DSL scope reduction. project review 2026-05-04 localhost: console
 // emits "unknown verb: 'select' (v0 supports: wall, slab, column, box, cut)"
 // for any verb outside a hardcoded 5-element list. Per silly-baking-yeti.md the
 // console must accept every canonical_name in spatial-api.yaml. The
 // "v0 supports:" literal in the error message is the structural signature of
 // scope reduction — if present in dsl-eval.ts source, the DSL is gated. Per
-// feedback_never_reduce_scope, only Jun reduces scope; this audit blocks the
+// feedback_never_reduce_scope, only the project owner reduces scope; this audit blocks the
 // pattern from re-shipping.
 function checkConsoleDslScope(): Violation[] {
   const lines = readLines(DSL_EVAL_TS);
@@ -345,7 +345,7 @@ function checkConsoleDslScope(): Violation[] {
   return violations;
 }
 
-// R6 — Layout tab functional. Jun 2026-05-04: "the layout tab is a complete
+// R6 — Layout tab functional. project review 2026-05-04: "the layout tab is a complete
 // mess." silly-baking-yeti T15 mandates layout = paper sheet + click-to-add
 // panels + viewport-picker + real WebGL panel rendering at scale (Rhino
 // Layout + Detail viewport pattern). Current layout.ts header comment
@@ -395,7 +395,7 @@ function checkLayoutFunctional(): Violation[] {
   return violations;
 }
 
-// R7 — Ortho grid z-order. Jun 2026-05-04: "for the orthogonal views, the
+// R7 — Ortho grid z-order. project review 2026-05-04: "for the orthogonal views, the
 // grids parallel to the camera's plane per view, is being rendered in front
 // of the geometry, should not be the case." Three.js GridHelper at default
 // renderOrder=0 + opaque material can occlude geometry when their world-z

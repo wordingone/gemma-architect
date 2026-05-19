@@ -2,7 +2,7 @@
 serve_lora.py — minimal OpenAI-compat /v1/chat/completions server backed by a
 v2 LoRA adapter, with optional MTP speculative-decoding via a paired drafter.
 
-Per Jun directive 2026-05-05: legacy bases were purged (hackathon eligibility
+Per project directive 2026-05-05: legacy bases were purged (hackathon eligibility
 drift). This server is now base-model-agnostic — set
 ADAPTER_DIR + GEMMA4_CHAT_TEMPLATE before running. The script fails loud if
 either is unset.
@@ -69,7 +69,7 @@ _adapter_env = os.environ.get("ADAPTER_DIR")
 if not _adapter_env:
     print(
         "ADAPTER_DIR unset. Legacy LoRA adapters purged 2026-05-05 "
-        "per Jun directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
+        "per project directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
         "Gemma 4 LoRA adapter path before serving.",
         file=sys.stderr,
     )

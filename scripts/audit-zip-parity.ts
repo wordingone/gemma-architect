@@ -12,7 +12,7 @@
 // Exits 1 with `DEVIATION: <label>` per missing entry.
 //
 // SHELL_TS is resolved from this script's own location, so it works from any
-// clone. APP_JSX is the source-of-truth zip Jun extracted to a fixed path —
+// clone. APP_JSX is the source-of-truth zip extracted to a fixed path —
 // override via APP_JSX_PATH env var when running on a machine where the zip
 // lives elsewhere.
 

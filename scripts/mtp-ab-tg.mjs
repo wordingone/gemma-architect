@@ -7,7 +7,7 @@
 //   Scenario 1 (build):  "Build a 5m wall..." — text-only, no VISUAL_RE
 //   Scenario 2 (visual): "What's currently in the scene?" — triggers VISUAL_RE → auto-capture
 //
-// Acceptance (#751 gate from Leo #8347):
+// Acceptance (#751 gate from mail #8347):
 //   - ON arm: mtp_on=true for BOTH scenarios
 //   - spec_attempts > 0 on ≥1 scenario
 //   - ratio ≥ 1.10 on ≥1 scenario
@@ -279,7 +279,7 @@ console.log("[mtp-ab] OFF arm:", JSON.stringify(off, null, 2));
 const ratioBuild  = (on.build?.tg_tps  ?? 0) / (off.build?.tg_tps  ?? 1);
 const ratioVisual = (on.visual?.tg_tps ?? 0) / (off.visual?.tg_tps ?? 1);
 
-// Gate (#751 — Leo #8347):
+// Gate (#751 — mail #8347):
 //   ON arm: mtp_on=true for BOTH scenarios
 //   spec_attempts > 0 on ≥1 scenario
 //   ratio ≥ 1.10 on ≥1 scenario

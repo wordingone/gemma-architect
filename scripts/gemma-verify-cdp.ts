@@ -5,8 +5,8 @@
 // gemma-verify-cdp.ts — CDP-attach variant of the gemma-verify skill.
 //
 // When B:/M/gemma-architect-master/.shared-browser/cdp.json exists, connects to
-// the shared headed Chromium (Jun's window) via chromium.connectOverCDP() instead
-// of launching an isolated browser. All 11 surface checks run in Jun's window;
+// the shared headed Chromium (the shared window) via chromium.connectOverCDP() instead
+// of launching an isolated browser. All 11 surface checks run in the shared window;
 // the cursor is visible to him in real time.
 //
 // Writes the same JSON format as the /gemma-verify SKILL.md:
@@ -511,6 +511,6 @@ if (!attachedViaCDP) {
   await page.close();
   await browser.close();
 }
-// CDP mode: never close page or browser — Jun's canonical tab and window survive.
+// CDP mode: never close page or browser — the canonical tab and window survive.
 
 process.exit(allPassed ? 0 : 1);

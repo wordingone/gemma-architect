@@ -28,7 +28,7 @@ Pre-merge `gemma-verify-raw` against `:5175` is forbidden. The single `:5175` vi
 
 - Contaminates the verify baseline (wrong-version testing)
 - Forces the serving tree to switch branches (disrupts the user's view)
-- Causes cross-worker DOM collisions when Eli and Archie verify concurrently
+- Causes cross-worker DOM collisions when engineers verify concurrently
 
 **The pre-merge gate is:** code-inspection + CI (typecheck-test + fixtures-validate must be green) + unit/component tests in own worktree (`bun test web/`).
 
@@ -55,7 +55,7 @@ snap-cursor-vertex  # #484  camera-fit timing race: midpoint vs endpoint snap no
 
 ## Verify wrapper (recommended path)
 
-All normal gemma-verify runs should go through the lockfile-coordinator wrapper (`scripts/gemma-verify.mjs`, shipped in PR #479) rather than calling `gemma-verify-raw.mjs` directly. The wrapper serializes concurrent runs from Eli and Archie and archives per-run receipts.
+All normal gemma-verify runs should go through the lockfile-coordinator wrapper (`scripts/gemma-verify.mjs`, shipped in PR #479) rather than calling `gemma-verify-raw.mjs` directly. The wrapper serializes concurrent runs from engineers and archives per-run receipts.
 
 ```bash
 bun scripts/gemma-verify.mjs            # normal run

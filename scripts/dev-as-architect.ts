@@ -1,4 +1,4 @@
-// Leo-as-architect harness — I write the JS by hand against tier1, the same
+// Dev-as-architect harness — I write the JS by hand against tier1, the same
 // way Gemma is supposed to. Each entry is (prompt, JS) where JS is what I
 // emitted given only the prompt + the 12-op vocabulary. The harness runs
 // each through the same execute → mesh → buildIfc → validate path the
@@ -306,7 +306,7 @@ async function tryDesign(d: Design): Promise<{ id: string; ok: boolean; report: 
 }
 
 async function main() {
-  console.log(`leo-as-architect — ${DESIGNS.length} designs written by hand against tier1\n`);
+  console.log(`dev-as-architect — ${DESIGNS.length} designs written by hand against tier1\n`);
   await ensureOC();
   console.log("OpenCascade ready.\n");
 

@@ -3,12 +3,12 @@ Schultz Residence first-target probe — runs the Schultz eval prompt
 through a v2 adapter and prints what the model produces, alongside the
 hand-written gold answer for comparison.
 
-Per Jun 2026-05-03: use Schultz as the first-target probe for compositional
+Per project decision 2026-05-03: use Schultz as the first-target probe for compositional
 generation. The standard inference_eval_v2.py uses max_new_tokens=300 which
 truncates Schultz output (~1.3k chars / ~450 tokens). This wrapper bumps
 to max_new_tokens=600.
 
-Per Jun directive 2026-05-05: ADAPTER_DIR + GEMMA4_CHAT_TEMPLATE are required;
+Per project directive 2026-05-05: ADAPTER_DIR + GEMMA4_CHAT_TEMPLATE are required;
 the legacy adapters were purged.
 
 Inputs:
@@ -39,7 +39,7 @@ _adapter_env = os.environ.get("ADAPTER_DIR")
 if not _adapter_env:
     print(
         "ADAPTER_DIR unset. Legacy LoRA adapters purged 2026-05-05 "
-        "per Jun directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
+        "per project directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
         "Gemma 4 LoRA adapter path before evaluating.",
         file=sys.stderr,
     )

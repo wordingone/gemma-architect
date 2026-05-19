@@ -4,7 +4,7 @@
 // We cannot import main.ts directly (it instantiates THREE.WebGLRenderer
 // at the module level and requires a GPU context). Instead we test the
 // pure-computation logic extracted from each handler using a real THREE.Scene
-// with synthetic wall/slab meshes — matching Leo's "no mocking" requirement.
+// with synthetic wall/slab meshes — matching the "no mocking" requirement.
 
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";

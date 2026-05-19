@@ -40,7 +40,7 @@ Goal: replace the 76-pair toy dataset with a 400+-pair v2 dataset. Re-train.
 - **D1 (4/30, today)** — finish Spike A LoRA + retrospective ✅. File the 18-day plan ✅. Open `dataset/v2-spec.md` listing target categories + ratios.
 - **D2 (5/1)** — synthetic IFC generator: parametric room/wall/slab/column/footing emitter that round-trips through web-ifc → mining pipeline → training pair. Target 200 synthetic pairs. Diversity knobs: dimensions (0.3-30m), wall thickness (0.1-0.4m), opening counts, L-shape / U-shape / courtyard footprints. Acceptance: 200 pairs validate as round-trippable.
 - **D3 (5/2)** — corpus expansion: pull more open IFC (IfcOpenHouse, FreeCAD-IFC export samples, IFC4 sample suite). Target +50 mined pairs. Hand-curate +50 pairs covering Tier 2 ops (revolves, basic booleans/cuts). Total v2 dataset: 50 (tier1) + 50 (tier1-extra) + 200 (synthetic) + 50 (tier2-curated) + 50 (mined) = 400.
-- **D4 (5/3)** — re-train on v2 dataset on Gemma 4 base (TBD per user directive 2026-05-05). Push best adapter to HF Hub as `gemma-architect/cad-lora-v2`. Sub-gate 1 closes here.
+- **D4 (5/3)** — re-train on v2 dataset on Gemma 4 base (TBD per project directive 2026-05-05). Push best adapter to HF Hub as `gemma-architect/cad-lora-v2`. Sub-gate 1 closes here.
 
 **Slip rule:** if D4 slips past 5/3, drop the 50 mined-extra and 50 tier2-curated rows and ship a 300-pair v2; do NOT skip the synthetic generator (it's the leverage).
 
@@ -88,7 +88,7 @@ To prevent track stacking (failure mode P2 from `failure-classes.md`):
 - **No multi-language UI.** English prompts only.
 - **No multimodality.** Text-in, JS-out. No image input even though Gemma 4 supports it.
 - **No fine-tune over base instruction-following.** LoRA on top of Gemma 4 base only. Don't attempt full fine-tune; the base instruction-following is the leverage.
-- **No AVIR-CLI work during the hackathon.** Per user directive 2026-04-30, the queue-burn defaults are paused. avir-cli mailbox check happens once per work session, not continuously.
+- **No AVIR-CLI work during the hackathon.** Per project directive 2026-04-30, the queue-burn defaults are paused. avir-cli mailbox check happens once per work session, not continuously.
 
 ---
 
@@ -96,7 +96,7 @@ To prevent track stacking (failure mode P2 from `failure-classes.md`):
 
 | Risk | Mitigation |
 |---|---|
-| Gemma 4 base selection delayed | Use E2B as default; E4B if wheel available. Legacy analogue fallback removed per user directive 2026-05-05. |
+| Gemma 4 base selection delayed | Use E2B as default; E4B if wheel available. Legacy analogue fallback removed per project directive 2026-05-05. |
 | WebGPU + Gemma-4 in-browser inference too slow | Server-side inference proxy on HuggingFace Spaces. Less impressive but still ships. |
 | LoRA adapter doesn't generalize off-distribution | The 400-pair v2 dataset is the bet. If still fails, expand to 800 via second synthetic-generator pass. |
 | Model emits non-Tier1 ops despite training | Post-process / lint the output and reject + re-prompt. Demo can hide this if rare. |
@@ -108,7 +108,7 @@ To prevent track stacking (failure mode P2 from `failure-classes.md`):
 
 - **No "phase 5 retry" pattern.** No comprehensive end-to-end run as goal — every sub-gate has its own day-block green-light.
 - **No deadline-as-budget thinking.** Days are dependency-ordered, not time-allocated. Ship sooner if I can.
-- **No escalation-as-design.** Every blocker has an in-plan fallback; no user decisions baked into the timeline.
+- **No escalation-as-design.** Every blocker has an in-plan fallback; no hard-coded decisions baked into the timeline.
 - **No scaffold-as-done at the planning layer.** Each sub-gate has an empirical close-condition (artifact published, page boots, video uploaded, write-up live), not "doc written."
 - **No track stacking.** 5 sub-gates, no more. New sub-gates require killing an existing one.
 

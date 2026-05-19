@@ -79,7 +79,7 @@ _adapter_env = os.environ.get("ADAPTER_DIR")
 if not _adapter_env:
     print(
         "ADAPTER_DIR unset. Legacy LoRA adapters purged 2026-05-05 "
-        "per Jun directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
+        "per project directive (hackathon eligibility drift). Set ADAPTER_DIR to a "
         "Gemma 4 LoRA adapter path before evaluating.",
         file=sys.stderr,
     )

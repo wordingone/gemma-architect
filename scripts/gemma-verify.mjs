@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // scripts/gemma-verify.mjs — Lockfile-coordinator wrapper for gemma-verify-raw.mjs
 //
-// Serializes concurrent gemma-verify invocations so Eli + Archie never
+// Serializes concurrent gemma-verify invocations so concurrent engineers never
 // DOM-stomp each other in the shared browser:
 //   1. Acquire state/gemma-verify.lock (atomic openSync wx — create-or-fail).
 //   2. Poll every 2s up to 10min if held by another process.

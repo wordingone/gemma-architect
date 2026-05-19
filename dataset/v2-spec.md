@@ -1,6 +1,6 @@
 # Dataset v2 — Target Spec
 
-**Owner:** Leo
+**Owner:** project lead
 **Filed:** 2026-04-30 (D1 of `docs/plan-18-day.md`)
 **Consumed by:** D2 (synthetic generator) + D3 (corpus expansion + tier2 hand-curation) + D4 (LoRA re-train)
 
