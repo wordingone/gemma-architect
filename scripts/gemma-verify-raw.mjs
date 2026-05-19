@@ -4986,6 +4986,29 @@ await resetScene('before-box-inject');
   await resetScene('post-S100');
 }
 
+// ── S101: demo prompt chips persist after dispatch ────────────────────────────
+// Asserts [data-prompt-chip] count > 0 before and after a SdBox dispatch.
+// Chips must never disappear due to layout shrink or DOM manipulation.
+{
+  const s101 = await evaluate(`(() => {
+    try {
+      const before = document.querySelectorAll('[data-prompt-chip]').length;
+      window.__dispatch('SdBox', { width: 1, depth: 1, height: 1 });
+      const after = document.querySelectorAll('[data-prompt-chip]').length;
+      const startersEl = document.querySelector('.chat-starters');
+      const style = startersEl ? window.getComputedStyle(startersEl) : null;
+      return {
+        passed: before > 0 && after > 0,
+        evidence: { before, after, display: style?.display, height: style?.height }
+      };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('demo-chips-persist', !!(s101?.passed), s101 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S101');
+}
+
 } finally {
   await cleanup();
 }

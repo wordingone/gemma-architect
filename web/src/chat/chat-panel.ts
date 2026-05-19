@@ -241,6 +241,7 @@ export class ChatPanel {
       for (const s of STARTER_PROMPTS) {
         const chip = document.createElement("span");
         chip.className = "ai-chip chat-starter-chip";
+        chip.dataset.promptChip = "1";
         chip.textContent = resolveStr(s.label);
         chip.addEventListener("click", () => {
           this._inputEl.value = resolveStr(s.prompt);
