@@ -34,6 +34,8 @@
     "master-autofwd:restart": "powershell -File scripts/gemma-master-autofwd-task.ps1 restart",
     "verify:raw": "node -e \"process.stderr.write('SUSPENDED until 2026-05-19 — do not run or cite in PR smoke packs.\\n'); process.exit(0);\"",
     "verify:demo": "bun scripts/gemma-verify-demo.mjs",
+    "matrix:test": "node scripts/fresh-device-matrix.mjs",
+    "matrix:test:chromium": "node scripts/fresh-device-matrix.mjs --config chromium-fresh",
     "demo:record": "node scripts/demo-record.mjs",
     "demo:drive": "node scripts/demo-drive.mjs",
     "verify:cdp": "node -e \"process.stderr.write('DEPRECATED: verify:cdp removed — use: bun run verify:raw\\n'); process.exit(2);\"",

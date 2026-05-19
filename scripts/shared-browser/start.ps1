@@ -107,10 +107,14 @@ Write-Host "  pid      : $($proc.Id)"
 Write-Host "  cdp.json : $CDP_JSON"
 Write-Host "  profile  : $ChromeDataDir"
 
-# --- Start periodic tab sweep (every 10 min) ---
+# --- Start periodic tab sweep (every 10 min) — one instance only ---
 $SweepScript = Join-Path $PSScriptRoot "..\shared-browser-watch.mjs"
 $SweepScript = [System.IO.Path]::GetFullPath($SweepScript)
 if (Test-Path $SweepScript) {
+    # Kill any stale watcher instances before starting a fresh one.
+    Get-CimInstance Win32_Process | Where-Object {
+        $_.Name -eq 'node.exe' -and $_.CommandLine -like "*shared-browser-watch*"
+    } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Process -FilePath "node" -ArgumentList $SweepScript -WindowStyle Hidden
     Write-Host "  tab-sweep: started (10 min interval)"
 } else {
