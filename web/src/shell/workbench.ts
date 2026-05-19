@@ -236,6 +236,10 @@ function el(tag: string, cls?: string, attrs?: Record<string, string>): HTMLElem
   return e;
 }
 
+// PALETTE_SECTIONS indices: 0=transform 1=sketch 2=solid 3=arch 4=comp(CAD) 5=measure
+const ARCH_SECTION_IDX = 3;
+const COMP_SECTION_IDX = 4;
+
 // Single shared tooltip element — created once, reused across all palette instances.
 function getPaletteTip(): HTMLDivElement {
   let tip = document.getElementById("palette-tip") as HTMLDivElement | null;
@@ -689,6 +693,7 @@ function buildPalette(host: HTMLElement) {
   for (let i = 0; i < PALETTE_SECTIONS.length; i++) {
     const section = PALETTE_SECTIONS[i];
     const sec = el("div", "palette-section");
+    if (i === COMP_SECTION_IDX) sec.classList.add("palette-section--hidden");
     for (const tool of section.tools) {
       const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
       const hasCorner = tool.id === "select" || tool.id === "scale" || tool.id === "wall" || tool.id === "stair" || tool.id === "clip";
@@ -734,6 +739,19 @@ function buildPalette(host: HTMLElement) {
     host.appendChild(sec);
     sectionEls[i] = sec;
   }
+
+  function showSectionTab(tab: "ARCH" | "CAD") {
+    const showArch = tab === "ARCH";
+    sectionEls[ARCH_SECTION_IDX]?.classList.toggle("palette-section--hidden", !showArch);
+    sectionEls[COMP_SECTION_IDX]?.classList.toggle("palette-section--hidden", showArch);
+  }
+
+  window.addEventListener("ribbon:section-tab", (rawEv) => {
+    const tab = (rawEv as CustomEvent<{ tab: string }>).detail?.tab;
+    if (tab === "ARCH" || tab === "CAD") {
+      showSectionTab(tab as "ARCH" | "CAD");
+    }
+  });
 
   // Variant picker — shown when door/window tool is active (#1127).
   const variantPicker = el("div", "palette-variant-picker");

@@ -1,4 +1,4 @@
-export type SliderTab = "ARCH" | "COMP";
+export type SliderTab = "ARCH" | "CAD";
 
 export interface PhoneSliderOpts {
   initial?: SliderTab;
@@ -10,7 +10,7 @@ export interface PhoneSliderOpts {
 // Labels inside the squares need no rotation of their own.
 export function buildPhoneSlider(opts: PhoneSliderOpts): { root: HTMLElement; setTab: (t: SliderTab) => void } {
   let active: SliderTab = opts.initial ?? "ARCH";
-  let totalRot = active === "COMP" ? 180 : 0;
+  let totalRot = active === "CAD" ? 180 : 0;
 
   const root = document.createElement("div");
   root.className = "yin-toggle";
@@ -34,11 +34,11 @@ export function buildPhoneSlider(opts: PhoneSliderOpts): { root: HTMLElement; se
   }
 
   const archHalf = makeHalf("yin-half--top", "ARCH");
-  const compHalf = makeHalf("yin-half--btm", "COMP");
+  const compHalf = makeHalf("yin-half--btm", "CAD");
 
   disc.addEventListener("transitionend", (e) => {
     if ((e as TransitionEvent).propertyName === "transform" && e.target === disc) {
-      disc.classList.toggle("is-comp", active === "COMP");
+      disc.classList.toggle("is-comp", active === "CAD");
     }
   });
 
@@ -62,7 +62,7 @@ export function buildPhoneSlider(opts: PhoneSliderOpts): { root: HTMLElement; se
 
   function doSwitch() {
     totalRot += 180;
-    active = active === "ARCH" ? "COMP" : "ARCH";
+    active = active === "ARCH" ? "CAD" : "ARCH";
     applyRotation();
     opts.onChange(active);
   }
@@ -72,7 +72,7 @@ export function buildPhoneSlider(opts: PhoneSliderOpts): { root: HTMLElement; se
     if (e.key === " " || e.key === "Enter") { e.preventDefault(); doSwitch(); }
   });
 
-  disc.classList.toggle("is-comp", active === "COMP");
+  disc.classList.toggle("is-comp", active === "CAD");
   applyRotation(true);
 
   function setTab(t: SliderTab) {
