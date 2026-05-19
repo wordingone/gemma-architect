@@ -42,8 +42,10 @@ function _fetchTemplate(path: string): Promise<FzkGeomData | null> {
 }
 
 // Kick off fetches immediately on module load so they're ready by first placement.
-_fetchTemplate("/samples/fzk-door-geom.json").then(d => { _doorData = d; });
-_fetchTemplate("/samples/fzk-window-geom.json").then(d => { _windowData = d; });
+// Use BASE_URL prefix so paths resolve correctly on GitHub Pages subpath deployments.
+const _OPENING_BASE = import.meta.env.BASE_URL;
+_fetchTemplate(`${_OPENING_BASE}samples/fzk-door-geom.json`).then(d => { _doorData = d; });
+_fetchTemplate(`${_OPENING_BASE}samples/fzk-window-geom.json`).then(d => { _windowData = d; });
 
 // Build a THREE.BufferGeometry from FZK JSON data. Applies axis swap from
 // IFC convention (X=depth, Y=height centered, Z=width floored at 0) to app

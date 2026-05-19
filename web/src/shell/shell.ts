@@ -158,6 +158,9 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
 // Use BASE_URL prefix so thumbnail paths resolve correctly on GitHub Pages
 // (base: "./" in vite.config.ts means absolute "/thumbnails/..." paths 404).
 const _BASE = import.meta.env.BASE_URL;
+// CSS can't reference import.meta.env — inject --chrome-texture with the correct
+// base path so texture-paper.png resolves on GitHub Pages subpath deployments.
+document.documentElement.style.setProperty("--chrome-texture", `url("${_BASE}texture-paper.png")`);
 const RIBBON_SCENE_SAMPLES = [
   { name: "Schultz Residence",  v: "schultz-residence", thumb: `${_BASE}thumbnails/schultz-residence.png` },
   { name: "KIT FZK-Haus",       v: "kit-fzk-haus",      thumb: `${_BASE}thumbnails/kit-fzk-haus.png` },

@@ -87,7 +87,7 @@
 
   --chrome-fill:      oklch(0.985 0.005 85 / 0.35);
   --chrome-fill-2:    oklch(0.978 0.006 85 / 0.40);
-  --chrome-texture:   url("/texture-paper.png");
+  --chrome-texture:   none; /* overridden at runtime by shell.ts with BASE_URL prefix */
 
   --overlay-bg:       oklch(0.985 0.005 85 / 0.985);
   --overlay-bg-2:     oklch(0.975 0.007 85 / 0.97);
