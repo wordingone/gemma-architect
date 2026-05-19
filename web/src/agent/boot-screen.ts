@@ -65,6 +65,8 @@ function _wireEvents(): void {
   window.addEventListener('agentmodel:manifest', (ev: Event) => {
     const detail = (ev as CustomEvent<{ totalBytesExpected?: number }>).detail;
     if (detail?.totalBytesExpected) _totalBytes = detail.totalBytesExpected;
+    // Cancel any watchdog set by pre-manifest loading events (they carry no bytes).
+    if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
     // Initial grace: 90s from manifest to first byte (covers CDN warmup + redirect chain).
     _watchdogId = setTimeout(_showStalled, 90_000);
   });
@@ -78,13 +80,14 @@ function _wireEvents(): void {
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     if (d.file) _currentFile = d.file;
     if (!_totalBytes && d.total) _totalBytes = d.total;
-    // Sliding-window: on first loading event switch from 90s initial grace to 30s window;
-    // reset the 30s timer on each event with real byte progress.
-    if (!_firstLoadingReceived) {
+    // Sliding-window: switch from 90s initial grace to 30s window only on first event
+    // with real bytes (pre-manifest loading events fire with empty detail and must not
+    // trigger the transition). Reset the 30s timer on each subsequent event with progress.
+    if (!_firstLoadingReceived && _loadedBytes > 0) {
       _firstLoadingReceived = true;
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
       _watchdogId = setTimeout(_showStalled, 30_000);
-    } else if (_loadedBytes > prevLoaded) {
+    } else if (_firstLoadingReceived && _loadedBytes > prevLoaded) {
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
       _watchdogId = setTimeout(_showStalled, 30_000);
     }
