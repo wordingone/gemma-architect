@@ -279,32 +279,51 @@ function makeSyntheticWindowV2(): GeomJson {
   return { positions, normals, indices, colors, groups };
 }
 
+// FZK IFC JSONs are in IFC convention (X=depth, Y=height, Z=width).
+// App convention is X=width, Y=depth, Z=height.
+// Apply the swap before building GLB so _buildFromGlb scales correctly.
+function applyIfcAxisSwap(geom: GeomJson): GeomJson {
+  const p = geom.positions;
+  const n = geom.normals;
+  const newPos: number[] = new Array(p.length);
+  const newNorm: number[] = new Array(n.length);
+  for (let i = 0; i < p.length; i += 3) {
+    newPos[i]   = p[i + 2]; // new X = old Z (width)
+    newPos[i+1] = p[i];     // new Y = old X (depth)
+    newPos[i+2] = p[i + 1]; // new Z = old Y (height)
+    newNorm[i]   = n[i + 2];
+    newNorm[i+1] = n[i];
+    newNorm[i+2] = n[i + 1];
+  }
+  return { ...geom, positions: newPos, normals: newNorm };
+}
+
 async function main() {
   const doorDir   = path.resolve("web/public/assets/architectural/doors");
   const windowDir = path.resolve("web/public/assets/architectural/windows");
   await mkdir(doorDir,   { recursive: true });
   await mkdir(windowDir, { recursive: true });
 
-  // Door variant 1: convert existing FZK JSON → GLB
+  // Door variant 1: convert existing FZK JSON → GLB (axis-swap IFC→App)
   const doorJsonPath = path.resolve("web/public/samples/fzk-door-geom.json");
   const doorJson: GeomJson = JSON.parse(await readFile(doorJsonPath, "utf8"));
-  const door1 = buildGlb(doorJson);
+  const door1 = buildGlb(applyIfcAxisSwap(doorJson));
   await writeFile(path.join(doorDir, "fzk-haus-door-1.glb"), door1);
   console.log(`door-1: ${door1.length} bytes`);
 
-  // Door variant 2: synthetic double-panel door → GLB
+  // Door variant 2: synthetic double-panel door → GLB (already in App convention)
   const door2 = buildGlb(makeSyntheticDoorV2());
   await writeFile(path.join(doorDir, "fzk-haus-door-2.glb"), door2);
   console.log(`door-2: ${door2.length} bytes`);
 
-  // Window variant 1: convert existing FZK JSON (frame+glass groups) → GLB
+  // Window variant 1: convert existing FZK JSON (frame+glass groups) → GLB (axis-swap IFC→App)
   const winJsonPath = path.resolve("web/public/samples/fzk-window-geom.json");
   const winJson: GeomJson = JSON.parse(await readFile(winJsonPath, "utf8"));
-  const win1 = buildGlb(winJson);
+  const win1 = buildGlb(applyIfcAxisSwap(winJson));
   await writeFile(path.join(windowDir, "fzk-haus-window-1.glb"), win1);
   console.log(`window-1: ${win1.length} bytes`);
 
-  // Window variant 2: synthetic casement window → GLB
+  // Window variant 2: synthetic casement window → GLB (already in App convention)
   const win2 = buildGlb(makeSyntheticWindowV2());
   await writeFile(path.join(windowDir, "fzk-haus-window-2.glb"), win2);
   console.log(`window-2: ${win2.length} bytes`);

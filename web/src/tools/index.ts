@@ -738,7 +738,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   // Group door-add + wall-void-cut into one undo transaction (#850).
   let _voidCutGroup: THREE.Object3D | null = null;
   let _voidCutHost: THREE.Mesh | null = null;
-  if (out.mesh instanceof THREE.Mesh) {
+  if (out.mesh instanceof THREE.Object3D) {
     const _creator = out.mesh.userData.creator as string | undefined;
     if (_creator === "door" || _creator === "window") {
       const _hostId = out.mesh.userData.hostExpressID as string | undefined;
