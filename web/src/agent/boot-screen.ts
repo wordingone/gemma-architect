@@ -399,151 +399,111 @@ function _buildOverlay(): void {
 // Ghost UI path data (viewBox 0 0 160 90)
 //
 // Layout proportions mirror actual Gemma-CAD chrome:
-//   menubar:   y 0-5   (full width, with app name + menu items)
-//   ribbon:    y 5-14  (full width, tool groups with buttons)
-//   palette:   x 0-20, y 14-87  (tool palette, icon grid)
-//   viewport:  x 20-122, y 14-87 (3D canvas with architectural content)
-//   sidebar:   x 122-160, y 14-87 (inspector panel, property rows)
-//   statusbar: y 87-90 (full width, snap + unit indicators)
+//   menubar:   y 0-2   (thin bar, app name + menu items)
+//   ribbon:    y 2-8   (tool groups; buttons span y 2.8-7.2, leaving margins)
+//   palette:   x 0-16, y 8-87  (4 col × 6 row icon grid, 3.2×2.8 each)
+//   viewport:  x 16-122, y 8-87 (floor plan; no grid lines to avoid overlap)
+//   sidebar:   x 122-160, y 8-87 (tabs + property rows)
+//   statusbar: y 87-90
 
 function _ghostPathData(): string {
   const segs: string[] = [];
 
-  // ── Chrome dividers ──
-  segs.push('M0 5 H160');         // menubar bottom
-  segs.push('M0 14 H160');        // ribbon bottom
-  segs.push('M20 14 V87');        // palette right edge
-  segs.push('M122 14 V87');       // sidebar left edge
-  segs.push('M0 87 H160');        // statusbar top
+  // ── Chrome structure ──
+  segs.push('M0 2 H160');      // menubar bottom
+  segs.push('M0 8 H160');      // ribbon bottom
+  segs.push('M16 8 V87');      // palette right edge
+  segs.push('M122 8 V87');     // sidebar left edge
+  segs.push('M0 87 H160');     // statusbar top
 
-  // ── Menubar: app name + menu words ──
-  segs.push('M2 1.5 H14');        // app name block
-  segs.push('M16 1.5 H22');       // File menu word
-  segs.push('M24 1.5 H30');       // Edit
-  segs.push('M32 1.5 H40');       // View
-  segs.push('M42 1.5 H50');       // Insert
-  segs.push('M52 1.5 H58');       // Help
+  // ── Menubar: short word-width blocks ──
+  segs.push('M2 1 H11');
+  segs.push('M13 1 H17');
+  segs.push('M19 1 H23');
+  segs.push('M25 1 H31');
+  segs.push('M33 1 H37');
 
-  // ── Ribbon: 5 tool groups with button clusters ──
-  // Group 1: Select/Navigate (3 buttons)
-  segs.push('M2 6 H5 V13 H2 Z');
-  segs.push('M6 6 H9 V13 H6 Z');
-  segs.push('M10 6 H13 V13 H10 Z');
-  // Group divider
-  segs.push('M14.5 6 V13');
-  // Group 2: Draw (5 buttons)
-  segs.push('M16 6 H19 V13 H16 Z');
-  segs.push('M20 6 H23 V13 H20 Z');
-  segs.push('M24 6 H27 V13 H24 Z');
-  segs.push('M28 6 H31 V13 H28 Z');
-  segs.push('M32 6 H35 V13 H32 Z');
-  // Group divider
-  segs.push('M36.5 6 V13');
-  // Group 3: Model ops (4 buttons)
-  segs.push('M38 6 H41 V13 H38 Z');
-  segs.push('M42 6 H45 V13 H42 Z');
-  segs.push('M46 6 H49 V13 H46 Z');
-  segs.push('M50 6 H53 V13 H50 Z');
-  // Group divider
-  segs.push('M54.5 6 V13');
-  // Group 4: Annotate (3 buttons)
-  segs.push('M56 6 H59 V13 H56 Z');
-  segs.push('M60 6 H63 V13 H60 Z');
-  segs.push('M64 6 H67 V13 H64 Z');
-  // Group divider
-  segs.push('M68.5 6 V13');
-  // Group 5: Layers/Scenes (3 buttons)
-  segs.push('M70 6 H73 V13 H70 Z');
-  segs.push('M74 6 H77 V13 H74 Z');
-  segs.push('M78 6 H81 V13 H78 Z');
-  // Right side: render mode + viewport controls
-  segs.push('M110 6 H120 V13 H110 Z');  // render mode button
-  segs.push('M121 6 H124 V13 H121 Z');
-  segs.push('M125 6 H128 V13 H125 Z');
-  segs.push('M129 6 H132 V13 H129 Z');
-  segs.push('M133 6 H136 V13 H133 Z');
-  segs.push('M147 6 H160 V13 H147 Z');  // viewport tabs area
+  // ── Ribbon: buttons occupy y=2.8–7.2 (4.4 units = ~37px at full HD) ──
+  // Each button: 3.5 wide. Step 4.2. Groups separated by thin line.
+  const BY1 = 2.8, BY2 = 7.2, BW = 3.5;
+  function btn(x: number) { segs.push(`M${x} ${BY1} H${x+BW} V${BY2} H${x} Z`); }
+  function sep(x: number) { segs.push(`M${x} ${BY1} V${BY2}`); }
 
-  // ── Palette: 4-col × 7-row icon grid ──
-  for (let row = 0; row < 7; row++) {
-    for (let col = 0; col < 4; col++) {
-      const x = 0.8 + col * 4.8;
-      const y = 16 + row * 5.2;
-      segs.push(`M${x.toFixed(1)} ${y.toFixed(1)} H${(x + 3.8).toFixed(1)} V${(y + 4.2).toFixed(1)} H${x.toFixed(1)} Z`);
+  // Group 1 (3)
+  btn(1.0); btn(5.2); btn(9.4); sep(13.8);
+  // Group 2 (5)
+  btn(14.3); btn(18.5); btn(22.7); btn(26.9); btn(31.1); sep(35.5);
+  // Group 3 (4)
+  btn(36.0); btn(40.2); btn(44.4); btn(48.6); sep(53.0);
+  // Group 4 (3)
+  btn(53.5); btn(57.7); btn(61.9); sep(66.3);
+  // Group 5 (2)
+  btn(66.8); btn(71.0);
+  // Right: render-mode + 4 small + viewport tabs
+  segs.push(`M107 ${BY1} H121 V${BY2} H107 Z`);
+  btn(122.0); btn(126.2); btn(130.4); btn(134.6);
+  segs.push(`M150 ${BY1} H160 V${BY2} H150 Z`);
+
+  // ── Palette: 4 col × 6 row icon grid ──
+  // Icon: 3.2 wide × 2.8 tall. Col step 3.8, row step 3.3. Start (0.4, 9.2)
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 4; c++) {
+      const x = +(0.4 + c * 3.8).toFixed(1);
+      const y = +(9.2 + r * 3.3).toFixed(1);
+      segs.push(`M${x} ${y} H${+(x+3.2).toFixed(1)} V${+(y+2.8).toFixed(1)} H${x} Z`);
     }
   }
-  // Section label rows in palette
-  segs.push('M0.5 57 H19');
-  segs.push('M0.5 63.5 H19');
-  segs.push('M0.5 70 H19');
-  segs.push('M0.5 76.5 H19');
+  // Three section dividers below icon grid (~y 29)
+  segs.push('M0.5 30 H15.5');
+  segs.push('M0.5 34.5 H15.5');
+  segs.push('M0.5 39 H15.5');
 
-  // ── Viewport: architectural floor plan content ──
-  // Outer building boundary
-  segs.push('M30 22 H112 V82 H30 Z');
-  // Primary room dividers (horizontal)
-  segs.push('M30 48 H90');
-  segs.push('M30 65 H70');
-  // Primary room dividers (vertical)
-  segs.push('M65 22 V48');
-  segs.push('M82 48 V82');
-  segs.push('M50 48 V82');
-  // Door openings (arc indicators)
-  segs.push('M65 34 L65 40');
-  segs.push('M47 48 L53 48');
-  segs.push('M30 56 L30 62');
-  // Window hash marks on exterior wall
-  segs.push('M45 22 L45 23');   segs.push('M48 22 L48 23');  // N facade
-  segs.push('M75 22 L75 23');   segs.push('M90 22 L90 23');
-  segs.push('M112 35 L111 35'); segs.push('M112 55 L111 55'); // E facade
-  segs.push('M60 82 L60 81');   segs.push('M95 82 L95 81');  // S facade
+  // ── Viewport: clean floor-plan (no grid — avoids overlap clutter) ──
+  // Building boundary
+  segs.push('M26 17 H114 V83 H26 Z');
+  // Room dividers
+  segs.push('M26 46 H88');
+  segs.push('M26 63 H67');
+  segs.push('M63 17 V46');
+  segs.push('M80 46 V83');
+  segs.push('M47 46 V83');
+  // Door-opening gaps
+  segs.push('M63 31 L63 38');
+  segs.push('M44 46 L50 46');
+  // Window ticks on exterior walls
+  segs.push('M44 17 V19'); segs.push('M54 17 V19');
+  segs.push('M80 17 V19'); segs.push('M96 17 V19');
+  segs.push('M114 38 H112'); segs.push('M114 57 H112');
+  segs.push('M58 83 V81'); segs.push('M75 83 V81');
   // Stair block
-  segs.push('M95 22 H112 V38 H95 Z');
-  segs.push('M97 24 H110'); segs.push('M97 26.5 H110'); segs.push('M97 29 H110');
-  segs.push('M97 31.5 H110'); segs.push('M97 34 H110'); segs.push('M97 36.5 H110');
-  // Furniture: desk in top-left room
-  segs.push('M35 25 H58 V38 H35 Z');
-  segs.push('M37 27 H45 V36 H37 Z');
-  // Furniture: table in bottom room
-  segs.push('M35 52 H65 V62 H35 Z');
-  // Grid accent lines (light)
-  segs.push('M20 25 H122');    // major grid line
-  segs.push('M20 42 H122');
-  segs.push('M20 59 H122');
-  segs.push('M20 76 H122');
-  segs.push('M40 14 V87');
-  segs.push('M60 14 V87');
-  segs.push('M80 14 V87');
-  segs.push('M100 14 V87');
+  segs.push('M91 17 H114 V35 H91 Z');
+  segs.push('M93 19 H112'); segs.push('M93 21.5 H112'); segs.push('M93 24 H112');
+  segs.push('M93 26.5 H112'); segs.push('M93 29 H112'); segs.push('M93 31.5 H112');
+  // Furniture
+  segs.push('M30 20 H60 V34 H30 Z');
+  segs.push('M32 22 H42 V32 H32 Z');
+  segs.push('M30 49 H62 V61 H30 Z');
+  // Compass (top-right viewport corner)
+  segs.push('M118 11 L118 15');
+  segs.push('M118 11 L116.5 13.5'); segs.push('M118 11 L119.5 13.5');
 
-  // Compass rose (top-right of viewport)
-  segs.push('M116 17 L116 20');  // N
-  segs.push('M116 17 L114.5 19'); segs.push('M116 17 L117.5 19');  // N arrow
-
-  // ── Sidebar: inspector panel ──
-  // Panel header
-  segs.push('M123 15 H159 V19 H123 Z');
-  // Tabs
-  segs.push('M124 20 H137 V22 H124 Z');
-  segs.push('M138 20 H151 V22 H138 Z');
-  segs.push('M152 20 H159 V22 H152 Z');
-  // Property row groups (label + value pairs)
-  for (let i = 0; i < 9; i++) {
-    const y = 24 + i * 7;
-    segs.push(`M125 ${y} H145`);            // property label
-    segs.push(`M125 ${(y + 3).toFixed(1)} H157`); // value bar (longer)
+  // ── Sidebar: header + 3 tabs + 10 property rows ──
+  segs.push('M123 9 H159 V13 H123 Z');
+  segs.push('M124 13.5 H136 V15.5 H124 Z');
+  segs.push('M137 13.5 H149 V15.5 H137 Z');
+  segs.push('M150 13.5 H158 V15.5 H150 Z');
+  for (let i = 0; i < 10; i++) {
+    const y = +(17 + i * 6.8).toFixed(1);
+    segs.push(`M125 ${y} H143`);
+    segs.push(`M125 ${+(+y + 3.2).toFixed(1)} H158`);
   }
-  // Vector diagram placeholder (node graph area)
-  segs.push('M124 89 H159');  // bottom section divider
-  segs.push('M124 91 H159');
-  segs.push('M124 93 H151');
 
-  // ── Statusbar: indicator segments ──
-  segs.push('M2 88.5 H28');   // snap indicator
-  segs.push('M30 88.5 H50');  // units indicator
-  segs.push('M52 88.5 H72');  // coordinates
-  segs.push('M120 88.5 H140'); // layer
-  segs.push('M142 88.5 H158'); // render mode
+  // ── Statusbar: 5 indicator segments ──
+  segs.push('M2 88.5 H28');
+  segs.push('M30 88.5 H50');
+  segs.push('M52 88.5 H72');
+  segs.push('M120 88.5 H140');
+  segs.push('M142 88.5 H158');
 
   return segs.join(' ');
 }
