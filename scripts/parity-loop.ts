@@ -17,20 +17,20 @@ import { writeFileSync, readFileSync, appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
-// ── Paths ────────────────────────────────────────────────────────────────────
+//  Paths 
 
 const PARITY_STATE_PATH = "B:/M/avir/leo/state/parity-experiment.json";
 const ITERATIONS_JSONL  = "B:/M/avir/leo/state/parity-experiment-iterations.jsonl";
 const PARITY_BANK_DIR   = "B:/M/avir/leo/state/parity-bank";
 
-// ── CLI args ─────────────────────────────────────────────────────────────────
+//  CLI args ─
 
 const argv = process.argv.slice(2);
 const MOCK = argv.includes("--mock");
 const maxIterArg = argv.indexOf("--max-iterations");
 const maxIterOverride = maxIterArg !== -1 ? parseInt(argv[maxIterArg + 1] ?? "100", 10) : undefined;
 
-// ── State file ────────────────────────────────────────────────────────────────
+//  State file 
 
 interface ParityState {
   config: {
@@ -52,8 +52,8 @@ const TIER_LADDER      = [90, 95, 99];
 const _startTierIdx    = TIER_LADDER.findIndex(t => t >= (cfg.parity_threshold.current_tier ?? 90));
 const START_TIER_IDX   = _startTierIdx < 0 ? TIER_LADDER.length - 1 : _startTierIdx;
 
-// ── CDP connection ──────────────────────────────────────────────────────────
-const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");──
+//  CDP connection 
+const CDP_PORT = Number(process.env.CDP_PORT ?? "9222");
 
 type CdpTarget = { url?: string; type?: string; webSocketDebuggerUrl?: string };
 
@@ -132,7 +132,7 @@ async function takeScreenshot(savePath: string): Promise<void> {
   writeFileSync(savePath, Buffer.from(b64, "base64"));
 }
 
-// ── Inline JPEG-bpp scorer (ported from parity-score.mjs, no subprocess) ────
+//  Inline JPEG-bpp scorer (ported from parity-score.mjs, no subprocess) 
 
 interface ScoreResult {
   score: number;
@@ -200,7 +200,7 @@ function scoreViewport(vpPath: string): ScoreOut {
   }
 }
 
-// ── Dispatch proposal via __runDesignLoop ─────────────────────────────────
+//  Dispatch proposal via __runDesignLoop ─
 
 interface Proposal { verb: string; args: Record<string, unknown>; rationale: string }
 
@@ -264,13 +264,13 @@ async function proposeDispatch(
   };
 }
 
-// ── JSONL logger ──────────────────────────────────────────────────────────────
+//  JSONL logger 
 
 function log(entry: Record<string, unknown>): void {
   appendFileSync(ITERATIONS_JSONL, JSON.stringify(entry) + "\n", "utf8");
 }
 
-// ── Main loop ─────────────────────────────────────────────────────────────────
+//  Main loop ─
 
 mkdirSync(PARITY_BANK_DIR, { recursive: true });
 
@@ -310,7 +310,7 @@ let haltReason = "safety cap";
 
 while (iterationN < MAX_ITERATIONS) {
   iterationN++;
-  console.log(`\n─── Iteration ${iterationN}/${MAX_ITERATIONS} (score=${currentScore}, tier=${activeTier}, non-imp=${consecutiveNonImprovements}) ───`);
+  console.log(`\n─ Iteration ${iterationN}/${MAX_ITERATIONS} (score=${currentScore}, tier=${activeTier}, non-imp=${consecutiveNonImprovements}) ─`);
 
   // 1. Capture viewport
   const vpBefore = join(TMP, `parity-${iterationN}-before.jpg`);
