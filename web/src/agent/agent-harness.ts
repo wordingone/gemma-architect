@@ -21,6 +21,12 @@ import { getDictionary } from "../commands/dictionary";
 import { listHandlers } from "../commands/dispatch";
 import { getState } from "../app-state";
 import { StandardBackend } from "./standard-backend";
+import {
+  WASM_BACKEND_ENABLED,
+  WASM_DRAFTER_URL,
+  loadWasmBackend,
+  wasmChatCompletion,
+} from "./wasm-backend";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -1214,12 +1220,68 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
 }
 
+// ---- WASM backend turn (#736) --------------------------------------------
+
+let _wasmLoading = false;
+
+/** Route a turn through the WASM-llama backend (turboquant + MTP, browser-resident). */
+async function runWasmBackendTurn(req: AgentRequest): Promise<AgentResponse> {
+  if (!_wasmLoading) {
+    _wasmLoading = true;
+    updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  WASM · loading…`);
+    await loadWasmBackend();
+  }
+
+  const mtpLabel = WASM_DRAFTER_URL ? " · MTP" : "";
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  WASM${mtpLabel} · ⟳`);
+
+  const MAX_HISTORY_MSGS = 20;
+  const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+  const messages = [
+    { role: "system" as const, content: buildSystemPrompt(req.skills) },
+    ...trimmedHistory,
+    { role: "user" as const, content: req.prompt },
+  ];
+
+  const json = await wasmChatCompletion({
+    messages,
+    max_tokens:  req.maxNewTokens ?? 4096,
+    temperature: 0.1,
+  });
+
+  const content = json.choices[0]?.message?.content ?? "";
+  const tpsLabel = json._tps > 0 ? ` · ${json._tps.toFixed(0)} t/s` : "";
+  const mtpActiveLabel = json._mtp_enabled ? " · MTP" : "";
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  WASM${mtpActiveLabel}${tpsLabel}`);
+
+  recordTurn({
+    ts:                   Date.now(),
+    prefill_ms:           0,
+    decode_ms:            json._latency_ms,
+    tokens_in:            0,
+    tokens_out:           0,
+    system_prompt_chars:  buildSystemPrompt(req.skills).length,
+    skills_total:         req.skillsTotal ?? req.skills?.length ?? 0,
+    skills_matched:       req.skills?.length ?? 0,
+    tg_tps:               json._tps,
+    pp_tps:               0,
+    mtp_on:               json._mtp_enabled,
+    path:                 "wasm",
+  });
+
+  const { dispatches, text } = parseDispatches(content);
+  return { dispatches, text: text || content, raw: json };
+}
+
 // ---- Public entry point --------------------------------------------------
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // P10-2: if a prior worker error engaged the session-level fallback, route remote.
   if (REMOTE_URL && _webgpuFallbackEngaged) return runRemoteAgentTurn(req);
   if (REMOTE_URL) return runRemoteAgentTurn(req);
+
+  // #736: WASM backend — env-gated, runs turboquant MTP in-browser via Emscripten.
+  if (WASM_BACKEND_ENABLED && !payloadHasMultimodal(req)) return runWasmBackendTurn(req);
 
   // #929: if drafter failed and dedicated standard backend is ready, use it.
   // Standard backend runs model.generate() in its own isolated worker so the

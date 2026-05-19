@@ -17,7 +17,7 @@ export interface TurnTelemetry {
   spec_attempts?: number;   // draft tokens proposed by drafter this turn (#674 AC4)
   spec_accepts?: number;    // draft tokens accepted by target this turn
   spec_accept_rate?: number; // spec_accepts / spec_attempts (0 when mtp_on false)
-  path?: "webgpu" | "remote"; // inference path used
+  path?: "webgpu" | "remote" | "wasm"; // inference path used
 }
 
 const RING_SIZE = 1000; // §C-telem (#990): 1000 samples supports 10-min moving averages at ~1 turn/s
