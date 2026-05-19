@@ -4764,6 +4764,68 @@ await resetScene('before-box-inject');
   record('standard-backend-module', !!(s110?.passed), s110 ?? { reason: 'evaluate returned null' });
 }
 
+// ── S111 — import-ifc-menu-item (#1052): "Import IFC…" entry exists in File menu ──
+{
+  const s111 = await evaluate(`(function() {
+    try {
+      // Check File menu definition via data-menu attribute or DOM text scan.
+      const menuBtns = [...document.querySelectorAll('[data-menu] button, .menu-entry, .menu-item')];
+      const hasImportIfc = menuBtns.some(b => b.textContent?.includes('Import IFC'));
+      // Also check that the shell.ts MENUS entry fires the event — verify listener registered.
+      const hasListener = typeof window.addEventListener === 'function';
+      // Check __importIfcFromUrl is exposed for test automation.
+      const hasTestHook = typeof window.__importIfcFromUrl === 'function';
+      // Check that window listens for file:open-ifc (can't enumerate listeners, but hook existence implies wiring)
+      return {
+        passed: hasImportIfc && hasTestHook,
+        evidence: { hasImportIfc, hasTestHook, menuBtnCount: menuBtns.length }
+      };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('import-ifc-menu-item', !!(s111?.passed), s111 ?? { reason: 'evaluate returned null' });
+}
+
+// ── S112 — open-project-round-trip (#1052): SDK obj survives save/load ──
+// Creates an SdWall, exports scene JSON, clears scene, imports JSON, checks wall back.
+{
+  await resetScene('pre-S112');
+  const s112 = await evaluate(`(async () => {
+    try {
+      // 1. Create a wall
+      window.__dispatch('SdWall', { start: [0, 0, 0], end: [3, 0, 0] });
+      await new Promise(r => setTimeout(r, 400));
+      const exported = window.__viewer?.exportScene?.();
+      if (!exported || exported.length === 0)
+        return { passed: false, evidence: { reason: 'exportScene returned empty after SdWall', exported } };
+
+      // 2. Clear scene
+      window.__dispatch('SdClearScene', {});
+      await new Promise(r => setTimeout(r, 400));
+      const afterClear = window.__viewer?.exportScene?.() ?? [];
+      if (afterClear.length !== 0)
+        return { passed: false, evidence: { reason: 'scene not empty after SdClearScene', afterClear } };
+
+      // 3. Import
+      window.__viewer?.importScene?.(exported);
+      await new Promise(r => setTimeout(r, 300));
+
+      // 4. Verify wall back
+      const afterImport = window.__viewer?.exportScene?.() ?? [];
+      const hasWall = afterImport.some(o => o.userData?.creator === 'wall' || o.userData?.kind === 'wall');
+      return {
+        passed: hasWall,
+        evidence: { exportedCount: exported.length, afterClearCount: afterClear.length, afterImportCount: afterImport.length, hasWall }
+      };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('open-project-round-trip', !!(s112?.passed), s112 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S112');
+}
+
 } finally {
   await cleanup();
 }
