@@ -170,7 +170,7 @@ function buildConsentDialog(onApprove: () => void, onCancel: () => void): HTMLEl
   overlay.style.cssText = [
     "position:fixed",
     "inset:0",
-    "z-index:8999",
+    "z-index:10001",
     "background:rgba(0,0,0,.72)",
     "display:flex",
     "align-items:center",
@@ -219,6 +219,7 @@ function buildConsentDialog(onApprove: () => void, onCancel: () => void): HTMLEl
   `;
 
   card.querySelector("#consent-approve")?.addEventListener("click", () => {
+    void navigator.storage?.persist?.();
     overlay.remove();
     onApprove();
   });

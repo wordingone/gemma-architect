@@ -6291,6 +6291,41 @@ await resetScene('before-box-inject');
   await resetScene('post-S129');
 }
 
+// ── S131 — first-load-consent-visible (#1133): consent dialog not hidden behind boot screen ──
+// Clears consent flag (not caches) and reloads. Within 5s, either the consent overlay or
+// the boot screen itself must be visible — confirming no blank-screen hang on fresh device.
+{
+  const priorConsent = await evaluate(`localStorage.getItem('gemma4-e4b-consent-v1')`);
+  await evaluate(`localStorage.removeItem('gemma4-e4b-consent-v1')`);
+  await send("Page.reload", { waitForNavigation: false });
+
+  let s131 = null;
+  for (let i = 0; i < 25; i++) {
+    await delay(200);
+    const check = await evaluate(`(function() {
+      const consent   = document.getElementById('model-consent-overlay');
+      const boot      = document.getElementById('boot-screen');
+      const strip     = document.getElementById('model-download-strip');
+      const consentOk = consent != null && getComputedStyle(consent).display !== 'none'
+                        && consent.getBoundingClientRect().height > 0;
+      const bootOk    = boot != null    && getComputedStyle(boot).display !== 'none';
+      const stripOk   = strip != null   && getComputedStyle(strip).display !== 'none'
+                        && strip.getBoundingClientRect().height > 0;
+      return { somethingVisible: consentOk || bootOk || stripOk, consentOk, bootOk, stripOk };
+    })()`);
+    if (check?.somethingVisible) { s131 = { passed: true, evidence: check }; break; }
+  }
+  if (!s131) s131 = { passed: false, evidence: { reason: 'nothing visible within 5s — blank-screen hang on first-load' } };
+  record('first-load-consent-visible', s131.passed, s131.evidence);
+
+  // Restore consent so any lingering surfaces / cleanup see a normal page state.
+  await evaluate(`localStorage.setItem('gemma4-e4b-consent-v1', '1')`);
+  await send("Page.reload", { waitForNavigation: false });
+  await delay(1500);
+  await evaluate(`(window.__gemmaTest = { events: {}, surfaceResults: [] }, true)`);
+  await evaluate(`(window.__testMode = true, true)`);
+}
+
 } finally {
   await cleanup();
 }

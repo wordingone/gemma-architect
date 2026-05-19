@@ -28,6 +28,7 @@ let _pathLen = 0;
 let _headDashLen = 0;
 let _startTime = 0;
 let _rafId = 0;
+let _watchdogId: ReturnType<typeof setTimeout> | null = null;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -48,9 +49,18 @@ function _wireEvents(): void {
   window.addEventListener('agentmodel:manifest', (ev: Event) => {
     const detail = (ev as CustomEvent<{ totalBytesExpected?: number }>).detail;
     if (detail?.totalBytesExpected) _totalBytes = detail.totalBytesExpected;
+    _watchdogId = setTimeout(() => {
+      if (_done || _loadedBytes > 0) return;
+      if (_statusEl) {
+        _statusEl.style.color = '#ff9900';
+        _statusEl.style.display = 'block';
+        _statusEl.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
+      }
+    }, 60_000);
   });
 
   window.addEventListener('agentmodel:loading', (ev: Event) => {
+    if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
     const d = (ev as CustomEvent<{
       bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string;
     }>).detail ?? {};
@@ -141,6 +151,7 @@ function _onReturningUser(): void {
 function _onDone(): void {
   if (_done) return;
   _done = true;
+  if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
   cancelAnimationFrame(_rafId);
   if (!_overlay) return;
   _overlay.style.transition = `opacity ${FADE_MS}ms ease`;
@@ -156,14 +167,36 @@ function _onDone(): void {
 function _onError(ev: Event): void {
   if (_done) return;
   _done = true;
+  if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
   cancelAnimationFrame(_rafId);
   if (!_overlay) return;
   const detail = (ev as CustomEvent).detail;
-  const msg = typeof detail === 'string' ? detail : 'Model failed to load. Try refreshing.';
+  const msg = typeof detail === 'string' ? detail
+    : (typeof detail?.message === 'string' ? detail.message : 'Model failed to load');
+  const url: string = detail && typeof detail === 'object' && typeof detail.url === 'string'
+    ? detail.url : '';
   if (_statusEl) {
-    _statusEl.textContent = `ERROR: ${msg}`;
-    _statusEl.style.color = '#ff4040';
-    _statusEl.style.display = 'block';
+    Object.assign(_statusEl.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '6px',
+      color: '#ff4040',
+    });
+    const errorLine = document.createElement('div');
+    errorLine.textContent = `ERROR: ${msg}`;
+    _statusEl.appendChild(errorLine);
+    if (url) {
+      const urlLine = document.createElement('div');
+      urlLine.style.cssText = 'font-size:8px;opacity:.55;word-break:break-all;max-width:min(78vw,580px);text-align:center;';
+      urlLine.textContent = url;
+      _statusEl.appendChild(urlLine);
+    }
+    const retryBtn = document.createElement('button');
+    retryBtn.textContent = 'Retry';
+    retryBtn.style.cssText = 'margin-top:2px;padding:4px 14px;border:1px solid rgba(255,64,64,.4);border-radius:4px;background:transparent;color:#ff4040;font:10px monospace;cursor:pointer;letter-spacing:.06em;';
+    retryBtn.addEventListener('click', () => { window.location.reload(); });
+    _statusEl.appendChild(retryBtn);
   }
   if (_pctEl) _pctEl.textContent = '';
   if (_fileEl) _fileEl.textContent = '';
