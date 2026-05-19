@@ -5531,6 +5531,154 @@ await resetScene('before-box-inject');
   await resetScene('post-S109');
 }
 
+// ── S113 — array-polar-spawns-radial (#1092) ──────────────────────────────────
+// Activate Array on a rect at (3,0), choose Polar, click center at (0,0),
+// type count 4 → assert 3 new clones exist at 90° intervals (total 4).
+{
+  const s113 = await evaluate(`
+    (async () => {
+      try {
+        // 1. Create a rect offset from origin so polar array has a clear radius.
+        window.__dispatch('SdRect', { x: 3, y: 0, w: 1, d: 1 });
+        await new Promise(r => setTimeout(r, 30));
+        const rects = window.__viewer.scene.children.filter(c => c.userData.creator === 'rect');
+        if (rects.length === 0) return { passed: false, evidence: { reason: 'rect not created' } };
+        const countBefore = rects.length;
+
+        // 2. Select the rect and activate Array tool.
+        const rectObj = rects[rects.length - 1];
+        window.__viewer.selectObject(rectObj);
+        window.__dispatch('setActiveTool', { toolId: 'array' });
+        await new Promise(r => setTimeout(r, 60));
+
+        // 3. Click the "Polar" chooser chip.
+        const chips = Array.from(document.querySelectorAll('.chooser-chip'));
+        const polarChip = chips.find(c => c.textContent.trim() === 'Polar');
+        if (!polarChip) return { passed: false, evidence: { reason: 'Polar chip not found', chipTexts: chips.map(c => c.textContent.trim()) } };
+        polarChip.click();
+        await new Promise(r => setTimeout(r, 40));
+
+        // 4. Click center at world (0, 0).
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+        const ctr = window.__projectToScreen(0, 0, 0);
+        if (!ctr) return { passed: false, evidence: { reason: 'projectToScreen failed for origin' } };
+
+        canvas.dispatchEvent(new PointerEvent('pointerdown', {
+          bubbles: true, cancelable: true, clientX: ctr.x, clientY: ctr.y,
+          button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+        }));
+        canvas.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true, cancelable: true, clientX: ctr.x, clientY: ctr.y,
+          button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+        }));
+        await new Promise(r => setTimeout(r, 50));
+
+        // 5. Type count "4" in coord input and press Enter.
+        const coordInput = document.querySelector('.pt-coord-input, #coord-input, input[placeholder*="count"]');
+        if (!coordInput) {
+          const opModule = window.__opModule;
+          if (opModule?.opHandleCoordSubmit) {
+            opModule.opHandleCoordSubmit(window.__viewer, '4');
+          }
+        } else {
+          coordInput.value = '4';
+          coordInput.dispatchEvent(new Event('input', { bubbles: true }));
+          coordInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+        }
+        await new Promise(r => setTimeout(r, 80));
+
+        const rectsAfter = window.__viewer.scene.children.filter(c => c.userData.creator === 'rect');
+        const countAfter = rectsAfter.length;
+        // count=4 total → 3 new copies (i < 4 means i=1,2,3 → 3 clones).
+        const passed = countAfter >= countBefore + 3;
+        return { passed, evidence: { countBefore, countAfter, expected: countBefore + 3 } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s113) record('array-polar-spawns-radial', false, { reason: 'evaluate returned null' });
+  else record('array-polar-spawns-radial', s113.passed, s113.evidence);
+  await resetScene('post-S113');
+}
+
+// ── S114 — array-rect-spawns-grid (#1092) ────────────────────────────────────
+// Activate Array on a rect, choose Rectangular, click base, X-dir, Y-dir,
+// type "3 3" → assert 8 new clones exist (3×3 grid - 1 original = 8 new).
+{
+  const s114 = await evaluate(`
+    (async () => {
+      try {
+        // 1. Create a rect at origin.
+        window.__dispatch('SdRect', { x: 0, y: 0, w: 1, d: 1 });
+        await new Promise(r => setTimeout(r, 30));
+        const rects = window.__viewer.scene.children.filter(c => c.userData.creator === 'rect');
+        if (rects.length === 0) return { passed: false, evidence: { reason: 'rect not created' } };
+        const countBefore = rects.length;
+
+        // 2. Select the rect and activate Array tool.
+        const rectObj = rects[rects.length - 1];
+        window.__viewer.selectObject(rectObj);
+        window.__dispatch('setActiveTool', { toolId: 'array' });
+        await new Promise(r => setTimeout(r, 60));
+
+        // 3. Click the "Rectangular" chooser chip.
+        const chips = Array.from(document.querySelectorAll('.chooser-chip'));
+        const rectChip = chips.find(c => c.textContent.trim() === 'Rectangular');
+        if (!rectChip) return { passed: false, evidence: { reason: 'Rectangular chip not found', chipTexts: chips.map(c => c.textContent.trim()) } };
+        rectChip.click();
+        await new Promise(r => setTimeout(r, 40));
+
+        // 4. Click base, X-dir, Y-dir points.
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
+
+        const pts = [
+          window.__projectToScreen(0, 0, 0),   // base
+          window.__projectToScreen(3, 0, 0),   // X-dir (+3 in X)
+          window.__projectToScreen(0, 3, 0),   // Y-dir (+3 in Y)
+        ];
+        for (const pt of pts) {
+          if (!pt) return { passed: false, evidence: { reason: 'projectToScreen failed' } };
+          canvas.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true, cancelable: true, clientX: pt.x, clientY: pt.y,
+            button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
+          }));
+          canvas.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, cancelable: true, clientX: pt.x, clientY: pt.y,
+            button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
+          }));
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 5. Type "3 3" in coord input for rows and cols.
+        const coordInput = document.querySelector('.pt-coord-input, #coord-input, input[placeholder*="rows"]');
+        if (!coordInput) {
+          const opModule = window.__opModule;
+          if (opModule?.opHandleCoordSubmit) {
+            opModule.opHandleCoordSubmit(window.__viewer, '3 3');
+          }
+        } else {
+          coordInput.value = '3 3';
+          coordInput.dispatchEvent(new Event('input', { bubbles: true }));
+          coordInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+        }
+        await new Promise(r => setTimeout(r, 80));
+
+        const rectsAfter = window.__viewer.scene.children.filter(c => c.userData.creator === 'rect');
+        const countAfter = rectsAfter.length;
+        // 3×3 grid - 1 original = 8 new copies.
+        const passed = countAfter >= countBefore + 8;
+        return { passed, evidence: { countBefore, countAfter, expected: countBefore + 8 } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s114) record('array-rect-spawns-grid', false, { reason: 'evaluate returned null' });
+  else record('array-rect-spawns-grid', s114.passed, s114.evidence);
+  await resetScene('post-S114');
+}
+
 } finally {
   await cleanup();
 }

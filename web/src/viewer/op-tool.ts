@@ -109,6 +109,12 @@ export type OpPhase =
   | { kind: "array_linear_count";  source: THREE.Object3D; dx: number; dy: number; dz: number }
   | { kind: "array_grid_params";   source: THREE.Object3D }
   | { kind: "array_polar_params";  source: THREE.Object3D }
+  | { kind: "array_polar_center";  source: THREE.Object3D }
+  | { kind: "array_polar_count";   source: THREE.Object3D; cx: number; cy: number }
+  | { kind: "array_rect_base";     source: THREE.Object3D }
+  | { kind: "array_rect_dir_x";    source: THREE.Object3D; basePt: THREE.Vector3 }
+  | { kind: "array_rect_dir_y";    source: THREE.Object3D; basePt: THREE.Vector3; dx: number }
+  | { kind: "array_rect_count";    source: THREE.Object3D; dx: number; dy: number }
   | { kind: "array_curve_pick";    source: THREE.Object3D }
   | { kind: "array_curve_count";   source: THREE.Object3D; curvePts: THREE.Vector3[] };
 
@@ -1025,6 +1031,48 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     return true;
   }
 
+  if (phase.kind === "array_polar_center") {
+    if (!snapped3) return true;
+    _opPhase = { kind: "array_polar_count", source: phase.source, cx: round(snapped3.x), cy: round(snapped3.y) };
+    ptPrompt(`Polar Array — center (${round(snapped3.x)}, ${round(snapped3.y)})  —  type: count  [angle°]  [Esc] cancel`);
+    ptShowCoordInput("count  or  count angle°");
+    return true;
+  }
+
+  if (phase.kind === "array_polar_count") {
+    return true; // waiting for coord input — ignore clicks
+  }
+
+  if (phase.kind === "array_rect_base") {
+    if (!snapped3) return true;
+    _opPhase = { kind: "array_rect_dir_x", source: phase.source, basePt: snapped3.clone() };
+    ptPrompt("Rectangular Array — click X-direction endpoint  [Esc] cancel");
+    return true;
+  }
+
+  if (phase.kind === "array_rect_dir_x") {
+    if (!snapped3) return true;
+    const dx = round(snapped3.x - phase.basePt.x);
+    if (dx === 0) { ptPrompt("Rectangular Array — X-step cannot be zero, click a point along X  [Esc] cancel"); return true; }
+    _opPhase = { kind: "array_rect_dir_y", source: phase.source, basePt: phase.basePt, dx };
+    ptPrompt(`Rectangular Array — X-step ${dx}  —  click Y-direction endpoint  [Esc] cancel`);
+    return true;
+  }
+
+  if (phase.kind === "array_rect_dir_y") {
+    if (!snapped3) return true;
+    const dy = round(snapped3.y - phase.basePt.y);
+    if (dy === 0) { ptPrompt("Rectangular Array — Y-step cannot be zero, click a point along Y  [Esc] cancel"); return true; }
+    _opPhase = { kind: "array_rect_count", source: phase.source, dx: phase.dx, dy };
+    ptPrompt(`Rectangular Array — X-step ${phase.dx}, Y-step ${dy}  —  type: rows  cols  [Esc] cancel`);
+    ptShowCoordInput("rows cols");
+    return true;
+  }
+
+  if (phase.kind === "array_rect_count") {
+    return true; // waiting for coord input — ignore clicks
+  }
+
   return false;
 }
 
@@ -1162,6 +1210,23 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
         z: round(pos.z - srcCtr.z),
       });
     }
+    opFinish(viewer);
+  }
+
+  if (phase.kind === "array_polar_count") {
+    const nums = raw.trim().split(/[\s,]+/).map(Number).filter(x => !isNaN(x));
+    const n = Math.round(nums[0] ?? NaN);
+    const angle = nums[1] ?? 360;
+    if (isNaN(n) || n < 2) { ptPrompt("Polar Array — type total count (min 2)"); return; }
+    dispatchSync("SdArrayPolar", { target: phase.source.uuid, count: n, cx: phase.cx, cy: phase.cy, angle });
+    opFinish(viewer);
+  }
+
+  if (phase.kind === "array_rect_count") {
+    const nums = raw.trim().split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+    if (nums.length < 2) { ptPrompt("Rectangular Array — type: rows  cols"); return; }
+    const [rows, cols] = nums;
+    dispatchSync("SdArrayGrid", { target: phase.source.uuid, rows: Math.max(1, Math.round(rows)), cols: Math.max(1, Math.round(cols)), dx: phase.dx, dy: phase.dy });
     opFinish(viewer);
   }
 }
@@ -1313,17 +1378,15 @@ function _opPhaseStartArray(source: THREE.Object3D): void {
         _opPhase = { kind: "array_linear_base", source };
         ptPrompt("Linear Array — click base point  [Esc] cancel");
       }},
-    { label: "Rectangular",  description: "Rows × columns — type rows cols dx dy",
+    { label: "Rectangular",  description: "Rows × columns — click base, X-dir, Y-dir, then type rows cols",
       onSelect: () => {
-        _opPhase = { kind: "array_grid_params", source };
-        ptPrompt("Rectangular Array — type: rows  cols  dx  dy  then Enter  [Esc] cancel");
-        ptShowCoordInput("rows cols dx dy");
+        _opPhase = { kind: "array_rect_base", source };
+        ptPrompt("Rectangular Array — click base point  [Esc] cancel");
       }},
-    { label: "Polar",        description: "Circular pattern — type count [cx cy]",
+    { label: "Polar",        description: "Circular pattern — click center, then type total count",
       onSelect: () => {
-        _opPhase = { kind: "array_polar_params", source };
-        ptPrompt("Polar Array — type: count  [cx  cy]  then Enter  [Esc] cancel");
-        ptShowCoordInput("count  or  count cx cy");
+        _opPhase = { kind: "array_polar_center", source };
+        ptPrompt("Polar Array — click center of rotation  [Esc] cancel");
       }},
     { label: "Along Curve",  description: "Distribute along an existing curve — click curve + count",
       onSelect: () => {
