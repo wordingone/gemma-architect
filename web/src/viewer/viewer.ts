@@ -48,6 +48,29 @@ export type Bounds = {
   max: [number, number, number];
 };
 
+// ── §B-mesh (#990): GPU resource disposal helpers ─────────────────────────────
+// Called when an object is removed from the scene and will NOT be re-added via
+// undo (i.e. removeObject() path — bypasses the undo stack by design).
+// deleteSelected() intentionally skips these — clearHistory() handles that path.
+
+function _disposeMaterial(mat: THREE.Material): void {
+  for (const k of ["map", "normalMap", "roughnessMap", "aoMap", "emissiveMap"] as const) {
+    (mat as unknown as Record<string, { dispose?: () => void }>)[k]?.dispose?.();
+  }
+  mat.dispose();
+}
+
+export function disposeMeshTree(obj: THREE.Object3D): void {
+  obj.traverse((child) => {
+    const m = child as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+    const mat = m.material;
+    if (!mat) return;
+    if (Array.isArray(mat)) (mat as THREE.Material[]).forEach(_disposeMaterial);
+    else _disposeMaterial(mat as THREE.Material);
+  });
+}
+
 export class Viewer {
   private canvas: HTMLCanvasElement;
   private scene: THREE.Scene;
@@ -2305,6 +2328,7 @@ export class Viewer {
       if (labels) labels.forEach((el) => el.remove());
     });
     this.scene.remove(obj);
+    disposeMeshTree(obj); // §B-mesh (#990): release GPU geometry + materials
     if (this.currentMesh === obj) this.currentMesh = null;
     if (this.currentEdges === obj) this.currentEdges = null;
     if (this.currentObject === obj) this.currentObject = null;
