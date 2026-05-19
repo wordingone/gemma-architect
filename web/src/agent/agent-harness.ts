@@ -1169,7 +1169,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   const t0 = Date.now();
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
 
-  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 512 });
+  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 1024 });
   // Drain the token stream (satisfies AC: tokens stream back via postMessage inside worker)
   for await (const _tok of stream) { /* tokens flow via postMessage internally */ }
 
@@ -1238,7 +1238,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         turnId,
         messages,
         imageUrl,
-        maxNewTokens:  req.maxNewTokens ?? 512,
+        maxNewTokens:  req.maxNewTokens ?? 1024,
         eosId:         1, // Gemma 4 EOS; worker also reads model.config as fallback
         draftK:        MTP_DRAFT_N,
         useMtp,

@@ -296,6 +296,7 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
   const chatText = proc.apply_chat_template(messagesForTemplate, {
     add_generation_prompt: true,
     tokenize: false,
+    enable_thinking: false, // #1044: skip <|think|> → all output budget for <tool_call> blocks
   }) as string;
 
   // Tokenize (pass image list separately for processor's vision encoder)
