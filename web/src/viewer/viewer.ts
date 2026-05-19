@@ -390,6 +390,9 @@ export class Viewer {
         let _dragStartSnapshot: TransformSnapshot | null = null;
         let _dragStartMultiSnapshots: TransformSnapshot[] = [];
         let _dragResetNeighborIds: string[] = [];
+        // Wall-opening coupling (#1152): openings whose host wall is being dragged.
+        // Each entry: [opening, matrix-at-drag-start (for live applyDeltaToLocal), snapshot-at-drag-start (for undo)].
+        let _wallOpeningEntries: Array<[THREE.Object3D, THREE.Matrix4, TransformSnapshot]> = [];
         g.setMode(mode);
         g.setSpace("local");
         if (mode === "translate") g.size = 1.0;
@@ -434,6 +437,11 @@ export class Viewer {
             if (!_mtBefore) continue;
             const _mtNew = applyDeltaToLocal(_mt, _mtBefore);
             _mtNew.decompose(_mt.position, _mt.quaternion, _mt.scale);
+          }
+          // Wall-opening coupling (#1152): live-drag openings with their host wall.
+          for (const [_op, _opMatBefore] of _wallOpeningEntries) {
+            const _opNew = applyDeltaToLocal(_op, _opMatBefore);
+            _opNew.decompose(_op.position, _op.quaternion, _op.scale);
           }
           // Sync clip-plane math when user moves/rotates the visualization mesh.
           if (this.targetObject.userData.creator === "SdClippingPlane") {
@@ -522,6 +530,21 @@ export class Viewer {
             // Capture transform snapshots for undo stack (recorded at drag-end).
             _dragStartSnapshot = captureTransform(this.targetObject);
             _dragStartMultiSnapshots = this.multiTargets.map(mt => captureTransform(mt));
+            // Wall-opening coupling (#1152): collect openings parented to this wall.
+            // Works for both Mesh and Group (void-cut) walls since we match by expressID.
+            _wallOpeningEntries = [];
+            if (this.targetObject.userData?.creator === "wall") {
+              const _wallId = this.targetObject.userData.expressID as string | number | undefined;
+              if (_wallId != null) {
+                this.scene.traverse((obj) => {
+                  if (obj === this.targetObject) return;
+                  if (!isOpening(obj.userData?.creator as string | undefined)) return;
+                  if (obj.userData?.hostExpressID == _wallId) {
+                    _wallOpeningEntries.push([obj, obj.matrix.clone(), captureTransform(obj)]);
+                  }
+                });
+              }
+            }
           } else if (!dragging && this.pivotProxy && this.targetObject) {
             // Drag complete — geometry already updated live by objectChange.
             // Emit a chain fragment from the final world-space delta.
@@ -570,6 +593,11 @@ export class Viewer {
                   }
                 }
                 _dragResetNeighborIds = [];
+                // Push undo snapshots for openings that followed the wall (#1152).
+                for (const [_op, , _opSnapBefore] of _wallOpeningEntries) {
+                  pushTransformAction(_op, _opSnapBefore);
+                }
+                _wallOpeningEntries = [];
               } else if (isOpening(_movedCreator) && _dragStartSnapshot) {
                 // AC3 (#875): restore old void, cut new void at current position.
                 const _rerect = rerecutVoid(this.targetObject, this.scene);
@@ -582,6 +610,13 @@ export class Viewer {
                 }
               }
               onElementCommitted(this.targetObject, this.scene);
+            } else if (!this.subTargetObject && this.targetObject instanceof THREE.Group &&
+                       this.targetObject.userData?.creator === "wall" && _wallOpeningEntries.length > 0) {
+              // Group wall (void-cut): flush opening undo snapshots (#1152).
+              for (const [_op, , _opSnapBefore] of _wallOpeningEntries) {
+                pushTransformAction(_op, _opSnapBefore);
+              }
+              _wallOpeningEntries = [];
             }
             // Record transform on undo stack. Skip sub-object drags (control-point edits
             // rebuild geometry in-place and don't have a clean before/after snapshot).
