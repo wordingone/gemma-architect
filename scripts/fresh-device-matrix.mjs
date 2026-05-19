@@ -936,6 +936,22 @@ async function runBrowserTests() {
   const skipped = results.filter(r => r.browserError).length;
   const failed = results.filter(r => !r.pass && !r.browserError).length;
 
+  // Reset browser to a clean state after all configs.
+  // The last fake-clock scenario replaces window.setTimeout with a fake version.
+  // Without this navigation, the user's browser is left with the fake clock active —
+  // boot-screen.ts watchdog timers never fire (require __advanceFakeClock), causing
+  // STALLED to never appear during real CDN downloads (#1058 post-matrix repro).
+  try {
+    if (cdp) await cdp.send('Network.setBlockedURLs', { urls: [] }).catch(() => {});
+    if (cdp) await cdp.send('Network.emulateNetworkConditions', {
+      offline: false, downloadThroughput: -1, uploadThroughput: -1, latency: 0,
+    }).catch(() => {});
+    await page.goto(TARGET_URL, { timeout: 30_000, waitUntil: 'domcontentloaded' });
+    console.log('\nBrowser reset to clean state (fake-clock cleared, network conditions reset).');
+  } catch (e) {
+    console.log(`\n⚠️  Final reset navigation failed: ${e.message.slice(0, 80)}`);
+  }
+
   console.log(`\nBrowser results: ${passed} pass / ${skipped} skip / ${failed} fail (of ${results.length} configs)`);
   return { passed, skipped, failed, total: results.length, configs: results };
 }
