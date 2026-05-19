@@ -46,6 +46,7 @@ export type CanvasCluster = {
   graphJson: string;  // JSON.stringify({ nodes, edges, groups })
   nodeCount: number;
   edgeCount: number;
+  thumbnail?: string; // optional 160×120 JPEG data-URL scene snapshot (#1111/SU-5)
 };
 
 let _db: IDBDatabase | null = null;

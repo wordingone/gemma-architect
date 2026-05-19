@@ -12,6 +12,7 @@ import { saveSkill, listSavedSkills, listCanvasClusters, type SkillStep, type Sa
 import { openSaveSkillModal, openSaveClusterModal } from "./skill-modal";
 import { subscribe as subscribeAppState, getState } from "../app-state";
 import { seedStarterClusters, STARTER_IDS } from "./starter-clusters";
+import { captureViewport } from "../agent/viewport-capture";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1354,7 +1355,9 @@ export class SkillCanvas {
     const nodes = this._graph.nodes.filter(n => selectedIds.has(n.id));
     const edges = this._graph.edges.filter(e => selectedIds.has(e.from) && selectedIds.has(e.to));
     const graphJson = JSON.stringify({ nodes, edges, groups: [] });
-    openSaveClusterModal(graphJson, nodes.length, edges.length, () => {
+    // Capture a 160×120 scene snapshot for the cluster card thumbnail (#1111/SU-5).
+    const thumbnail = captureViewport(160) ?? undefined;
+    openSaveClusterModal(graphJson, nodes.length, edges.length, thumbnail, () => {
       void this._buildPalette();
     });
   }

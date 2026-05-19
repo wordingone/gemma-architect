@@ -5997,6 +5997,73 @@ await resetScene('before-box-inject');
   await resetScene('post-S123');
 }
 
+// ── S124 — skill-canvas-cluster-roundtrip (#1111/SU-5): save 2-node cluster → reload → counts match ──
+{
+  const s124 = await evaluate(`
+    (async () => {
+      try {
+        // Activate SKILLS tab.
+        const skillsTab = document.querySelector('[data-tab="skills"]');
+        if (!skillsTab) return { passed: false, evidence: { reason: 'skills tab not found' } };
+        skillsTab.click();
+        await new Promise(r => setTimeout(r, 200));
+
+        const canvas = window.__skillCanvas;
+        if (!canvas) return { passed: false, evidence: { reason: '__skillCanvas not exposed' } };
+
+        // Clear graph; inject 2 wired nodes.
+        const graph = canvas.getGraph();
+        const idA = 'su5-test-a';
+        const idB = 'su5-test-b';
+        const edgeId = 'su5-test-edge';
+        graph.nodes = [
+          { id: idA, kind: 'skill', skillName: 'NodeA', skillSteps: [], x: 50, y: 50, inPorts: 0, outPorts: 1 },
+          { id: idB, kind: 'skill', skillName: 'NodeB', skillSteps: [], x: 260, y: 50, inPorts: 1, outPorts: 0 },
+        ];
+        graph.edges = [{ id: edgeId, from: idA, fromPort: 0, to: idB, toPort: 0 }];
+        graph.groups = [];
+
+        // Save as CanvasCluster via __skillStore API.
+        const graphJson = JSON.stringify({ nodes: graph.nodes, edges: graph.edges, groups: [] });
+        const cluster = await window.__skillStore.saveCanvasCluster({
+          name: 'su5-test-cluster',
+          graphJson,
+          nodeCount: 2,
+          edgeCount: 1,
+        });
+        if (!cluster?.id) return { passed: false, evidence: { reason: 'saveCanvasCluster returned no id', cluster } };
+
+        // Clear the graph then load the cluster back.
+        graph.nodes = [];
+        graph.edges = [];
+        graph.groups = [];
+        canvas.loadCanvasCluster(cluster);
+
+        const nodesAfter = graph.nodes.length;
+        const edgesAfter = graph.edges.length;
+        // Re-IDs are applied on load; verify counts (not specific IDs).
+        const passed = nodesAfter === 2 && edgesAfter === 1;
+
+        // Verify IDs were re-assigned (no ID collision with originals).
+        const newIds = graph.nodes.map(n => n.id);
+        const idsAreFresh = !newIds.includes(idA) && !newIds.includes(idB);
+
+        return { passed, evidence: {
+          nodesAfter,
+          edgesAfter,
+          idsAreFresh,
+          clusterId: cluster.id,
+          edge: graph.edges[0],
+        } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s124) record('skill-canvas-cluster-roundtrip', false, { reason: 'evaluate returned null' });
+  else record('skill-canvas-cluster-roundtrip', s124.passed, s124.evidence);
+  await resetScene('post-S124');
+}
+
 } finally {
   await cleanup();
 }

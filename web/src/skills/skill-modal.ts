@@ -90,6 +90,7 @@ export function openSaveClusterModal(
   graphJson: string,
   nodeCount: number,
   edgeCount: number,
+  thumbnail: string | undefined,
   onSaved: (id: string) => void,
 ): void {
   const overlay = document.createElement("div");
@@ -143,6 +144,7 @@ export function openSaveClusterModal(
         graphJson,
         nodeCount,
         edgeCount,
+        thumbnail,
       });
       window.dispatchEvent(new CustomEvent("skillstore:cluster-saved", { detail: { cluster } }));
       onSaved(cluster.id);
