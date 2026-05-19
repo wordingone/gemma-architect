@@ -435,7 +435,7 @@ BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apa
 - IfcLevel: one per storey (elevation = floor_index × floor_height). Always emit before walls on that level.
 - IfcWall: exterior 0.15m thick; interior partition 0.10m thick. Enclose all rooms — no open faces.
 - IfcSlab: 0.20m thick at every level base (floor slab). Also use for roof on flat-roof buildings.
-- IfcDoor: width=0.9, height=2.1, wallThickness=0.15. One per building minimum; front entry on south wall.
+- IfcDoor: width=0.914, height=2.032, wallThickness=0.15. One per building minimum; front entry on south wall.
 - IfcWindow: width=1.2, height=1.2, sillH=0.9. Minimum 2 per exterior elevation (south + north or east + west).
 - SdColumn: size=0.3 at building corners and wall junctions; height = floor height. Add when span >6m.
 - IfcRoof: roofType=pitched (residential house/tiny home), roofType=hipped (villa), roofType=flat (apartment/office), roofType=shed (lean-to/mono-pitch, industrial annexe). pitchDeg=35 default.
@@ -555,7 +555,7 @@ Assistant: 12m wide, 8m deep, 1 floor × 2.4m. Footprint [[0,0],[12,0],[12,8],[0
 7. SdCeiling — width=12, depth=8, elevation=2.4
 8. SdSpace — footprint=[[1,1],[7,1],[7,7],[1,7]], height=2.4, name="main hall"
 9. SdSpace — footprint=[[7,1],[11,1],[11,7],[7,7]], height=2.4, name="kitchenette"
-10. SdDoor — width=0.91, height=2.1
+10. SdDoor — width=0.914, height=2.032
 </plan>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Ground","elevation":0,"extent":12},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[12,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
@@ -566,7 +566,7 @@ Assistant: 12m wide, 8m deep, 1 floor × 2.4m. Footprint [[0,0],[12,0],[12,8],[0
 <tool_call>{"command":"SdCeiling","parameters":{"width":12,"depth":8,"elevation":2.4},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdSpace","parameters":{"footprint":[[1,1],[7,1],[7,7],[1,7]],"height":2.4,"name":"main hall"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdSpace","parameters":{"footprint":[[7,1],[11,1],[11,7],[7,7]],"height":2.4,"name":"kitchenette"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdDoor","parameters":{"width":0.91,"height":2.1},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdDoor","parameters":{"width":0.914,"height":2.032},"metadata":{"source":"agent"}}</tool_call>
 
 User: design a 20m × 12m 2-story office building, 3.5m floor height
 Assistant: 20m wide, 12m deep, 2 floors × 3.5m = 7m total. Ground Floor at 0m, Floor 2 at 3.5m.
@@ -740,7 +740,7 @@ Assistant: 24m wide, 25m deep. Bay zone 24×9m at 4.5m height; living zone 24×1
 12. SdDoor — width=4.0, height=4.2
 13. SdDoor — width=4.0, height=4.2
 14. SdDoor — width=4.0, height=4.2
-15. SdDoor — width=0.9, height=2.1
+15. SdDoor — width=0.914, height=2.032
 </plan>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Ground","elevation":0,"extent":24},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[24,0]],"thickness":0.3,"height":4.5},"metadata":{"source":"agent"}}</tool_call>
@@ -756,7 +756,7 @@ Assistant: 24m wide, 25m deep. Bay zone 24×9m at 4.5m height; living zone 24×1
 <tool_call>{"command":"SdDoor","parameters":{"width":4.0,"height":4.2},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdDoor","parameters":{"width":4.0,"height":4.2},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"SdDoor","parameters":{"width":4.0,"height":4.2},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"SdDoor","parameters":{"width":0.9,"height":2.1},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"SdDoor","parameters":{"width":0.914,"height":2.032},"metadata":{"source":"agent"}}</tool_call>
 
 User: add a 1m grid and snap walls to it
 Assistant: Adding 1m grid; walls will snap to intersections.
@@ -816,7 +816,7 @@ Assistant: Assuming 8m × 6m footprint, 1 storey, 3.0m ceiling, 3 rooms (living 
 6. IfcSlab — floor, profile=[[0,0],[8,0],[8,6],[0,6]], thickness=0.2
 7. IfcWall — living/bedroom partition, profile=[[5,0],[5,6]], thickness=0.1, height=3.0
 8. IfcWall — bedroom/bath divider, profile=[[5,4],[8,4]], thickness=0.1, height=3.0
-9. IfcDoor — front entry, width=0.9, height=2.1, position=[4,0]
+9. IfcDoor — front entry, width=0.914, height=2.032, position=[4,0]
 10. IfcWindow — south left, width=1.2, height=1.2, sillH=0.9, position=[1.5,0]
 11. IfcWindow — south right, width=1.2, height=1.2, sillH=0.9, position=[6.5,0]
 12. IfcWindow — east, width=1.0, height=1.2, sillH=0.9, position=[8,3]
@@ -832,7 +832,7 @@ Assistant: Assuming 8m × 6m footprint, 1 storey, 3.0m ceiling, 3 rooms (living 
 <tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[8,0],[8,6],[0,6]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[5,0],[5,6]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[5,4],[8,4]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"IfcDoor","parameters":{"width":0.9,"height":2.1,"position":[4,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.914,"height":2.032,"position":[4,0]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[1.5,0]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[6.5,0]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[8,3]},"metadata":{"source":"agent"}}</tool_call>
@@ -852,8 +852,8 @@ Assistant: Assuming 10m × 8m footprint, 2 storeys at 3.0m each, 4 bedrooms uppe
 7. IfcWall — west ground, profile=[[0,8],[0,0]], thickness=0.15, height=3.0
 8. IfcSlab — ground floor, profile=[[0,0],[10,0],[10,8],[0,8]], thickness=0.2
 9. IfcWall — kitchen/living partition, profile=[[5,0],[5,8]], thickness=0.1, height=3.0
-10. IfcDoor — front entry, width=0.9, height=2.1, position=[5,0]
-11. IfcDoor — rear patio, width=0.9, height=2.1, position=[5,8]
+10. IfcDoor — front entry, width=0.914, height=2.032, position=[5,0]
+11. IfcDoor — rear patio, width=0.914, height=2.032, position=[5,8]
 12. IfcWindow — south ×2, width=1.2, height=1.2, sillH=0.9
 13. IfcWindow — north, width=1.0, height=1.2, sillH=0.9, position=[7,8]
 14. setActiveLevel — id=level/1
@@ -878,8 +878,8 @@ Assistant: Assuming 10m × 8m footprint, 2 storeys at 3.0m each, 4 bedrooms uppe
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[0,8],[0,0]],"thickness":0.15,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcSlab","parameters":{"profile":[[0,0],[10,0],[10,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWall","parameters":{"profile":[[5,0],[5,8]],"thickness":0.1,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"IfcDoor","parameters":{"width":0.9,"height":2.1,"position":[5,0]},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"command":"IfcDoor","parameters":{"width":0.9,"height":2.1,"position":[5,8]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.914,"height":2.032,"position":[5,0]},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"command":"IfcDoor","parameters":{"width":0.914,"height":2.032,"position":[5,8]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[2,0]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWindow","parameters":{"width":1.2,"height":1.2,"sillH":0.9,"position":[7,0]},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"command":"IfcWindow","parameters":{"width":1.0,"height":1.2,"sillH":0.9,"position":[7,8]},"metadata":{"source":"agent"}}</tool_call>
