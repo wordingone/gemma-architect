@@ -32,6 +32,9 @@ const SKETCH_PROFILE_CREATORS = new Set([
   "rect", "circle", "polygon", "polyline", "curve", "line",
 ]);
 
+// Closed 2D sketch creators that can be auto-extruded before boolean.
+const CLOSED_SKETCH_CREATORS = new Set(["circle", "rect", "polygon"]);
+
 // Creators valid for click-selection as extrude profile.
 // Excludes raw 3D primitives (wall, slab, column, box, beam, roof, space)
 // to prevent accidentally extruding large solids as a profile.
@@ -1031,43 +1034,61 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
 
   if (phase.kind === "bool_a") {
     const hit = opRaycastObject(viewer, clientX, clientY);
-    if (!hit) { ptPrompt("Boolean — click the first solid"); return true; }
-    if (!(hit.obj instanceof THREE.Mesh)) {
-      ptPrompt("Boolean requires solid meshes — extrude your curves first to create a solid");
-      return true;
+    if (!hit) { ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)"); return true; }
+    let objA: THREE.Object3D = hit.obj;
+    if (!(objA instanceof THREE.Mesh)) {
+      const cr = objA.userData.creator as string | undefined;
+      const isClosed = !!(objA.userData.isClosed as boolean | undefined);
+      if (cr && (CLOSED_SKETCH_CREATORS.has(cr) || (cr === "curve" && isClosed))) {
+        const extruded = opBuildExtrudeMesh(objA, 3.0);
+        extruded.userData.creator = "extrude"; extruded.userData.kind = "brep";
+        extruded.userData.autoExtrudedForBoolean = true;
+        viewer.getScene().remove(objA);
+        viewer.getScene().add(extruded);
+        extruded.updateMatrixWorld(true);
+        pushReplaceAction(extruded, [objA], "extrude");
+        objA = extruded;
+      } else {
+        ptPrompt("Boolean needs 3D solids — open curves/lines can't be auto-extruded. Close the profile first or use a closed shape.");
+        return true;
+      }
     }
     opSetHover(null);
-    const m = hit.obj as THREE.Mesh;
-    const mAMats = Array.isArray(m.material) ? m.material : (m.material ? [m.material] : []);
+    const mA = objA as THREE.Mesh;
+    const mAMats = Array.isArray(mA.material) ? mA.material : (mA.material ? [mA.material] : []);
     const mAStd = mAMats.find((mt): mt is THREE.MeshStandardMaterial => !!(mt as THREE.MeshStandardMaterial).emissive);
-    if (mAStd) {
-      m.userData._savedEmissive = mAStd.emissive.getHex();
-      mAStd.emissive.setHex(0x003399);
-    }
-    _opPhase = { kind: "bool_b", objA: hit.obj };
-    ptPrompt("Boolean — click the second solid (selected: first highlighted in blue)");
+    if (mAStd) { mA.userData._savedEmissive = mAStd.emissive.getHex(); mAStd.emissive.setHex(0x003399); }
+    _opPhase = { kind: "bool_b", objA };
+    ptPrompt("Boolean — click the second solid (first highlighted in blue)");
     return true;
   }
 
   if (phase.kind === "bool_b") {
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit || hit.obj === phase.objA) { ptPrompt("Boolean — click a different second solid"); return true; }
-    if (!(hit.obj instanceof THREE.Mesh)) {
-      ptPrompt("Boolean requires solid meshes — extrude your curves first to create a solid");
-      return true;
+    let objB: THREE.Object3D = hit.obj;
+    if (!(objB instanceof THREE.Mesh)) {
+      const cr = objB.userData.creator as string | undefined;
+      const isClosed = !!(objB.userData.isClosed as boolean | undefined);
+      if (cr && (CLOSED_SKETCH_CREATORS.has(cr) || (cr === "curve" && isClosed))) {
+        const extruded = opBuildExtrudeMesh(objB, 3.0);
+        extruded.userData.creator = "extrude"; extruded.userData.kind = "brep";
+        extruded.userData.autoExtrudedForBoolean = true;
+        viewer.getScene().remove(objB);
+        viewer.getScene().add(extruded);
+        extruded.updateMatrixWorld(true);
+        pushReplaceAction(extruded, [objB], "extrude");
+        objB = extruded;
+      } else {
+        ptPrompt("Boolean needs 3D solids — open curves/lines can't be auto-extruded. Close the profile first or use a closed shape.");
+        return true;
+      }
     }
-    opSetHover(null); // clear hover so its saved emissive doesn't overwrite our selection color
-    const objB = hit.obj;
+    opSetHover(null);
     const mB = objB as THREE.Mesh;
-    const mats = mB instanceof THREE.Mesh
-      ? (Array.isArray(mB.material) ? mB.material : [mB.material])
-      : [];
-    const firstStd = mats.find((m): m is THREE.MeshStandardMaterial =>
-      !!(m as THREE.MeshStandardMaterial).emissive);
-    if (firstStd) {
-      mB.userData._savedEmissive = firstStd.emissive.getHex();
-      firstStd.emissive.setHex(0xcc6600); // bright amber — distinct from first object's blue
-    }
+    const mBMats = Array.isArray(mB.material) ? mB.material : (mB.material ? [mB.material] : []);
+    const mBStd = mBMats.find((m): m is THREE.MeshStandardMaterial => !!(m as THREE.MeshStandardMaterial).emissive);
+    if (mBStd) { mB.userData._savedEmissive = mBStd.emissive.getHex(); mBStd.emissive.setHex(0xcc6600); }
     _opPhase = { kind: "bool_op", objA: phase.objA, objB };
     opShowBoolChooser(viewer, phase.objA, objB);
     ptPrompt("Boolean — choose operation");
@@ -1612,7 +1633,7 @@ export function opStartTool(viewer: Viewer, tool: string): void {
     }
   } else if (tool === "boolean") {
     _opPhase = { kind: "bool_a" };
-    ptPrompt("Boolean — click the first solid");
+    ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)");
   } else if (tool === "fillet") {
     _opPhase = { kind: "fillet_select" };
     ptPrompt("Fillet — click a solid mesh or a polyline/curve corner  [Escape = cancel]");

@@ -945,6 +945,7 @@ export function initCreateMode(viewer: Viewer): void {
       ptStartTool(tool as "move" | "rotate" | "scale" | "scale-1d" | "scale-2d");
     } else if (OP_TOOLS.has(tool)) {
       if (_ptPhase) ptCancel(viewer, false);
+      if (getOpPhase()) opCancel(viewer, false);
       opStartTool(viewer, tool);
     } else {
       if (_ptPhase) ptCancel(viewer, false);
