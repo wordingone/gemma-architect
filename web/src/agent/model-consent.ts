@@ -160,6 +160,8 @@ function wireProgressEvents(): void {
   });
   window.addEventListener("agentmodel:drafter:ready", () => { _drafterDone = true; maybeHideStrip(); }, { once: true });
   window.addEventListener("agentmodel:drafter:error", () => { _drafterDone = true; maybeHideStrip(); }, { once: true });
+  // Boot-screen close = main UI visible; strip must not outlive it (#1134).
+  window.addEventListener("agentmodel:boot-complete", () => { _modelDone = true; _drafterDone = true; hideProgressStrip(); }, { once: true });
 }
 
 // ---- Consent dialog ------------------------------------------------------------
