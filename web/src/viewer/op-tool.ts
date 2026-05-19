@@ -3,7 +3,7 @@
 // Does NOT import from selection-ops.ts — runPolySel/overlay fns injected via registerOpToolHooks.
 
 import * as THREE from "three";
-import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge } from "./csg";
+import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge, getUniqueEdges } from "./csg";
 import type { Viewer } from "./viewer";
 import { getSnap } from "./snap-state";
 import { nearestSnapVertex, closestPtOnSegToRay } from "./snap-state";
@@ -1223,9 +1223,24 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
   if (phase.kind === "fillet_edge_radius") {
     const r = parseFloat(raw);
     if (!Number.isFinite(r) || r <= 0) { ptPrompt("Fillet radius — enter a positive number"); return; }
-    const filleted = chamferEdge(phase.target, phase.edgeA, phase.edgeB, r);
-    viewer.addMesh(filleted, "brep", { noHistory: true });
-    pushReplaceAction(filleted, [phase.target], "fillet");
+    // Resolve edgeId from world-space endpoints so the schema dispatch is self-contained.
+    const invMat = phase.target.matrixWorld.clone().invert();
+    const localA = phase.edgeA.clone().applyMatrix4(invMat);
+    const localB = phase.edgeB.clone().applyMatrix4(invMat);
+    const edges = getUniqueEdges(phase.target);
+    const EPS_ID = 1e-3;
+    const edgeId = edges.findIndex(([ea, eb]) =>
+      (ea.distanceTo(localA) < EPS_ID && eb.distanceTo(localB) < EPS_ID) ||
+      (ea.distanceTo(localB) < EPS_ID && eb.distanceTo(localA) < EPS_ID),
+    );
+    if (edgeId >= 0) {
+      dispatchSync("SdFillet", { target: phase.target.uuid, edgeId, radius: r });
+    } else {
+      // Fallback: direct chamfer when edge not found in enumeration (degenerate geometry).
+      const filleted = chamferEdge(phase.target, phase.edgeA, phase.edgeB, r);
+      viewer.addMesh(filleted, "brep", { noHistory: true });
+      pushReplaceAction(filleted, [phase.target], "fillet");
+    }
     ptPrompt(`Fillet r=${formatLength(r)} applied`);
     setTimeout(() => opFinish(viewer), 400);
   }

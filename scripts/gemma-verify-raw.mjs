@@ -5842,6 +5842,48 @@ await resetScene('before-box-inject');
   await resetScene('post-S120');
 }
 
+// ── S121 — fillet-schema-edge-dispatch (#1098): SdFillet with edgeId bevels one edge ──
+{
+  const s121 = await evaluate(`
+    (async () => {
+      try {
+        window.__dispatch('SdBox', { x: 0, y: 0, z: 0, w: 2, d: 2, h: 2 });
+        await new Promise(r => setTimeout(r, 50));
+        const boxes = window.__viewer.scene.children.filter(c => c.userData.creator === 'box');
+        if (!boxes.length) return { passed: false, evidence: { reason: 'SdBox not created' } };
+        const box = boxes[boxes.length - 1];
+        const posBefore = box.geometry.getAttribute('position').count;
+
+        // Single-edge fillet via edgeId=0.
+        const res = window.__dispatch('SdFillet', { target: box.uuid, edgeId: 0, radius: 0.05 });
+        await new Promise(r => setTimeout(r, 80));
+        const newMesh = (res && res.modified) ? window.__viewer.scene.getObjectByProperty('uuid', res.modified) : null;
+        const posAfter = newMesh ? newMesh.geometry.getAttribute('position').count : 0;
+
+        // All-edges round (no edgeId).
+        const box2 = window.__viewer.scene.children.filter(c => c.userData.creator === 'box').pop();
+        let allEdgesOk = false;
+        if (box2) {
+          const res2 = window.__dispatch('SdFillet', { target: box2.uuid, radius: 0.1 });
+          await new Promise(r => setTimeout(r, 80));
+          allEdgesOk = !!(res2 && res2.modified);
+        }
+
+        // Out-of-range edgeId returns error.
+        const resOob = window.__dispatch('SdFillet', { target: box.uuid, edgeId: 9999, radius: 0.05 });
+        const oobError = !!(resOob && resOob.error && resOob.error.includes('out of range'));
+
+        const passed = posAfter > posBefore && allEdgesOk && oobError;
+        return { passed, evidence: { posBefore, posAfter, allEdgesOk, oobError } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s121) record('fillet-schema-edge-dispatch', false, { reason: 'evaluate returned null' });
+  else record('fillet-schema-edge-dispatch', s121.passed, s121.evidence);
+  await resetScene('post-S121');
+}
+
 } finally {
   await cleanup();
 }

@@ -164,6 +164,33 @@ export function csgIntersection(a: THREE.Mesh, b: THREE.Mesh, mat: THREE.Materia
 }
 
 /**
+ * Enumerate unique edges of a mesh in local (object) space, in stable traversal order.
+ * Edges are deduplicated by endpoint proximity (EPS=1e-3). The returned index is stable
+ * across calls for the same geometry, making it suitable as a persistent `edgeId`.
+ */
+export function getUniqueEdges(mesh: THREE.Mesh): [THREE.Vector3, THREE.Vector3][] {
+  const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  const EPS_EDGE = 1e-3;
+  const edges: [THREE.Vector3, THREE.Vector3][] = [];
+  const isDup = (a: THREE.Vector3, b: THREE.Vector3) =>
+    edges.some(([ea, eb]) =>
+      (ea.distanceTo(a) < EPS_EDGE && eb.distanceTo(b) < EPS_EDGE) ||
+      (ea.distanceTo(b) < EPS_EDGE && eb.distanceTo(a) < EPS_EDGE),
+    );
+  for (let i = 0; i < pos.count; i += 3) {
+    const va = new THREE.Vector3().fromBufferAttribute(pos, i);
+    const vb = new THREE.Vector3().fromBufferAttribute(pos, i + 1);
+    const vc = new THREE.Vector3().fromBufferAttribute(pos, i + 2);
+    for (const [a, b] of [[va, vb], [vb, vc], [vc, va]] as [THREE.Vector3, THREE.Vector3][]) {
+      if (!isDup(a, b)) edges.push([a.clone(), b.clone()]);
+    }
+  }
+  geo.dispose();
+  return edges;
+}
+
+/**
  * Chamfer a single edge of a mesh: `edgeAWorld` and `edgeBWorld` are the two
  * endpoints of the target edge in world space. The two triangles adjacent to
  * that edge are pulled back by `radius` and a bevel strip is inserted between

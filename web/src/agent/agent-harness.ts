@@ -919,6 +919,20 @@ Assistant:
 1. SdAlignedDim — a=[0,0,0], b=[3,4,0]
 </plan>
 <tool_call>{"command":"SdAlignedDim","parameters":{"a":[0,0,0],"b":[3,4,0]},"metadata":{"source":"agent"}}</tool_call>
+
+User: round all edges of the selected wall with radius 0.05
+Assistant: Using SdFillet with no edgeId to round all edges.
+<plan>
+1. SdFillet — target=<uuid from context>, radius=0.05
+</plan>
+<tool_call>{"command":"SdFillet","parameters":{"target":"wall-uuid","radius":0.05},"metadata":{"source":"agent"}}</tool_call>
+
+User: bevel only edge 0 of the selected box with radius 0.02
+Assistant: Using SdFillet with edgeId=0 to bevel one edge; all other edges stay sharp.
+<plan>
+1. SdFillet — target=<uuid>, edgeId=0, radius=0.02
+</plan>
+<tool_call>{"command":"SdFillet","parameters":{"target":"box-uuid","edgeId":0,"radius":0.02},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 
