@@ -4853,6 +4853,52 @@ await resetScene('before-box-inject');
   await resetScene('post-S115');
 }
 
+// ── S116 — wall-roof-trim (#947): walls don't poke above roof eave ────────────
+// Places 4 walls + pitched roof → asserts no wall top Z > roof eave Z.
+// Wall top Z = wall.position.z + wallHeight (walls are direct scene children).
+// Roof eave Z = roof.position.z (roof Group positioned at eave level in SdRoof).
+{
+  await resetScene('pre-S116');
+  const s116 = await evaluate(`(async () => {
+    try {
+      window.__dispatch('SdWall', { start: [0, 0, 0], end: [6, 0, 0] });
+      window.__dispatch('SdWall', { start: [6, 0, 0], end: [6, 4, 0] });
+      window.__dispatch('SdWall', { start: [6, 4, 0], end: [0, 4, 0] });
+      window.__dispatch('SdWall', { start: [0, 4, 0], end: [0, 0, 0] });
+      await new Promise(r => setTimeout(r, 400));
+      window.__dispatch('SdRoof', { roofType: 'pitched', footprint: [[0,0],[6,0],[6,4],[0,4]], pitchDeg: 30 });
+      await new Promise(r => setTimeout(r, 600));
+
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      let eaveZ = null;
+      const wallTopZs = [];
+      v.scene.traverse(obj => {
+        if (obj.userData?.creator === 'roof' && eaveZ === null) {
+          eaveZ = obj.position.z;
+        }
+        if (obj.userData?.creator === 'wall') {
+          const wh = (obj.userData.wallHeight ?? 3);
+          wallTopZs.push(Math.round((obj.position.z + wh) * 1000) / 1000);
+        }
+      });
+
+      if (eaveZ === null) return { passed: false, evidence: { reason: 'no roof found', wallTopZs } };
+      const maxWallTop = wallTopZs.length ? Math.max(...wallTopZs) : 0;
+      const r = Math.round;
+      return {
+        passed: maxWallTop <= eaveZ + 0.001,
+        evidence: { eaveZ: r(eaveZ * 1000) / 1000, maxWallTop, wallTopZs }
+      };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('wall-roof-trim', !!(s116?.passed), s116 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S116');
+}
+
 } finally {
   await cleanup();
 }

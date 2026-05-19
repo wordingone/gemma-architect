@@ -1085,7 +1085,30 @@ registerHandler("SdRoof", (args) => {
   const b = { x: w / 2, y: d / 2 };
   const roofParams: RoofParams = { type: roofType, pitchDeg, overhang, thickness, showStructure: true };
   const { mesh, chain } = buildRoof(a, b, roofParams);
-  mesh.position.set(centerX, centerY, getActiveLevelElevation() + DEFAULT_CEILING_OFFSET);
+
+  // Infer eave height from walls adjacent to the footprint so the roof plate sits
+  // at the wall top — prevents wall tops from poking above the eave plane (#947).
+  // DEFAULT_CEILING_OFFSET (2.74m) was below DEFAULT_WALL_HEIGHT (3m) causing grey bars.
+  const activeLevelElev = getActiveLevelElevation();
+  let eaveOffset = DEFAULT_WALL_HEIGHT;
+  {
+    const FOOT_EXPAND = 1.5;
+    viewer.getScene().traverse((child) => {
+      if (child.userData?.creator !== "wall") return;
+      const wp = new THREE.Vector3();
+      child.getWorldPosition(wp);
+      if (Math.abs(wp.z - activeLevelElev) > 0.5) return;
+      const eps = child.userData.endpoints as Array<{ x: number; y: number }> | undefined;
+      if (!eps || eps.length < 2) return;
+      const midX = (eps[0].x + eps[1].x) / 2;
+      const midY = (eps[0].y + eps[1].y) / 2;
+      if (midX < centerX - w / 2 - FOOT_EXPAND || midX > centerX + w / 2 + FOOT_EXPAND) return;
+      if (midY < centerY - d / 2 - FOOT_EXPAND || midY > centerY + d / 2 + FOOT_EXPAND) return;
+      const wh = (child.userData.wallHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
+      if (wh > eaveOffset) eaveOffset = wh;
+    });
+  }
+  mesh.position.set(centerX, centerY, activeLevelElev + eaveOffset);
   mesh.userData.roofType = roofType;
   mesh.userData.ifcPredefinedType = ({
     pitched: "GABLE_ROOF",
@@ -1109,10 +1132,11 @@ registerHandler("SdRoof", (args) => {
   if (roofType === "pitched") {
     const pitchRad2 = (pitchDeg * Math.PI) / 180;
     const landscape = w >= d;
-    // Span half: the dimension over which the roof pitches (shorter plan axis).
-    const spanHalf = (landscape ? d : w) / 2;
+    // Span half includes overhang — matches buildRoof's hd/hw calculation so
+    // gable wall pentagon peak aligns with the actual roof ridge (#947).
+    const spanHalf = (landscape ? d : w) / 2 + overhang;
     const rH = spanHalf * Math.tan(pitchRad2);
-    const activeLevelElev = getActiveLevelElevation();
+    // activeLevelElev already defined above (eave-height inference block).
     const TOL = 0.8; // metres — endpoint must be within TOL of the gable edge
 
     viewer.getScene().traverse((child) => {
