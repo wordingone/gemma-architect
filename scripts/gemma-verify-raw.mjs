@@ -6199,6 +6199,54 @@ await resetScene('before-box-inject');
   await resetScene('post-S127');
 }
 
+// ── S129 — wall-params input parsing (#1124): imperial length input → correct metres ──
+{
+  const s129 = await evaluate(`
+    (async () => {
+      try {
+        // Set imperial units
+        await window.__dispatch('SdSetUnits', { system: 'imperial' });
+        await new Promise(r => setTimeout(r, 40));
+
+        // Place a wall (6m long, 3m tall)
+        await window.__dispatch('SdWall', { start: {x:0,y:0,z:0}, end: {x:6,y:0,z:0}, height: 3.0, thickness: 0.2 });
+        await new Promise(r => setTimeout(r, 60));
+
+        // Find the wall height input and simulate user typing "7" (= 7 ft in imperial)
+        const heightInp = document.querySelector('#wall-params-section [data-wall-field="height"]');
+        if (!heightInp) return { passed: false, evidence: { reason: 'height input not found' } };
+
+        heightInp.value = '7';
+        heightInp.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 60));
+
+        // Find the active wall mesh and check its height userData
+        const scene = window.__viewer?.getScene();
+        if (!scene) return { passed: false, evidence: { reason: '__viewer not available' } };
+        let wallH = null;
+        scene.traverse((obj) => {
+          if (obj.userData?.creator === 'wall' && obj.userData?.wallHeight !== undefined) {
+            wallH = obj.userData.wallHeight;
+          }
+        });
+
+        // 7 ft = 2.1336 m
+        const expected = 7 * 0.3048;
+        const passed = wallH !== null && Math.abs(wallH - expected) < 0.001;
+
+        // Restore metric
+        await window.__dispatch('SdSetUnits', { system: 'metric' });
+
+        return { passed, evidence: { wallH, expected, delta: wallH !== null ? Math.abs(wallH - expected) : null } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s129) record('wall-params-input-parsing', false, { reason: 'evaluate returned null' });
+  else record('wall-params-input-parsing', s129.passed, s129.evidence);
+  await resetScene('post-S129');
+}
+
 } finally {
   await cleanup();
 }

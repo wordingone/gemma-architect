@@ -28,7 +28,7 @@ import { dispatch, dispatchSync, registerPostDispatch, type DispatchArgs } from 
 import { startCommandSession } from "../commands/command-session";
 import { setPickerHint, OP_TOOL_IDS } from "../viewer/picker-hint";
 import { getState, setState, subscribe as subscribeAppState, type ViewName } from "../app-state";
-import { formatLength } from "../units";
+import { formatLength, formatLengthNum, parseLength, unitLabel } from "../units";
 import { setGridOn, setSnapOn, setOrthoOn, setPolarOn, setVertexSnapOn, setEdgeSnapOn, setMidpointSnapOn, setStep, setAngleStep, getSnap } from "../viewer/snap-state";
 import { buildSelectionFiltersPanel } from "../scene/scene-panel";
 import { levelStore, type Level } from "../geometry/levels";
@@ -947,24 +947,24 @@ function buildInspectTab(): HTMLElement {
       <div class="prop-row">
         <span class="k">Thickness</span>
         <span class="v">
-          <input type="number" data-wall-field="thickness" min="0.05" max="1.0" step="0.01" style="width:54px"/>
-          <span class="unit">m</span>
+          <input type="text" data-wall-field="thickness" style="width:54px"/>
+          <span class="unit" data-wall-unit>m</span>
           <input type="range" data-wall-slider="thickness" min="0.05" max="1.0" step="0.01" style="width:60px;accent-color:var(--sanguine)"/>
         </span>
       </div>
       <div class="prop-row">
         <span class="k">Bottom elev.</span>
         <span class="v">
-          <input type="number" data-wall-field="bottom" step="0.05" style="width:54px"/>
-          <span class="unit">m</span>
+          <input type="text" data-wall-field="bottom" style="width:54px"/>
+          <span class="unit" data-wall-unit>m</span>
           <select data-wall-level-select="bottom" style="font-size:9.5px;background:var(--paper-2);border:1px solid var(--hairline);color:var(--ink);border-radius:var(--r-sm);padding:1px 2px"></select>
         </span>
       </div>
       <div class="prop-row">
         <span class="k">Height</span>
         <span class="v">
-          <input type="number" data-wall-field="height" min="0.1" max="30" step="0.05" style="width:54px"/>
-          <span class="unit">m</span>
+          <input type="text" data-wall-field="height" style="width:54px"/>
+          <span class="unit" data-wall-unit>m</span>
           <input type="range" data-wall-slider="height" min="0.1" max="30" step="0.05" style="width:60px;accent-color:var(--sanguine)"/>
         </span>
       </div>
@@ -1103,15 +1103,17 @@ function buildInspectTab(): HTMLElement {
     const sameH = allH.every((v) => v === allH[0]);
     const sameZ = allZ.every((v) => v === allZ[0]);
 
-    const tVal = sameT ? String(allT[0].toFixed(3)) : "";
-    const hVal = sameH ? String(allH[0].toFixed(3)) : "";
-    const zVal = sameZ ? String(allZ[0].toFixed(3)) : "";
+    const tVal = sameT ? formatLengthNum(allT[0]) : "";
+    const hVal = sameH ? formatLengthNum(allH[0]) : "";
+    const zVal = sameZ ? formatLengthNum(allZ[0]) : "";
+    const uLbl = unitLabel();
 
     if (thicknessInput) thicknessInput.value = tVal;
-    if (thicknessSlider) thicknessSlider.value = tVal;
+    if (thicknessSlider) thicknessSlider.value = sameT ? String(allT[0]) : "";
     if (heightInput) heightInput.value = hVal;
-    if (heightSlider) heightSlider.value = hVal;
+    if (heightSlider) heightSlider.value = sameH ? String(allH[0]) : "";
     if (bottomInput) bottomInput.value = zVal;
+    sec.querySelectorAll<HTMLElement>("[data-wall-unit]").forEach((s) => (s.textContent = uLbl));
 
     // Populate level dropdown
     if (levelSelect) {
@@ -1123,8 +1125,16 @@ function buildInspectTab(): HTMLElement {
   }
 
   function applyWallParam(field: "thickness" | "height" | "bottom", rawVal: string): void {
-    const val = parseFloat(rawVal);
-    if (!isFinite(val) || _activeWalls.length === 0) return;
+    let val: number | null;
+    if (field === "bottom") {
+      // Elevation — can be negative (below grade); unit-convert bare numbers only
+      const bare = parseFloat(rawVal);
+      if (!isFinite(bare)) return;
+      val = getState("unitSystem") === "imperial" ? bare * 0.3048 : bare;
+    } else {
+      val = parseLength(rawVal);
+    }
+    if (val === null || _activeWalls.length === 0) return;
     for (const m of _activeWalls) {
       if (field === "thickness") rebuildWallParams(m, { thickness: Math.max(0.01, val) });
       else if (field === "height") rebuildWallParams(m, { height: Math.max(0.01, val) });
@@ -1147,16 +1157,19 @@ function buildInspectTab(): HTMLElement {
       const inp = wallSec.querySelector<HTMLInputElement>(`[data-wall-field="${field}"]`);
       const sld = wallSec.querySelector<HTMLInputElement>(`[data-wall-slider="${field}"]`);
       inp?.addEventListener("change", (e) => {
-        const v = (e.target as HTMLInputElement).value;
-        if (sld) sld.value = v;
-        applyWallParam(field, v);
+        const raw = (e.target as HTMLInputElement).value;
+        const meters = parseLength(raw);
+        if (meters !== null && sld) sld.value = String(meters);
+        applyWallParam(field, raw);
       });
       sld?.addEventListener("input", (e) => {
-        const v = (e.target as HTMLInputElement).value;
-        if (inp) inp.value = v;
-        applyWallParam(field, v);
+        const meters = parseFloat((e.target as HTMLInputElement).value);
+        if (inp && isFinite(meters)) inp.value = formatLengthNum(meters);
+        applyWallParam(field, String(meters));
       });
     }
+    // Re-render wall param displays when unit system changes
+    subscribeAppState("unitSystem", () => updateWallSection(_activeWalls));
     const bottomInp = wallSec.querySelector<HTMLInputElement>('[data-wall-field="bottom"]');
     bottomInp?.addEventListener("change", (e) => applyWallParam("bottom", (e.target as HTMLInputElement).value));
     const levelSel = wallSec.querySelector<HTMLSelectElement>('[data-wall-level-select="bottom"]');
