@@ -110,8 +110,9 @@ const pollInterval = setInterval(async () => {
     const s = await page.evaluate(() => {
       const body    = document.body.innerText ?? '';
       const stalled = body.includes('DOWNLOAD STALLED') || body.includes('check your connection');
-      const pctEl   = document.querySelector('[data-progress], .download-pct, .progress-pct');
-      return { stalled, pct: pctEl ? pctEl.textContent.trim() : null, snippet: body.slice(0, 120).replace(/\n+/g, ' | ') };
+      const pctEl   = document.querySelector('[data-download-pct]');
+      const pct = pctEl ? (pctEl.getAttribute('data-download-pct') || pctEl.textContent?.trim() || null) : null;
+      return { stalled, pct, snippet: body.slice(0, 120).replace(/\n+/g, ' | ') };
     }).catch(() => null);
     if (!s) return;
     if (s.stalled) {
@@ -193,7 +194,7 @@ console.log('PHASE 3.5 — Agent NL reply + tool dispatches (watching live)');
 console.log('  Waiting for agent:turn-complete...');
 console.log('════════════════════════════════════════════════════════');
 
-const DISPATCH_TIMEOUT_MS = 3 * 60 * 1000; // 3 min for NL + geometry
+const DISPATCH_TIMEOUT_MS = 5 * 60 * 1000; // 5 min — Gemma 4B needs up to ~200s for 997-tok plan
 
 const turnFromPage = page.evaluate(() => new Promise(resolve => {
   // Prefer agent:turn-complete event (fires when both NL + dispatches done)
@@ -201,14 +202,17 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
     resolve({ source: 'event', detail: e.detail ?? null });
   }, { once: true });
 
-  // Fallback: scene stabilization — 10s no change in children count
+  // Fallback: scene stabilization — 10s no change AFTER new geometry appears.
+  // initialCount captures the default-scene baseline so the fallback does NOT fire
+  // while the model is still generating (scene unchanged at baseline count).
+  const initialCount = window.__viewer?.scene?.children?.length ?? 0;
   let lastCount = -1, stableFor = 0;
   const STABLE_MS = 10_000, POLL_MS = 1_000;
   const poll = setInterval(() => {
     const count = window.__viewer?.scene?.children?.length ?? -1;
     if (count !== lastCount) { lastCount = count; stableFor = 0; }
     else stableFor += POLL_MS;
-    if (stableFor >= STABLE_MS && count > 0) {
+    if (stableFor >= STABLE_MS && count > initialCount) {
       clearInterval(poll);
       resolve({ source: 'scene-stable', count });
     }

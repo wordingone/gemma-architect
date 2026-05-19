@@ -33,6 +33,7 @@ let _rafId = 0;
 let _watchdogId: ReturnType<typeof setTimeout> | null = null;
 let _firstLoadingReceived = false;
 let _stalledShown = false;
+let _manifestReceived = false; // true once agentmodel:manifest fires
 
 // Download trace — in-memory log of all agentmodel:* events for STALLED diagnostics.
 type TraceEntry = { t: number; event: string; bytes?: number; total?: number; phase?: string };
@@ -92,11 +93,13 @@ function _wireEvents(): void {
   window.addEventListener('agentmodel:manifest', (ev: Event) => {
     const detail = (ev as CustomEvent<{ totalBytesExpected?: number }>).detail;
     if (detail?.totalBytesExpected) _totalBytes = detail.totalBytesExpected;
+    _manifestReceived = true;
     _traceEvent('manifest', { total: detail?.totalBytesExpected });
+    _updateProgress(); // show indeterminate bar immediately on manifest
     // Cancel any watchdog set by pre-manifest loading events (they carry no bytes).
     if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
-    // Initial grace: 90s from manifest to first byte (covers CDN warmup + redirect chain).
-    _watchdogId = setTimeout(_showStalled, 90_000);
+    // Initial grace: 150s from manifest to first byte (observed CDN warmup can exceed 90s).
+    _watchdogId = setTimeout(_showStalled, 150_000);
   });
 
   window.addEventListener('agentmodel:loading', (ev: Event) => {
@@ -184,8 +187,29 @@ function _tick(): void {
 function _updateProgress(): void {
   if (_done || !_pctEl) return;
   const pct = _totalBytes > 0 ? Math.min((_loadedBytes / _totalBytes) * 100, 99) : 0;
-  _pctEl.textContent = pct > 0 ? `${Math.round(pct)}%` : '';
-  if (_barFill) _barFill.style.width = `${pct}%`;
+  if (pct > 0) {
+    _pctEl.textContent = `${Math.round(pct)}%`;
+    _pctEl.removeAttribute('data-indeterminate');
+    if (_barFill) {
+      _barFill.style.width = `${pct}%`;
+      _barFill.style.opacity = '1';
+      _barFill.style.animation = '';
+    }
+  } else if (_manifestReceived) {
+    // Manifest received but no bytes yet — show indeterminate pulse so user sees activity.
+    _pctEl.textContent = '';
+    _pctEl.setAttribute('data-indeterminate', '');
+    if (_barFill) {
+      _barFill.style.width = '100%';
+      _barFill.style.opacity = '0.25';
+      _barFill.style.animation = 'boot-bar-pulse 1.6s ease-in-out infinite';
+    }
+  } else {
+    _pctEl.textContent = '';
+    if (_barFill) { _barFill.style.width = '0%'; _barFill.style.animation = ''; }
+  }
+  // data-download-pct attribute for external monitoring (chain-proof, devtools).
+  _pctEl.setAttribute('data-download-pct', pct > 0 ? `${Math.round(pct)}` : '0');
 
   // Hide first-visit hint once loading starts
   if (pct > 0 && _hintEl) _hintEl.style.opacity = '0';
@@ -222,7 +246,7 @@ function _onReturningUser(): void {
     _headPath.setAttribute('opacity', '1');
   }
   if (_pctEl) { _pctEl.textContent = '100%'; _pctEl.style.color = '#6ef2b0'; }
-  if (_barFill) { _barFill.style.width = '100%'; _barFill.style.background = '#6ef2b0'; }
+  if (_barFill) { _barFill.style.width = '100%'; _barFill.style.opacity = '1'; _barFill.style.animation = ''; _barFill.style.background = '#6ef2b0'; }
   if (_fileEl) _fileEl.textContent = '';
   if (_etaEl) _etaEl.textContent = '';
   if (_hintEl) _hintEl.style.display = 'none';
@@ -302,6 +326,14 @@ function _onError(ev: Event): void {
 
 function _buildOverlay(): void {
   const overlay = document.createElement('div');
+  // Inject keyframe for indeterminate bar pulse (no stylesheet dep).
+  if (!document.getElementById('boot-bar-pulse-style')) {
+    const s = document.createElement('style');
+    s.id = 'boot-bar-pulse-style';
+    s.textContent = '@keyframes boot-bar-pulse{0%,100%{opacity:.15}50%{opacity:.35}}';
+    document.head.appendChild(s);
+  }
+
   overlay.id = 'boot-screen';
   overlay.setAttribute('aria-label', 'Loading Gemma-CAD');
   overlay.setAttribute('aria-live', 'polite');
