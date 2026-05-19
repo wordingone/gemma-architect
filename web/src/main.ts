@@ -186,6 +186,7 @@ initRenderModes(viewer);
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
   const deleted = viewer.deleteSelected();
+  if (deleted) document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   return { deleted };
 });
 syncToolActiveClass();

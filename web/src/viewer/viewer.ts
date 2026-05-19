@@ -216,6 +216,11 @@ export class Viewer {
       const detail = (e as CustomEvent).detail as { mode: string };
       this._fillMode = detail.mode;
       this._clipFill.updateColor(detail.mode);
+      // Technical mode adds LineSegments overlays via applyDrafting; re-apply so
+      // those new overlays get the active clip planes (Sub-bug 4 fix).
+      if (this._sectionPlanes.length > 0 || this._clipPlanes.length > 0) {
+        this._applyClippingPlanes();
+      }
     });
 
     this.scene = new THREE.Scene();
@@ -1225,10 +1230,10 @@ export class Viewer {
       // first — removes the display mesh and makes all other members visible as
       // standalone walls. No-op when the mesh is not in any group.
       dissolveGroupForMesh(removed.uuid, this.scene);
-      // If the deleted object is a clip plane, remove the mathematical plane so
-      // the clipping effect is lifted along with the visualization mesh.
+      // Lift clipping effect together with the visualization mesh.
       const clipLabel = removed.userData.clipLabel as string | undefined;
       if (clipLabel) this.removeClippingPlane(clipLabel);
+      if (removed.userData.kind === "section-box") this.clearSectionBox();
       // IFC sub-meshes are children of currentObject (not direct scene children);
       // remove from their actual parent so scene.remove() doesn't silently no-op.
       const removedParent = removed.parent;
@@ -2571,6 +2576,21 @@ export class Viewer {
     const idx = Viewer._FACE_IDX[face];
     this._sectionPlanes[idx].constant += delta;
     this._applyClippingPlanes();
+    // Sync the section-box wireframe visual (unit-cube LineSegments) to the new AABB.
+    const box = this.getSectionBox();
+    if (box) {
+      const w = box.max[0] - box.min[0];
+      const d = box.max[1] - box.min[1];
+      const h = box.max[2] - box.min[2];
+      const cx = (box.min[0] + box.max[0]) / 2;
+      const cy = (box.min[1] + box.max[1]) / 2;
+      const cz = (box.min[2] + box.max[2]) / 2;
+      this.scene.traverse((obj) => {
+        if (obj.userData.kind !== "section-box") return;
+        obj.position.set(cx, cy, cz);
+        obj.scale.set(w, d, h);
+      });
+    }
   }
 
   // Returns the signed position of the face along its axis (scene units).
@@ -2647,10 +2667,13 @@ export class Viewer {
     if (this.pivotProxy) gizmoObjs.add(this.pivotProxy);
 
     this.scene.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      const isM = obj instanceof THREE.Mesh;
+      const isL = obj instanceof THREE.LineSegments;
+      if (!isM && !isL) return;
+      if (obj.userData.noRenderMode) return;  // grid, axes — always unclipped
       const exclude = obj.userData.excludeFromClip === true || gizmoObjs.has(obj);
       const planes = exclude ? [] : all;
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      const mats = Array.isArray((obj as THREE.Mesh).material) ? (obj as THREE.Mesh).material : [(obj as THREE.Mesh).material];
       for (const m of mats) {
         if ((m as THREE.Material).clippingPlanes !== planes) {
           (m as THREE.Material).clippingPlanes = planes;
@@ -2667,9 +2690,12 @@ export class Viewer {
     const all = [...this._sectionPlanes, ...this._clipPlanes];
     if (all.length === 0) return;
     root.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      const isM = obj instanceof THREE.Mesh;
+      const isL = obj instanceof THREE.LineSegments;
+      if (!isM && !isL) return;
+      if (obj.userData.noRenderMode) return;
       if (obj.userData.excludeFromClip) return;
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      const mats = Array.isArray((obj as THREE.Mesh).material) ? (obj as THREE.Mesh).material : [(obj as THREE.Mesh).material];
       for (const m of mats) {
         (m as THREE.Material).clippingPlanes = all;
         (m as THREE.Material).needsUpdate = true;
@@ -2988,6 +3014,8 @@ export class Viewer {
       cam = tmp;
     }
     this._thumbRenderer!.setClearColor(displayMode === "technical" ? 0xffffff : 0x808080, 1);
+    // Sync local clipping so material.clippingPlanes apply in the layout thumbnail.
+    this._thumbRenderer!.localClippingEnabled = this.renderer.localClippingEnabled;
     const prevOverride = this.scene.overrideMaterial;
     if (displayMode === "wireframe") {
       if (!this._thumbMatWireframe) this._thumbMatWireframe = new THREE.MeshBasicMaterial({ color: 0x2a2a3a, wireframe: true });

@@ -1265,13 +1265,16 @@ export function buildSectionBox(a: { x: number; y: number }, b: { x: number; y: 
   const maxZ = sceneBounds ? sceneBounds.max.z + margin : 6.0;
   const w = maxX - minX || 0.1, d = maxY - minY || 0.1, h = maxZ - minZ;
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
-  const geom = new THREE.BoxGeometry(w, d, h);
-  const edges = new THREE.EdgesGeometry(geom);
-  geom.dispose();
+  // Unit cube geometry + scale lets pushSectionFace update the visual without
+  // rebuilding EdgesGeometry on every pointer-move drag event.
+  const unitGeom = new THREE.BoxGeometry(1, 1, 1);
+  const edges = new THREE.EdgesGeometry(unitGeom);
+  unitGeom.dispose();
   const mat = new THREE.LineBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.85, depthTest: false });
   const mesh = new THREE.LineSegments(edges, mat);
   mesh.renderOrder = 999;
   mesh.position.set(cx, cy, cz);
+  mesh.scale.set(w, d, h);
   mesh.userData.kind = "section-box";
   mesh.userData.creator = "SdSectionBox";
   mesh.userData.excludeFromClip = true;

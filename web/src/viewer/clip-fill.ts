@@ -112,6 +112,7 @@ export class ClipFillManager {
         side:           THREE.DoubleSide,
         clippingPlanes: otherPlanes,
         colorWrite:     true,
+        depthTest:      false,  // fill reads stencil only; depth-test would let grid occlude it
         depthWrite:     false,
         stencilWrite:   true,
         stencilFunc:    THREE.NotEqualStencilFunc,

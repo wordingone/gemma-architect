@@ -5063,6 +5063,106 @@ await resetScene('before-box-inject');
   await resetScene('post-S102');
 }
 
+// ── S94 — section-box-handle-tracks (#943 Sub-bug 3): pushing a section face ─
+// updates the wireframe mesh scale so the visible box matches the cut AABB.
+{
+  await resetScene('pre-S94');
+  const s94 = await evaluate(`(async () => {
+    try {
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      window.__dispatch('SdSectionBox', { min: [0, 0, 0], max: [4, 3, 3] });
+      await new Promise(r => setTimeout(r, 300));
+
+      let boxMesh = null;
+      v.scene.traverse(obj => { if (obj.userData?.kind === 'section-box' && !boxMesh) boxMesh = obj; });
+      if (!boxMesh) return { passed: false, evidence: { reason: 'no section-box mesh after SdSectionBox' } };
+
+      const beforeScaleX = boxMesh.scale.x;
+
+      // Simulate the drag handle: push the +x face by 1 unit.
+      v.pushSectionFace('+x', 1.0);
+      await new Promise(r => setTimeout(r, 100));
+
+      const afterScaleX = boxMesh.scale.x;
+      // After pushing +x by 1 the box grows from width=4 to width=5.
+      const passed = afterScaleX > beforeScaleX + 0.9;
+      return { passed, evidence: { beforeScaleX, afterScaleX, delta: afterScaleX - beforeScaleX } };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  if (!s94) record('section-box-handle-tracks', false, { reason: 'evaluate returned null' });
+  else record('section-box-handle-tracks', s94.passed, s94.evidence ?? { error: s94.error });
+  await resetScene('post-S94');
+}
+
+// ── S95 — clip-delete-clears-planes (#943 Sub-bug 1): deleting the clip-plane ─
+// mesh lifts localClippingEnabled when no planes remain.
+{
+  await resetScene('pre-S95');
+  const s95 = await evaluate(`(async () => {
+    try {
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      window.__dispatch('SdClippingPlane', { origin: [0, 0, 2], normal: [0, 0, 1], label: 'test-s95' });
+      await new Promise(r => setTimeout(r, 300));
+      const enabledAfterAdd = v.renderer.localClippingEnabled;
+
+      let clipMesh = null;
+      v.scene.traverse(obj => { if (obj.userData?.kind === 'clip-plane' && !clipMesh) clipMesh = obj; });
+      if (!clipMesh) return { passed: false, evidence: { reason: 'no clip-plane mesh found', enabledAfterAdd } };
+
+      // Set as selection target and delete via the registered handler.
+      v.targetObject = clipMesh;
+      window.__dispatch('SdDelete', {});
+      await new Promise(r => setTimeout(r, 300));
+
+      const enabledAfterDelete = v.renderer.localClippingEnabled;
+      const passed = enabledAfterAdd === true && enabledAfterDelete === false;
+      return { passed, evidence: { enabledAfterAdd, enabledAfterDelete } };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  if (!s95) record('clip-delete-clears-planes', false, { reason: 'evaluate returned null' });
+  else record('clip-delete-clears-planes', s95.passed, s95.evidence ?? { error: s95.error });
+  await resetScene('post-S95');
+}
+
+// ── S96 — layout-clip-inheritance (#943 Sub-bug 5): the thumbnail renderer ───
+// inherits localClippingEnabled from the main renderer so layout panels show clips.
+{
+  await resetScene('pre-S96');
+  const s96 = await evaluate(`(async () => {
+    try {
+      const v = window.__viewer;
+      if (!v) return { passed: false, evidence: { reason: '__viewer missing' } };
+
+      window.__dispatch('SdSectionBox', { min: [-2, -2, 0], max: [2, 2, 3] });
+      await new Promise(r => setTimeout(r, 300));
+
+      const mainEnabled = v.renderer.localClippingEnabled;
+
+      // Trigger lazy creation of the thumb renderer via renderThumbnailTo.
+      const dest = document.createElement('canvas');
+      dest.width = 64; dest.height = 64;
+      v.renderThumbnailTo('perspective', dest, 0, 0, 0, 0, 'shaded');
+
+      const thumbEnabled = v._thumbRenderer?.localClippingEnabled ?? null;
+      const passed = mainEnabled === true && thumbEnabled === true;
+      return { passed, evidence: { mainEnabled, thumbEnabled } };
+    } catch(e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  if (!s96) record('layout-clip-inheritance', false, { reason: 'evaluate returned null' });
+  else record('layout-clip-inheritance', s96.passed, s96.evidence ?? { error: s96.error });
+  await resetScene('post-S96');
+}
+
 } finally {
   await cleanup();
 }
