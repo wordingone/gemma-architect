@@ -65,7 +65,7 @@ import { initSectionHandles } from "./viewer/section-handles";
 import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "./history";
-import { csgUnion, csgDifference, csgIntersection, filletMesh } from "./viewer/csg";
+import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge, getUniqueEdges } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
 import { listClusters, getClusterByName, type SkillClusterStep } from "./skills/skill-store";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
@@ -562,15 +562,31 @@ registerHandler("SdBoolean", (args) => {
 
 registerHandler("SdFillet", (args) => {
   const targetId = args.target as string | undefined;
-  const radius = (args.radius as number | undefined) ?? 0.05;
+  if (!targetId) return { error: "SdFillet — target is required" };
+  const radius = args.radius as number | undefined;
+  if (radius === undefined || radius === null) return { error: "SdFillet — radius is required" };
+  if (!Number.isFinite(radius) || radius <= 0) return { error: `SdFillet — radius must be a positive number, got: ${radius}` };
   const scene = viewer.getScene();
-  const obj = targetId ? scene.getObjectByProperty("uuid", targetId) : null;
+  const obj = scene.getObjectByProperty("uuid", targetId);
   if (!obj) return { error: `SdFillet — target not found: ${targetId}` };
   if (!(obj instanceof THREE.Mesh)) return { error: `SdFillet — target is not a Mesh` };
-  const filleted = filletMesh(obj, radius);
+  const edgeId = args.edgeId as number | undefined;
+  let filleted: THREE.Mesh;
+  if (edgeId !== undefined && edgeId !== null) {
+    const edges = getUniqueEdges(obj);
+    if (edgeId < 0 || edgeId >= edges.length) {
+      return { error: `SdFillet — edgeId ${edgeId} out of range [0, ${edges.length - 1}]` };
+    }
+    const [localA, localB] = edges[edgeId];
+    const worldA = localA.clone().applyMatrix4(obj.matrixWorld);
+    const worldB = localB.clone().applyMatrix4(obj.matrixWorld);
+    filleted = chamferEdge(obj, worldA, worldB, radius);
+  } else {
+    filleted = filletMesh(obj, radius);
+  }
   viewer.addMesh(filleted, "brep", { noHistory: true });
   pushReplaceAction(filleted, [obj], "fillet");
-  return { modified: filleted.uuid };
+  return { modified: filleted.uuid, edgeCount: edgeId !== undefined ? 1 : "all" };
 });
 
 registerHandler("SdSelect", (args) => {

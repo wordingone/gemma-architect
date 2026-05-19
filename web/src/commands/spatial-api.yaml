@@ -333,8 +333,9 @@
 - canonical_name: SdFillet
   kernel_op: fillet
   args:
-    - {name: target, type: object_id, required: false}
-    - {name: radius, type: number,    required: false, default: 0.05, unit: m}
+    - {name: target, type: object_id, required: true}
+    - {name: radius, type: number,    required: true,  unit: m}
+    - {name: edgeId, type: integer,   required: false, description: "0-based index into the mesh's unique edge list; omit to round all edges"}
   topology_role: edge
   kg_predicates: []
   synonyms: [fillet, round]
