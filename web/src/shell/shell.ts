@@ -154,9 +154,12 @@ function fillRibbonTools(toolsEl: HTMLElement, groups: ToolGroup[]) {
 }
 
 // SAMPLES displayed as ribbon asset cards in MODEL mode (far right of ribbon-tools).
-// Projects = full building scenes; Elements = individual components (naming subject to Leo review).
+// Projects = full building scenes; Elements = individual components.
 const RIBBON_SCENE_SAMPLES = [
-  { name: "IFC - FZK-House",  v: "kit-fzk-haus",      thumb: "/thumbnails/kit-fzk-haus.png" },
+  { name: "Schultz Residence",  v: "schultz-residence", thumb: "/thumbnails/schultz-residence.png" },
+  { name: "KIT FZK-Haus",       v: "kit-fzk-haus",      thumb: "/thumbnails/kit-fzk-haus.png" },
+  { name: "KIT Institute",      v: "kit-office",         thumb: "/thumbnails/kit-office.png" },
+  { name: "Bonsai House",       v: "bonsai-openings",    thumb: "/thumbnails/bonsai-openings.png" },
 ];
 const RIBBON_ELEMENT_SAMPLES = [
   { name: "Wall",  v: "wall-with-opening", thumb: "/thumbnails/wall-with-opening.png" },
