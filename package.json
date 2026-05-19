@@ -46,7 +46,8 @@
     "baseline:bare-gemma": "bun web/test/capability/baselines/bare-gemma.ts",
     "baseline:blender-mcp": "bun web/test/capability/baselines/blender-mcp.ts",
     "baseline:compare": "bun web/test/capability/baselines/post-comparison.ts",
-    "llama:proxy": "bun scripts/llama-proxy.ts"
+    "llama:proxy": "bun scripts/llama-proxy.ts",
+    "pre-commit-setup": "sh scripts/setup-hooks.sh"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.0.0",

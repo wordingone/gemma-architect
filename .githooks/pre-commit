@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Pre-commit: scan staged changes for secrets using gitleaks (#1153).
+# Install once per clone: bun run pre-commit-setup (sets core.hooksPath=.githooks)
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks not found — skipping secret scan (install from https://github.com/gitleaks/gitleaks/releases)"
+  exit 0
+fi
+
+gitleaks protect --staged --config .gitleaks.toml --no-banner
