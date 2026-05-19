@@ -393,6 +393,7 @@ export class Viewer {
         // Wall-opening coupling (#1152): openings whose host wall is being dragged.
         // Each entry: [opening, matrix-at-drag-start (for live applyDeltaToLocal), snapshot-at-drag-start (for undo)].
         let _wallOpeningEntries: Array<[THREE.Object3D, THREE.Matrix4, TransformSnapshot]> = [];
+        let _shiftSnapHandler: ((ev: KeyboardEvent) => void) | null = null;
         g.setMode(mode);
         g.setSpace("local");
         if (mode === "translate") g.size = 1.0;
@@ -486,10 +487,25 @@ export class Viewer {
             if (mode === "translate") {
               g.setTranslationSnap(snap.snapOn && snap.gridOn ? snap.step : null);
             } else if (mode === "rotate") {
-              g.setRotationSnap(snap.snapOn && snap.polarOn ? (snap.angleStep * Math.PI) / 180 : null);
+              const angleRad = (snap.angleStep * Math.PI) / 180;
+              g.setRotationSnap(snap.snapOn && snap.polarOn ? angleRad : null);
+              // Shift held during rotate drag → force angle snap on.
+              _shiftSnapHandler = (ev: KeyboardEvent) => {
+                if (ev.key !== "Shift") return;
+                const s = getSnap();
+                const shiftHeld = ev.type === "keydown";
+                g.setRotationSnap((shiftHeld || (s.snapOn && s.polarOn)) ? (s.angleStep * Math.PI) / 180 : null);
+              };
+              document.addEventListener("keydown", _shiftSnapHandler);
+              document.addEventListener("keyup", _shiftSnapHandler);
             } else if (mode === "scale") {
               g.setScaleSnap(snap.snapOn ? 0.1 : null);
             }
+          }
+          if (!dragging && _shiftSnapHandler) {
+            document.removeEventListener("keydown", _shiftSnapHandler);
+            document.removeEventListener("keyup", _shiftSnapHandler);
+            _shiftSnapHandler = null;
           }
           if (dragging && this.pivotProxy && this.targetObject) {
             // Dissolve the join group at drag start so the selected element
