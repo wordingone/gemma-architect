@@ -24,7 +24,8 @@ type MenuItem = {
 
 const MENUS: MenuItem[] = [
   { label: "File", entries: [
-    { label: "Open / Import…",  shortcut: "⌘O", onAction: () => openProjectFile() },
+    { label: "Open Project…",   shortcut: "⌘O", onAction: () => openProjectFile() },
+    { label: "Import IFC…",                     onAction: () => window.dispatchEvent(new Event("file:open-ifc")) },
     { label: "Save project",    shortcut: "⌘S", onAction: () => saveProjectGemarch(_currentFileName) },
     { label: "Save As…",       shortcut: "⇧⌘S", onAction: () => saveProjectGemarch(null) },
     { separator: true },
@@ -369,6 +370,8 @@ function snapshotState(): object {
   return { version: 1, meta: { units, name: _currentFileName }, objects: w.__viewer?.exportScene?.() ?? [] };
 }
 
+type _ParsedProject = { version?: number; meta?: { units?: string; name?: string }; objects?: unknown[] };
+
 function setCurrentFileName(name: string): void {
   _currentFileName = name;
   if (_fileNameEl) _fileNameEl.textContent = `${name} · IFC4`;
@@ -376,10 +379,14 @@ function setCurrentFileName(name: string): void {
 
 function loadProjectData(data: string, fileName: string): void {
   try {
-    const parsed = JSON.parse(data) as { version?: number; meta?: { units?: string; name?: string } };
+    const parsed = JSON.parse(data) as _ParsedProject;
     if (parsed.meta?.units) dispatchSync("SdSetUnits", { system: parsed.meta.units });
     const baseName = fileName.replace(/\.(gemarch|json)$/i, "");
     setCurrentFileName(parsed.meta?.name ?? baseName);
+    if (Array.isArray(parsed.objects) && parsed.objects.length > 0) {
+      const w = window as Window & { __viewer?: { importScene?: (o: unknown[]) => void } };
+      w.__viewer?.importScene?.(parsed.objects);
+    }
   } catch {
     alert(`Could not load "${fileName}": invalid format.`);
   }

@@ -3013,6 +3013,30 @@ export class Viewer {
     if (ctx) ctx.drawImage(this._thumbCanvas!, 0, 0, w, h);
   }
 
+  exportScene(): SerializedSceneObj[] {
+    const infraSet = new Set<THREE.Object3D>([
+      this.grid, this.axes, ...this.axisLabels,
+      ...(this.pivotProxy ? [this.pivotProxy] : []),
+      ...(this.snapMarker ? [this.snapMarker] : []),
+      ...this.gizmos,
+      this._cplaneGizmo.group,
+    ]);
+    const out: SerializedSceneObj[] = [];
+    for (const child of this.scene.children) {
+      if (infraSet.has(child) || child instanceof THREE.Light) continue;
+      const s = _serializeSceneObj(child);
+      if (s) out.push(s);
+    }
+    return out;
+  }
+
+  importScene(objects: SerializedSceneObj[]): void {
+    for (const s of objects) {
+      const obj = _deserializeSceneObj(s);
+      if (obj) this.scene.add(obj);
+    }
+  }
+
   dispose(): void {
     this._themeObserver?.disconnect();
     this._themeObserver = null;
@@ -3020,4 +3044,70 @@ export class Viewer {
     this._thumbMatGhosted?.dispose();
     this._clipFill.dispose(this.scene);
   }
+}
+
+// --- Scene serialization helpers ---
+
+export type SerializedSceneObj = {
+  uuid: string;
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+  scale: [number, number, number];
+  color?: number;
+  geometry?: { position: number[]; normal?: number[]; index?: number[] };
+  userData: Record<string, unknown>;
+  children?: SerializedSceneObj[];
+};
+
+function _serializeSceneObj(obj: THREE.Object3D): SerializedSceneObj | null {
+  if (obj.userData.creator == null && obj.userData.kind == null) return null;
+  const s: SerializedSceneObj = {
+    uuid: obj.uuid,
+    position: obj.position.toArray() as [number, number, number],
+    quaternion: [obj.quaternion.x, obj.quaternion.y, obj.quaternion.z, obj.quaternion.w],
+    scale: obj.scale.toArray() as [number, number, number],
+    userData: { ...obj.userData },
+  };
+  const mesh = obj as THREE.Mesh;
+  if (mesh.isMesh && mesh.geometry) {
+    const geo = mesh.geometry as THREE.BufferGeometry;
+    const posAttr = geo.getAttribute("position") as THREE.BufferAttribute;
+    const normAttr = geo.getAttribute("normal") as THREE.BufferAttribute | undefined;
+    const idx = geo.index;
+    s.geometry = {
+      position: Array.from(posAttr.array as Float32Array),
+      ...(normAttr ? { normal: Array.from(normAttr.array as Float32Array) } : {}),
+      ...(idx ? { index: Array.from(idx.array as Uint32Array | Uint16Array) } : {}),
+    };
+    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if (mat && "color" in mat) s.color = (mat as THREE.MeshStandardMaterial).color.getHex();
+  }
+  if (obj.children.length > 0) {
+    const kids: SerializedSceneObj[] = [];
+    for (const c of obj.children) { const cs = _serializeSceneObj(c); if (cs) kids.push(cs); }
+    if (kids.length) s.children = kids;
+  }
+  return s;
+}
+
+function _deserializeSceneObj(s: SerializedSceneObj): THREE.Object3D | null {
+  let obj: THREE.Object3D;
+  if (s.geometry) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(s.geometry.position), 3));
+    if (s.geometry.normal) geo.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(s.geometry.normal), 3));
+    if (s.geometry.index) geo.setIndex(new THREE.BufferAttribute(new Uint32Array(s.geometry.index), 1));
+    const mat = new THREE.MeshStandardMaterial({ color: s.color ?? 0x888888, roughness: 0.6, metalness: 0.1 });
+    obj = new THREE.Mesh(geo, mat);
+  } else {
+    obj = new THREE.Group();
+  }
+  obj.position.fromArray(s.position);
+  obj.quaternion.set(s.quaternion[0], s.quaternion[1], s.quaternion[2], s.quaternion[3]);
+  obj.scale.fromArray(s.scale);
+  obj.userData = { ...s.userData };
+  if (s.children) {
+    for (const cs of s.children) { const child = _deserializeSceneObj(cs); if (child) obj.add(child); }
+  }
+  return obj;
 }

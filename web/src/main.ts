@@ -2930,6 +2930,34 @@ fileInput.addEventListener("change", () => {
   if (f) handleFile(f);
 });
 
+// IFC-specific file picker triggered from File menu "Import IFC…"
+window.addEventListener("file:open-ifc", () => {
+  let ifcPicker = document.getElementById("ifc-file-picker") as HTMLInputElement | null;
+  if (!ifcPicker) {
+    ifcPicker = document.createElement("input");
+    ifcPicker.type = "file";
+    ifcPicker.id = "ifc-file-picker";
+    ifcPicker.accept = ".ifc";
+    ifcPicker.style.display = "none";
+    document.body.appendChild(ifcPicker);
+    ifcPicker.addEventListener("change", () => {
+      const f = ifcPicker!.files?.[0];
+      if (f) handleFile(f);
+      ifcPicker!.value = "";
+    });
+  }
+  ifcPicker.click();
+});
+
+// Test-automation: load an IFC from a URL (e.g. for gemma-verify-raw surface)
+(window as Window & { __importIfcFromUrl?: (url: string) => Promise<void> }).__importIfcFromUrl = async (url: string) => {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`fetch ${url}: HTTP ${resp.status}`);
+  const buf = await resp.arrayBuffer();
+  const name = url.split("/").pop() ?? "import.ifc";
+  await handleFile(new File([buf], name));
+};
+
 // Sample dropdown
 sampleSelect.addEventListener("change", async () => {
   const id = sampleSelect.value;
