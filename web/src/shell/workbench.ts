@@ -36,6 +36,7 @@ import { refLineStore } from "../geometry/ref-lines";
 import * as THREE from "three";
 import { subscribe, getSelected, subscribeMulti, getMultiSelected, type Selection } from "../viewer/selection-state";
 import { getCreateSequence } from "../tools/index";
+import { setDoorVariant, setWindowVariant } from "../tools/openings";
 import { prefetchModel, MODEL_ID, setClusterCatalog, setCanvasSkillCatalog } from "../agent/agent-harness";
 import { checkConsentAndLoad } from "../agent/model-consent";
 import { initBootScreen } from "../agent/boot-screen";
@@ -733,6 +734,58 @@ function buildPalette(host: HTMLElement) {
     host.appendChild(sec);
     sectionEls[i] = sec;
   }
+
+  // Variant picker — shown when door/window tool is active (#1127).
+  const variantPicker = el("div", "palette-variant-picker");
+  variantPicker.style.display = "none";
+  variantPicker.innerHTML = `<div class="vp-title">Variant</div>`;
+
+  const _vBtnSvgs = {
+    door: [
+      `<svg width="24" height="28" viewBox="0 0 24 28"><rect x="2" y="1" width="20" height="26" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="4" width="14" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="0.8"/><rect x="5" y="16" width="14" height="9" rx="0.5" fill="none" stroke="currentColor" stroke-width="0.8"/><circle cx="18" cy="14.5" r="1" fill="currentColor"/></svg>`,
+      `<svg width="24" height="28" viewBox="0 0 24 28"><rect x="1" y="1" width="10" height="26" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="1" width="10" height="26" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="4" width="6" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="0.8"/><rect x="15" y="4" width="6" height="10" rx="0.5" fill="none" stroke="currentColor" stroke-width="0.8"/></svg>`,
+    ],
+    window: [
+      `<svg width="28" height="22" viewBox="0 0 28 22"><rect x="1" y="1" width="26" height="20" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="14" y1="2" x2="14" y2="20" stroke="currentColor" stroke-width="0.8"/><rect x="3" y="3" width="9" height="16" rx="0.5" fill="rgba(100,160,210,0.25)" stroke="none"/><rect x="16" y="3" width="9" height="16" rx="0.5" fill="rgba(100,160,210,0.25)" stroke="none"/></svg>`,
+      `<svg width="28" height="22" viewBox="0 0 28 22"><rect x="1" y="1" width="26" height="20" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="3" width="22" height="16" rx="0.5" fill="rgba(100,160,210,0.25)" stroke="currentColor" stroke-width="0.5"/></svg>`,
+    ],
+  };
+
+  let _vpTool: "door" | "window" | null = null;
+  let _vpSelected = 0;
+  const _vpBtns: HTMLButtonElement[] = [];
+
+  function _rebuildVariantBtns(toolId: "door" | "window"): void {
+    _vpTool = toolId;
+    variantPicker.querySelectorAll(".vp-btn").forEach(b => b.remove());
+    _vpBtns.length = 0;
+    const svgs = _vBtnSvgs[toolId];
+    for (let i = 0; i < svgs.length; i++) {
+      const btn = el("button", "palette-btn vp-btn", { type: "button", "aria-label": `Variant ${i + 1}`, "data-variant": String(i) }) as HTMLButtonElement;
+      btn.innerHTML = svgs[i];
+      if (i === _vpSelected) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        _vpSelected = i;
+        _vpBtns.forEach((b, j) => b.classList.toggle("active", j === i));
+        if (toolId === "door") setDoorVariant(i as 0 | 1);
+        else setWindowVariant(i as 0 | 1);
+      });
+      variantPicker.appendChild(btn);
+      _vpBtns.push(btn);
+    }
+  }
+
+  subscribe((sel) => {
+    const tool = getState("activeTool");
+    if (tool === "door" || tool === "window") {
+      if (tool !== _vpTool) { _vpSelected = 0; _rebuildVariantBtns(tool); }
+      variantPicker.style.display = "";
+    } else {
+      variantPicker.style.display = "none";
+    }
+  });
+
+  host.appendChild(variantPicker);
 
 }
 

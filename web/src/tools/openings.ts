@@ -1,8 +1,10 @@
 // Door / window / opening builders — extracted from create-mode.ts (#723).
 // Door and window geometry sourced from FZK-Haus IFC (#874) via extract-fzk-geometry.ts.
+// GLB assets at web/public/assets/architectural/{doors,windows}/ (#1127).
 // Dimensions sourced from FZK-Haus IFC (#754) via extract-fzk-templates.ts.
 
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { getPendingHostId } from "../viewer/snap-state";
 
@@ -46,6 +48,88 @@ function _fetchTemplate(path: string): Promise<FzkGeomData | null> {
 const _OPENING_BASE = import.meta.env.BASE_URL;
 _fetchTemplate(`${_OPENING_BASE}samples/fzk-door-geom.json`).then(d => { _doorData = d; });
 _fetchTemplate(`${_OPENING_BASE}samples/fzk-window-geom.json`).then(d => { _windowData = d; });
+
+// ── GLB asset cache (#1127) ───────────────────────────────────────────────────
+// door variant index (0 or 1); window variant index (0 or 1)
+export let _doorVariant   = 0;
+export let _windowVariant = 0;
+
+export function setDoorVariant(v: 0 | 1): void   { _doorVariant = v; }
+export function setWindowVariant(v: 0 | 1): void { _windowVariant = v; }
+
+// Per-variant GLB cache: null = not yet loaded, THREE.Group = loaded ok, false = load failed
+const _doorGlbCache:   (THREE.Group | false | null)[] = [null, null];
+const _windowGlbCache: (THREE.Group | false | null)[] = [null, null];
+
+const DOOR_GLBS   = ["assets/architectural/doors/fzk-haus-door-1.glb",
+                     "assets/architectural/doors/fzk-haus-door-2.glb"];
+const WINDOW_GLBS = ["assets/architectural/windows/fzk-haus-window-1.glb",
+                     "assets/architectural/windows/fzk-haus-window-2.glb"];
+
+// Warm up GLB variants — only in browser context (not in test/SSR environments).
+if (typeof window !== "undefined" && typeof _OPENING_BASE === "string") {
+  const _gltfLoader = new GLTFLoader();
+  const _warmGlb = (paths: string[], cache: (THREE.Group | false | null)[], i: number): void => {
+    _gltfLoader.load(
+      `${_OPENING_BASE}${paths[i]}`,
+      (gltf) => { cache[i] = gltf.scene; },
+      undefined,
+      () => { cache[i] = false; },
+    );
+  };
+  for (let i = 0; i < 2; i++) { _warmGlb(DOOR_GLBS, _doorGlbCache, i); }
+  for (let i = 0; i < 2; i++) { _warmGlb(WINDOW_GLBS, _windowGlbCache, i); }
+}
+
+// Build a positioned/scaled mesh from a loaded GLB group.
+// GLB meshes are produced in normalized [−0.5..0.5, depth, 0..1] space by gen-fzk-glbs.ts
+// The axis-swap (IFC→app) was already baked in during extraction, so we just scale + place.
+function _buildFromGlb(
+  glbGroup: THREE.Group,
+  targetW: number,
+  targetThick: number,
+  targetH: number,
+  source: string,
+): THREE.Mesh | null {
+  try {
+    const clone = glbGroup.clone(true);
+    // Gather all meshes to compute aggregate bbox
+    const meshes: THREE.Mesh[] = [];
+    clone.traverse((obj) => { if ((obj as THREE.Mesh).isMesh) meshes.push(obj as THREE.Mesh); });
+    if (meshes.length === 0) return null;
+
+    // Aggregate bbox in local-group space
+    const bb = new THREE.Box3().setFromObject(clone);
+    const sz = bb.getSize(new THREE.Vector3());
+    if (sz.x < 1e-4 || sz.y < 1e-4 || sz.z < 1e-4) return null;
+
+    // Center X/Y, zero-floor Z
+    const center = bb.getCenter(new THREE.Vector3());
+    clone.position.set(-center.x, -center.y, -bb.min.z);
+
+    // Scale to target dims
+    const sx = targetW     / sz.x;
+    const sy = targetThick / sz.y;
+    const sz_ = targetH    / sz.z;
+    clone.scale.set(sx, sy, sz_);
+
+    // Wrap in a single Mesh-shaped container via a Group-as-Mesh trick:
+    // Return the group cast as a Mesh so callers don't need to change their type.
+    const container = new THREE.Group();
+    container.add(clone);
+
+    // Tag userData on each child mesh for S130 assertion
+    container.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) obj.userData.source = source;
+    });
+
+    // Return container as a Mesh (callers use mesh.add/position/userData)
+    (container as unknown as THREE.Mesh).userData = { source };
+    return container as unknown as THREE.Mesh;
+  } catch {
+    return null;
+  }
+}
 
 // Build a THREE.BufferGeometry from FZK JSON data. Applies axis swap from
 // IFC convention (X=depth, Y=height centered, Z=width floored at 0) to app
@@ -209,13 +293,23 @@ export function buildDoor(p: { x: number; y: number }, dims?: { w?: number; h?: 
   const t = DEFAULT_WALL_THICKNESS;
   const h = dims?.h ?? DEFAULT_DOOR_H;
 
-  const fzk = _doorData ? _buildFromFzkData(_doorData, w, t, h) : null;
-  const { geom, mat } = fzk ?? _syntheticDoor(w, t, h);
+  // Prefer GLB asset (#1127); fall back to JSON-based geometry, then synthetic.
+  const glbGroup = _doorGlbCache[_doorVariant];
+  const glbMesh  = glbGroup ? _buildFromGlb(glbGroup, w, t, h, "glb") : null;
 
-  const mesh = new THREE.Mesh(geom, mat as THREE.Material);
+  let mesh: THREE.Mesh;
+  if (glbMesh) {
+    mesh = glbMesh;
+  } else {
+    const fzk = _doorData ? _buildFromFzkData(_doorData, w, t, h) : null;
+    const { geom, mat } = fzk ?? _syntheticDoor(w, t, h);
+    mesh = new THREE.Mesh(geom, mat as THREE.Material);
+  }
+
   mesh.position.set(p.x, p.y, 0);
-  mesh.userData.kind = "mesh";
+  mesh.userData.kind    = "mesh";
   mesh.userData.creator = "door";
+  mesh.userData.variant = _doorVariant;
   const hostId = getPendingHostId();
   if (hostId) mesh.userData.hostExpressID = hostId;
   const vW = 0.9, vT = t, vH = 2.1;
@@ -229,13 +323,23 @@ export function buildWindow(p: { x: number; y: number }): { mesh: THREE.Mesh; ch
   const h    = FZK_WINDOW_H;
   const sill = FZK_WINDOW_SILL;
 
-  const fzk = _windowData ? _buildWindowFromFzkData(_windowData, w, t, h) : null;
-  const { geom, mat } = fzk ?? _syntheticWindow(w, t, h);
+  // Prefer GLB asset (#1127); fall back to JSON-based geometry, then synthetic.
+  const glbGroup = _windowGlbCache[_windowVariant];
+  const glbMesh  = glbGroup ? _buildFromGlb(glbGroup, w, t, h, "glb") : null;
 
-  const mesh = new THREE.Mesh(geom, mat as THREE.Material | THREE.Material[]);
+  let mesh: THREE.Mesh;
+  if (glbMesh) {
+    mesh = glbMesh;
+  } else {
+    const fzk = _windowData ? _buildWindowFromFzkData(_windowData, w, t, h) : null;
+    const { geom, mat } = fzk ?? _syntheticWindow(w, t, h);
+    mesh = new THREE.Mesh(geom, mat as THREE.Material | THREE.Material[]);
+  }
+
   mesh.position.set(p.x, p.y, sill);
-  mesh.userData.kind = "mesh";
+  mesh.userData.kind    = "mesh";
   mesh.userData.creator = "window";
+  mesh.userData.variant = _windowVariant;
   const hostId = getPendingHostId();
   if (hostId) mesh.userData.hostExpressID = hostId;
   const chain = `window: makeBox(${w}, ${t}, ${h}) translate([${round(p.x)}, ${round(p.y)}, ${Math.round(sill)}])`;

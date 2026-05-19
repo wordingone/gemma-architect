@@ -6199,6 +6199,50 @@ await resetScene('before-box-inject');
   await resetScene('post-S127');
 }
 
+// ── S130 — FZK-Haus GLB door/window assets (#1127): builders load GLB source ──
+{
+  const s130 = await evaluate(`
+    (async () => {
+      try {
+        // Place a wall, then a door and window
+        await window.__dispatch('SdWall', { start: {x:0,y:0,z:0}, end: {x:5,y:0,z:0}, height: 3.0, thickness: 0.2 });
+        await new Promise(r => setTimeout(r, 100));
+        await window.__dispatch('SdDoor', { x: 2.5, y: 0 });
+        await new Promise(r => setTimeout(r, 100));
+        await window.__dispatch('SdWindow', { x: 1.0, y: 0 });
+        await new Promise(r => setTimeout(r, 150));
+
+        // Traverse scene for door + window meshes; check userData.source
+        const scene = window.__viewer?.getScene();
+        if (!scene) return { passed: false, evidence: { reason: '__viewer unavailable' } };
+
+        let doorGlb = false, windowGlb = false;
+        scene.traverse((obj) => {
+          if (!obj.userData?.creator) return;
+          if (obj.userData.creator === 'door') {
+            // Check self and children for source="glb"
+            let found = obj.userData.source === 'glb';
+            if (!found) obj.traverse((c) => { if (c.userData?.source === 'glb') found = true; });
+            if (found) doorGlb = true;
+          }
+          if (obj.userData.creator === 'window') {
+            let found = obj.userData.source === 'glb';
+            if (!found) obj.traverse((c) => { if (c.userData?.source === 'glb') found = true; });
+            if (found) windowGlb = true;
+          }
+        });
+
+        const passed = doorGlb && windowGlb;
+        return { passed, evidence: { doorGlb, windowGlb } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s130) record('fzk-glb-door-window', false, { reason: 'evaluate returned null' });
+  else record('fzk-glb-door-window', s130.passed, s130.evidence);
+  await resetScene('post-S130');
+}
+
 // ── S129 — wall-params input parsing (#1124): imperial length input → correct metres ──
 {
   const s129 = await evaluate(`
