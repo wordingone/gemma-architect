@@ -1,0 +1,14 @@
+# gitleaks configuration for gemma-architect
+# https://github.com/gitleaks/gitleaks
+
+title = "gemma-architect gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "localStorage key constants are not secrets"
+regexes = [
+  # CONSENT_KEY = "gemma4-e4b-consent-v1" — localStorage key name, not a credential
+  '''gemma4-e4b-consent-v1''',
+]
