@@ -59,6 +59,7 @@ const CREATOR_LAYER_MAP: Record<string, string> = {
   column:         "Columns",
   beam:           "Columns",
   // Elements
+  IfcBuildingElement: "Elements",
   IfcDoor:        "Elements",
   IfcWindow:      "Elements",
   SdDoor:         "Elements",
