@@ -462,6 +462,30 @@ function ptCommitRotate(obj: THREE.Object3D, base: THREE.Vector3, angleDeg: numb
   obj.updateMatrixWorld(true);
 }
 
+// Live rotation preview during angle_end — called on every mousemove.
+// Returns the snapped angle in degrees, or null when not in angle_end phase.
+export function ptUpdateAnglePreview(worldX: number, worldY: number, shiftSnap: boolean): number | null {
+  const phase = _ptPhase;
+  if (!phase || phase.kind !== "angle_end") return null;
+  const obj = ptGetTarget();
+  if (!obj || !_ptInitPos || !_ptInitQuat || !_ptInitScale) return null;
+
+  const dx = worldX - phase.base.x;
+  const dy = worldY - phase.base.y;
+  const raw = Math.atan2(dy, dx) * 180 / Math.PI;
+  const snap = getSnap();
+  let angleDeg = (snap.snapOn && snap.polarOn)
+    ? Math.round(raw / snap.angleStep) * snap.angleStep : raw;
+  if (shiftSnap) angleDeg = Math.round(angleDeg / 15) * 15;
+
+  // Reset to init state then apply preview rotation (no history push)
+  obj.position.copy(_ptInitPos);
+  obj.quaternion.copy(_ptInitQuat);
+  obj.scale.copy(_ptInitScale);
+  ptCommitRotate(obj, phase.base, angleDeg, phase.axisDir);
+  return angleDeg;
+}
+
 function ptCommitScale(obj: THREE.Object3D, base: THREE.Vector3, factor: number): void {
   if (!Number.isFinite(factor) || factor <= 0) return;
   obj.position.sub(base);

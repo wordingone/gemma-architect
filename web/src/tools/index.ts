@@ -15,7 +15,7 @@ import { levelStore, getActiveLevelId } from "../geometry/levels";
 import { getSelected, setSelected, addToMultiSelected, clearMultiSelected, getMultiSelected } from "../viewer/selection-state";
 import { projectToScreen, unprojectToXY, unprojectForClipTool, snapWorldForView, getGeometryZ, showLevelChip } from "../viewer/projection";
 import { initPickerHint, setPickerHint, setChooserHint, getChooserEl, readActiveTool, setSubToolOverride, opSetHover, OP_TOOL_IDS } from "../viewer/picker-hint";
-import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPrompt, ptShowCoordInput, ptHideCoordInput, ptStartTool, ptHandlePoint, ptHandleCoordSubmit as _ptHandleCoordSubmit, ptHandleEnter as _ptHandleEnter, ptCancel, ptFinish, ptPhaseIsObjectSelect, _ptPhase, _ptAxisLock, _ptCoordInputEl, ptGetAxisBase, ptEffectiveAxisDir, ptSetAxisLockLine, ptClearAxisLockLine, _ptViewer, _lastPtTool, unprojectToAxisLine } from "../viewer/transforms";
+import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPrompt, ptShowCoordInput, ptHideCoordInput, ptStartTool, ptHandlePoint, ptHandleCoordSubmit as _ptHandleCoordSubmit, ptHandleEnter as _ptHandleEnter, ptCancel, ptFinish, ptPhaseIsObjectSelect, _ptPhase, _ptAxisLock, _ptCoordInputEl, ptGetAxisBase, ptEffectiveAxisDir, ptSetAxisLockLine, ptClearAxisLockLine, _ptViewer, _lastPtTool, unprojectToAxisLine, ptUpdateAnglePreview } from "../viewer/transforms";
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, opUpdateDimPreview, opUpdateCopyPreview, opUpdateFilletEdge, getOpPhase, setSelDragging, _selDragging, EXTRUDABLE_CREATORS, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildStairOnPolyline, buildStairOnCurve, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildClipPlanePlan, buildClipPlaneSection, buildBox, buildExtrude } from "./structural";
@@ -1037,6 +1037,20 @@ export function initCreateMode(viewer: Viewer): void {
           const constrained = shiftAxisSnap(base, { x: clickPt.x, y: clickPt.y }, getSnap().step);
           clickPt = new THREE.Vector3(constrained.x, constrained.y, clickPt.z);
         }
+        // Shift-snap for angle_end: snap commit angle to 15° increments.
+        if (ev.shiftKey && _ptPhase?.kind === "angle_end") {
+          const dx = clickPt.x - _ptPhase.base.x;
+          const dy = clickPt.y - _ptPhase.base.y;
+          const raw = Math.atan2(dy, dx) * 180 / Math.PI;
+          const snapped15 = Math.round(raw / 15) * 15;
+          const r = Math.hypot(dx, dy) || 1;
+          const rad = snapped15 * Math.PI / 180;
+          clickPt = new THREE.Vector3(
+            _ptPhase.base.x + r * Math.cos(rad),
+            _ptPhase.base.y + r * Math.sin(rad),
+            clickPt.z,
+          );
+        }
         ev.stopImmediatePropagation();
         ptHandlePoint(viewer, clickPt);
         return;
@@ -1411,6 +1425,14 @@ export function initCreateMode(viewer: Viewer): void {
       const tl = tlMap[_ptPhase.tool] ?? _ptPhase.tool;
       if (!ptObj) ptPrompt(`${tl} — click to select an object`);
       else ptPrompt(`${tl} — reference point: click, type x,y,z, or Enter for centroid`);
+    }
+    // Live rotate preview: object turns in real time; Shift snaps to 15° increments.
+    if (_ptPhase?.kind === "angle_end") {
+      const angleDeg = ptUpdateAnglePreview(snapped.x, snapped.y, ev.shiftKey);
+      if (angleDeg !== null) {
+        const snapTag = ev.shiftKey ? "  [Shift: 15°]" : "";
+        ptPrompt(`Rotate — ${Math.round(angleDeg * 10) / 10}°  [click to commit]${snapTag}`);
+      }
     }
     // (remaining PT live-preview phases are handled inside transforms.ts ptHandlePoint)
 
