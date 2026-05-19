@@ -20,7 +20,7 @@ export interface TurnTelemetry {
   path?: "webgpu" | "remote"; // inference path used
 }
 
-const RING_SIZE = 50;
+const RING_SIZE = 1000; // §C-telem (#990): 1000 samples supports 10-min moving averages at ~1 turn/s
 const _ring: TurnTelemetry[] = [];
 
 export function recordTurn(t: TurnTelemetry): void {

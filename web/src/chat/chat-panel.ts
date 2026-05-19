@@ -345,6 +345,22 @@ export class ChatPanel {
     );
   }
 
+  // §C-hist (#990): enforce byte budget on _history — evict oldest turns from front
+  // until total char count is within WEBGPU_CONTEXT_LIMIT × 0.5 tokens × 4 chars/tok.
+  // Primary cap (fires after every push); compact (#988 §D-pre) is the secondary mechanism
+  // that fires only on user-push when the token estimate exceeds 13K.
+  // Always preserves at least 1 entry so _history is never emptied.
+  private _enforceHistoryBudget(): void {
+    // 16384 context × 0.5 history fraction × 4 chars/token = 32768 chars
+    const HISTORY_BUDGET_CHARS = 32768;
+    while (
+      this._history.length > 1 &&
+      this._history.reduce((s, m) => s + m.content.length, 0) > HISTORY_BUDGET_CHARS
+    ) {
+      this._history.shift();
+    }
+  }
+
   // §D-pre (#988): compact conversation when approaching context limit.
   // Preserves all Sd* dispatches verbatim + goal + last 4 turns.
   private _compactHistory(): void {
@@ -392,6 +408,7 @@ export class ChatPanel {
 
     this._pushMsg({ role: "user", content: text });
     this._history.push({ role: "user", content: text });
+    this._enforceHistoryBudget(); // §C-hist (#990)
 
     // §D-pre (#988): compact before calling the model if history is large.
     if (this._estimateHistoryTokens() > 13000) {
@@ -555,6 +572,7 @@ export class ChatPanel {
     const content = `${skill.name} (${steps.length} steps)`;
     this._pushMsg({ role: "assistant", content, dispatches });
     this._history.push({ role: "assistant", content });
+    this._enforceHistoryBudget(); // §C-hist (#990)
   }
 
   private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; userSummary: string; fired: string[] }> {
@@ -595,6 +613,7 @@ export class ChatPanel {
     const { summary, userSummary } = await this._runDispatches(resp);
     this._pushMsg({ role: "assistant", content: userSummary, dispatches: resp.dispatches });
     this._history.push({ role: "assistant", content: summary });
+    this._enforceHistoryBudget(); // §C-hist (#990)
     if (resp.dispatches.length > 0) {
       (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
     }
@@ -689,6 +708,7 @@ export class ChatPanel {
         content.textContent = doneText;
         item.insertBefore(content, turnsEl);
         this._history.push({ role: "assistant", content: doneText });
+        this._enforceHistoryBudget(); // §C-hist (#990)
         (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
       })();
     });
