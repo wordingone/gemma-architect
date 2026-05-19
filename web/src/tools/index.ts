@@ -1038,6 +1038,22 @@ export function initCreateMode(viewer: Viewer): void {
           const constrained = shiftAxisSnap(base, { x: clickPt.x, y: clickPt.y }, getSnap().step);
           clickPt = new THREE.Vector3(constrained.x, constrained.y, clickPt.z);
         }
+        // Apply shift-axis constraint at click commit for end_move.
+        if (ev.shiftKey && !_ptAxisLock && _ptPhase?.kind === "end_move" && _shiftAxisChoice) {
+          const base = _ptPhase.start;
+          if (_shiftAxisChoice === "z") {
+            const dz = screenYtoDz(viewer, ev.clientY, base);
+            const baseZ = base.z ?? 0;
+            const step = getSnap().step;
+            const rawZ = baseZ + dz;
+            const lockedZ = getSnap().snapOn && getSnap().gridOn
+              ? Math.round(rawZ / step) * step : Math.round(rawZ * 1000) / 1000;
+            clickPt = new THREE.Vector3(base.x, base.y, lockedZ);
+          } else {
+            const constrained = shiftAxisSnap(base, { x: clickPt.x, y: clickPt.y }, getSnap().step);
+            clickPt = new THREE.Vector3(constrained.x, constrained.y, base.z ?? 0);
+          }
+        }
         // Shift-snap for angle_end: snap commit angle to 15° increments.
         if (ev.shiftKey && _ptPhase?.kind === "angle_end") {
           const dx = clickPt.x - _ptPhase.base.x;
@@ -1349,8 +1365,12 @@ export function initCreateMode(viewer: Viewer): void {
       }
     }
 
-    // Shift-hold axis constraint for rotate_axis_b — constrain axis direction to X/Y/Z from axisA.
+    // Shift-hold axis constraint — merged if/else-if so all arms share one cleanup else.
+    const shiftBase: { x: number; y: number; z?: number } | null =
+      _pending.length > 0 ? _pending[_pending.length - 1]
+      : _smartTrackPt ?? null;
     if (ev.shiftKey && !ev.altKey && _ptPhase?.kind === "rotate_axis_b") {
+      // Constrain rotate axis direction to X/Y from axisA.
       const base = _ptPhase.axisA;
       const dx = snapped.x - base.x;
       const dy = snapped.y - base.y;
@@ -1363,13 +1383,36 @@ export function initCreateMode(viewer: Viewer): void {
         snapped = { x: axisSnapped.x, y: axisSnapped.y, z: snapped.z };
         updateSketchShiftLine(viewer, base, _shiftAxisChoice);
       }
-    }
-
-    // Shift-hold axis constraint for sketch draw tools.
-    const shiftBase: { x: number; y: number; z?: number } | null =
-      _pending.length > 0 ? _pending[_pending.length - 1]
-      : _smartTrackPt ?? null;
-    if (ev.shiftKey && !ev.altKey && !_ptPhase && !opPhase && tool && shiftBase) {
+    } else if (ev.shiftKey && !ev.altKey && _ptPhase?.kind === "end_move") {
+      // Constrain move delta to nearest cardinal axis (X/Y/Z) from reference start point.
+      const base = _ptPhase.start;
+      const dx = snapped.x - base.x;
+      const dy = snapped.y - base.y;
+      const dz = screenYtoDz(viewer, ev.clientY, base);
+      const baseZ = base.z ?? 0;
+      if (!_shiftAxisChoice) {
+        const moved = Math.abs(dx) > 1e-4 || Math.abs(dy) > 1e-4 || Math.abs(dz) > 1e-4;
+        if (moved) {
+          _shiftAxisChoice = (Math.abs(dz) > Math.abs(dx) && Math.abs(dz) > Math.abs(dy)) ? "z"
+            : Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+        }
+      }
+      if (_shiftAxisChoice === "z") {
+        const step = getSnap().step;
+        const rawZ = baseZ + dz;
+        const lockedZ = getSnap().snapOn && getSnap().gridOn
+          ? Math.round(rawZ / step) * step : Math.round(rawZ * 1000) / 1000;
+        snapped = { x: base.x, y: base.y, z: lockedZ };
+        updateSketchShiftLine(viewer, new THREE.Vector3(base.x, base.y, baseZ), "z");
+      } else if (_shiftAxisChoice) {
+        const axisSnapped = shiftAxisSnap(base, snapped, getSnap().step);
+        snapped = { x: axisSnapped.x, y: axisSnapped.y, z: baseZ };
+        updateSketchShiftLine(viewer, new THREE.Vector3(base.x, base.y, baseZ), _shiftAxisChoice);
+      } else {
+        clearSketchShiftLine(viewer);
+      }
+    } else if (ev.shiftKey && !ev.altKey && !_ptPhase && !opPhase && tool && shiftBase) {
+      // Constrain sketch draw tools to X/Y/Z from last pending point or smart-track.
       const dx = snapped.x - shiftBase.x;
       const dy = snapped.y - shiftBase.y;
       const dz = screenYtoDz(viewer, ev.clientY, shiftBase);

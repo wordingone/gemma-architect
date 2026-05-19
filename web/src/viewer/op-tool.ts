@@ -445,47 +445,45 @@ export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: num
     _opHoverEdgePts   = [prev, next]; // stored for click handler compatibility
 
     opClearPreview(viewer);
+    const previewGrp = new THREE.Group();
     const previewGeo = new THREE.BufferGeometry().setFromPoints([prev, corner, next]);
-    const previewMat = new THREE.LineBasicMaterial({ color: 0x44aaff, depthTest: false });
-    _opPreview = new THREE.Line(previewGeo, previewMat);
-    (_opPreview as THREE.Line).renderOrder = 999;
-    viewer.getScene().add(_opPreview);
+    const previewMat = new THREE.LineBasicMaterial({ color: 0xff7700, depthTest: false });
+    const previewLine = new THREE.Line(previewGeo, previewMat);
+    previewLine.renderOrder = 999;
+    previewGrp.add(previewLine);
+    const cDotGeo = new THREE.SphereGeometry(0.04, 8, 6);
+    const cDotMat = new THREE.MeshBasicMaterial({ color: 0xff7700, depthTest: false });
+    for (const pt of [prev, corner, next]) {
+      const d = new THREE.Mesh(cDotGeo, cDotMat);
+      d.position.copy(pt);
+      d.renderOrder = 999;
+      previewGrp.add(d);
+    }
+    _opPreview = previewGrp;
+    viewer.getScene().add(previewGrp);
     return;
   }
 
-  // ── 3D fillet: face-intersect + closest edge on Mesh ──
-  const canvas = viewer.getCanvas();
-  const rect = canvas.getBoundingClientRect();
-  const ndc = new THREE.Vector2(
-    ((clientX - rect.left) / rect.width) * 2 - 1,
-    -((clientY - rect.top) / rect.height) * 2 + 1,
-  );
-  const rc = new THREE.Raycaster();
-  rc.setFromCamera(ndc, viewer.getActiveCamera());
-
+  // ── 3D fillet: closest logical edge (unique-edge enumeration) ──
+  // Use getUniqueEdges so we highlight actual solid edges, not internal triangle
+  // diagonals. Transform each local-space edge to world space, find closest to
+  // cursor ray within a 60px screen-distance threshold.
   const meshTarget = phase.target as THREE.Mesh;
-  const hits = rc.intersectObject(meshTarget, false);
-  if (!hits.length || !hits[0].face) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
-
-  const face = hits[0].face;
-  const pos = meshTarget.geometry.getAttribute("position") as THREE.BufferAttribute;
   const mat4 = meshTarget.matrixWorld;
+  const uniqueLocal = getUniqueEdges(meshTarget);
 
-  const va = new THREE.Vector3().fromBufferAttribute(pos, face.a).applyMatrix4(mat4);
-  const vb = new THREE.Vector3().fromBufferAttribute(pos, face.b).applyMatrix4(mat4);
-  const vc = new THREE.Vector3().fromBufferAttribute(pos, face.c).applyMatrix4(mat4);
-
-  const edges: [THREE.Vector3, THREE.Vector3][] = [[va, vb], [vb, vc], [vc, va]];
   let bestEdge: [THREE.Vector3, THREE.Vector3] | null = null;
-  let bestDist = Infinity;
+  let bestDist = 60; // px — only highlight if cursor is within this range
 
-  for (const [a, b] of edges) {
-    const ep = closestPtOnSegToRay(viewer, clientX, clientY, a, b);
+  for (const [la, lb] of uniqueLocal) {
+    const wa = la.clone().applyMatrix4(mat4);
+    const wb = lb.clone().applyMatrix4(mat4);
+    const ep = closestPtOnSegToRay(viewer, clientX, clientY, wa, wb);
     if (!ep) continue;
     const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
     if (!sc) continue;
     const d = Math.hypot(sc.x - clientX, sc.y - clientY);
-    if (d < bestDist) { bestDist = d; bestEdge = [a, b]; }
+    if (d < bestDist) { bestDist = d; bestEdge = [wa, wb]; }
   }
 
   if (!bestEdge) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
@@ -493,11 +491,24 @@ export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: num
   _opHoverCornerPts = null;
 
   opClearPreview(viewer);
-  const geo = new THREE.BufferGeometry().setFromPoints(bestEdge);
-  const lineMat = new THREE.LineBasicMaterial({ color: 0x44aaff, depthTest: false });
-  _opPreview = new THREE.Line(geo, lineMat);
-  (_opPreview as THREE.Line).renderOrder = 999;
-  viewer.getScene().add(_opPreview);
+  // Build a group: line + sphere markers at endpoints so the edge is clearly visible.
+  const grp = new THREE.Group();
+  const lineGeo = new THREE.BufferGeometry().setFromPoints(bestEdge);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xff7700, depthTest: false });
+  const edgeLine = new THREE.Line(lineGeo, lineMat);
+  edgeLine.renderOrder = 999;
+  grp.add(edgeLine);
+  const dotR = 0.04;
+  const dotGeo = new THREE.SphereGeometry(dotR, 8, 6);
+  const dotMat = new THREE.MeshBasicMaterial({ color: 0xff7700, depthTest: false });
+  for (const ep of bestEdge) {
+    const dot = new THREE.Mesh(dotGeo, dotMat);
+    dot.position.copy(ep);
+    dot.renderOrder = 999;
+    grp.add(dot);
+  }
+  _opPreview = grp;
+  viewer.getScene().add(grp);
 }
 
 // Build snap endpoints from a flat list of world-space XY points at z=0 and z=h.
