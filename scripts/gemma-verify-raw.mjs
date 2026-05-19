@@ -5884,6 +5884,54 @@ await resetScene('before-box-inject');
   await resetScene('post-S121');
 }
 
+// ── S122 — layout-svg-vector-export (#941): SVG from Layout tab contains vector elements ──
+{
+  const s122 = await evaluate(`
+    (async () => {
+      try {
+        // Build a box so the layout has geometry to project.
+        window.__dispatch('SdBox', { x: 0, y: 0, z: 0, w: 3, d: 3, h: 3 });
+        await new Promise(r => setTimeout(r, 60));
+
+        // Activate Layout mode (click the LAYOUT tab button).
+        const layoutTab = document.querySelector('[data-mode="layout"]');
+        if (!layoutTab) return { passed: false, evidence: { reason: 'LAYOUT tab not found' } };
+        layoutTab.click();
+        await new Promise(r => setTimeout(r, 300));
+
+        // Trigger SVG export — testMode must be off to run the real pipeline.
+        const prevTestMode = window.__testMode;
+        window.__testMode = false;
+        // Patch URL.createObjectURL to suppress browser download dialog.
+        const origCreate = URL.createObjectURL;
+        URL.createObjectURL = () => 'mock://svg-test';
+        window.__dispatch('SdExport', { format: 'svg' });
+        await new Promise(r => setTimeout(r, 300));
+        URL.createObjectURL = origCreate;
+        window.__testMode = prevTestMode;
+
+        // Inspect captured SVG text.
+        const svgText = window.__lastLayoutSvg || '';
+        const hasVector = /<(line|polyline|path|rect|polygon|circle|ellipse)[ \\/]/i.test(svgText);
+        const hasRaster = /<image[ \\/]/i.test(svgText);
+        const hasSvgRoot = svgText.startsWith('<svg') || svgText.includes('<svg ');
+        const passed = hasSvgRoot && hasVector && !hasRaster;
+        return { passed, evidence: {
+          svgLength: svgText.length,
+          hasSvgRoot,
+          hasVector,
+          hasRaster,
+          preview: svgText.slice(0, 120),
+        } };
+      } catch(e) {
+        return { passed: false, evidence: { error: e.message } };
+      }
+    })()`);
+  if (!s122) record('layout-svg-vector-export', false, { reason: 'evaluate returned null' });
+  else record('layout-svg-vector-export', s122.passed, s122.evidence);
+  await resetScene('post-S122');
+}
+
 } finally {
   await cleanup();
 }

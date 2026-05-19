@@ -7,7 +7,8 @@ import { isBonsaiAvailable, validateIFC, type BonsaiValidation } from "./bonsai-
 import { unitLabel } from "../units";
 import { dispatchSync } from "../commands/dispatch";
 
-type Fmt = { ext: string; sub: string; fmt: string };
+// fromLayout: 2D formats always export from the Layout sheet pipeline (vector, not raster).
+type Fmt = { ext: string; sub: string; fmt: string; fromLayout?: boolean };
 
 const SECTIONS: { num: string; title: string; items: Fmt[] }[] = [
   {
@@ -16,7 +17,7 @@ const SECTIONS: { num: string; title: string; items: Fmt[] }[] = [
     items: [
       { ext: "IFC",  sub: "STEP-21 · SPF",  fmt: "ifc" },
       { ext: "STEP", sub: "OCCT B-rep",     fmt: "step" },
-      { ext: "DWG",  sub: "AutoCAD 2018",   fmt: "dwg" }, // not implemented yet
+      { ext: "DWG",  sub: "AutoCAD 2018",   fmt: "dwg", fromLayout: true },
     ],
   },
   {
@@ -28,16 +29,16 @@ const SECTIONS: { num: string; title: string; items: Fmt[] }[] = [
       { ext: "GLB",  sub: "binary glTF",    fmt: "glb" },
       { ext: "glTF", sub: "JSON glTF",      fmt: "gltf" },
       { ext: "USDZ", sub: "AR · iOS",       fmt: "usdz" },
-      { ext: "FBX",  sub: "FilmBox",        fmt: "fbx" }, // not implemented yet
+      { ext: "FBX",  sub: "FilmBox",        fmt: "fbx" },
     ],
   },
   {
     num: "03",
     title: "2D · DRAWING",
     items: [
-      { ext: "SVG",  sub: "vector",         fmt: "svg" },
-      { ext: "DXF",  sub: "vector · CAD",   fmt: "dxf" },
-      { ext: "PDF",  sub: "A1 sheet",       fmt: "pdf" },
+      { ext: "SVG",  sub: "vector",         fmt: "svg",  fromLayout: true },
+      { ext: "DXF",  sub: "vector · CAD",   fmt: "dxf",  fromLayout: true },
+      { ext: "PDF",  sub: "A1 sheet",       fmt: "pdf",  fromLayout: true },
     ],
   },
 ];
@@ -83,8 +84,9 @@ function build(): HTMLDivElement {
       <div class="ed-section-title"><span class="num">${s.num}</span>${s.title}</div>
       <div class="ed-grid">`;
     for (const it of s.items) {
+      const layoutTag = it.fromLayout ? `<span class="ed-layout-tag">LAYOUT</span>` : "";
       html += `<button class="ed-fmt" type="button" data-fmt="${it.fmt}">
-        <span class="ext">${it.ext}</span><span class="sub">${it.sub}</span>
+        <span class="ext">${it.ext}${layoutTag}</span><span class="sub">${it.sub}</span>
       </button>`;
     }
     html += `</div></div>`;
