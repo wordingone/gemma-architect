@@ -984,6 +984,50 @@ Assistant: Invoking starter skill BuildWall with custom length and height.
 <tool_call>{"name":"SdInvokeSkill","arguments":{"skill":"BuildWall","params":{"end":{"x":6,"y":0,"z":0},"height":3}},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
+// Mirrors WEBGPU_CONTEXT_LIMIT in model-worker.ts. Duplicated here to allow
+// pre-dispatch size checks without crossing the worker boundary.
+const _WEBGPU_CTX = 16_384;
+const _WEBGPU_OUT_RESERVE = 512; // 256 min output + 256 safety headroom
+
+// Prompt budget in chars: (limit - reserve) * conservative chars-per-token ratio.
+// Gemma tokenizer averages ~2.5 ch/tok on JSON-heavy few-shot content.
+const _WEBGPU_PROMPT_BUDGET_CHARS = (_WEBGPU_CTX - _WEBGPU_OUT_RESERVE) * 2.5; // ~39 680
+
+// Compact few-shot: 3 essential examples covering basic dispatch, multi-level
+// buildings, and openings. Used when FEW_SHOT_EXAMPLES would overflow the budget.
+const FEW_SHOT_COMPACT = `
+Examples — copy function names EXACTLY:
+
+User: draw a 5m wall, 0.2m thick, 2.8m tall
+Assistant:
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
+
+User: design a 2-story library, 12m × 8m
+Assistant: Assuming 3.0m floor heights, slab at +3.0m.
+<tool_call>{"name":"SdLevel","arguments":{"name":"Level 1","elevation":0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdLevel","arguments":{"name":"Level 2","elevation":3.0,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[12,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[12,8],[0,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[12,0],[12,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,8],[0,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[12,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[12,8],[0,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[12,0],[12,8]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,8],[0,0]],"thickness":0.3,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[12,0],[12,8],[0,8]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+
+User: design an 8m × 6m cabin, 2.4m ceiling, add a door
+Assistant: 8m wide, 6m deep, 1 floor × 2.4m.
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[8,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[8,6],[0,6]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[8,0],[8,6]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,6],[0,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[8,0],[8,6],[0,6]],"thickness":0.2},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdDoor","arguments":{"width":0.914,"height":2.032},"metadata":{"source":"agent"}}</tool_call>
+`.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
@@ -1023,13 +1067,20 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     ? "Active unit: imperial. Express all lengths in feet (e.g. 26ft, 20ft, 9.6ft). Emit foot values directly in coordinates — 26 feet wide → x-max 26, 20 feet deep → y-max 20."
     : "Active unit: metric. In NL responses express lengths in metres (e.g. 5m, 3m). Dispatch args use the active unit's numbers directly — emit metres for metric mode.";
 
+  // Switch to compact examples when full examples would overflow context.
+  // FEW_SHOT_EXAMPLES is ~40 K chars; at 2.5 ch/tok that's ~16 K tokens,
+  // which leaves no headroom for the chip prompt. Compact is ~2.5 K chars (~1 K tok).
+  const fewShot = FEW_SHOT_EXAMPLES.length > _WEBGPU_PROMPT_BUDGET_CHARS * 0.9
+    ? FEW_SHOT_COMPACT
+    : FEW_SHOT_EXAMPLES;
+
   return [
     "You are Gemma, a parametric CAD assistant. Be direct — no preamble.",
     "DISPATCH DIRECTLY: emit <tool_call> blocks immediately — no <plan> block. State ONE assumption on one line if needed, then emit tool calls. Level names are always 'Level 1', 'Level 2', 'Level 3' — never 'Ground', 'Floor 2', or custom names.",
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
-    FEW_SHOT_EXAMPLES,
+    fewShot,
     verbList,
     summariseCanvasSkills(),
   ].filter(Boolean).join("\n\n");
@@ -1381,6 +1432,21 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const MAX_HISTORY_MSGS = 60;
   const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
   const _sysPrompt = buildWebGPUSystemPrompt(req.skills);
+
+  // Pre-dispatch context budget check (AC1 of #1194).
+  // Uses a conservative 2.5 ch/tok ratio — matches the tokenizer's effective rate
+  // for JSON-heavy content. Throws a user-actionable error before the worker sees
+  // the input, so the failure is clear rather than "input too long: N tokens".
+  const _histChars = trimmedHistory.reduce((n, m) =>
+    n + (typeof m.content === "string" ? m.content.length : 0), 0);
+  const _totalChars = _sysPrompt.length + _histChars + req.prompt.length;
+  if (_totalChars > _WEBGPU_PROMPT_BUDGET_CHARS) {
+    throw new Error(
+      `Prompt too long for on-device model (estimated ${Math.ceil(_totalChars / 2.5).toLocaleString()} tokens, limit ${_WEBGPU_CTX.toLocaleString()}). ` +
+      `Start a new chat or shorten your message to free context space.`
+    );
+  }
+
   const messages = [
     { role: "system" as const, content: _sysPrompt },
     ...trimmedHistory,
