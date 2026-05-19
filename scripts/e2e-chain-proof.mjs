@@ -6,7 +6,7 @@
 import { chromium } from 'playwright';
 
 const TARGET = 'http://localhost:5847/';
-const BOOT_TIMEOUT_MS = 5 * 60 * 1000; // 5 min for real download
+const BOOT_TIMEOUT_MS = 10 * 60 * 1000; // 10 min for real download from CDN
 const INFER_TIMEOUT_MS = 90_000;
 
 // ── Connect (never close Chrome) ──────────────────────────────────────────────
@@ -82,12 +82,12 @@ const pollInterval = setInterval(async () => {
 }, 10_000);
 
 const bootResult = await page.evaluate(() => new Promise((resolve) => {
-  const timer = setTimeout(() => resolve({ event: 'timeout' }), 300_000);
+  const timer = setTimeout(() => resolve({ event: 'timeout' }), 600_000);
   const done = (name) => (e) => { clearTimeout(timer); resolve({ event: name, detail: e.detail ?? null }); };
   window.addEventListener('agentmodel:boot-complete', done('boot-complete'));
   window.addEventListener('agentmodel:returning-user', done('returning-user'));
   window.addEventListener('agentmodel:error', done('error'));
-}), { timeout: 305_000 });
+}), { timeout: 605_000 });
 
 clearInterval(pollInterval);
 
