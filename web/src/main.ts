@@ -67,6 +67,7 @@ import { replayCloneSideEffects } from "./viewer/copy-array";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge, getUniqueEdges } from "./viewer/csg";
 import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
+import { registerGoalHandlers } from "./agent/goal-handlers";
 import { listClusters, getClusterByName, listCanvasClusters, type SkillClusterStep } from "./skills/skill-store";
 import { STARTER_LIBRARY } from "./skills/starter-library";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
@@ -184,6 +185,9 @@ levelStore.subscribe(() => {
   };
 (window as unknown as { __setSelected: typeof setSelected }).__setSelected = setSelected;
 initRenderModes(viewer);
+// Goal meta-tools (#980)
+registerGoalHandlers();
+
 // SdDelete: delete the currently selected object via the viewer's deleteSelected() method.
 registerHandler("SdDelete", () => {
   const deleted = viewer.deleteSelected();

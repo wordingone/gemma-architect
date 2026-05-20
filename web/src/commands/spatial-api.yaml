@@ -2469,3 +2469,55 @@
   synonyms: [invokeskill, "invoke skill", "run skill", "call skill", "use skill"]
   kernel: replicad
   alias_source: generic_cad_vocabulary
+
+# ============================================================
+# §15 Agent goal meta-tools (#980)
+# These are NOT geometry producers. They manage the goal state machine
+# and are not Sd*-prefixed. Registered by goal-handlers.ts.
+# ============================================================
+
+- name: create_goal
+  kernel_op: create_goal
+  parameters:
+    type: object
+    properties:
+      objective:
+        type: string
+        description: "Required. The concrete objective to start pursuing."
+      token_budget:
+        type: integer
+        description: "Optional positive token budget for the new active goal."
+    required: [objective]
+  topology_role: system
+  kg_predicates: []
+  synonyms: [creategoal, "create goal", "set goal", "start goal"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- name: update_goal
+  kernel_op: update_goal
+  parameters:
+    type: object
+    properties:
+      status:
+        type: string
+        enum: [complete]
+        description: "Required. Set to complete only when the objective is fully achieved."
+    required: [status]
+  topology_role: system
+  kg_predicates: []
+  synonyms: [updategoal, "update goal", "complete goal", "mark goal complete", "finish goal"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
+- name: get_goal
+  kernel_op: get_goal
+  parameters:
+    type: object
+    properties: {}
+    required: []
+  topology_role: system
+  kg_predicates: []
+  synonyms: [getgoal, "get goal", "show goal", "current goal", "goal status"]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary

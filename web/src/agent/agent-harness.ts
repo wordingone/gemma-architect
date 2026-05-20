@@ -30,6 +30,7 @@ import {
   wasmChatCompletion,
 } from "./wasm-backend";
 import { VIDEO_INPUT_ENABLED, buildVideoDataUrls } from "./video-input";
+import { getCachedGoal } from "./goal-state";
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -69,7 +70,6 @@ export type AgentRequest = {
 export type AgentResponse = {
   dispatches: AgentDispatch[];
   text: string;
-  plan?: string; // extracted from <plan>…</plan> block
   raw?: unknown;
 };
 
@@ -484,44 +484,14 @@ HANDLER AUTO-BEHAVIORS — the dispatch handlers do these automatically; agent m
 // limit (~3GB). Prior 492-line version pushed system prompt to ~4000 tokens causing
 // WASM OOM at ~347s on Playwright Chromium. Refs: #1058, #1194.
 const FEW_SHOT_EXAMPLES = `
-Examples — emit <plan> block then <tool_call> tags, copy function names EXACTLY:
+Examples — emit <tool_call> tags directly, copy function names EXACTLY:
 
 User: draw a 5m wall, 0.2m thick, 2.8m tall
 Assistant:
-<plan>
-1. SdWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8
-</plan>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
 
 User: Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.
 Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4 walls + door + 4 windows + stair. Upper: slab + 4 walls + 4 windows + SdRoof.
-<plan>
-1. SdLevel — name="Level 1", elevation=0, height=9.0, extent=26
-2. SdLevel — name="Level 2", elevation=9.0, height=9.0, extent=26
-3. setActiveLevel — id=level/0
-4. SdSlab — profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
-5. SdWall — south ground, profile=[[0,0],[26,0]], thickness=0.67, height=9.0
-6. SdWall — east ground, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
-7. SdWall — north ground, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
-8. SdWall — west ground, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
-9. SdDoor — south entry, position=[13,0,0], width=3.0, height=7.0, sillH=0
-10. SdWindow — south, position=[5,0,0], width=3.0, height=4.0, sillH=3.0
-11. SdWindow — east, position=[26,10,0], width=3.0, height=4.0, sillH=3.0
-12. SdWindow — north, position=[13,20,0], width=3.0, height=4.0, sillH=3.0
-13. SdWindow — west, position=[0,10,0], width=3.0, height=4.0, sillH=3.0
-14. SdStair — NE corner, start=[23,16], end=[23,8], type=straight, riser=0.583, tread=0.917, width=3.0, targetHeight=9.0
-15. setActiveLevel — id=level/1
-16. SdSlab — upper, profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
-17. SdWall — south upper, profile=[[0,0],[26,0]], thickness=0.67, height=9.0
-18. SdWall — east upper, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
-19. SdWall — north upper, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
-20. SdWall — west upper, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
-21. SdWindow — upper south, position=[5,0,0], width=3.0, height=4.0, sillH=3.0
-22. SdWindow — upper east, position=[26,10,0], width=3.0, height=4.0, sillH=3.0
-23. SdWindow — upper north, position=[13,20,0], width=3.0, height=4.0, sillH=3.0
-24. SdWindow — upper west, position=[0,10,0], width=3.0, height=4.0, sillH=3.0
-25. SdRoof — pitched, footprint=[[0,0],[26,0],[26,20],[0,20]], pitchDeg=30
-</plan>
 <tool_call>{"name":"SdLevel","arguments":{"name":"Level 1","elevation":0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdLevel","arguments":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"setActiveLevel","arguments":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
@@ -550,16 +520,33 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 `.trim();
 
 
+function buildGoalSection(): string | null {
+  const goal = getCachedGoal();
+  if (!goal || goal.status !== "active") return null;
+  const used = goal.tokensUsed;
+  const budget = goal.tokenBudget;
+  const budgetLine = budget != null
+    ? `Tokens used: ${used} of ${budget} (${Math.max(0, budget - used)} remaining)`
+    : `Tokens used: ${used}`;
+  return [
+    `Active goal: ${goal.objective}`,
+    "Status: active",
+    budgetLine,
+    'Steering: continue iterating toward the objective. Call update_goal({"status":"complete"}) ONLY when the objective is fully achieved. Do not mark complete due to budget pressure or stopping work — the system enforces budget limits separately.',
+  ].join("\n");
+}
+
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
     "You are Gemma, a parametric CAD assistant. Be direct — no preamble, no performative filler ('certainly!', 'I'll help you with that!', 'Great!' and similar are forbidden).",
-    "PLAN BEFORE DISPATCH: For every request that emits tool calls, first emit a compact <plan> block, then the tool_call blocks.\n<plan> format — EXACTLY this structure, no prose:\n<plan>\n1. VerbName — key_arg=value, …\n2. VerbName — key_arg=value\n</plan>",
+    "DISPATCH DIRECTLY: emit <tool_call> blocks immediately — no <plan> block. State ONE assumption on one line if a critical parameter is missing, then emit tool calls.",
     "AMBIGUITY: Infer the most common default and proceed. If one critical parameter is missing, state your assumption on ONE line (e.g. 'Assuming 2.8 m ceiling height.') then execute. Do NOT ask multiple clarifying questions.",
     'Tool call format: <tool_call>{"name":"FunctionName","arguments":{...},"metadata":{"source":"agent"}}</tool_call>',
     "CRITICAL: Use ONLY the exact function names listed below. Any unknown name is silently dropped — nothing will be created.",
     DIMENSION_RULES,
     BUILDING_DEFAULTS,
     MULTI_LEVEL_NOTES,
+    buildGoalSection(),
     FEW_SHOT_EXAMPLES,
     summariseDictionary(),
     `Current scene: ${buildSceneContext()}`,
@@ -594,6 +581,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
+    buildGoalSection(),
     FEW_SHOT_EXAMPLES,
     verbList,
     summariseCanvasSkills(),
@@ -834,16 +822,11 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   const tgTps = decodeMs > 0 ? tokensOut / (decodeMs / 1000) : 0;
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ${tgTps.toFixed(0)} t/s`);
 
-  let plan: string | undefined;
-  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
-    plan = inner.trim();
-    return "";
-  });
-  const { dispatches, text } = parseDispatches(afterPlan);
-  const _pbc2 = (afterPlan.match(/<tool_call/gi) ?? []).length;
+  const { dispatches, text } = parseDispatches(responseText);
+  const _pbc2 = (responseText.match(/<tool_call/gi) ?? []).length;
   console.log(`[agent-harness:turn-complete] path=standard dispatches=${dispatches.length} tool_call_blocks=${_pbc2} raw_len=${responseText.length}`);
   if (dispatches.length === 0) console.warn(`[agent-harness:zero-dispatch] path=standard raw_len=${responseText.length} excerpt=${JSON.stringify(responseText.slice(0, 800))}`);
-  return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
+  return { dispatches, text: text.trim() || responseText, raw: undefined };
 }
 
 // ---- WASM backend turn (#736) --------------------------------------------
@@ -1016,17 +999,11 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     path:                "webgpu",
   });
 
-  let plan: string | undefined;
-  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
-    plan = inner.trim();
-    return "";
-  });
-
-  const { dispatches, text } = parseDispatches(afterPlan);
-  const _pbc4 = (afterPlan.match(/<tool_call/gi) ?? []).length;
+  const { dispatches, text } = parseDispatches(responseText);
+  const _pbc4 = (responseText.match(/<tool_call/gi) ?? []).length;
   console.log(`[agent-harness:turn-complete] path=webgpu dispatches=${dispatches.length} tool_call_blocks=${_pbc4} tokens_out=${tokensOut} raw_len=${responseText.length}`);
   if (dispatches.length === 0) console.warn(`[agent-harness:zero-dispatch] path=webgpu raw_len=${responseText.length} excerpt=${JSON.stringify(responseText.slice(0, 800))}`);
-  return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
+  return { dispatches, text: text.trim() || responseText, raw: undefined };
 }
 
 // ── Multi-instance factory (#1122) ────────────────────────────────────────────
