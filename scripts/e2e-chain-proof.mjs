@@ -33,7 +33,7 @@ mkdirSync(ARTIFACT_DIR, { recursive: true });
 
 const TARGET        = 'http://localhost:5847/';
 const TARGET_ORIGIN = new URL(TARGET).origin;
-const BOOT_MS       = 10 * 60 * 1000; // 10 min — real CDN download of ~2.7GB
+const BOOT_MS       = 20 * 60 * 1000; // 20 min — real CDN download of ~2.7GB; 10-min cap caused iter-7 timeout
 
 const t0    = Date.now();
 const elapsed = () => `+${Math.round((Date.now() - t0) / 1000)}s`;
