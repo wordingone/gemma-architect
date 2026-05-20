@@ -1843,7 +1843,9 @@ await resetScene('before-box-inject');
     function sceneHash() {
       const scene = window.__viewer?.scene;
       if (!scene) return '';
-      return scene.children.map(c => c.uuid + ':' + c.type).join('|');
+      // Sort by UUID so order changes (e.g. void-cut undo re-appends at end) don't
+      // produce a false mismatch — only membership changes matter for undo correctness.
+      return scene.children.map(c => c.uuid + ':' + c.type).sort().join('|');
     }
 
     function posHash(obj) {
