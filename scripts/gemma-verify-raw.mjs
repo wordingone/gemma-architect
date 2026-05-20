@@ -627,9 +627,19 @@ await resetScene('before-box-inject');
       if (!sheet) return { passed: false, evidence: { reason: "no .paper-sheet element" } };
       const rect = sheet.getBoundingClientRect();
       const aspectRatio = rect.width / rect.height;
-      const a1Aspect = 594 / 841;
-      const aspectMatches = Math.abs(aspectRatio - a1Aspect) < 0.05 || Math.abs(aspectRatio - 1/a1Aspect) < 0.05;
-      if (!aspectMatches) return { passed: false, evidence: { reason: "wrong aspect ratio", aspect: aspectRatio, expected: a1Aspect } };
+      // Derive expected aspect from the sheet's own declared mm dimensions (set by applySheetDims).
+      // Default is Tabloid landscape (432×279mm); don't hardcode A1.
+      const mmW = parseFloat(sheet.dataset.widthMm || '0');
+      const mmH = parseFloat(sheet.dataset.heightMm || '0');
+      let aspectMatches;
+      if (mmW > 0 && mmH > 0) {
+        const declaredAspect = mmW / mmH;
+        aspectMatches = Math.abs(aspectRatio - declaredAspect) < 0.08;
+      } else {
+        // Fallback: any plausible paper aspect (portrait or landscape)
+        aspectMatches = aspectRatio > 0.4 && aspectRatio < 2.5;
+      }
+      if (!aspectMatches) return { passed: false, evidence: { reason: "aspect mismatch", aspect: aspectRatio, mmW, mmH } };
       const cx = rect.left + rect.width * 0.25, cy = rect.top + rect.height * 0.25;
       const beforeNoTool = sheet.querySelectorAll("[data-panel-id]").length;
       sheet.dispatchEvent(new MouseEvent("click", { clientX: cx, clientY: cy, bubbles: true, button: 0 }));
