@@ -87,6 +87,19 @@ console.log('\n═════════════════════�
 console.log('PHASE 1 — Fresh device: wipe all storage, load app');
 console.log('════════════════════════════════════════════════════════');
 
+// Register init script BEFORE navigation so boot events are captured even if they
+// fire before Phase 2's page.evaluate registers its listeners. Returning-user path
+// can fire within milliseconds of DOMContentLoaded when model is in OPFS cache.
+await page.addInitScript(() => {
+  window.__bootResult = null;
+  const _capture = name => e => {
+    if (!window.__bootResult) window.__bootResult = { event: name, detail: e.detail ?? null };
+  };
+  window.addEventListener('agentmodel:boot-complete',  _capture('boot-complete'),  { once: true });
+  window.addEventListener('agentmodel:returning-user', _capture('returning-user'), { once: true });
+  window.addEventListener('agentmodel:error',          _capture('error'),          { once: true });
+});
+
 await cdp.send('Storage.clearDataForOrigin', { origin: TARGET_ORIGIN, storageTypes: 'all' });
 await cdp.send('Network.clearBrowserCache');
 log('CDP wipe complete — IDB, Cache API, cookies, all cleared');
@@ -127,9 +140,15 @@ const pollInterval = setInterval(async () => {
   } catch {}
 }, 15_000);
 
-// Wait for real boot event — Promise.race with Node-side timeout
+// Wait for real boot event — Promise.race with Node-side timeout.
+// Also checks window.__bootResult set by the init script, in case the event
+// fired during the 2-second pause before this evaluate registered its listeners.
 const bootFromPage = page.evaluate(() => new Promise(resolve => {
-  const done = name => e => resolve({ event: name, detail: e.detail ?? null });
+  if (window.__bootResult) { resolve(window.__bootResult); return; }
+  const done = name => e => {
+    window.__bootResult = { event: name, detail: e.detail ?? null };
+    resolve(window.__bootResult);
+  };
   window.addEventListener('agentmodel:boot-complete',  done('boot-complete'),  { once: true });
   window.addEventListener('agentmodel:returning-user', done('returning-user'), { once: true });
   window.addEventListener('agentmodel:error',          done('error'),          { once: true });
