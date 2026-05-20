@@ -286,7 +286,7 @@ console.log('PHASE 3.5 — Agent NL reply + tool dispatches (watching live)');
 console.log('  Waiting for agent:turn-complete...');
 console.log('════════════════════════════════════════════════════════');
 
-const DISPATCH_TIMEOUT_MS = 5 * 60 * 1000; // 5 min — Gemma 4B needs up to ~200s for 997-tok plan
+const DISPATCH_TIMEOUT_MS = 15 * 60 * 1000; // 15 min — house sequence ~2000 tokens at 3.1 t/s ≈ 650s
 
 const turnFromPage = page.evaluate(() => new Promise(resolve => {
   // Prefer agent:turn-complete event (fires when both NL + dispatches done)
