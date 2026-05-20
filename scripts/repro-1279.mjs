@@ -19,14 +19,15 @@ const STATE_DIR    = "B:/M/gemma-architect-archie/state";
 
 mkdirSync(STATE_DIR, { recursive: true });
 
-// ── 1. Open a NEW tab for the repro (existing tab untouched) ──────────────────
-const newTarget = await fetch(`${CDP_BASE}/json/new?${encodeURIComponent(PAGES_URL)}`, { method: "PUT" })
-  .then(r => r.json()).catch(() => null);
+// ── 1. Use the existing Pages tab — never open a new tab ─────────────────────
+const targets = await fetch(`${CDP_BASE}/json`).then(r => r.json()).catch(() => null);
+if (!targets) { console.error("ERROR: CDP not reachable at :9222"); process.exit(1); }
+const newTarget = targets.filter(t => t.type === "page")[0];
 if (!newTarget?.webSocketDebuggerUrl) {
-  console.error("ERROR: could not open new CDP tab");
+  console.error("No page tab found.");
   process.exit(1);
 }
-console.log(`Repro tab opened: ${newTarget.id}`);
+console.log(`Using existing tab: ${newTarget.url} — ${newTarget.id}`);
 
 // ── 2. WS to new tab ──────────────────────────────────────────────────────────
 const ws = new WebSocket(newTarget.webSocketDebuggerUrl);
@@ -95,9 +96,9 @@ ws.onmessage = m => {
   }
 };
 
-// ── 5. Navigate the repro tab to Pages URL ────────────────────────────────────
-console.log(`\nNavigating repro tab to ${PAGES_URL}...`);
-await send("Page.navigate", { url: PAGES_URL });
+// ── 5. Reload the existing tab (cache already cleared) ───────────────────────
+console.log(`\nReloading tab (cache cleared)...`);
+await send("Page.reload", { ignoreCache: true });
 console.log("Waiting for M2 or 115s cap...\n");
 
 await Promise.race([m2Promise, new Promise(r => setTimeout(r, MAX_WAIT_MS))]);
@@ -175,10 +176,7 @@ const outFile = `${STATE_DIR}/repro-1279-${ts2}.json`;
 writeFileSync(outFile, JSON.stringify({ url: PAGES_URL, captured_at: new Date().toISOString(), markers, domInfo, cacheInfo, consoleLogs, screenshotPath: ssPath }, null, 2));
 console.log(`Artifact: ${outFile}`);
 
-// ── 8. Leave repro tab open — user can see STALLED state live ─────────────────
-// Do NOT close the tab or the browser. The Pages tab stays open so the
-// DOWNLOAD STALLED message is visible. Close it manually when done.
+// ── 8. Done — tab stays open, browser stays open ─────────────────────────────
 ws.close();
-console.log("\nRepro tab left open at Pages URL — STALLED state visible in browser.");
-console.log("Close the Pages tab manually when done.");
+console.log("\nDone. Tab left open — STALLED state visible in browser.");
 process.exit(0);
