@@ -484,77 +484,6 @@ HANDLER AUTO-BEHAVIORS — the dispatch handlers do these automatically; agent m
 // limit (~3GB). Prior 492-line version pushed system prompt to ~4000 tokens causing
 // WASM OOM at ~347s on Playwright Chromium. Refs: #1058, #1194.
 const FEW_SHOT_EXAMPLES = `
-Examples — emit <plan> block then <tool_call> tags, copy function names EXACTLY:
-
-User: draw a 5m wall, 0.2m thick, 2.8m tall
-Assistant:
-<plan>
-1. SdWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8
-</plan>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
-
-User: Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.
-Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4 walls + door + 4 windows + stair. Upper: slab + 4 walls + 4 windows + SdRoof.
-<plan>
-1. SdLevel — name="Level 1", elevation=0, height=9.0, extent=26
-2. SdLevel — name="Level 2", elevation=9.0, height=9.0, extent=26
-3. setActiveLevel — id=level/0
-4. SdSlab — profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
-5. SdWall — south ground, profile=[[0,0],[26,0]], thickness=0.67, height=9.0
-6. SdWall — east ground, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
-7. SdWall — north ground, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
-8. SdWall — west ground, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
-9. SdDoor — south entry, position=[13,0,0], width=3.0, height=7.0, sillH=0
-10. SdWindow — south, position=[5,0,0], width=3.0, height=4.0, sillH=3.0
-11. SdWindow — east, position=[26,10,0], width=3.0, height=4.0, sillH=3.0
-12. SdWindow — north, position=[13,20,0], width=3.0, height=4.0, sillH=3.0
-13. SdWindow — west, position=[0,10,0], width=3.0, height=4.0, sillH=3.0
-14. SdStair — NE corner, start=[23,16], end=[23,8], type=straight, riser=0.583, tread=0.917, width=3.0, targetHeight=9.0
-15. setActiveLevel — id=level/1
-16. SdSlab — upper, profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
-17. SdWall — south upper, profile=[[0,0],[26,0]], thickness=0.67, height=9.0
-18. SdWall — east upper, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
-19. SdWall — north upper, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
-20. SdWall — west upper, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
-21. SdWindow — upper south, position=[5,0,0], width=3.0, height=4.0, sillH=3.0
-22. SdWindow — upper east, position=[26,10,0], width=3.0, height=4.0, sillH=3.0
-23. SdWindow — upper north, position=[13,20,0], width=3.0, height=4.0, sillH=3.0
-24. SdWindow — upper west, position=[0,10,0], width=3.0, height=4.0, sillH=3.0
-25. SdRoof — pitched, footprint=[[0,0],[26,0],[26,20],[0,20]], pitchDeg=30
-</plan>
-<tool_call>{"name":"SdLevel","arguments":{"name":"Level 1","elevation":0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdLevel","arguments":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdDoor","arguments":{"position":[13,0,0],"width":3.0,"height":7.0,"sillH":0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdStair","arguments":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
-`.trim();
-
-// WebGPU path — identical tool_call blocks, plan wrappers removed (#1058 root cause).
-// buildWebGPUSystemPrompt says "DISPATCH DIRECTLY: no <plan> block"; examples must
-// match the directive or the model follows the examples and ignores the directive.
-// API path (buildSystemPrompt) keeps the plan-block version above — its "PLAN BEFORE
-// DISPATCH" directive is intentional and the examples must match it.
-const FEW_SHOT_EXAMPLES_WEBGPU = `
 Examples — emit <tool_call> tags directly, copy function names EXACTLY:
 
 User: draw a 5m wall, 0.2m thick, 2.8m tall
@@ -594,7 +523,7 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
     "You are Gemma, a parametric CAD assistant. Be direct — no preamble, no performative filler ('certainly!', 'I'll help you with that!', 'Great!' and similar are forbidden).",
-    "PLAN BEFORE DISPATCH: For every request that emits tool calls, first emit a compact <plan> block, then the tool_call blocks.\n<plan> format — EXACTLY this structure, no prose:\n<plan>\n1. VerbName — key_arg=value, …\n2. VerbName — key_arg=value\n</plan>",
+    "DISPATCH DIRECTLY: emit <tool_call> blocks immediately — no <plan> block. State ONE assumption on one line if a critical parameter is missing, then emit tool calls.",
     "AMBIGUITY: Infer the most common default and proceed. If one critical parameter is missing, state your assumption on ONE line (e.g. 'Assuming 2.8 m ceiling height.') then execute. Do NOT ask multiple clarifying questions.",
     'Tool call format: <tool_call>{"name":"FunctionName","arguments":{...},"metadata":{"source":"agent"}}</tool_call>',
     "CRITICAL: Use ONLY the exact function names listed below. Any unknown name is silently dropped — nothing will be created.",
@@ -635,7 +564,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
-    FEW_SHOT_EXAMPLES_WEBGPU,
+    FEW_SHOT_EXAMPLES,
     verbList,
     summariseCanvasSkills(),
   ].filter(Boolean).join("\n\n");
@@ -876,7 +805,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ${tgTps.toFixed(0)} t/s`);
 
   let plan: string | undefined;
-  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
+  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/gi, (_, inner: string) => {
     plan = inner.trim();
     return "";
   });
@@ -1058,7 +987,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   });
 
   let plan: string | undefined;
-  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
+  const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/gi, (_, inner: string) => {
     plan = inner.trim();
     return "";
   });
