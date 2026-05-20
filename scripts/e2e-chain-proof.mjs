@@ -87,6 +87,10 @@ console.log('\n═════════════════════�
 console.log('PHASE 1 — Fresh device: wipe all storage, load app');
 console.log('════════════════════════════════════════════════════════');
 
+// Navigate to TARGET first — page.evaluate() must run in :5847 context so that
+// OPFS.getDirectory() clears the model store, not the Chrome startup-URL origin.
+await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+
 await cdp.send('Storage.clearDataForOrigin', { origin: TARGET_ORIGIN, storageTypes: 'all' });
 await cdp.send('Network.clearBrowserCache');
 
