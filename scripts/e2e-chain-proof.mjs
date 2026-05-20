@@ -270,7 +270,10 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
   const initialCount = window.__viewer?.scene?.children?.length ?? -1;
   let firstDispatchMs = null;
   let lastCount = -1, stableFor = 0;
-  const STABLE_MS = 10_000, POLL_MS = 1_000;
+  // 60s — last-resort fallback. agent:turn-complete should win the race for
+  // normally-progressing turns. 10s was too short: model dispatches 2 setup
+  // objects quickly then pauses >10s before architectural dispatch begins.
+  const STABLE_MS = 60_000, POLL_MS = 1_000;
 
   // Explicit timeout: if model does not dispatch any geometry in 120s, FAIL.
   // Distinguishes "model silent" from "scene-stable fired too early."
