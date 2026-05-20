@@ -286,6 +286,10 @@ console.log('\n═════════════════════�
 console.log('PHASE 6 — Canvas screenshot (Haiku /visual-check)');
 console.log('════════════════════════════════════════════════════════');
 
+// Canonical camera pose: SdZoomExtents → viewer.frameAllVisible() →
+// perspective cam, dir=(1,1,1.5).norm, fit-to-scene-bounds. Eliminates
+// azimuth variance across iters (iter 4 top-down: roof obscured walls).
+await page.evaluate(() => window.__dispatch?.('SdZoomExtents', {}));
 await pause(1_000);
 
 let canvasPath = null;
