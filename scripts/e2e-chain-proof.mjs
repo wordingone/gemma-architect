@@ -258,6 +258,7 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
 
   // Prefer agent:turn-complete event (fires when both NL + dispatches done)
   window.addEventListener('agent:turn-complete', e => {
+    console.log(`[chainproof] agent:turn-complete fired at +${elapsedS()}s`);
     resolve({ source: 'event', detail: e.detail ?? null });
   }, { once: true });
 
@@ -286,10 +287,22 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
   const poll = setInterval(() => {
     const count = window.__viewer?.scene?.children?.length ?? -1;
     if (count !== lastCount) {
-      if (firstDispatchMs === null && count > initialCount) {
-        firstDispatchMs = Date.now() - t0;
-        console.log(`[chainproof] first-dispatch at +${elapsedS()}s — scene ${initialCount} → ${count}`);
-        clearTimeout(firstDispatchTimer);
+      if (count > initialCount) {
+        if (firstDispatchMs === null) {
+          firstDispatchMs = Date.now() - t0;
+          console.log(`[chainproof] first-dispatch at +${elapsedS()}s — scene ${initialCount} → ${count}`);
+          clearTimeout(firstDispatchTimer);
+        }
+        // Log each newly dispatched object (creator + name + uuid)
+        const children = window.__viewer?.scene?.children ?? [];
+        const prevIdx = Math.max(lastCount < initialCount ? initialCount : lastCount, initialCount);
+        const newOnes = children.slice(prevIdx, count);
+        for (const c of newOnes) {
+          const creator = c.userData?.creator ?? '?';
+          const uuid = (c.uuid ?? '').slice(0, 8);
+          const name = c.name ?? '?';
+          console.log(`[chainproof] dispatch obj#${prevIdx + newOnes.indexOf(c) + 1}: creator=${creator} name=${name} uuid=${uuid}`);
+        }
       }
       lastCount = count; stableFor = 0;
     } else {
@@ -297,7 +310,7 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
     }
     if (stableFor >= STABLE_MS && count > initialCount) {
       clearInterval(poll);
-      console.log(`[chainproof] scene-stable at +${elapsedS()}s — count=${count} initial=${initialCount} delta=${count - initialCount}`);
+      console.log(`[chainproof] scene-stable at +${elapsedS()}s — count=${count} initial=${initialCount} delta=${count - initialCount} — turn-complete NEVER fired, fell back to scene-stable`);
       resolve({ source: 'scene-stable', count, initialCount, firstDispatchMs });
     }
   }, POLL_MS);
