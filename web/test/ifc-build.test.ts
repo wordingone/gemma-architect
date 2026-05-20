@@ -148,3 +148,69 @@ describe("buildIfcScene — property sets (#244)", () => {
     expect(text).not.toContain("IFCPROPERTYSET");
   });
 });
+
+// ── IFC unit system (#792) ────────────────────────────────────────────────────
+import { buildIfc } from "../src/ifc/ifc-build.js";
+
+describe("IFC unit system — imperial vs metric (#792)", () => {
+  it("metric export: IFCUNITASSIGNMENT uses IFCSIUNIT METRE", () => {
+    const bytes = buildIfcScene([{ mesh: minimalMesh(), creator: "IfcWall" }]);
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain("IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)");
+    expect(text).not.toContain("IFCCONVERSIONBASEDUNIT");
+  });
+
+  it("imperial export: IFCUNITASSIGNMENT uses IFCCONVERSIONBASEDUNIT FOOT", () => {
+    const bytes = buildIfcScene([{ mesh: minimalMesh(), creator: "IfcWall" }], undefined, { imperial: true });
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain("IFCCONVERSIONBASEDUNIT");
+    expect(text).toContain("'FOOT'");
+    expect(text).toContain("IFCLENGTHMEASURE(0.3048)");
+    // SI metre still appears as the base reference unit for IFCCONVERSIONBASEDUNIT — that's correct IFC.
+  });
+
+  it("imperial export: area unit is SQUARE FOOT", () => {
+    const bytes = buildIfcScene([{ mesh: minimalMesh(), creator: "IfcWall" }], undefined, { imperial: true });
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain("'SQUARE FOOT'");
+    expect(text).toContain("IFCAREAMEASURE(0.09290304)");
+  });
+
+  it("imperial export: storey elevation scaled m→ft", () => {
+    const levels = [{ levelId: "l0", name: "Ground", elevation: 3.0 }]; // 3m = 9.8425ft
+    const bytes = buildIfcScene([{ mesh: minimalMesh(), creator: "IfcWall", levelId: "l0" }], levels, { imperial: true });
+    const text = new TextDecoder().decode(bytes);
+    // 3 * M_TO_FT ≈ 9.842519... — confirm the scaled value appears
+    expect(text).toMatch(/IFCBUILDINGSTOREY\(.*9\.84/);
+  });
+
+  it("imperial export via buildIfc: IFCCONVERSIONBASEDUNIT present", () => {
+    const bytes = buildIfc(minimalMesh(), "Test", { imperial: true });
+    const text = new TextDecoder().decode(bytes);
+    expect(text).toContain("IFCCONVERSIONBASEDUNIT");
+    expect(text).toContain("'FOOT'");
+  });
+
+  it("metric export via buildIfc: no IFCCONVERSIONBASEDUNIT", () => {
+    const bytes = buildIfc(minimalMesh(), "Test");
+    const text = new TextDecoder().decode(bytes);
+    expect(text).not.toContain("IFCCONVERSIONBASEDUNIT");
+    expect(text).toContain("IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.)");
+  });
+
+  it("imperial vertex scaling: 1m vertex lands at ~3.28ft", () => {
+    const mesh = {
+      vertices: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), // 1-metre triangle
+      indices: new Uint32Array([0, 1, 2]),
+    };
+    const imperial = buildIfcScene([{ mesh, creator: "IfcWall" }], undefined, { imperial: true });
+    const metric  = buildIfcScene([{ mesh, creator: "IfcWall" }]);
+    const textI = new TextDecoder().decode(imperial);
+    const textM = new TextDecoder().decode(metric);
+    // stepFloat returns n.toFixed(1) for integers → "0.0", "1.0" etc.
+    expect(textM).toContain("IFCCARTESIANPOINT((0.0,0.0,0.0))");
+    expect(textM).toContain("IFCCARTESIANPOINT((1.0,0.0,0.0))");
+    // Imperial x=1m → 1/0.3048 ≈ 3.2808...; check 3.28 prefix
+    expect(textI).toMatch(/IFCCARTESIANPOINT\(\(3\.28/);
+  });
+});

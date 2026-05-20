@@ -27,11 +27,54 @@ function ifcGuid(): string {
   return out;
 }
 
+const M_TO_FT = 1 / 0.3048; // 3.28084...
+
 function stepFloat(n: number): string {
   // STEP requires explicit decimal point, no leading +.
   if (!isFinite(n)) return "0.";
   if (Number.isInteger(n)) return n.toFixed(1);
   return n.toString();
+}
+
+// Emit IFCUNITASSIGNMENT lines; returns the ref. When imperial, emits
+// IFCCONVERSIONBASEDUNIT chains for foot/sq-ft/cu-ft. Scene geometry coords
+// must be pre-scaled by M_TO_FT by the caller when imperial is true.
+function emitUnits(lines: string[], next: () => string, imperial: boolean): string {
+  const angUnit = next();
+  lines.push(`${angUnit}=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);`);
+  if (imperial) {
+    const siLen = next();
+    lines.push(`${siLen}=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);`);
+    const mwuLen = next();
+    lines.push(`${mwuLen}=IFCMEASUREWITHUNIT(IFCLENGTHMEASURE(0.3048),${siLen});`);
+    const lenUnit = next();
+    lines.push(`${lenUnit}=IFCCONVERSIONBASEDUNIT(*,.LENGTHUNIT.,'FOOT',${mwuLen});`);
+    const siArea = next();
+    lines.push(`${siArea}=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);`);
+    const mwuArea = next();
+    lines.push(`${mwuArea}=IFCMEASUREWITHUNIT(IFCAREAMEASURE(0.09290304),${siArea});`);
+    const areaUnit = next();
+    lines.push(`${areaUnit}=IFCCONVERSIONBASEDUNIT(*,.AREAUNIT.,'SQUARE FOOT',${mwuArea});`);
+    const siVol = next();
+    lines.push(`${siVol}=IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.);`);
+    const mwuVol = next();
+    lines.push(`${mwuVol}=IFCMEASUREWITHUNIT(IFCVOLUMEMEASURE(0.028316846),${siVol});`);
+    const volUnit = next();
+    lines.push(`${volUnit}=IFCCONVERSIONBASEDUNIT(*,.VOLUMEUNIT.,'CUBIC FOOT',${mwuVol});`);
+    const ua = next();
+    lines.push(`${ua}=IFCUNITASSIGNMENT((${lenUnit},${angUnit},${areaUnit},${volUnit}));`);
+    return ua;
+  } else {
+    const lenUnit = next();
+    lines.push(`${lenUnit}=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);`);
+    const areaUnit = next();
+    lines.push(`${areaUnit}=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);`);
+    const volUnit = next();
+    lines.push(`${volUnit}=IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.);`);
+    const ua = next();
+    lines.push(`${ua}=IFCUNITASSIGNMENT((${lenUnit},${angUnit},${areaUnit},${volUnit}));`);
+    return ua;
+  }
 }
 
 function stepString(s: string): string {
@@ -68,7 +111,7 @@ const IFC4_ENTITY: Record<string, { name: string; tail: string }> = {
 
 // Returns the shared header + hierarchy (project/site/building) lines and refs.
 // Storey(s) are emitted by the caller (one or many) under `building`.
-function buildIfcHeader(lines: string[], next: () => string): {
+function buildIfcHeader(lines: string[], next: () => string, imperial = false): {
   ownerHistory: string; ctx: string; localPlacement: string; axis3: string; building: string;
 } {
   const ts = new Date().toISOString().replace(/\.\d{3}Z$/, "");
@@ -104,16 +147,7 @@ function buildIfcHeader(lines: string[], next: () => string): {
   const ctx = next();
   lines.push(`${ctx}=IFCGEOMETRICREPRESENTATIONCONTEXT($,${stepString("Model")},3,1.0E-5,${axis3},$);`);
 
-  const lenUnit = next();
-  lines.push(`${lenUnit}=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);`);
-  const angUnit = next();
-  lines.push(`${angUnit}=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);`);
-  const areaUnit = next();
-  lines.push(`${areaUnit}=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);`);
-  const volUnit = next();
-  lines.push(`${volUnit}=IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.);`);
-  const unitAssignment = next();
-  lines.push(`${unitAssignment}=IFCUNITASSIGNMENT((${lenUnit},${angUnit},${areaUnit},${volUnit}));`);
+  const unitAssignment = emitUnits(lines, next, imperial);
 
   const project = next();
   lines.push(`${project}=IFCPROJECT(${stepString(ifcGuid())},${ownerHistory},${stepString("GemmaCad Demo Project")},$,$,$,$,(${ctx}),${unitAssignment});`);
@@ -161,10 +195,11 @@ function emitElementPropertySet(
 }
 
 // Emit brep geometry for one mesh, return the IFCFACETEDBREP ref.
-function emitMeshBrep(mesh: IfcMesh, lines: string[], next: () => string): string {
+// scale is applied to every coordinate (1.0 for metric; M_TO_FT for imperial).
+function emitMeshBrep(mesh: IfcMesh, lines: string[], next: () => string, scale = 1.0): string {
   const vertexIds: string[] = [];
   for (let i = 0; i < mesh.vertices.length; i += 3) {
-    const x = mesh.vertices[i], y = mesh.vertices[i + 1], z = mesh.vertices[i + 2];
+    const x = mesh.vertices[i] * scale, y = mesh.vertices[i + 1] * scale, z = mesh.vertices[i + 2] * scale;
     const pt = next();
     lines.push(`${pt}=IFCCARTESIANPOINT((${stepFloat(x)},${stepFloat(y)},${stepFloat(z)}));`);
     vertexIds.push(pt);
@@ -187,12 +222,14 @@ function emitMeshBrep(mesh: IfcMesh, lines: string[], next: () => string): strin
 // Sentinel key for elements with no matching levelId.
 const FALLBACK_LEVEL_ID = "__default__";
 
-export function buildIfcScene(elements: IfcSceneElement[], levels?: IfcLevel[]): Uint8Array {
+export function buildIfcScene(elements: IfcSceneElement[], levels?: IfcLevel[], opts?: { imperial?: boolean }): Uint8Array {
   const lines: string[] = [];
   let id = 0;
   const next = () => `#${++id}`;
+  const imperial = opts?.imperial ?? false;
+  const coordScale = imperial ? M_TO_FT : 1.0;
 
-  const { ownerHistory, ctx, localPlacement, axis3, building } = buildIfcHeader(lines, next);
+  const { ownerHistory, ctx, localPlacement, axis3, building } = buildIfcHeader(lines, next, imperial);
 
   // ── Storey setup (#243) ──────────────────────────────────────────────────
   type StoreyBucket = { ref: string; entityRefs: string[] };
@@ -202,7 +239,7 @@ export function buildIfcScene(elements: IfcSceneElement[], levels?: IfcLevel[]):
     const storeyRefs: string[] = [];
     for (const lev of levels) {
       const storeyRef = next();
-      lines.push(`${storeyRef}=IFCBUILDINGSTOREY(${stepString(ifcGuid())},${ownerHistory},${stepString(lev.name)},$,$,${localPlacement},$,$,.ELEMENT.,${stepFloat(lev.elevation)});`);
+      lines.push(`${storeyRef}=IFCBUILDINGSTOREY(${stepString(ifcGuid())},${ownerHistory},${stepString(lev.name)},$,$,${localPlacement},$,$,.ELEMENT.,${stepFloat(lev.elevation * coordScale)});`);
       storeyMap.set(lev.levelId, { ref: storeyRef, entityRefs: [] });
       storeyRefs.push(storeyRef);
     }
@@ -227,7 +264,7 @@ export function buildIfcScene(elements: IfcSceneElement[], levels?: IfcLevel[]):
     const spec = IFC4_ENTITY[el.creator] ?? { name: "IFCBUILDINGELEMENTPROXY", tail: ",$,.NOTDEFINED." };
     const label = el.label ?? el.creator;
 
-    const brep = emitMeshBrep(el.mesh, lines, next);
+    const brep = emitMeshBrep(el.mesh, lines, next, coordScale);
     const shapeRep = next();
     lines.push(`${shapeRep}=IFCSHAPEREPRESENTATION(${ctx},${stepString("Body")},${stepString("Brep")},(${brep}));`);
     const productShape = next();
@@ -259,10 +296,12 @@ export function buildIfcScene(elements: IfcSceneElement[], levels?: IfcLevel[]):
   return new TextEncoder().encode(lines.join("\n"));
 }
 
-export function buildIfc(mesh: IfcMesh, label: string = "GemmaCad Element"): Uint8Array {
+export function buildIfc(mesh: IfcMesh, label: string = "GemmaCad Element", opts?: { imperial?: boolean }): Uint8Array {
   const lines: string[] = [];
   let id = 0;
   const next = () => `#${++id}`;
+  const imperial = opts?.imperial ?? false;
+  const coordScale = imperial ? M_TO_FT : 1.0;
 
   const refs = {
     project: "",
@@ -308,17 +347,8 @@ export function buildIfc(mesh: IfcMesh, label: string = "GemmaCad Element"): Uin
   const ctx = next();
   lines.push(`${ctx}=IFCGEOMETRICREPRESENTATIONCONTEXT($,${stepString("Model")},3,1.0E-5,${axis3},$);`);
 
-  // Units (SI metre + radian).
-  const lenUnit = next();
-  lines.push(`${lenUnit}=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);`);
-  const angUnit = next();
-  lines.push(`${angUnit}=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);`);
-  const areaUnit = next();
-  lines.push(`${areaUnit}=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);`);
-  const volUnit = next();
-  lines.push(`${volUnit}=IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.);`);
-  const unitAssignment = next();
-  lines.push(`${unitAssignment}=IFCUNITASSIGNMENT((${lenUnit},${angUnit},${areaUnit},${volUnit}));`);
+  // Units: metric (metre) or imperial (foot via IFCCONVERSIONBASEDUNIT).
+  const unitAssignment = emitUnits(lines, next, imperial);
 
   // Project.
   refs.project = next();
@@ -350,7 +380,7 @@ export function buildIfc(mesh: IfcMesh, label: string = "GemmaCad Element"): Uin
   // them, IfcFacetedBrep wrapping the shell.
   const vertexIds: string[] = [];
   for (let i = 0; i < mesh.vertices.length; i += 3) {
-    const x = mesh.vertices[i], y = mesh.vertices[i + 1], z = mesh.vertices[i + 2];
+    const x = mesh.vertices[i] * coordScale, y = mesh.vertices[i + 1] * coordScale, z = mesh.vertices[i + 2] * coordScale;
     const ptId = next();
     lines.push(`${ptId}=IFCCARTESIANPOINT((${stepFloat(x)},${stepFloat(y)},${stepFloat(z)}));`);
     vertexIds.push(ptId);

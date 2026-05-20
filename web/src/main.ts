@@ -3371,8 +3371,9 @@ async function exportIfc(stem: string): Promise<void> {
       name: l.name,
       elevation: l.elevation,
     }));
+    const ifcImperial = getState("unitSystem") === "imperial";
     if (sceneElements.length > 0) {
-      bytes = buildIfcScene(sceneElements, exportLevels);
+      bytes = buildIfcScene(sceneElements, exportLevels, { imperial: ifcImperial });
     } else {
       // Fallback: kernel BREP mesh for single-object scenes (replicad / file import).
       const data = viewer.getActiveMeshData();
@@ -3386,7 +3387,7 @@ async function exportIfc(stem: string): Promise<void> {
           : currentSource.kind === "file"
             ? `Imported ${currentSource.filename}`
             : "GemmaCad Element";
-      bytes = buildIfc({ vertices: data.vertices, indices: data.indices }, label);
+      bytes = buildIfc({ vertices: data.vertices, indices: data.indices }, label, { imperial: ifcImperial });
     }
     const result = await ifcRoundTrip(bytes);
     if (result.ok) {
