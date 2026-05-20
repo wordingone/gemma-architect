@@ -80,6 +80,11 @@ page.on('console', msg => {
   consoleLogs.push(line);
   if (msg.type() === 'error' || msg.type() === 'warning')
     process.stderr.write('  BROWSER ' + line + '\n');
+  // Forward diagnostic signals + first-token marker to stdout in real time.
+  // [chainproof] = browser-side poll logs; [vision] = model received prompt.
+  const text = msg.text();
+  if (text.startsWith('[chainproof]') || text.startsWith('[vision]'))
+    process.stdout.write('  BROWSER ' + line + '\n');
 });
 
 // Navigation forensics — capture URL when page navigates mid-test.
@@ -244,9 +249,13 @@ console.log('PHASE 3.5 — Agent NL reply + tool dispatches (watching live)');
 console.log('  Waiting for agent:turn-complete...');
 console.log('════════════════════════════════════════════════════════');
 
-const DISPATCH_TIMEOUT_MS = 3 * 60 * 1000; // 3 min for NL + geometry
+const DISPATCH_TIMEOUT_MS       = 3 * 60 * 1000; // 3 min total for NL + geometry
+const FIRST_DISPATCH_TIMEOUT_MS = 120_000;         // 120s — explicit FAIL if model never dispatches
 
 const turnFromPage = page.evaluate(() => new Promise(resolve => {
+  const t0 = Date.now();
+  const elapsedS = () => Math.round((Date.now() - t0) / 1000);
+
   // Prefer agent:turn-complete event (fires when both NL + dispatches done)
   window.addEventListener('agent:turn-complete', e => {
     resolve({ source: 'event', detail: e.detail ?? null });
@@ -259,25 +268,51 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
   // time to emit its first dispatch — which can take 30-120s when
   // Phase 2 is fast (cache hit, 12s boot) and the model is cold-warm.
   const initialCount = window.__viewer?.scene?.children?.length ?? -1;
+  let firstDispatchMs = null;
   let lastCount = -1, stableFor = 0;
   const STABLE_MS = 10_000, POLL_MS = 1_000;
+
+  // Explicit timeout: if model does not dispatch any geometry in 120s, FAIL.
+  // Distinguishes "model silent" from "scene-stable fired too early."
+  const firstDispatchTimer = setTimeout(() => {
+    clearInterval(poll);
+    console.log(`[chainproof] dispatch-timeout at +${elapsedS()}s — no geometry dispatched (scene still at ${window.__viewer?.scene?.children?.length ?? -1}, initial=${initialCount})`);
+    resolve({ source: 'dispatch-timeout', initialCount });
+  }, 120_000);
+
   const poll = setInterval(() => {
     const count = window.__viewer?.scene?.children?.length ?? -1;
-    if (count !== lastCount) { lastCount = count; stableFor = 0; }
-    else stableFor += POLL_MS;
+    if (count !== lastCount) {
+      if (firstDispatchMs === null && count > initialCount) {
+        firstDispatchMs = Date.now() - t0;
+        console.log(`[chainproof] first-dispatch at +${elapsedS()}s — scene ${initialCount} → ${count}`);
+        clearTimeout(firstDispatchTimer);
+      }
+      lastCount = count; stableFor = 0;
+    } else {
+      stableFor += POLL_MS;
+    }
     if (stableFor >= STABLE_MS && count > initialCount) {
       clearInterval(poll);
-      resolve({ source: 'scene-stable', count });
+      console.log(`[chainproof] scene-stable at +${elapsedS()}s — count=${count} initial=${initialCount} delta=${count - initialCount}`);
+      resolve({ source: 'scene-stable', count, initialCount, firstDispatchMs });
     }
   }, POLL_MS);
 
-  // Clean up poll if event fires first
-  window.addEventListener('agent:turn-complete', () => clearInterval(poll), { once: true });
+  window.addEventListener('agent:turn-complete', () => {
+    clearInterval(poll);
+    clearTimeout(firstDispatchTimer);
+  }, { once: true });
 }));
 const turnTimeout  = new Promise(r => setTimeout(() => r({ source: 'timeout' }), DISPATCH_TIMEOUT_MS));
 const turnResult   = await Promise.race([turnFromPage, turnTimeout]);
 
 log(`Turn settled — source: ${turnResult.source}`);
+if (turnResult.source === 'dispatch-timeout') {
+  log(`❌ DISPATCH TIMEOUT — model did not produce any scene geometry within 120s. Phase 5 will fail.`);
+} else if (turnResult.source === 'timeout') {
+  log(`❌ TURN TIMEOUT — full ${DISPATCH_TIMEOUT_MS / 1000}s elapsed without turn completion.`);
+}
 
 // Phase 3.5 assertion: NL text visible in chat panel
 const nlText = await page.evaluate(() => {
