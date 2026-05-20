@@ -72,7 +72,7 @@ import { listClusters, getClusterByName, listCanvasClusters, type SkillClusterSt
 import { STARTER_LIBRARY } from "./skills/starter-library";
 import { resolveCPlane, WORLD_XY, WORLD_XZ, WORLD_YZ, type CPlane } from "./viewer/cplane";
 import { clearCommandSession, getActiveCommandSession } from "./commands/command-session";
-import { runIteration, runDesignLoop } from "./chat/chat-panel";
+import { runIteration } from "./chat/chat-panel";
 import { Point3 as Prim3, Plane as PrimPlane, type Arc as PrimArc } from "./nurbs/nurbs-primitives";
 import { tessellate, createClampedUniformNurbs, type Curve, pointAt as curvePointAt, domain as curveDomain } from "./nurbs/nurbs-curves";
 import { nurbsCurveFromArc } from "./nurbs/nurbs-curve-algorithms";
@@ -163,7 +163,8 @@ levelStore.subscribe(() => {
 (window as unknown as { __getActiveCPlane: () => CPlane }).__getActiveCPlane = () => viewer.activeCPlane;
 (window as unknown as { __emitClickWorld: (w: Parameters<typeof emitClickWorld>[1], opts?: Parameters<typeof emitClickWorld>[2]) => ReturnType<typeof emitClickWorld> }).__emitClickWorld = (w, opts) => emitClickWorld(viewer, w, opts);
 (window as unknown as { __runIteration: typeof runIteration }).__runIteration = runIteration;
-(window as unknown as { __runDesignLoop: typeof runDesignLoop }).__runDesignLoop = runDesignLoop;
+// Backwards-compat shim for gemma-verify scripts until PR-C updates them (#980).
+(window as unknown as { __runDesignLoop: (prompt: string) => ReturnType<typeof runIteration> }).__runDesignLoop = (prompt: string) => runIteration(null, null, prompt, []);
 // Expose snap test hooks for CDP verification (#374, #327).
 (window as unknown as { __snapPoint: typeof snapPoint }).__snapPoint = snapPoint;
 (window as unknown as { __snapSetStep: typeof snapSetStep }).__snapSetStep = snapSetStep;

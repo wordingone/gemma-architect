@@ -510,31 +510,18 @@
   color: var(--gemma);
   background: var(--gemma-tint);
 }
-/* Plan pane — foldable (#413/SU-7) */
-.chat-plan-details {
-  width: 100%;
-  border: var(--lw-construction) solid var(--border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.chat-plan-summary {
+/* Goal banner (#980) */
+.chat-goal-banner {
   font-family: var(--mono);
   font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
   padding: 3px 8px;
-  cursor: pointer;
-  user-select: none;
   background: var(--glass-bg);
+  border-bottom: var(--lw-construction) solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.chat-plan-summary:hover { color: var(--ink); }
-.chat-plan-details .chat-plan-block {
-  margin: 0;
-  padding: 6px 8px;
-  font-size: 10px;
-  border-top: var(--lw-construction) solid var(--border);
-}
-.chat-plan-turns { display: flex; flex-direction: column; gap: 1px; padding: 2px 0; }
-.chat-plan-turn { font-family: var(--mono); font-size: 9px; color: var(--ink-dim); padding: 1px 4px; }
+.chat-goal-banner[data-status="active"] { color: #4caf50; }
+.chat-goal-banner[data-status="paused"] { color: #ff9800; }
+.chat-goal-banner[data-status="budget_limited"] { color: #f44336; }
+.chat-goal-banner[data-status="complete"] { color: #2196f3; }

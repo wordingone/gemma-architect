@@ -11,6 +11,7 @@ import { setConsoleMode } from "../shell/workbench";
 import { getState } from "../app-state";
 import { startCommandSession } from "../commands/command-session";
 import { setPickerHint, setChooserHint } from "../viewer/picker-hint";
+import { transitionGoal, clearGoal } from "../agent/goal-state";
 
 type Cmd = {
   group: "GENERATE" | "MODEL" | "VIEW" | "FILE";
@@ -50,6 +51,9 @@ function activateDockTab(id: string) {
 }
 
 const ALL_CMDS: Cmd[] = [
+  { group: "GENERATE", icon: "sparkle",  label: "/goal pause — pause active goal",   kbd: "", run: () => { void transitionGoal("paused"); } },
+  { group: "GENERATE", icon: "sparkle",  label: "/goal resume — resume paused goal", kbd: "", run: () => { void transitionGoal("active"); } },
+  { group: "GENERATE", icon: "sparkle",  label: "/goal clear — clear active goal",   kbd: "", run: () => { void clearGoal(); window.dispatchEvent(new CustomEvent("goal:changed", { detail: null })); } },
   { group: "GENERATE", icon: "sparkle",  label: "Prompt → geometry",        kbd: "⌘P",  run: () => activateDockTab("prompt") },
   { group: "GENERATE", icon: "sparkle",  label: "Run current prompt",       kbd: "⌘⏎", run: () => clickById("ai-generate-btn") },
   { group: "GENERATE", icon: "sparkle",  label: "Vary current with seed",   kbd: "⌘⇧P", run: () => clickById("ai-generate-btn") },

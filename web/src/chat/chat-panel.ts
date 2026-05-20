@@ -6,17 +6,18 @@
 
 import { runAgentTurn } from "../agent/agent-harness";
 import { captureViewport } from "../agent/viewport-capture";
-import type { AgentDispatch, AgentRequest, AgentResponse } from "../agent/agent-harness";
+import type { AgentDispatch, AgentResponse } from "../agent/agent-harness";
 import { invokeCommand } from "../commands/command-session";
 import type { Skill, SkillStep } from "../agent/skills-loader";
 import { findSkillsForPrompt } from "../agent/skills-loader";
-import { isSimplePlan } from "../agent/plan";
 import { lastTurn } from "../agent/telemetry";
 import { buildDispatchSummary } from "./chat-dispatch-summary";
 import { classifyDispatchResult } from "./chat-dispatch-routing";
 import { setPickerHint } from "../viewer/picker-hint";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { getState, subscribe } from "../app-state";
+import { createGoal, getCachedGoal, updateGoalTokens } from "../agent/goal-state";
+import type { Goal } from "../agent/goal-state";
 
 type Message = {
   role: "user" | "assistant";
@@ -183,10 +184,13 @@ export class ChatPanel {
   private _inputEl!: HTMLTextAreaElement;
   private _sendBtn!: HTMLButtonElement;
   private _perfStripEl!: HTMLElement;
+  private _goalBannerEl!: HTMLElement;
   private _skills: Skill[] = [];
   private _pendingImage: string | undefined;
   private _previewEl!: HTMLElement;
   private _fileInputEl!: HTMLInputElement;
+  private _continuationRunning = false;
+  private _continuationSuppressed = false;
 
   constructor(private _root: HTMLElement) {
     this._build();
@@ -209,6 +213,7 @@ export class ChatPanel {
 
   private _build(): void {
     this._root.innerHTML = `
+      <div class="chat-goal-banner" style="display:none"></div>
       <div class="chat-list"></div>
       <div class="chat-starters"></div>
       <div class="chat-perf-strip" style="display:none"></div>
@@ -222,6 +227,7 @@ export class ChatPanel {
       </div>
       <input class="chat-file-input" type="file" accept="image/*" style="display:none" />
     `;
+    this._goalBannerEl = this._root.querySelector(".chat-goal-banner")!;
     this._listEl    = this._root.querySelector(".chat-list")!;
     this._startersEl = this._root.querySelector(".chat-starters")!;
     this._perfStripEl = this._root.querySelector(".chat-perf-strip")!;
@@ -229,6 +235,30 @@ export class ChatPanel {
     this._inputEl   = this._root.querySelector<HTMLTextAreaElement>(".chat-input")!;
     this._sendBtn   = this._root.querySelector<HTMLButtonElement>(".chat-send-btn")!;
     this._fileInputEl = this._root.querySelector<HTMLInputElement>(".chat-file-input")!;
+
+    // A7 (#980): goal banner — update on goal state changes.
+    window.addEventListener("goal:changed", (e) => {
+      const goal = (e as CustomEvent<Goal | null>).detail;
+      this._updateGoalBanner(goal);
+      if (goal?.status === "complete") {
+        this._pushMsg({ role: "assistant", content: `Goal achieved. ${goal.objective}. Final usage: ${goal.tokensUsed} tok.` });
+        this._continuationSuppressed = true;
+      }
+    });
+
+    // A6 (#980): continuation loop — fires on every agent:turn-complete while goal is active.
+    window.addEventListener("agent:turn-complete", (e) => {
+      const detail = (e as CustomEvent<{ verbs: string[] }>).detail;
+      const goal = getCachedGoal();
+      if (!goal || goal.status !== "active") return;
+      if (this._continuationRunning || this._sendBtn.disabled) return;
+      if (this._continuationSuppressed) return;
+      if (detail.verbs.length === 0) {
+        this._continuationSuppressed = true;
+        return;
+      }
+      void this._runContinuation(goal);
+    });
 
     window.addEventListener("debug:telemetry-toggle", () => {
       const visible = this._perfStripEl.style.display !== "none";
@@ -436,9 +466,17 @@ export class ChatPanel {
         return;
       }
 
-      // Evaluate VISUAL_RE first — visual queries must not trigger SdClearScene below.
+      // A5 (#980): create goal for design-intent prompts before first agent turn.
+      // Non-design prompts (questions, single-verb commands) run single-turn without a goal.
       const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       const isVisualQuery = VISUAL_RE.test(text);
+      if (!isVisualQuery && !userImage && DESIGN_RE.test(text)) {
+        const existingGoal = getCachedGoal();
+        if (!existingGoal || existingGoal.status !== "active") {
+          await createGoal(text, 10000);
+        }
+      }
+      this._continuationSuppressed = false;
 
       // Auto-clear scene for fresh design prompts — file-loaded IFC or prior geometry
       // pollutes the agent context and produces geometry on top of existing structure (#476).
@@ -604,6 +642,9 @@ export class ChatPanel {
     if (resp.dispatches.length > 0) {
       (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
     }
+    // A6 (#980): update goal token usage from last turn telemetry (atomic, transition if exhausted).
+    const t = lastTurn();
+    if (t) await updateGoalTokens(t.tokens_in, t.tokens_out);
     // QW-2 (#409): emit turn-complete event — mirrors avir-cli Stop hook turn visibility.
     window.dispatchEvent(new CustomEvent("agent:turn-complete", {
       detail: {
@@ -613,6 +654,51 @@ export class ChatPanel {
       },
     }));
   }
+
+  // A7 (#980): update goal banner from current goal state.
+  private _updateGoalBanner(goal: Goal | null): void {
+    if (!goal || goal.status === "complete") {
+      this._goalBannerEl.style.display = "none";
+      this._goalBannerEl.removeAttribute("data-status");
+      return;
+    }
+    const budgetText = goal.tokenBudget != null
+      ? ` — ${goal.tokensUsed} / ${goal.tokenBudget} tok`
+      : ` — ${goal.tokensUsed} tok`;
+    this._goalBannerEl.textContent = `Goal: ${goal.objective.slice(0, 60)}${goal.objective.length > 60 ? "…" : ""}${budgetText} — ${goal.status}`;
+    this._goalBannerEl.dataset.status = goal.status;
+    this._goalBannerEl.style.display = "";
+  }
+
+  // A6 (#980): continuation turn — runs one more agent turn while goal is active.
+  private async _runContinuation(goal: Goal): Promise<void> {
+    if (this._continuationRunning) return;
+    this._continuationRunning = true;
+    this._sendBtn.disabled = true;
+    this._sendBtn.textContent = "…";
+    const thinking = this._appendThinking();
+    try {
+      const continuationPrompt = `Continue working toward the goal: "${goal.objective}". Dispatch the next batch of building elements. Call update_goal({"status":"complete"}) when fully done.`;
+      this._history.push({ role: "user", content: continuationPrompt });
+      this._enforceHistoryBudget();
+      const resp = await runAgentTurn({
+        prompt: continuationPrompt,
+        history: this._history.slice(0, -1),
+        maxNewTokens: 2048,
+      });
+      this._removeThinking(thinking);
+      this._updatePerfStrip();
+      await this._executeAndPush(resp, undefined); // token update happens inside _executeAndPush
+      if (resp.dispatches.length === 0) this._continuationSuppressed = true;
+    } catch {
+      this._removeThinking(thinking);
+    } finally {
+      this._continuationRunning = false;
+      this._sendBtn.disabled = false;
+      this._sendBtn.textContent = "SEND";
+    }
+  }
+
 
   private _pushMsg(msg: Message): void {
     this._messages.push(msg);
@@ -708,11 +794,6 @@ export async function runIteration(
     userImage = canvas.toDataURL("image/jpeg", 0.8);
   }
 
-  // Delegate to multi-turn planning loop for design-intent prompts (#413/SU-2).
-  if (!vpImg && !refImg && DESIGN_RE.test(deltaText)) {
-    return runDesignLoop(deltaText, [], undefined, 3);
-  }
-
   return runAgentTurn({
     prompt: lines.join("\n"),
     userImage,
@@ -720,56 +801,5 @@ export async function runIteration(
   });
 }
 
-// Multi-turn design loop (#413/SU-2).
-//
-// For "Design a house / apartment / 2-storey house" style prompts: the full
-// building exceeds what a single model turn can reliably dispatch without
-// running out of context. This loop:
-//   Turn 1 — agent emits <plan> + first batch (foundation, levels, walls, ≤10 cmds)
-//   Turn N — "Continue" prompt with dispatch summary; agent emits next batch
-//   Stops   — when SdExport fires, no new dispatches, or maxTurns reached
-//
-// History and dispatch summary carry forward so the model knows what's been done.
-
+// DESIGN_RE: matches design-intent prompts that trigger goal creation (#980 A5).
 const DESIGN_RE = /\b(design|build|create|model)\b.*\b(house|apartment|office|cabin|building|studio|home|tiny home|residence)\b|\b(house|apartment|office|cabin|building|studio|home)\b/i;
-
-export async function runDesignLoop(
-  prompt: string,
-  history: Array<{ role: "user" | "assistant"; content: string }> = [],
-  skills?: import("../agent/skills-loader").Skill[],
-  maxTurns = 3,
-): Promise<AgentResponse> {
-  const allDispatches: AgentDispatch[] = [];
-  let lastText = "";
-  const localHistory: Array<{ role: "user" | "assistant"; content: string }> = [...history];
-
-  for (let turn = 0; turn < maxTurns; turn++) {
-    const isFirst = turn === 0;
-    const dispatchedSoFar = allDispatches.map((d) => d.name).join(", ");
-    const continuationHint = dispatchedSoFar
-      ? `Already dispatched: ${dispatchedSoFar}.`
-      : "";
-
-    const req: AgentRequest = {
-      prompt: isFirst
-        ? prompt
-        : `Continue plan execution. ${continuationHint} Dispatch the next batch of building elements (up to 10 commands). End with SdExport when all plan items are complete.`,
-      history: localHistory,
-      maxNewTokens: 1024,
-      skills,
-    };
-
-    const resp = await runAgentTurn(req);
-
-    lastText = resp.text;
-    allDispatches.push(...resp.dispatches);
-
-    localHistory.push({ role: "user", content: req.prompt });
-    localHistory.push({ role: "assistant", content: resp.text });
-
-    if (resp.dispatches.some((d) => d.name === "SdExport")) break;
-    if (resp.dispatches.length === 0) break;
-  }
-
-  return { dispatches: allDispatches, text: lastText };
-}
