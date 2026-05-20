@@ -112,18 +112,25 @@ page.on('framenavigated', frame => {
 // First-time cold-download (truly fresh device) is validated separately, not per-iter.
 //
 console.log('\n════════════════════════════════════════════════════════');
-console.log('PHASE 1 — Fresh session: clear state, preserve model + shaders');
+console.log('PHASE 1 — Fresh session: clear state, preserve model + shaders + COI SW');
 console.log('════════════════════════════════════════════════════════');
 
 // Navigate to TARGET first — ensures CDP storage ops target :5847 origin.
 await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
-// Clear session state only. cache_storage (model) and OPFS (WebGPU shaders) preserved.
+// Clear session state only. cache_storage (model), OPFS (WebGPU shaders), and
+// service_workers preserved. The COI service worker (coi-serviceworker.js) is
+// infrastructure — it provides COOP/COEP shims required for SharedArrayBuffer /
+// WebGPU. Unregistering it triggers re-registration on next load, which fires an
+// 'updatefound' event → window.location.reload() mid-boot. Root cause of the
+// +543s context-destroyed failure in iter 10-42-25Z (SW candidate A, confirmed
+// by elimination). Keeping the SW registered means no re-registration, no
+// updatefound, no reload. It is not session state.
 await cdp.send('Storage.clearDataForOrigin', {
   origin: TARGET_ORIGIN,
-  storageTypes: 'cookies,indexeddb,local_storage,service_workers',
+  storageTypes: 'cookies,indexeddb,local_storage',
 });
-log('CDP wipe complete — IDB, cookies, localStorage, SW unregistered (cache_storage + OPFS preserved)');
+log('CDP wipe complete — IDB, cookies, localStorage cleared (SW + cache_storage + OPFS preserved)');
 
 await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 log('App loaded — boot screen should appear');
