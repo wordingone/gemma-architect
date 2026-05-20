@@ -480,7 +480,7 @@ HANDLER AUTO-BEHAVIORS — the dispatch handlers do these automatically; agent m
 `.trim();
 
 const FEW_SHOT_EXAMPLES = `
-Examples â€” copy function names EXACTLY; always emit <plan> before tool_call tags:
+Examples — emit <tool_call> tags directly, copy function names EXACTLY:
 
 User: draw a 5m wall, 0.2m thick, 2.8m tall
 Assistant:
