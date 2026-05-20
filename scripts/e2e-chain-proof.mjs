@@ -164,6 +164,12 @@ await page.goto(GOTO_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 log('App loaded — boot screen should appear');
 await pause(2_000);
 
+// ── Phase 0.5: Cross-origin isolation check ──────────────────────────────────
+// Captures window.crossOriginIsolated immediately after load.
+// Expected: true on localhost (vite COOP+COEP headers), false on GH Pages without coi-serviceworker.
+const crossOriginIsolated = await page.evaluate(() => window.crossOriginIsolated).catch(() => null);
+log(`crossOriginIsolated: ${crossOriginIsolated} ${crossOriginIsolated ? '✅' : '⚠️  SAB + WASM pthreads unavailable — origin missing COOP/COEP'}`);
+
 // Auto-click "Download model" prompt if present (app shows this on fresh device before fetch starts)
 const downloadBtnText = await page.evaluate(() => {
   const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Download model'));
@@ -314,7 +320,21 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
   window.addEventListener('agent:turn-complete', () => clearInterval(poll), { once: true });
 }));
 const turnTimeout  = new Promise(r => setTimeout(() => r({ source: 'timeout' }), DISPATCH_TIMEOUT_MS));
-const turnResult   = await Promise.race([turnFromPage, turnTimeout]);
+let turnResult;
+try {
+  turnResult = await Promise.race([turnFromPage, turnTimeout]);
+} catch (err) {
+  // Page navigated or tab crashed during the long wait — browser is gone.
+  // Exit cleanly so Playwright's exit handlers (which would close the browser) don't run.
+  if (err.message?.includes('Target page') || err.message?.includes('closed')) {
+    log('❌ Page navigated or closed during turn wait — exiting without browser close');
+    log(`   Error: ${err.message.slice(0, 120)}`);
+    ['exit', 'SIGINT', 'beforeExit', 'SIGTERM', 'uncaughtException'].forEach(ev =>
+      process.rawListeners(ev).forEach(l => process.removeListener(ev, l)));
+    process.exit(6);
+  }
+  throw err;
+}
 
 log(`Turn settled — source: ${turnResult.source}`);
 
