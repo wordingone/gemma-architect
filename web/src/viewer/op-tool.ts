@@ -555,6 +555,27 @@ function snapEndpointsFromProfile(pts: Array<{x: number; y: number}>, h: number)
   return eps;
 }
 
+// Build explicit edge pairs for section-1d snap, avoiding the spurious diagonal
+// segments that arise when section-1d iterates the interleaved [z=0,z=h] endpoint array.
+// Encodes vertical edges (z=0↔z=h at each profile point) and horizontal ring edges
+// (adjacent profile points at z=0 and at z=h).
+type EdgePtPair = [{ x: number; y: number; z: number }, { x: number; y: number; z: number }];
+function snapEdgePairsFromProfile(pts: Array<{x: number; y: number}>, h: number): EdgePtPair[] {
+  const pairs: EdgePtPair[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    // Vertical edge
+    pairs.push([{ x: p.x, y: p.y, z: 0 }, { x: p.x, y: p.y, z: h }]);
+    // Horizontal ring edges at z=0 and z=h (adjacent profile points)
+    if (i < pts.length - 1) {
+      const q = pts[i + 1];
+      pairs.push([{ x: p.x, y: p.y, z: 0 }, { x: q.x, y: q.y, z: 0 }]);
+      pairs.push([{ x: p.x, y: p.y, z: h }, { x: q.x, y: q.y, z: h }]);
+    }
+  }
+  return pairs;
+}
+
 function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
   const creator = profile.userData.creator as string | undefined;
   const box = new THREE.Box3().setFromObject(profile);
@@ -571,11 +592,13 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     mesh.position.set(ctr.x, ctr.y, 0);
     // Cardinal snap points on top + bottom circles (N/S/E/W + center)
     const cx = ctr.x, cy = ctr.y;
-    mesh.userData.endpoints = snapEndpointsFromProfile([
+    const circlePts = [
       { x: cx, y: cy },
       { x: cx + r, y: cy }, { x: cx - r, y: cy },
       { x: cx, y: cy + r }, { x: cx, y: cy - r },
-    ], h);
+    ];
+    mesh.userData.endpoints = snapEndpointsFromProfile(circlePts, h);
+    mesh.userData.edgePairs = snapEdgePairsFromProfile(circlePts, h);
     return mesh;
   }
 
@@ -600,6 +623,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
         const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
         const mesh = new THREE.Mesh(geom, mat);
         mesh.userData.endpoints = snapEndpointsFromProfile(snapPts2d, h);
+        mesh.userData.edgePairs = snapEdgePairsFromProfile(snapPts2d, h);
         return mesh;
       } else {
         const verts: number[] = [];
@@ -618,6 +642,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
         const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(geom, mat);
         mesh.userData.endpoints = snapEndpointsFromProfile(snapPts2d, h);
+        mesh.userData.edgePairs = snapEdgePairsFromProfile(snapPts2d, h);
         return mesh;
       }
     }
@@ -635,7 +660,9 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
       const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
       const mat = new THREE.MeshStandardMaterial({ color: 0xd0a868, roughness: 0.55, metalness: 0.05 });
       const mesh = new THREE.Mesh(geom, mat);
-      mesh.userData.endpoints = snapEndpointsFromProfile(cpWorld.map((v) => ({ x: v.x, y: v.y })), h);
+      const polPts = cpWorld.map((v) => ({ x: v.x, y: v.y }));
+      mesh.userData.endpoints = snapEndpointsFromProfile(polPts, h);
+      mesh.userData.edgePairs = snapEdgePairsFromProfile(polPts, h);
       return mesh;
     }
   }
@@ -659,7 +686,9 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
       geom.computeVertexNormals();
       const mat = new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
       const mesh = new THREE.Mesh(geom, mat);
-      mesh.userData.endpoints = snapEndpointsFromProfile(worldPts.map((p) => ({ x: p.x, y: p.y })), h);
+      const linPts = worldPts.map((p) => ({ x: p.x, y: p.y }));
+      mesh.userData.endpoints = snapEndpointsFromProfile(linPts, h);
+      mesh.userData.edgePairs = snapEdgePairsFromProfile(linPts, h);
       return mesh;
     }
   }
@@ -672,11 +701,13 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(ctr.x, ctr.y, 0);
   const cx = ctr.x, cy = ctr.y, hw = w / 2, hd = d / 2;
-  mesh.userData.endpoints = snapEndpointsFromProfile([
+  const boxPts = [
     { x: cx - hw, y: cy - hd }, { x: cx + hw, y: cy - hd },
     { x: cx + hw, y: cy + hd }, { x: cx - hw, y: cy + hd },
     { x: cx, y: cy },
-  ], h);
+  ];
+  mesh.userData.endpoints = snapEndpointsFromProfile(boxPts, h);
+  mesh.userData.edgePairs = snapEdgePairsFromProfile(boxPts, h);
   return mesh;
 }
 
@@ -1049,7 +1080,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     opClearPreview(viewer);
     _selectHoverProfile = null;
     _opPhase = { kind: "extrude_height", profile: hit.obj, cx: ctr.x, cy: ctr.y, w: size.x, d: size.y };
-    ptPrompt("Extrude height — move cursor up/down to set height, click to commit  [Escape = cancel]");
+    ptPrompt(`Extrude height — profile: ${creator} — move cursor up/down to set height, click to commit  [Escape = cancel]`);
     return true;
   }
 
@@ -1543,10 +1574,20 @@ export function opHandleCoordSubmit(viewer: Viewer, raw: string): void {
       (ea.distanceTo(localB) < EPS_ID && eb.distanceTo(localA) < EPS_ID),
     );
     if (edgeId >= 0) {
-      dispatchSync("SdFillet", { target: meshTarget.uuid, edgeId, radius: r });
+      const res = dispatchSync("SdFillet", { target: meshTarget.uuid, edgeId, radius: r }) as { error?: string } | null;
+      if (res?.error) {
+        ptPrompt(`Fillet — ${res.error.replace(/^SdFillet — /, "")}`);
+        setTimeout(() => opFinish(viewer), 1400);
+        return;
+      }
     } else {
-      // Fallback: direct chamfer when edge not found in enumeration (degenerate geometry).
+      // Fallback: direct chamfer when edge not found in enumeration.
       const filleted = chamferEdge(meshTarget, phase.edgeA, phase.edgeB, r);
+      if (filleted.userData._chamferError) {
+        ptPrompt("Fillet — edge cannot be chamfered (curved or non-manifold surface); select a straight edge on a flat face");
+        setTimeout(() => opFinish(viewer), 1600);
+        return;
+      }
       viewer.getScene().remove(meshTarget); // audit-undo-ok: tracked by pushReplaceAction below
       viewer.addMesh(filleted, "brep", { noHistory: true });
       pushReplaceAction(filleted, [meshTarget], "fillet");
@@ -1657,7 +1698,8 @@ export function opStartTool(viewer: Viewer, tool: string): void {
       const size = new THREE.Vector3(); box.getSize(size);
       const ctr = new THREE.Vector3(); box.getCenter(ctr);
       _opPhase = { kind: "extrude_height", profile: sel!, cx: ctr.x, cy: ctr.y, w: size.x, d: size.y };
-      ptPrompt("Extrude height — move cursor up/down to set height, click to commit  [Escape = cancel]");
+      const creator = (sel!.userData.creator as string | undefined) ?? "shape";
+      ptPrompt(`Extrude height — profile: ${creator} — move cursor up/down to set height, click to commit  [Escape = cancel]`);
     } else {
       _opPhase = { kind: "extrude_select" };
       ptPrompt("Extrude — click a curve, rectangle, circle, or polygon profile");

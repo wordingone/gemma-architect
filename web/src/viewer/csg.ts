@@ -236,7 +236,17 @@ export function chamferEdge(
 
   if (adjTris.length !== 2) {
     srcGeo.dispose();
-    return filletMesh(mesh, radius);
+    // Cannot chamfer: edge shared by ≠2 triangles (curved surface or non-manifold).
+    // Return a copy of the original mesh with an error flag so callers can surface
+    // a meaningful message instead of silently producing a wrong rounded-box shape.
+    const errGeo = mesh.geometry.clone();
+    const errMat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    const errMesh = new THREE.Mesh(errGeo, errMat);
+    errMesh.position.copy(mesh.position);
+    errMesh.rotation.copy(mesh.rotation);
+    errMesh.scale.copy(mesh.scale);
+    errMesh.userData = { ...mesh.userData, _chamferError: `edge has ${adjTris.length} adjacent triangle(s); need exactly 2` };
+    return errMesh;
   }
 
   // Inset direction for each adjacent face (perpendicular to edge, pointing into face).

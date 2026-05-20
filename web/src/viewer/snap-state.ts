@@ -314,12 +314,34 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   // ── 1d. Edge snap from stored endpoints (centerline; walls + other Mesh) ─────
   // Runs after face-vertex so surface corners take priority over axis projection.
   // Line/curve geometry is handled in section 2 with full tessellation fidelity.
+  // If an object has userData.edgePairs (explicit [A,B] pairs), those are used
+  // instead of sequential endpoint iteration, which would create spurious diagonal
+  // segments across interleaved z=0/z=h endpoint arrays.
   if (snap.edgeSnapOn) {
     let epEdgeBest: SnapVertex | null = null;
     let epEdgeBestD = VERTEX_SNAP_PX;
     viewer.getScene().traverse((obj) => {
       if (obj.userData.noSnap) return;
       if (obj instanceof THREE.Line) return; // covered by section 2
+      type EdgePair = [{ x: number; y: number; z: number }, { x: number; y: number; z: number }];
+      const pairs = (obj.userData as { edgePairs?: EdgePair[] }).edgePairs;
+      if (pairs) {
+        for (const [pa, pb] of pairs) {
+          const A = new THREE.Vector3(pa.x, pa.y, pa.z);
+          const B = new THREE.Vector3(pb.x, pb.y, pb.z);
+          const ep = closestPtOnSegToRay(viewer, clientX, clientY, A, B);
+          if (!ep) continue;
+          const sc = projectToScreen(viewer, ep.x, ep.y, ep.z);
+          if (!sc) continue;
+          const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+          if (d < epEdgeBestD) {
+            epEdgeBestD = d;
+            const edgeDir = B.clone().sub(A).normalize();
+            epEdgeBest = { id: makeSnapId(ep.x, ep.y, ep.z), x: ep.x, y: ep.y, z: ep.z, edgeDir };
+          }
+        }
+        return;
+      }
       const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
       if (!eps || eps.length < 2) return;
       for (let i = 0; i < eps.length - 1; i++) {

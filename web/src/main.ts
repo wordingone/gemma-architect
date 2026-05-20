@@ -582,6 +582,9 @@ registerHandler("SdFillet", (args) => {
     const worldA = localA.clone().applyMatrix4(obj.matrixWorld);
     const worldB = localB.clone().applyMatrix4(obj.matrixWorld);
     filleted = chamferEdge(obj, worldA, worldB, radius);
+    if (filleted.userData._chamferError) {
+      return { error: `SdFillet — ${filleted.userData._chamferError as string}` };
+    }
   } else {
     filleted = filletMesh(obj, radius);
   }
