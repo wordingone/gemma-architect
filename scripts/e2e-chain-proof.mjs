@@ -104,7 +104,63 @@ await cdp.send('Storage.clearDataForOrigin', { origin: TARGET_ORIGIN, storageTyp
 await cdp.send('Network.clearBrowserCache');
 log('CDP wipe complete — IDB, Cache API, cookies, all cleared');
 
-await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+// ── Fix 2: JS-level explicit clear for surfaces CDP may miss (OPFS, Cache API, IDB, SW) ─
+const clearReport = await page.evaluate(async () => {
+  const r = {};
+  try {
+    const names = await caches.keys();
+    await Promise.all(names.map(n => caches.delete(n)));
+    r.cacheApi = `cleared ${names.length}`;
+  } catch (e) { r.cacheApi = `err:${e.message.slice(0,40)}`; }
+
+  try {
+    const root = await navigator.storage.getDirectory();
+    const entries = [];
+    for await (const [name] of root.entries()) entries.push(name);
+    await Promise.all(entries.map(n => root.removeEntry(n, { recursive: true })));
+    r.opfs = `cleared ${entries.length} entries`;
+  } catch (e) { r.opfs = `err:${e.message.slice(0,40)}`; }
+
+  try {
+    const dbs = await indexedDB.databases?.() ?? [];
+    for (const db of dbs) {
+      const req = indexedDB.deleteDatabase(db.name);
+      await new Promise(res => { req.onsuccess = res; req.onerror = res; req.onblocked = res; });
+    }
+    r.idb = `cleared ${dbs.length} dbs`;
+  } catch (e) { r.idb = `err:${e.message.slice(0,40)}`; }
+
+  try {
+    const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : [];
+    await Promise.all(regs.map(reg => reg.unregister()));
+    r.sw = `unregistered ${regs.length}`;
+  } catch (e) { r.sw = `err:${e.message.slice(0,40)}`; }
+
+  return r;
+}).catch(e => ({ error: e.message.slice(0, 80) }));
+log(`JS clear: ${JSON.stringify(clearReport)}`);
+
+// ── Fix 1: Verify storage is near-empty after wipe ───────────────────────────
+const storageCheck = await page.evaluate(async () => {
+  const est = await navigator.storage.estimate().catch(() => null);
+  const cacheNames = await caches.keys().catch(() => []);
+  let opfsEntries = 0;
+  try { const root = await navigator.storage.getDirectory(); for await (const _ of root.entries()) opfsEntries++; } catch {}
+  return { usageBytes: est?.usage ?? -1, cacheNames, opfsEntries };
+}).catch(e => ({ error: e.message.slice(0, 80) }));
+log(`Post-wipe storage: usage=${storageCheck.usageBytes}B caches=[${(storageCheck.cacheNames ?? []).join(',')}] opfs=${storageCheck.opfsEntries}`);
+
+if (!storageCheck.error &&
+    ((storageCheck.usageBytes > 5_000_000) ||
+     (storageCheck.cacheNames?.length > 0)  ||
+     (storageCheck.opfsEntries > 0))) {
+  log('HALT:fresh-device-violated STORAGE — residual model data survives wipe');
+  process.exit(1);
+}
+
+// ── Fix 4: Cache-bust URL so service-worker URL matching cannot shortcut ─────
+const GOTO_URL = TARGET + '?_freshdevice=' + Date.now();
+await page.goto(GOTO_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 log('App loaded — boot screen should appear');
 await pause(2_000);
 
@@ -164,6 +220,11 @@ if (bootResult.event === 'timeout') {
 }
 if (bootResult.event === 'error') {
   log(`❌ agentmodel:error: ${JSON.stringify(bootResult.detail)}`);
+  process.exit(1);
+}
+// Fix 3: returning-user = model was cached = fresh-device-violated
+if (bootResult.event === 'returning-user') {
+  log('HALT:fresh-device-violated — returning-user fired; model cached, CDN download NOT tested');
   process.exit(1);
 }
 
