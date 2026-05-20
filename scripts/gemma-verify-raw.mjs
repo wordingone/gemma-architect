@@ -4550,7 +4550,7 @@ await resetScene('before-box-inject');
     for (const fmt of formats) {
       try {
         const res = window.__dispatch && window.__dispatch('SdExport', { format: fmt });
-        results[fmt] = res ? { ok: !!res.ok, testMode: !!res.testMode, raw: JSON.stringify(res) } : { ok: false, raw: 'null return' };
+        results[fmt] = res ? { ok: !!res.ok, testMode: !!(res.result?.testMode ?? res.testMode), raw: JSON.stringify(res) } : { ok: false, raw: 'null return' };
       } catch (e) {
         results[fmt] = { ok: false, raw: e.message };
       }
