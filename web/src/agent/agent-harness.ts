@@ -549,6 +549,47 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
+// WebGPU path — identical tool_call blocks, plan wrappers removed (#1058 root cause).
+// buildWebGPUSystemPrompt says "DISPATCH DIRECTLY: no <plan> block"; examples must
+// match the directive or the model follows the examples and ignores the directive.
+// API path (buildSystemPrompt) keeps the plan-block version above — its "PLAN BEFORE
+// DISPATCH" directive is intentional and the examples must match it.
+const FEW_SHOT_EXAMPLES_WEBGPU = `
+Examples — emit <tool_call> tags directly, copy function names EXACTLY:
+
+User: draw a 5m wall, 0.2m thick, 2.8m tall
+Assistant:
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
+
+User: Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.
+Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4 walls + door + 4 windows + stair. Upper: slab + 4 walls + 4 windows + SdRoof.
+<tool_call>{"name":"SdLevel","arguments":{"name":"Level 1","elevation":0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdLevel","arguments":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdDoor","arguments":{"position":[13,0,0],"width":3.0,"height":7.0,"sillH":0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdStair","arguments":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
+`.trim();
+
 
 export function buildSystemPrompt(skills?: Skill[]): string {
   return [
@@ -594,7 +635,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
-    FEW_SHOT_EXAMPLES,
+    FEW_SHOT_EXAMPLES_WEBGPU,
     verbList,
     summariseCanvasSkills(),
   ].filter(Boolean).join("\n\n");
