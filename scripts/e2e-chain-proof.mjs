@@ -82,6 +82,21 @@ page.on('console', msg => {
     process.stderr.write('  BROWSER ' + line + '\n');
 });
 
+// Navigation forensics — capture URL when page navigates mid-test.
+// Resolves the root-cause ambiguity from iter 10-42-25Z (context-destroyed at +543s).
+// SW-triggered reload → navigates to http://localhost:5847
+// OOM/crash → navigates to chrome-error://chromewebdata
+// Neither OOM nor app-navigation code could explain +543s; SW updatefound is the remaining candidate.
+const _t0 = Date.now();
+const navLog = [];
+page.on('framenavigated', frame => {
+  if (frame === page.mainFrame()) {
+    const entry = `+${Math.round((Date.now() - _t0) / 1000)}s  framenavigated → ${frame.url()}`;
+    navLog.push(entry);
+    process.stderr.write('  NAV ' + entry + '\n');
+  }
+});
+
 // ── Phase 1: Real fresh-device wipe ──────────────────────────────────────────
 //
 // Semantic: clear SESSION STATE only — each iter boots with a clean app state
@@ -146,12 +161,14 @@ const pollInterval = setInterval(async () => {
 }, 15_000);
 
 // Wait for real boot event — Promise.race with Node-side timeout
+// .catch() converts page navigation / context destruction to a clean FAIL event
+// rather than an uncaught exception that crashes node (seen in iter 10-42-25Z).
 const bootFromPage = page.evaluate(() => new Promise(resolve => {
   const done = name => e => resolve({ event: name, detail: e.detail ?? null });
   window.addEventListener('agentmodel:boot-complete',  done('boot-complete'),  { once: true });
   window.addEventListener('agentmodel:returning-user', done('returning-user'), { once: true });
   window.addEventListener('agentmodel:error',          done('error'),          { once: true });
-}));
+})).catch(err => ({ event: 'context-destroyed', detail: String(err) }));
 const bootTimeout = new Promise(r => setTimeout(() => r({ event: 'timeout' }), BOOT_MS));
 const bootResult  = await Promise.race([bootFromPage, bootTimeout]);
 
@@ -159,6 +176,14 @@ clearInterval(pollInterval);
 
 if (bootResult.event === 'timeout') {
   log(`❌ Boot timed out after ${BOOT_MS / 60_000} min — CDN too slow or stalled`);
+  process.exit(1);
+}
+if (bootResult.event === 'context-destroyed') {
+  log(`❌ Phase 2: execution context destroyed — page navigated or crashed mid-boot`);
+  log(`   Detail: ${bootResult.detail}`);
+  log(`   Navigation log (check URL for SW-reload vs crash): ${navLog.join(' | ') || '(none recorded)'}`);
+  log(`   Last 10 browser console lines:`);
+  consoleLogs.slice(-10).forEach(l => log(`     ${l}`));
   process.exit(1);
 }
 if (bootResult.event === 'error') {
