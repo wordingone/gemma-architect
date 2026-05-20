@@ -110,6 +110,36 @@ await page.addInitScript(() => {
   window.addEventListener('agentmodel:error',          _capture('error'),          { once: true });
 });
 
+// ── Step 0: Pre-clear OPFS from TARGET_ORIGIN context (before any navigation) ──
+// OPFS (Origin Private File System) holds the 2.7GB model weights. CDP's
+// Storage.clearDataForOrigin doesn't always reach OPFS from about:blank context.
+// We must clear it from within the origin's own page while the SW is stable.
+// If the current tab is not at TARGET_ORIGIN, navigate there briefly to clear OPFS.
+const currentURL = page.url();
+const needsOriginNav = !currentURL.startsWith(TARGET_ORIGIN);
+if (needsOriginNav) {
+  await page.goto(TARGET + '?_preclear=' + Date.now(), { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+  await pause(4_000); // wait for SW controllerchange reload to settle
+}
+const opfsPreClear = await page.evaluate(async () => {
+  const r = {};
+  try {
+    const root = await navigator.storage.getDirectory();
+    const entries = [];
+    for await (const [name] of root.entries()) entries.push(name);
+    await Promise.all(entries.map(n => root.removeEntry(n, { recursive: true })));
+    r.opfs = `cleared ${entries.length} entries`;
+    r.entryNames = entries;
+  } catch (e) { r.opfs = `err:${e.message.slice(0, 60)}`; }
+  try {
+    const names = await caches.keys();
+    await Promise.all(names.map(n => caches.delete(n)));
+    r.cacheApi = `cleared ${names.length}`;
+  } catch (e) { r.cacheApi = `err:${e.message.slice(0, 40)}`; }
+  return r;
+}).catch(e => ({ error: e.message.slice(0, 80) }));
+log(`OPFS/cache pre-clear (origin context): ${JSON.stringify(opfsPreClear)}`);
+
 // Navigate to about:blank before CDP wipe so a registered SW on TARGET_ORIGIN
 // cannot fire controllerchange → location.reload() during the JS clear step.
 // CDP Storage.clearDataForOrigin still targets TARGET_ORIGIN correctly from here.
