@@ -654,6 +654,7 @@ registerHandler("SdBox", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdBox", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.creator = "SdBox";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
@@ -822,6 +823,7 @@ registerHandler("SdWall", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWall", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.creator = "SdWall";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
