@@ -1276,15 +1276,15 @@ export function initCreateMode(viewer: Viewer): void {
       if (world) opUpdateDimPreview(viewer, new THREE.Vector3(world.x, world.y, world.z ?? 0));
     }
     if (opPhase && opPhaseIsObjectSelect(opPhase)) {
-      const profileOnly = opPhase.kind === "extrude_select";
-      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, profileOnly, true);
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
       if (opPhase.kind === "bool_b") {
         opSetHover(hit && hit.obj !== opPhase.objA ? hit.obj : null);
+      } else if (opPhase.kind === "extrude_select") {
+        const extrudableHit = hit && EXTRUDABLE_CREATORS.has((hit.obj.userData.creator as string | undefined) ?? "") ? hit.obj : null;
+        opSetHover(extrudableHit);
+        opUpdateSelectHoverPreview(viewer, extrudableHit);
       } else {
         opSetHover(hit ? hit.obj : null);
-      }
-      if (opPhase.kind === "extrude_select") {
-        opUpdateSelectHoverPreview(viewer, hit?.obj ?? null);
       }
     } else if (ptPhaseIsObjectSelect()) {
       const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);

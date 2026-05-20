@@ -708,6 +708,46 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     }
   }
 
+  // rect: read corner positions directly from LineLoop geometry buffer for exact world-space shape.
+  if (creator === "rect") {
+    profile.updateMatrixWorld();
+    const profileAsLine = profile as THREE.Object3D & { geometry?: THREE.BufferGeometry };
+    const posAttr = profileAsLine.geometry?.getAttribute("position") as THREE.BufferAttribute | undefined;
+    if (posAttr && posAttr.count >= 3) {
+      const worldPts: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < posAttr.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(profile.matrixWorld);
+        worldPts.push({ x: v.x, y: v.y });
+      }
+      const shape = new THREE.Shape();
+      shape.moveTo(worldPts[0].x, worldPts[0].y);
+      for (let i = 1; i < worldPts.length; i++) shape.lineTo(worldPts[i].x, worldPts[i].y);
+      shape.closePath();
+      const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+      const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.userData.endpoints = snapEndpointsFromProfile(worldPts, h);
+      mesh.userData.edgePairs = snapEdgePairsFromProfile(worldPts, h);
+      return mesh;
+    }
+  }
+
+  // Solid mesh used as profile: extrude by re-sweeping along Z from its footprint.
+  if (profile instanceof THREE.Mesh) {
+    const geom = new THREE.BoxGeometry(Math.max(0.05, size.x), Math.max(0.05, size.y || size.x), h);
+    geom.translate(ctr.x, ctr.y, h / 2);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+    const mesh = new THREE.Mesh(geom, mat);
+    const hw = size.x / 2, hd = (size.y || size.x) / 2;
+    const boxPts = [
+      { x: ctr.x - hw, y: ctr.y - hd }, { x: ctr.x + hw, y: ctr.y - hd },
+      { x: ctr.x + hw, y: ctr.y + hd }, { x: ctr.x - hw, y: ctr.y + hd },
+    ];
+    mesh.userData.endpoints = snapEndpointsFromProfile(boxPts, h);
+    mesh.userData.edgePairs = snapEdgePairsFromProfile(boxPts, h);
+    return mesh;
+  }
+
   const w = Math.max(0.05, size.x);
   const d = Math.max(0.05, size.y || size.x);
   const geom = new THREE.BoxGeometry(w, d, h);
@@ -1078,19 +1118,17 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select") return false;
 
   if (phase.kind === "extrude_select") {
-    const hit = opRaycastObject(viewer, clientX, clientY, true);
-    if (!hit) { ptPrompt("Extrude — click a curve, rectangle, circle, or polygon profile  [Escape = cancel]"); return true; }
+    // Accept both sketch profiles (Line objects) and solid meshes (surfaces, prior extrudes, booleans).
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    if (!hit) { ptPrompt("Extrude — click a profile curve, solid, or surface  [Escape = cancel]"); return true; }
+    const creator = (hit.obj.userData.creator as string | undefined) ?? "";
+    if (!EXTRUDABLE_CREATORS.has(creator)) {
+      ptPrompt("Extrude — click a profile curve, rectangle, circle, polygon, or solid surface");
+      return true;
+    }
     const box = new THREE.Box3().setFromObject(hit.obj);
     const size = new THREE.Vector3(); box.getSize(size);
     const ctr = new THREE.Vector3(); box.getCenter(ctr);
-    // Guard: reject degenerate or implausibly large profiles (#1182). A valid 2D
-    // sketch profile has a near-zero Z extent; 3D solids should not be used as profiles.
-    const creator = (hit.obj.userData.creator as string | undefined) ?? "";
-    const SKETCH_PROFILE_ONLY = new Set(["rect", "circle", "polygon", "polyline", "curve", "line"]);
-    if (!SKETCH_PROFILE_ONLY.has(creator)) {
-      ptPrompt("Extrude — select a 2D sketch profile (circle, rect, curve, polygon, polyline, line)");
-      return true;
-    }
     opSetHover(null);
     opClearPreview(viewer);
     _selectHoverProfile = null;
@@ -1177,7 +1215,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   }
 
   if (phase.kind === "fillet_select") {
-    const hit = opRaycastObject(viewer, clientX, clientY, true);
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
     if (!hit) { ptPrompt("Fillet — click a solid or a polyline/curve"); return true; }
     if (!(hit.obj instanceof THREE.Mesh) && !(hit.obj instanceof THREE.Line)) {
       ptPrompt("Fillet — click a solid mesh or 2D polyline/curve");
@@ -1706,19 +1744,8 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   viewer.setGumballEnabled(false);
 
   if (tool === "extrude") {
-    const sel = ptGetTarget();
-    const selIsProfile = sel && SKETCH_PROFILE_CREATORS.has(sel.userData.creator ?? "");
-    if (selIsProfile) {
-      const box = new THREE.Box3().setFromObject(sel!);
-      const size = new THREE.Vector3(); box.getSize(size);
-      const ctr = new THREE.Vector3(); box.getCenter(ctr);
-      _opPhase = { kind: "extrude_height", profile: sel!, cx: ctr.x, cy: ctr.y, w: size.x, d: size.y };
-      const creator = (sel!.userData.creator as string | undefined) ?? "shape";
-      ptPrompt(`Extrude height — profile: ${creator} — move cursor up/down to set height, click to commit  [Escape = cancel]`);
-    } else {
-      _opPhase = { kind: "extrude_select" };
-      ptPrompt("Extrude — click a curve, rectangle, circle, or polygon profile");
-    }
+    _opPhase = { kind: "extrude_select" };
+    ptPrompt("Extrude — click a profile curve, solid, or surface  [Escape = cancel]");
   } else if (tool === "boolean") {
     _opPhase = { kind: "bool_a" };
     ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)");

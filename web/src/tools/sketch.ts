@@ -38,6 +38,12 @@ export function buildRect(a: { x: number; y: number }, b: { x: number; y: number
   mesh.renderOrder = 1;
   mesh.userData.kind = "rectangle";
   mesh.userData.creator = "rect";
+  mesh.userData.endpoints = [
+    { x: cx - w/2, y: cy - d/2, z: 0, id: makeSnapId(cx-w/2, cy-d/2) },
+    { x: cx + w/2, y: cy - d/2, z: 0, id: makeSnapId(cx+w/2, cy-d/2) },
+    { x: cx + w/2, y: cy + d/2, z: 0, id: makeSnapId(cx+w/2, cy+d/2) },
+    { x: cx - w/2, y: cy + d/2, z: 0, id: makeSnapId(cx-w/2, cy+d/2) },
+  ] as SnapVertex[];
   const h = DEFAULT_RECT_HEIGHT;
   const chain = `const rect = drawRectangle(${round(w)}, ${round(d)}).sketchOnPlane("XY").extrude(${round(h)}).translate([${round(cx)}, ${round(cy)}, 0]);`;
   return { mesh: mesh as unknown as THREE.Mesh, chain };
@@ -61,6 +67,14 @@ export function buildCircle(center: { x: number; y: number }, radial: { x: numbe
   mesh.renderOrder = 1;
   mesh.userData.kind = "circle";
   mesh.userData.creator = "circle";
+  // Cardinal snap points (N/S/E/W + center) for vertex snap.
+  mesh.userData.endpoints = [
+    { x: center.x, y: center.y, z: 0, id: makeSnapId(center.x, center.y) },
+    { x: center.x + r, y: center.y, z: 0, id: makeSnapId(center.x+r, center.y) },
+    { x: center.x - r, y: center.y, z: 0, id: makeSnapId(center.x-r, center.y) },
+    { x: center.x, y: center.y + r, z: 0, id: makeSnapId(center.x, center.y+r) },
+    { x: center.x, y: center.y - r, z: 0, id: makeSnapId(center.x, center.y-r) },
+  ] as SnapVertex[];
   const h = DEFAULT_RECT_HEIGHT;
   const chain = `const cyl = makeCylinder(${round(r)}, ${round(h)}).translate([${round(center.x)}, ${round(center.y)}, 0]);`;
   return { mesh: mesh as unknown as THREE.Mesh, chain };
