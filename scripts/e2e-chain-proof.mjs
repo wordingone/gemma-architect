@@ -377,6 +377,33 @@ if (sceneAssertion.reason) {
       `doors:${sceneAssertion.doors}  windows:${sceneAssertion.windows}  total:${sceneAssertion.total}`);
 }
 
+// ── Phase 5.5: Per-object scene inventory ────────────────────────────────────
+const sceneInventory = await page.evaluate(() => {
+  const scene = window.__viewer?.scene;
+  if (!scene) return { error: '__viewer.scene not found', children: [] };
+  const all = Array.from(scene.children ?? []);
+  return {
+    total: all.length,
+    children: all.map((o, i) => {
+      const bb = o.geometry?.boundingBox ?? null;
+      const mat = o.material ?? null;
+      return {
+        idx: i,
+        name: o.name || '',
+        type: o.type,
+        creator: o.userData?.creator ?? null,
+        position: { x: +o.position.x.toFixed(4), y: +o.position.y.toFixed(4), z: +o.position.z.toFixed(4) },
+        scale:    { x: +o.scale.x.toFixed(4),    y: +o.scale.y.toFixed(4),    z: +o.scale.z.toFixed(4) },
+        visible: o.visible,
+        matTransparent: mat ? mat.transparent : null,
+        matOpacity:     mat ? +mat.opacity.toFixed(3) : null,
+        bbMin: bb ? { x: +bb.min.x.toFixed(4), y: +bb.min.y.toFixed(4), z: +bb.min.z.toFixed(4) } : null,
+        bbMax: bb ? { x: +bb.max.x.toFixed(4), y: +bb.max.y.toFixed(4), z: +bb.max.z.toFixed(4) } : null,
+      };
+    }),
+  };
+}).catch(e => ({ error: e.message, children: [] }));
+
 // ── Phase 6: Canvas screenshot for /visual-check ─────────────────────────────
 console.log('\n════════════════════════════════════════════════════════');
 console.log('PHASE 6 — Canvas screenshot (Haiku /visual-check)');
@@ -414,6 +441,10 @@ try {
     scene: sceneAssertion,
   }, null, 2), 'utf8');
   log('📊 scene-state.json');
+
+  writeFileSync(resolve(ARTIFACT_DIR, 'scene-inventory.json'),
+    JSON.stringify(sceneInventory, null, 2), 'utf8');
+  log(`📊 scene-inventory.json (${sceneInventory.children?.length ?? 0} objects)`);
 
   await page.screenshot({ path: resolve(ARTIFACT_DIR, 'final.png'), fullPage: false });
   log('📷 final.png');
