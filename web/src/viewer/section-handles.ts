@@ -6,6 +6,7 @@
 
 import * as THREE from "three";
 import type { Viewer } from "./viewer";
+import { formatLength } from "../units.js";
 
 type Face = '+x' | '-x' | '+y' | '-y' | '+z' | '-z';
 
@@ -82,8 +83,7 @@ function updateDimChip(): void {
   const w = Math.abs(box.max[0] - box.min[0]);
   const d = Math.abs(box.max[1] - box.min[1]);
   const h = Math.abs(box.max[2] - box.min[2]);
-  const fmt = (v: number): string => v.toFixed(2) + "m";
-  _dimChip.textContent = `W ${fmt(w)}  D ${fmt(d)}  H ${fmt(h)}`;
+  _dimChip.textContent = `W ${formatLength(w)}  D ${formatLength(d)}  H ${formatLength(h)}`;
   _dimChip.style.display = "block";
 }
 

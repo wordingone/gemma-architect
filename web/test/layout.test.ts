@@ -9,6 +9,7 @@ import {
   exportLayoutAsPdf,
   exportLayoutAsAi,
   exportLayoutAsDwgFallback,
+  parseScale,
 } from "../src/shell/layout";
 
 function freshHost(): HTMLElement {
@@ -144,4 +145,32 @@ test("scale picker accepts presets and parseable custom ratios", () => {
   addPanel(host, { x: 50, y: 250, w: 200, h: 150, viewport: "top", scale: "1:25"  });
   const ps = getPanels(host);
   expect(ps.map((p) => p.scale)).toEqual(["1:100", "1:25"]);
+});
+
+// ── parseScale — imperial architectural scale strings ──────────────────────
+
+test("parseScale: metric 1:N ratios", () => {
+  expect(parseScale("1:1")).toBe(1);
+  expect(parseScale("1:50")).toBe(50);
+  expect(parseScale("1:100")).toBe(100);
+  expect(parseScale("NTS")).toBe(1);
+});
+
+test("parseScale: imperial scale fractions → correct ratio", () => {
+  expect(parseScale(`1/4" = 1'-0"`)).toBeCloseTo(48, 6);  // 12/(1/4)
+  expect(parseScale(`1/8" = 1'-0"`)).toBeCloseTo(96, 6);  // 12/(1/8)
+  expect(parseScale(`1/2" = 1'-0"`)).toBeCloseTo(24, 6);  // 12/(1/2)
+  expect(parseScale(`3/4" = 1'-0"`)).toBeCloseTo(16, 6);  // 12/(3/4)
+  expect(parseScale(`1" = 1'-0"`)).toBeCloseTo(12, 6);    // 12/1
+  expect(parseScale(`3" = 1'-0"`)).toBeCloseTo(4, 6);     // 12/3
+  expect(parseScale(`1/16" = 1'-0"`)).toBeCloseTo(192, 6); // 12/(1/16)
+});
+
+test("parseScale: imperial mixed fractions", () => {
+  expect(parseScale(`1-1/2" = 1'-0"`)).toBeCloseTo(8, 6); // 12/1.5
+});
+
+test("parseScale: unknown string returns 1 (NTS equivalent)", () => {
+  expect(parseScale("custom-garbage")).toBe(1);
+  expect(parseScale("Custom")).toBe(1);
 });

@@ -24,6 +24,7 @@
 
 import { iconSVG } from "../ui/icons";
 import { formatLength } from "../units.js";
+import { getState } from "../app-state.js";
 import type { Viewer } from "../viewer/viewer";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
@@ -88,13 +89,50 @@ const SCALE_PRESETS = [
   "1:100", "1:200", "1:500", "1:1000",
   "NTS", "Custom",
 ] as const;
-export type ScaleId = typeof SCALE_PRESETS[number] | string; // strings accepted for custom
 
-function parseScale(s: ScaleId): number {
-  // Returns drawing-unit / paper-unit (e.g. "1:100" → 100). NTS → 1.
+// Standard US/Imperial architectural scales shown when unitSystem === "imperial".
+// Format: "a" = 1'-0" where a is the paper measurement in inches.
+// Ratio = 12 / a (feet to paper inches).
+const IMPERIAL_SCALE_PRESETS = [
+  `1/16" = 1'-0"`,  // 1:192
+  `1/8" = 1'-0"`,   // 1:96
+  `1/4" = 1'-0"`,   // 1:48
+  `1/2" = 1'-0"`,   // 1:24
+  `3/4" = 1'-0"`,   // 1:16
+  `1" = 1'-0"`,     // 1:12
+  `1-1/2" = 1'-0"`, // 1:8
+  `3" = 1'-0"`,     // 1:4
+  "NTS", "Custom",
+] as const;
+
+function activeScalePresets(): readonly string[] {
+  return getState("unitSystem") === "imperial" ? IMPERIAL_SCALE_PRESETS : SCALE_PRESETS;
+}
+
+export type ScaleId = typeof SCALE_PRESETS[number] | typeof IMPERIAL_SCALE_PRESETS[number] | string;
+
+export function parseScale(s: ScaleId): number {
+  // Returns drawing-unit / paper-unit ratio. NTS → 1.
   if (s === "NTS") return 1;
-  const m = /^1:(\d+(?:\.\d+)?)$/.exec(s);
-  if (m) return parseFloat(m[1]);
+  // Standard metric 1:N ratio.
+  const metricM = /^1:(\d+(?:\.\d+)?)$/.exec(s);
+  if (metricM) return parseFloat(metricM[1]);
+  // Imperial architectural: 'a" = 1\'-0"' where a can be whole, fraction, or mixed.
+  // e.g. '1/4" = 1\'-0"' → ratio = 12 / 0.25 = 48
+  // e.g. '1-1/2" = 1\'-0"' → ratio = 12 / 1.5 = 8
+  const impM = /^(.+?)" = 1'-0"$/.exec(s);
+  if (impM) {
+    const frac = impM[1].trim();
+    const mixed = /^(\d+)-(\d+)\/(\d+)$/.exec(frac);
+    const simple = /^(\d+)\/(\d+)$/.exec(frac);
+    const whole = /^(\d+)$/.exec(frac);
+    let inches: number;
+    if (mixed) inches = parseInt(mixed[1]) + parseInt(mixed[2]) / parseInt(mixed[3]);
+    else if (simple) inches = parseInt(simple[1]) / parseInt(simple[2]);
+    else if (whole) inches = parseInt(whole[1]);
+    else return 1;
+    return inches > 0 ? 12 / inches : 1;
+  }
   return 1;
 }
 
@@ -1121,8 +1159,9 @@ class LayoutController {
     const sSel = document.createElement("select");
     sSel.className = "paper-cell-select";
     sSel.setAttribute("aria-label", "Scale");
-    const isCustomScale = !SCALE_PRESETS.includes(p.scale as typeof SCALE_PRESETS[number]);
-    for (const s of SCALE_PRESETS) {
+    const presets = activeScalePresets();
+    const isCustomScale = !presets.includes(p.scale);
+    for (const s of presets) {
       const opt = document.createElement("option");
       opt.value = s; opt.textContent = s;
       if (s === p.scale || (s === "Custom" && isCustomScale)) opt.selected = true;
