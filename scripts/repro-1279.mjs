@@ -175,8 +175,10 @@ const outFile = `${STATE_DIR}/repro-1279-${ts2}.json`;
 writeFileSync(outFile, JSON.stringify({ url: PAGES_URL, captured_at: new Date().toISOString(), markers, domInfo, cacheInfo, consoleLogs, screenshotPath: ssPath }, null, 2));
 console.log(`Artifact: ${outFile}`);
 
-// ── 8. Close repro tab (never touches the dev-server tab) ─────────────────────
+// ── 8. Leave repro tab open — user can see STALLED state live ─────────────────
+// Do NOT close the tab or the browser. The Pages tab stays open so the
+// DOWNLOAD STALLED message is visible. Close it manually when done.
 ws.close();
-await fetch(`${CDP_BASE}/json/close/${newTarget.id}`).catch(() => {});
-console.log("Repro tab closed.");
+console.log("\nRepro tab left open at Pages URL — STALLED state visible in browser.");
+console.log("Close the Pages tab manually when done.");
 process.exit(0);
