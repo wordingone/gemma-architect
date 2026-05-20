@@ -23,6 +23,7 @@ import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from
 import { ClipFillManager } from "./clip-fill.js";
 import { getLayerForCreator } from "../geometry/layers.js";
 import { drawingLayerStore } from "../geometry/drawing-layers.js";
+import { clipSegByPlanes, worldToPanelXY } from "./line-clip.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 type Pane = {
@@ -2780,10 +2781,10 @@ export class Viewer {
       for (let i = 0; i < pos.length; i += 6) {
         tmpA.set(pos[i], pos[i + 1], pos[i + 2]).applyMatrix4(mat4);
         tmpB.set(pos[i + 3], pos[i + 4], pos[i + 5]).applyMatrix4(mat4);
-        const clipped = _clipSegByPlanes(tmpA, tmpB, planes);
+        const clipped = clipSegByPlanes(tmpA, tmpB, planes);
         if (!clipped) continue;
-        const a2 = _worldToPanelXY(clipped[0], projMat, panelW, panelH);
-        const b2 = _worldToPanelXY(clipped[1], projMat, panelW, panelH);
+        const a2 = worldToPanelXY(clipped[0], projMat, panelW, panelH);
+        const b2 = worldToPanelXY(clipped[1], projMat, panelW, panelH);
         if (!a2 || !b2) continue;
         segments.push([a2[0], a2[1], b2[0], b2[1]]);
       }
@@ -3230,37 +3231,7 @@ export class Viewer {
 }
 
 // --- Edge-projection helpers (used by getEdgeSegmentsForView) ---
-
-function _clipSegByPlanes(
-  a: THREE.Vector3, b: THREE.Vector3, planes: THREE.Plane[],
-): [THREE.Vector3, THREE.Vector3] | null {
-  if (planes.length === 0) return [a, b];
-  let t0 = 0, t1 = 1;
-  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
-  for (const pl of planes) {
-    const dA = pl.distanceToPoint(a);
-    const dB = pl.distanceToPoint(b);
-    const dot = dB - dA;
-    if (Math.abs(dot) < 1e-10) { if (dA < 0) return null; continue; }
-    const t = -dA / dot;
-    if (dot < 0) { if (t < t1) t1 = t; }
-    else         { if (t > t0) t0 = t; }
-    if (t0 > t1 + 1e-10) return null;
-  }
-  if (t0 > t1 + 1e-10) return null;
-  return [
-    new THREE.Vector3(a.x + dx * t0, a.y + dy * t0, a.z + dz * t0),
-    new THREE.Vector3(a.x + dx * t1, a.y + dy * t1, a.z + dz * t1),
-  ];
-}
-
-function _worldToPanelXY(
-  pt: THREE.Vector3, projMat: THREE.Matrix4, pw: number, ph: number,
-): [number, number] | null {
-  const v = pt.clone().applyMatrix4(projMat);
-  if (v.z > 1.001 || v.z < -1.001) return null;
-  return [(v.x * 0.5 + 0.5) * pw, (-v.y * 0.5 + 0.5) * ph];
-}
+// Implementations live in line-clip.ts (exported for testing).
 
 // --- Scene serialization helpers ---
 
