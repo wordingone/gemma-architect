@@ -171,23 +171,45 @@ export function csgIntersection(a: THREE.Mesh, b: THREE.Mesh, mat: THREE.Materia
 export function getUniqueEdges(mesh: THREE.Mesh): [THREE.Vector3, THREE.Vector3][] {
   const geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
   const pos = geo.getAttribute("position") as THREE.BufferAttribute;
-  const EPS_EDGE = 1e-3;
-  const edges: [THREE.Vector3, THREE.Vector3][] = [];
-  const isDup = (a: THREE.Vector3, b: THREE.Vector3) =>
-    edges.some(([ea, eb]) =>
-      (ea.distanceTo(a) < EPS_EDGE && eb.distanceTo(b) < EPS_EDGE) ||
-      (ea.distanceTo(b) < EPS_EDGE && eb.distanceTo(a) < EPS_EDGE),
-    );
+  const EPS_SNAP = 1e-3;
+
+  // Build edge → adjacent face normals map using quantised vertex keys.
+  const vertKey = (v: THREE.Vector3) =>
+    `${Math.round(v.x / EPS_SNAP)},${Math.round(v.y / EPS_SNAP)},${Math.round(v.z / EPS_SNAP)}`;
+  const edgeKey = (a: THREE.Vector3, b: THREE.Vector3) => {
+    const ka = vertKey(a); const kb = vertKey(b);
+    return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+  };
+
+  type EdgeEntry = { a: THREE.Vector3; b: THREE.Vector3; normals: THREE.Vector3[] };
+  const edgeMap = new Map<string, EdgeEntry>();
+  const vA = new THREE.Vector3(); const vB = new THREE.Vector3(); const vC = new THREE.Vector3();
+
   for (let i = 0; i < pos.count; i += 3) {
-    const va = new THREE.Vector3().fromBufferAttribute(pos, i);
-    const vb = new THREE.Vector3().fromBufferAttribute(pos, i + 1);
-    const vc = new THREE.Vector3().fromBufferAttribute(pos, i + 2);
-    for (const [a, b] of [[va, vb], [vb, vc], [vc, va]] as [THREE.Vector3, THREE.Vector3][]) {
-      if (!isDup(a, b)) edges.push([a.clone(), b.clone()]);
+    vA.fromBufferAttribute(pos, i);
+    vB.fromBufferAttribute(pos, i + 1);
+    vC.fromBufferAttribute(pos, i + 2);
+    const normal = new THREE.Vector3()
+      .crossVectors(new THREE.Vector3().subVectors(vB, vA), new THREE.Vector3().subVectors(vC, vA))
+      .normalize();
+    for (const [a, b] of [[vA, vB], [vB, vC], [vC, vA]] as [THREE.Vector3, THREE.Vector3][]) {
+      const key = edgeKey(a, b);
+      if (!edgeMap.has(key)) edgeMap.set(key, { a: a.clone(), b: b.clone(), normals: [] });
+      edgeMap.get(key)!.normals.push(normal.clone());
     }
   }
   geo.dispose();
-  return edges;
+
+  // Keep only hard edges: boundary (1 adjacent face) or where faces meet at an angle.
+  // Coplanar seams (face-split diagonals) have dot ≥ 0.99 → skip.
+  const COPLANAR = 0.99;
+  const result: [THREE.Vector3, THREE.Vector3][] = [];
+  for (const { a, b, normals } of edgeMap.values()) {
+    if (normals.length === 1) { result.push([a, b]); }
+    else if (normals.length === 2) { if (normals[0].dot(normals[1]) < COPLANAR) result.push([a, b]); }
+    else { result.push([a, b]); } // non-manifold — include
+  }
+  return result;
 }
 
 /**

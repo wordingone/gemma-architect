@@ -37,11 +37,12 @@ const CLOSED_SKETCH_CREATORS = new Set(["circle", "rect", "polygon"]);
 
 // Creators valid for click-selection as extrude profile.
 // Excludes raw 3D primitives (wall, slab, column, box, beam, roof, space)
-// to prevent accidentally extruding large solids as a profile.
-// Includes previous extrude/boolean results so re-extrusion works.
+// to prevent accidentally extruding large structural elements as a profile.
+// Includes previous extrude/boolean/CSG results so re-extrusion and surface
+// selection work (e.g. extruding a boolean result or a CSG brep surface).
 const CLICK_PROFILE_CREATORS = new Set([
   "rect", "circle", "polygon", "polyline", "curve", "line",
-  "extrude", "boolean-union", "boolean-difference", "boolean-split",
+  "extrude", "boolean-union", "boolean-difference", "boolean-split", "brep",
 ]);
 
 // ── Late-binding hooks ────────────────────────────────────────────────────────
@@ -1118,14 +1119,12 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
   if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select") return false;
 
   if (phase.kind === "extrude_select") {
-    // Accept both sketch profiles (Line objects) and solid meshes (surfaces, prior extrudes, booleans).
-    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    // profileOnly=true limits raycast to CLICK_PROFILE_CREATORS (sketch curves +
+    // extrude/boolean/brep results). Prevents accidentally extruding large structural
+    // elements (walls, slabs) that share the scene floor level.
+    const hit = opRaycastObject(viewer, clientX, clientY, true);
     if (!hit) { ptPrompt("Extrude — click a profile curve, solid, or surface  [Escape = cancel]"); return true; }
     const creator = (hit.obj.userData.creator as string | undefined) ?? "";
-    if (!EXTRUDABLE_CREATORS.has(creator)) {
-      ptPrompt("Extrude — click a profile curve, rectangle, circle, polygon, or solid surface");
-      return true;
-    }
     const box = new THREE.Box3().setFromObject(hit.obj);
     const size = new THREE.Vector3(); box.getSize(size);
     const ctr = new THREE.Vector3(); box.getCenter(ctr);
