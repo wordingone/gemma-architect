@@ -110,6 +110,11 @@ await page.addInitScript(() => {
   window.addEventListener('agentmodel:error',          _capture('error'),          { once: true });
 });
 
+// Navigate to about:blank before CDP wipe so a registered SW on TARGET_ORIGIN
+// cannot fire controllerchange → location.reload() during the JS clear step.
+// CDP Storage.clearDataForOrigin still targets TARGET_ORIGIN correctly from here.
+await page.goto('about:blank', { waitUntil: 'load', timeout: 10_000 });
+
 await cdp.send('Storage.clearDataForOrigin', { origin: TARGET_ORIGIN, storageTypes: 'all' });
 await cdp.send('Network.clearBrowserCache');
 log('CDP wipe complete — IDB, Cache API, cookies, all cleared');
@@ -160,9 +165,12 @@ const storageCheck = await page.evaluate(async () => {
 }).catch(e => ({ error: e.message.slice(0, 80) }));
 log(`Post-wipe storage: usage=${storageCheck.usageBytes}B caches=[${(storageCheck.cacheNames ?? []).join(',')}] opfs=${storageCheck.opfsEntries}`);
 
+// HALT on actual model bytes (>5MB) or OPFS entries (where the model lives).
+// Cache name presence alone is NOT a halt condition: the app caches a small
+// model-manifest JSON (<100KB) on every page load regardless of whether the model
+// has been downloaded. That metadata does not constitute a "cached model."
 if (!storageCheck.error &&
     ((storageCheck.usageBytes > 5_000_000) ||
-     (storageCheck.cacheNames?.length > 0)  ||
      (storageCheck.opfsEntries > 0))) {
   log('HALT:fresh-device-violated STORAGE — residual model data survives wipe');
   process.exit(5);
@@ -172,24 +180,32 @@ if (!storageCheck.error &&
 const GOTO_URL = TARGET + '?_freshdevice=' + Date.now();
 await page.goto(GOTO_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 log('App loaded — boot screen should appear');
-await pause(2_000);
+// Extended pause: coi-serviceworker fires controllerchange → location.reload() ~200-500ms
+// after domcontentloaded on GH Pages. Waiting 4s ensures the SW reload settles before
+// we check crossOriginIsolated and look for the download button.
+await pause(4_000);
 
 // ── Phase 0.5: Cross-origin isolation check ──────────────────────────────────
 // Captures window.crossOriginIsolated immediately after load.
-// Expected: true on localhost (vite COOP+COEP headers), false on GH Pages without coi-serviceworker.
+// Expected: true on localhost (vite COOP+COEP headers), true on GH Pages WITH coi-serviceworker.
 const crossOriginIsolated = await page.evaluate(() => window.crossOriginIsolated).catch(() => null);
 log(`crossOriginIsolated: ${crossOriginIsolated} ${crossOriginIsolated ? '✅' : '⚠️  SAB + WASM pthreads unavailable — origin missing COOP/COEP'}`);
 
-// Auto-click "Download model" prompt if present (app shows this on fresh device before fetch starts)
-const downloadBtnText = await page.evaluate(() => {
-  const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Download model'));
-  if (btn) { btn.click(); return btn.textContent.trim(); }
-  return null;
-}).catch(() => null);
+// Auto-click "Download model" prompt — retry loop so SW-reload timing doesn't miss it.
+// Boot screen shows the button on a fresh device; it disappears once download starts.
+let downloadBtnText = null;
+for (let attempt = 0; attempt < 15 && !downloadBtnText; attempt++) {
+  downloadBtnText = await page.evaluate(() => {
+    const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Download model'));
+    if (btn) { btn.click(); return btn.textContent.trim(); }
+    return null;
+  }).catch(() => null);
+  if (!downloadBtnText) await pause(1_000);
+}
 if (downloadBtnText) {
   log(`Clicked: "${downloadBtnText}" — CDN fetch initiated`);
 } else {
-  log('No "Download model" button found — download may auto-start');
+  log('No "Download model" button found after 15s — download may auto-start or page still loading');
 }
 
 // ── Phase 2: Real CDN download, watched live ──────────────────────────────────
