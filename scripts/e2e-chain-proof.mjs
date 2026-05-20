@@ -354,8 +354,8 @@ const sceneAssertion = await page.evaluate(() => {
   const walls    = all.filter(o => o.userData?.creator === 'wall').length;
   const slabs    = all.filter(o => o.userData?.creator === 'slab').length;
   const roofs    = all.filter(o => o.userData?.creator === 'roof').length;
-  const doors    = all.filter(o => o.userData?.creator === 'door').length;
-  const windows  = all.filter(o => o.userData?.creator === 'window').length;
+  const doors    = all.filter(o => o.userData?.creator === 'door' || o.userData?.creator === 'SdDoor').length;
+  const windows  = all.filter(o => o.userData?.creator === 'window' || o.userData?.creator === 'SdWindow').length;
   const openings = doors + windows;
   return {
     ok: walls >= 4 && slabs >= 2 && roofs >= 1 && openings >= 1,
