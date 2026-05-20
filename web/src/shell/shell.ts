@@ -19,7 +19,7 @@ function escapeHtml(s: string): string {
 // .app, .menubar, .modebar, .ribbon, .ribbon-tabs, .ribbon-tools, .statusbar,
 // .menu-item / .menu-dropdown / .menu-row / .menu-row-kbd / .menu-sep, etc.
 
-type MenuEntry = { label: string; shortcut?: string; separator?: false; canonical?: string; canonicalArgs?: Record<string, unknown>; toolId?: string; onAction?: () => void; stub?: boolean; submenu?: MenuEntry[] } | { separator: true };
+type MenuEntry = { label: string | (() => string); shortcut?: string; separator?: false; canonical?: string; canonicalArgs?: Record<string, unknown>; toolId?: string; onAction?: () => void; stub?: boolean; submenu?: MenuEntry[] } | { separator: true };
 type MenuItem = {
   label: string;
   entries: MenuEntry[];
@@ -44,7 +44,7 @@ const MENUS: MenuItem[] = [
       { label: "PDF",            onAction: () => dispatchSync("SdExport", { format: "pdf" }) },
     ]},
     { separator: true },
-    { label: "Units: Metric ↔ Imperial", onAction: () => {
+    { label: () => getState("unitSystem") === "imperial" ? "Units: Imperial ✓" : "Units: Metric ✓", onAction: () => {
       const cur = getState("unitSystem") ?? "metric";
       dispatchSync("SdSetUnits", { system: cur === "metric" ? "imperial" : "metric" });
     }},
@@ -539,7 +539,7 @@ function buildMenubar(host: HTMLElement) {
         panel.appendChild(sep);
         continue;
       }
-      const e = entry as { label: string; shortcut?: string; canonical?: string; canonicalArgs?: Record<string, unknown>; toolId?: string; onAction?: () => void; stub?: boolean; submenu?: MenuEntry[] };
+      const e = entry as { label: string | (() => string); shortcut?: string; canonical?: string; canonicalArgs?: Record<string, unknown>; toolId?: string; onAction?: () => void; stub?: boolean; submenu?: MenuEntry[] };
       const row = document.createElement("div");
       row.className = "menu-row";
       row.setAttribute("role", "menuitem");
@@ -549,7 +549,7 @@ function buildMenubar(host: HTMLElement) {
 
       const label = document.createElement("span");
       label.className = "menu-row-label";
-      label.textContent = e.label;
+      label.textContent = typeof e.label === "function" ? e.label() : e.label;
       row.appendChild(label);
 
       if (e.shortcut) {
