@@ -192,7 +192,15 @@ export function opFinish(viewer: Viewer, resetTool = true): void {
 
 // Clones a mesh's material before setting emissive highlight so shared materials
 // (e.g. IFC walls sharing one MeshStandardMaterial) are not globally tinted.
-function _applyBoolHighlight(m: THREE.Mesh, hex: number): void {
+function _applyBoolHighlight(obj: THREE.Object3D, hex: number): void {
+  // Line objects (curves, polylines, circles as sketches) use LineBasicMaterial.color
+  if (obj instanceof THREE.Line) {
+    const lm = obj.material as THREE.LineBasicMaterial;
+    obj.userData._savedLineColor = lm.color.getHex();
+    lm.color.setHex(hex);
+    return;
+  }
+  const m = obj as THREE.Mesh;
   const mats = Array.isArray(m.material) ? m.material : (m.material ? [m.material] : []);
   const idx = mats.findIndex((mt) => !!(mt as THREE.MeshStandardMaterial).emissive);
   if (idx < 0) return;
@@ -206,10 +214,18 @@ function _applyBoolHighlight(m: THREE.Mesh, hex: number): void {
     m.material = cloned;
   }
   m.userData._savedEmissive = orig.emissive.getHex();
-  m.userData._savedMaterial = orig; // restore on cancel/finish
+  m.userData._savedMaterial = orig;
 }
 
 function _restoreBoolHighlight(obj: THREE.Object3D): void {
+  // Restore Line objects
+  if (obj instanceof THREE.Line) {
+    if (obj.userData._savedLineColor !== undefined) {
+      (obj.material as THREE.LineBasicMaterial).color.setHex(obj.userData._savedLineColor as number);
+      delete obj.userData._savedLineColor;
+    }
+    return;
+  }
   const m = obj as THREE.Mesh;
   if (m.userData._savedEmissive === undefined) return;
   const orig = m.userData._savedMaterial as THREE.Material | undefined;
@@ -224,7 +240,6 @@ function _restoreBoolHighlight(obj: THREE.Object3D): void {
     }
     delete m.userData._savedMaterial;
   } else {
-    // Fallback: restore emissive on existing material.
     const mats = Array.isArray(m.material) ? m.material : [m.material];
     const std = mats.find((mt): mt is THREE.MeshStandardMaterial => !!(mt as THREE.MeshStandardMaterial).emissive);
     if (std) std.emissive.setHex(m.userData._savedEmissive as number);
