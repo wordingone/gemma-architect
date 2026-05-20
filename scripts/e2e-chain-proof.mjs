@@ -89,7 +89,25 @@ console.log('══════════════════════�
 
 await cdp.send('Storage.clearDataForOrigin', { origin: TARGET_ORIGIN, storageTypes: 'all' });
 await cdp.send('Network.clearBrowserCache');
-log('CDP wipe complete — IDB, Cache API, cookies, all cleared');
+
+// Storage.clearDataForOrigin skips OPFS — unregister SW then clear OPFS explicitly
+const opfsClear = await page.evaluate(async () => {
+  // Unregister SW first — prevents write-back racing the OPFS clear
+  await navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister())));
+  const root = await navigator.storage.getDirectory();
+  const removed = [];
+  for await (const [name] of root.entries()) {
+    await root.removeEntry(name, { recursive: true });
+    removed.push(name);
+  }
+  // Second-pass verify — throw if any entry survived (locked files can survive silently)
+  for await (const _ of root.entries()) {
+    throw new Error('OPFS not empty after clear — locked entry survived removeEntry');
+  }
+  return { cleared: removed.length, names: removed };
+});
+log(`OPFS clear: ${JSON.stringify(opfsClear)}`);
+log('CDP wipe complete — IDB, Cache API, cookies, OPFS all cleared');
 
 await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 log('App loaded — boot screen should appear');
