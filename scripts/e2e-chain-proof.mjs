@@ -164,6 +164,18 @@ await page.goto(GOTO_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 log('App loaded — boot screen should appear');
 await pause(2_000);
 
+// Auto-click "Download model" prompt if present (app shows this on fresh device before fetch starts)
+const downloadBtnText = await page.evaluate(() => {
+  const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Download model'));
+  if (btn) { btn.click(); return btn.textContent.trim(); }
+  return null;
+}).catch(() => null);
+if (downloadBtnText) {
+  log(`Clicked: "${downloadBtnText}" — CDN fetch initiated`);
+} else {
+  log('No "Download model" button found — download may auto-start');
+}
+
 // ── Phase 2: Real CDN download, watched live ──────────────────────────────────
 console.log('\n════════════════════════════════════════════════════════');
 console.log('PHASE 2 — Real CDN download (no fake bytes, no synthetic events)');
