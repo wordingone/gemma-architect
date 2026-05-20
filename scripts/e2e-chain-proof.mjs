@@ -252,14 +252,20 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
     resolve({ source: 'event', detail: e.detail ?? null });
   }, { once: true });
 
-  // Fallback: scene stabilization — 10s no change in children count
+  // Fallback: scene stabilization — 10s no change in children count,
+  // and count must exceed initialCount (pre-dispatch default scene).
+  // Without this guard, the 10s stable window fires at the initial
+  // scene count (e.g. 13 default children) before the model has had
+  // time to emit its first dispatch — which can take 30-120s when
+  // Phase 2 is fast (cache hit, 12s boot) and the model is cold-warm.
+  const initialCount = window.__viewer?.scene?.children?.length ?? -1;
   let lastCount = -1, stableFor = 0;
   const STABLE_MS = 10_000, POLL_MS = 1_000;
   const poll = setInterval(() => {
     const count = window.__viewer?.scene?.children?.length ?? -1;
     if (count !== lastCount) { lastCount = count; stableFor = 0; }
     else stableFor += POLL_MS;
-    if (stableFor >= STABLE_MS && count > 0) {
+    if (stableFor >= STABLE_MS && count > initialCount) {
       clearInterval(poll);
       resolve({ source: 'scene-stable', count });
     }
