@@ -72,29 +72,23 @@ function checkBootComplete(): void {
   }
 }
 
-// Wrap Cache.put to swallow UnknownError / QuotaExceededError.
+// Wrap Cache.prototype.put to swallow UnknownError / QuotaExceededError.
 // If Cache.put throws, transformers.js may consume (and corrupt) the response body before re-raising,
-// silently aborting the download pipeline.  We catch here and log to stall trace instead of throwing.
+// silently aborting the download pipeline.  We patch the prototype (not globalThis.caches, which is
+// a getter-only property in WorkerGlobalScope and cannot be reassigned).
 function installCachePutGuard(): void {
-  if (!("caches" in globalThis)) return;
-  const cs = (globalThis as unknown as { caches: CacheStorage }).caches;
-  const origOpen = cs.open.bind(cs);
-  (globalThis as unknown as { caches: CacheStorage }).caches = Object.assign(Object.create(cs), {
-    open: async (...args: Parameters<CacheStorage["open"]>) => {
-      const cache = await origOpen(...args);
-      const origPut = cache.put.bind(cache);
-      return Object.assign(Object.create(cache), {
-        put: async (...putArgs: Parameters<Cache["put"]>) => {
-          try {
-            await origPut(...putArgs);
-          } catch (e) {
-            post({ type: "progress", phase: "cache-put-error", bytes: 0, total: 0,
-                   throughputBytesPerSec: 0, error: `Cache.put: ${(e as Error).message}` });
-          }
-        },
-      });
-    },
-  });
+  if (!("Cache" in globalThis)) return;
+  try {
+    const origPut = Cache.prototype.put;
+    Cache.prototype.put = async function(this: Cache, ...args: Parameters<Cache["put"]>) {
+      try {
+        return await origPut.apply(this, args);
+      } catch (e) {
+        post({ type: "progress", phase: "cache-put-error", bytes: 0, total: 0,
+               throughputBytesPerSec: 0, error: `Cache.put: ${(e as Error).message}` });
+      }
+    };
+  } catch (_) { /* non-fatal if prototype is frozen */ }
 }
 
 // Check if model weights are already in Cache API — indicates a returning user.
