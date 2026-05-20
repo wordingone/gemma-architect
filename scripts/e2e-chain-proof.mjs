@@ -155,7 +155,7 @@ if (!storageCheck.error &&
      (storageCheck.cacheNames?.length > 0)  ||
      (storageCheck.opfsEntries > 0))) {
   log('HALT:fresh-device-violated STORAGE — residual model data survives wipe');
-  process.exit(1);
+  process.exit(5);
 }
 
 // ── Fix 4: Cache-bust URL so service-worker URL matching cannot shortcut ─────
@@ -237,7 +237,7 @@ if (bootResult.event === 'error') {
 // Fix 3: returning-user = model was cached = fresh-device-violated
 if (bootResult.event === 'returning-user') {
   log('HALT:fresh-device-violated — returning-user fired; model cached, CDN download NOT tested');
-  process.exit(1);
+  process.exit(5);
 }
 
 // Monotonicity check — real bytes must only go up
