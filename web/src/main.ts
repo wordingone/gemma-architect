@@ -147,8 +147,26 @@ levelStore.subscribe(() => {
 });
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
-// Expose dispatchSync + async dispatch for CDP-driven verification scripts.
-(window as unknown as { __dispatch: typeof dispatchSync }).__dispatch = dispatchSync;
+// Expose dispatch for CDP-driven verification scripts.
+// __dispatch is a smart wrapper: sync handlers return DispatchResult directly (backwards-compat
+// for non-awaited calls); async handlers (e.g. SdInvokeSkill) return Promise<DispatchResult>
+// so that `await window.__dispatch('SdInvokeSkill', ...)` resolves correctly.
+(window as unknown as { __dispatch: (verb: string, args?: Record<string, unknown>) => Record<string, unknown> | Promise<Record<string, unknown>> }).__dispatch =
+  (verb: string, args: Record<string, unknown> = {}) => {
+    const syncRes = dispatchSync(verb, args);
+    if (!syncRes.ok && syncRes.error === "HandlerThrew" &&
+        typeof syncRes.detail === "string" && syncRes.detail.includes("returned Promise")) {
+      return dispatch(verb, args).then((r: DispatchResult) => {
+        const handlerFields = r.ok && r.result && typeof r.result === "object" ? r.result as Record<string, unknown> : {};
+        return { ...r, ...handlerFields };
+      });
+    }
+    // Spread handler result onto the DispatchResult for backwards-compat — callers
+    // that access res.modified / res.created directly (not via res.result) still work.
+    const handlerFields = syncRes.ok && syncRes.result && typeof syncRes.result === "object"
+      ? syncRes.result as Record<string, unknown> : {};
+    return { ...syncRes, ...handlerFields };
+  };
 (window as unknown as { __dispatchAsync: typeof dispatch }).__dispatchAsync = dispatch;
 // Expose command-session control for test teardown (prevents picker-bridge session leak).
 (window as unknown as { __clearCommandSession: typeof clearCommandSession }).__clearCommandSession = clearCommandSession;
@@ -852,6 +870,7 @@ registerHandler("SdSlab", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdSlab", args);
   mesh.userData.levelId = getActiveLevelId();
+  mesh.userData.creator = "slab";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
@@ -963,6 +982,7 @@ registerHandler("SdStair", (args) => {
   const { group, chain, footprint } = buildStair(a, b, stairParams);
   const elev = getActiveLevelElevation();
   group.position.z = elev;
+  group.userData.creator = "stair";
   group.userData.layerId = resolveLayerId("SdStair", args);
   group.userData.levelId = getActiveLevelId();
   group.userData.dispatchArgs = args;
@@ -1005,7 +1025,7 @@ registerHandler("SdDoor", (args) => {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
-  mesh.userData.creator = "SdDoor";
+  mesh.userData.creator = "door";
   mesh.userData.voidW = doorW;
   mesh.userData.voidH = doorH;
   mesh.userData.cplaneKind = cplane.kind;
@@ -1064,7 +1084,7 @@ registerHandler("SdWindow", (args) => {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
-  mesh.userData.creator = "SdWindow";
+  mesh.userData.creator = "window";
   mesh.userData.voidW = FZK_WINDOW_W;
   mesh.userData.voidH = FZK_WINDOW_H;
   mesh.userData.cplaneKind = cplane.kind;
@@ -1147,6 +1167,7 @@ registerHandler("SdRoof", (args) => {
     });
   }
   mesh.position.set(centerX, centerY, activeLevelElev + eaveOffset);
+  mesh.userData.creator = "roof";
   mesh.userData.roofType = roofType;
   mesh.userData.ifcPredefinedType = ({
     pitched: "GABLE_ROOF",
@@ -1759,6 +1780,23 @@ registerHandler("SdRectangle", (args) => {
   return { created: "rectangle", width: w, depth: d };
 });
 
+// SdRect — shorthand for axis-aligned rectangle with {x,y,w,d} center-based args.
+// creator:"rect" matches surface tests (array-linear-spawns-copies, array-polar-spawns-radial, etc.)
+registerHandler("SdRect", (args) => {
+  const w  = (args.w as number | undefined) ?? (args.width  as number | undefined) ?? 1;
+  const d  = (args.d as number | undefined) ?? (args.depth  as number | undefined) ?? 1;
+  const cx = (args.x as number | undefined) ?? 0;
+  const cy = (args.y as number | undefined) ?? 0;
+  const a = { x: cx - w / 2, y: cy - d / 2 };
+  const b = { x: cx + w / 2, y: cy + d / 2 };
+  const { mesh, chain } = buildRect(a, b);
+  mesh.userData.creator = "rect";
+  mesh.userData.dispatchArgs = args;
+  mesh.userData.chain = chain;
+  viewer.addMesh(mesh, "mesh");
+  return { created: "rect", width: w, depth: d };
+});
+
 registerHandler("SdPolyline", (args) => {
   const points = (args.points as number[][] | undefined) ?? [];
   if (points.length < 2) return { error: "SdPolyline requires at least 2 points", created: null };
@@ -2166,6 +2204,7 @@ registerHandler("SdAlignedDim", (args) => {
   const dist = ptA.distanceTo(ptB);
   const mid = ptA.clone().add(ptB).multiplyScalar(0.5);
   const lineObj = opBuildAnnotLine([ptA, ptB]);
+  lineObj.userData.creator = "SdAlignedDim";
   viewer.addMesh(lineObj, "mesh");
   opAddLabel(formatLength(dist), mid, viewer);
   return { measured: "length", distance: parseFloat(dist.toFixed(4)), unit: "m", annotationUuid: lineObj.uuid };
@@ -2182,6 +2221,7 @@ registerHandler("SdAngularDim", (args) => {
   const d2 = ray2.clone().sub(vertex).normalize();
   const angleDeg = (Math.acos(Math.max(-1, Math.min(1, d1.dot(d2)))) * 180) / Math.PI;
   const lineObj = opBuildAnnotLine([vertex, ray1, vertex, ray2]);
+  lineObj.userData.creator = "SdAngularDim";
   viewer.addMesh(lineObj, "mesh");
   opAddLabel(`${angleDeg.toFixed(1)}°`, vertex, viewer);
   return { measured: "angle", angleDeg: parseFloat(angleDeg.toFixed(2)), unit: "deg", annotationUuid: lineObj.uuid };

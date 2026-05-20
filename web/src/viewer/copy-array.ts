@@ -57,7 +57,7 @@ export function replayCloneSideEffects(
   }
 
   // ── Door / Window: cut void in nearest containing wall ───────────────────
-  if (creator === "SdDoor" || creator === "SdWindow") {
+  if (creator === "door" || creator === "window" || creator === "SdDoor" || creator === "SdWindow") {
     const voidW = clone.userData.voidW as number | undefined;
     const voidH = clone.userData.voidH as number | undefined;
     if (!voidW || !voidH) return;
