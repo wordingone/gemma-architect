@@ -311,6 +311,34 @@ export function initPtOverlay(ptWrap: HTMLElement, ptInput: HTMLInputElement): v
     // Re-focus after the click event fully processes so we don't fight with it.
     setTimeout(() => _ptCoordInputEl?.focus({ preventScroll: true }), 0);
   }, true); // capture = true: fires before canvas/viewer handlers
+
+  // Capture-phase keydown: when the coord input is visible but not focused,
+  // redirect printable characters into the input so typing never gets lost.
+  // This covers the race window between ptShowCoordInput() and focus settling.
+  document.addEventListener("keydown", (e) => {
+    if (!_ptCoordWrapEl?.classList.contains("visible")) return;
+    if (!_ptCoordInputEl) return;
+    if (document.activeElement === _ptCoordInputEl) return; // already focused
+    if (e.ctrlKey || e.altKey || e.metaKey) return; // modifier combos — leave alone
+    const isPrintable = e.key.length === 1;
+    if (!isPrintable) {
+      // Non-printable but useful for editing — just focus the input so next key lands there.
+      if (e.key === "Backspace" || e.key === "Delete" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        _ptCoordInputEl.focus({ preventScroll: true });
+      }
+      return;
+    }
+    // Redirect the printable character into the input.
+    _ptCoordInputEl.focus({ preventScroll: true });
+    const val = _ptCoordInputEl.value;
+    const sel = _ptCoordInputEl.selectionStart ?? val.length;
+    const end = _ptCoordInputEl.selectionEnd ?? val.length;
+    _ptCoordInputEl.value = val.substring(0, sel) + e.key + val.substring(end);
+    _ptCoordInputEl.selectionStart = _ptCoordInputEl.selectionEnd = sel + 1;
+    _ptCoordInputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true); // capture = true
 }
 
 export function ptGetTarget(): THREE.Object3D | null {

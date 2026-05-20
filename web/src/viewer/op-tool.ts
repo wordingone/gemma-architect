@@ -190,19 +190,52 @@ export function opFinish(viewer: Viewer, resetTool = true): void {
   if (resetTool) dispatchSync("setActiveTool", { toolId: "select" });
 }
 
+// Clones a mesh's material before setting emissive highlight so shared materials
+// (e.g. IFC walls sharing one MeshStandardMaterial) are not globally tinted.
+function _applyBoolHighlight(m: THREE.Mesh, hex: number): void {
+  const mats = Array.isArray(m.material) ? m.material : (m.material ? [m.material] : []);
+  const idx = mats.findIndex((mt) => !!(mt as THREE.MeshStandardMaterial).emissive);
+  if (idx < 0) return;
+  const orig = mats[idx] as THREE.MeshStandardMaterial;
+  const cloned = orig.clone();
+  cloned.emissive.setHex(hex);
+  cloned.emissiveIntensity = 1;
+  if (Array.isArray(m.material)) {
+    const next = [...m.material]; next[idx] = cloned; m.material = next;
+  } else {
+    m.material = cloned;
+  }
+  m.userData._savedEmissive = orig.emissive.getHex();
+  m.userData._savedMaterial = orig; // restore on cancel/finish
+}
+
+function _restoreBoolHighlight(obj: THREE.Object3D): void {
+  const m = obj as THREE.Mesh;
+  if (m.userData._savedEmissive === undefined) return;
+  const orig = m.userData._savedMaterial as THREE.Material | undefined;
+  if (orig) {
+    if (Array.isArray(m.material)) {
+      m.material = m.material.map((mt) =>
+        (mt as THREE.MeshStandardMaterial).emissiveIntensity === 1 &&
+        (mt as THREE.MeshStandardMaterial).emissive ? orig : mt,
+      );
+    } else {
+      m.material = orig;
+    }
+    delete m.userData._savedMaterial;
+  } else {
+    // Fallback: restore emissive on existing material.
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    const std = mats.find((mt): mt is THREE.MeshStandardMaterial => !!(mt as THREE.MeshStandardMaterial).emissive);
+    if (std) std.emissive.setHex(m.userData._savedEmissive as number);
+  }
+  delete m.userData._savedEmissive;
+}
+
 export function opCancel(viewer: Viewer, resetTool = true): void {
   opSetHover(null);
-  const restoreEmissive = (obj: THREE.Object3D) => {
-    const m = obj as THREE.Mesh;
-    if (m.userData._savedEmissive === undefined) return;
-    const mats = Array.isArray(m.material) ? m.material : [m.material];
-    const firstStd = mats.find((mat): mat is THREE.MeshStandardMaterial =>
-      !!(mat as THREE.MeshStandardMaterial).emissive);
-    if (firstStd) firstStd.emissive.setHex(m.userData._savedEmissive as number);
-    delete m.userData._savedEmissive;
-  };
-  if (_opPhase?.kind === "bool_b") restoreEmissive(_opPhase.objA);
-  if (_opPhase?.kind === "bool_op") { restoreEmissive(_opPhase.objA); restoreEmissive(_opPhase.objB); }
+  if (_opPhase?.kind === "bool_b") _restoreBoolHighlight(_opPhase.objA);
+  if (_opPhase?.kind === "bool_op") { _restoreBoolHighlight(_opPhase.objA); _restoreBoolHighlight(_opPhase.objB); }
   opFinish(viewer, resetTool);
 }
 
@@ -917,16 +950,7 @@ export function opUpdateSelectHoverPreview(viewer: Viewer, profile: THREE.Object
 // ── Boolean operation ─────────────────────────────────────────────────────────
 
 function opExecBoolean(viewer: Viewer, objA: THREE.Object3D, objB: THREE.Object3D, op: "union" | "difference" | "split"): void {
-  const restoreEmissive = (obj: THREE.Object3D) => {
-    const m = obj as THREE.Mesh;
-    if (m.userData._savedEmissive === undefined) return;
-    const mats = Array.isArray(m.material) ? m.material : [m.material];
-    const std = mats.find((mat): mat is THREE.MeshStandardMaterial =>
-      !!(mat as THREE.MeshStandardMaterial).emissive);
-    if (std) std.emissive.setHex(m.userData._savedEmissive as number);
-    delete m.userData._savedEmissive;
-  };
-  restoreEmissive(objA); restoreEmissive(objB);
+  _restoreBoolHighlight(objA); _restoreBoolHighlight(objB);
 
   if (!(objA instanceof THREE.Mesh) || !(objB instanceof THREE.Mesh)) {
     ptPrompt("Boolean — both objects must be solid meshes, not curves or points");
@@ -1066,9 +1090,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     }
     opSetHover(null);
     const mA = objA as THREE.Mesh;
-    const mAMats = Array.isArray(mA.material) ? mA.material : (mA.material ? [mA.material] : []);
-    const mAStd = mAMats.find((mt): mt is THREE.MeshStandardMaterial => !!(mt as THREE.MeshStandardMaterial).emissive);
-    if (mAStd) { mA.userData._savedEmissive = mAStd.emissive.getHex(); mAStd.emissive.setHex(0x003399); }
+    _applyBoolHighlight(mA, 0x003399);
     _opPhase = { kind: "bool_b", objA };
     ptPrompt("Boolean — click the second solid (first highlighted in blue)");
     return true;
@@ -1097,9 +1119,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     }
     opSetHover(null);
     const mB = objB as THREE.Mesh;
-    const mBMats = Array.isArray(mB.material) ? mB.material : (mB.material ? [mB.material] : []);
-    const mBStd = mBMats.find((m): m is THREE.MeshStandardMaterial => !!(m as THREE.MeshStandardMaterial).emissive);
-    if (mBStd) { mB.userData._savedEmissive = mBStd.emissive.getHex(); mBStd.emissive.setHex(0xcc6600); }
+    _applyBoolHighlight(mB, 0xcc6600);
     _opPhase = { kind: "bool_op", objA: phase.objA, objB };
     opShowBoolChooser(viewer, phase.objA, objB);
     ptPrompt("Boolean — choose operation");
