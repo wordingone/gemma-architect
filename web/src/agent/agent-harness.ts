@@ -143,12 +143,23 @@ const _generateCallbacks = new Map<string, {
   reject: (e: Error) => void;
 }>();
 
-// CDN URL for the MTP drafter ONNX model (#811, #1205).
-// Defaults to the uploaded HF Hub artifact; override via VITE_DRAFTER_ONNX_URL at build time.
-const DRAFTER_DEFAULT_URL = "https://huggingface.co/Ignore/gemma-cad-drafter-e4b/resolve/main/drafter-e4b.onnx";
+// CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#811).
+// Replace placeholder with actual HF Hub URL after drafter-e4b.onnx is uploaded.
+//   Recommended host: https://huggingface.co/<user>/<repo>/resolve/main/drafter-e4b.onnx
+//   Set VITE_DRAFTER_ONNX_URL in the production deploy environment to activate the CDN path.
+const _DRAFTER_CDN_PLACEHOLDER = "https://huggingface.co/TODO-set-after-upload/resolve/main/drafter-e4b.onnx";
 const DRAFTER_ONNX_URL: string =
-  (import.meta.env.VITE_DRAFTER_ONNX_URL as string | undefined) ?? DRAFTER_DEFAULT_URL;
+  (import.meta.env["VITE_DRAFTER_ONNX_URL"] as string | undefined) ?? _DRAFTER_CDN_PLACEHOLDER;
 const DRAFTER_CACHE_KEY = "mtp-drafter-e4b-v2"; // bumped: CDN URL changed from local path (#811)
+
+// Warn in production when the drafter URL is still the placeholder (file not uploaded yet).
+if (import.meta.env.PROD && DRAFTER_ONNX_URL === _DRAFTER_CDN_PLACEHOLDER) {
+  console.warn(
+    "[agent-harness] VITE_DRAFTER_ONNX_URL is not set — drafter will load from placeholder URL " +
+    "(will 404 until drafter-e4b.onnx is uploaded and the env var is configured). " +
+    "MTP spec-decode is disabled until the drafter loads. See issue #811."
+  );
+}
 const MTP_DRAFT_N = 3; // candidate tokens to draft per speculation step
 
 /**
