@@ -1354,13 +1354,31 @@ function layoutViewportToViewName(v: ViewportId): "top" | "persp" | "front" | "r
   }
 }
 
-// --- Viewport SVG placeholder rendering -----------------------------------
+// --- Viewport SVG rendering (real projection + AABB fallback) -------------
 
 interface PlanProj { sx: (a: number, b: number, c: number) => number; sy: (a: number, b: number, c: number) => number; au: number; av: number; }
 
-function renderViewportSvg(p: PanelState, b: SceneBounds): string {
+function renderViewportSvg(p: PanelState, b: SceneBounds, viewer?: Viewer): string {
   const w = p.w, h = p.h;
   if (w < 4 || h < 4) return "";
+
+  // Real 3D edge projection (#1211): use live viewer when available.
+  if (viewer) {
+    const viewName = layoutViewportToViewName(p.viewport);
+    const segs = viewer.getEdgeSegmentsForView(viewName, w, h);
+    if (segs.length > 0) {
+      const lines = segs.map(([x1, y1, x2, y2]) =>
+        `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`,
+      ).join("\n      ");
+      return `<svg viewBox="0 0 ${w.toFixed(2)} ${h.toFixed(2)}" preserveAspectRatio="xMidYMid meet">
+      <g fill="none" stroke="#1a1a22" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round">
+      ${lines}
+      </g>
+    </svg>`;
+    }
+    // No geometry yet — fall through to AABB placeholder.
+  }
+
   const dx = b.max[0] - b.min[0] || 1;
   const dy = b.max[1] - b.min[1] || 1;
   const dz = b.max[2] - b.min[2] || 1;
@@ -1511,9 +1529,10 @@ function composeSvg(c: LayoutController): string {
   // Render width="<W>mm" so SVG viewers honor real-world dimensions.
   const px = sheetPx(mm);
   const w = px.w, h = px.h;
+  const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
 
   const panelMarkup = c.panels.map((p) => {
-    const inner = renderViewportSvg(p, c.bounds()).replace(/^<svg [^>]*>|<\/svg>$/g, "");
+    const inner = renderViewportSvg(p, c.bounds(), viewer).replace(/^<svg [^>]*>|<\/svg>$/g, "");
     const sb = renderScaleBar(p).replace(/^<svg [^>]*>|<\/svg>$/g, "");
     const titleLabel = `<text x="6" y="10" font-size="7" font-family="monospace" fill="#1a1a22">${escapeXml(p.title)}</text>`;
     const scaleLabel = `<text x="${(p.w - 4).toFixed(2)}" y="10" font-size="7" font-family="monospace" fill="#5a5a66" text-anchor="end">${escapeXml(p.scale)}</text>`;
@@ -1610,6 +1629,7 @@ export async function exportLayoutAsPdf(host: HTMLElement): Promise<ArrayBuffer>
   doc.setDrawColor(60, 60, 70);
   doc.rect(3, 3, sheetWmm - 6, sheetHmm - 6);
 
+  const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
   // Panels.
   for (const p of c.panels) {
     const px = p.x * PX_TO_MM;
@@ -1619,8 +1639,8 @@ export async function exportLayoutAsPdf(host: HTMLElement): Promise<ArrayBuffer>
     doc.setLineWidth(p.border === "thick" ? 0.6 : 0.25);
     doc.setDrawColor(26, 26, 34);
     if (p.border !== "none") doc.rect(px, py, pw, ph);
-    // Project SVG primitives.
-    const inner = renderViewportSvg(p, c.bounds());
+    // Project SVG primitives — real geometry when viewer is available (#1211).
+    const inner = renderViewportSvg(p, c.bounds(), viewer);
     doc.setLineWidth(0.25);
     extractSvgLines(inner).forEach(([sx, sy, ex, ey]) => {
       doc.line(
@@ -1749,6 +1769,78 @@ export function exportLayoutAsDwgFallback(host: HTMLElement): string {
   const svg = composeSvg(c);
   const note = "<!-- DWG export not available without LibreDWG-WASM. Export saved as SVG sidecar. -->\n";
   return note + svg;
+}
+
+// DXF vector export — AC1009 (R12), AcDbLine entities. Segments come from the
+// real 3D edge-projection pipeline (getEdgeSegmentsForView) when a live viewer
+// is available, clipped against active section + clip planes (#1211).
+// Coordinates are in mm (sheet paper space). Y axis is DXF bottom-up (flipped
+// from screen top-down) so (0,0) is the bottom-left corner of the sheet.
+export function exportLayoutAsDxf(host: HTMLElement): string {
+  const c = _controllers.get(host);
+  if (!c) throw new Error("layout: host has no LayoutController");
+  const mm = sheetMm(c.size, c.orientation, c.customMm);
+  const sheetHpx = sheetPx(mm).h;
+  const PX_TO_MM = 1 / MM_TO_PX;
+  const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
+
+  const lines: string[] = [];
+  // AC1009 header.
+  lines.push("0", "SECTION", "2", "HEADER");
+  lines.push("9", "$ACADVER", "1", "AC1009");
+  lines.push("9", "$EXTMIN", "10", "0", "20", "0", "30", "0");
+  lines.push("9", "$EXTMAX",
+    "10", mm.w.toFixed(4), "20", mm.h.toFixed(4), "30", "0");
+  lines.push("0", "ENDSEC");
+  // Tables.
+  lines.push("0", "SECTION", "2", "TABLES");
+  lines.push("0", "TABLE", "2", "LAYER", "70", "2");
+  lines.push("0", "LAYER", "2", "BORDER", "70", "0", "62", "7", "6", "CONTINUOUS");
+  lines.push("0", "LAYER", "2", "GEOMETRY", "70", "0", "62", "1", "6", "CONTINUOUS");
+  lines.push("0", "ENDTAB", "0", "ENDSEC");
+  // Entities.
+  lines.push("0", "SECTION", "2", "ENTITIES");
+
+  for (const p of c.panels) {
+    const ox = p.x * PX_TO_MM;
+    const oy = (sheetHpx - p.y - p.h) * PX_TO_MM; // flip Y for DXF bottom-up
+
+    // Panel border on BORDER layer.
+    const bx1 = ox, by1 = oy, bx2 = ox + p.w * PX_TO_MM, by2 = oy + p.h * PX_TO_MM;
+    if (p.border !== "none") {
+      for (const [ax, ay, bx, by] of [
+        [bx1, by1, bx2, by1], [bx2, by1, bx2, by2],
+        [bx2, by2, bx1, by2], [bx1, by2, bx1, by1],
+      ] as [number, number, number, number][]) {
+        lines.push("0", "LINE", "8", "BORDER",
+          "10", ax.toFixed(4), "20", ay.toFixed(4), "30", "0",
+          "11", bx.toFixed(4), "21", by.toFixed(4), "31", "0");
+      }
+    }
+
+    // Geometry on GEOMETRY layer.
+    const viewName = layoutViewportToViewName(p.viewport);
+    const segs: [number, number, number, number][] = viewer
+      ? viewer.getEdgeSegmentsForView(viewName, p.w, p.h)
+      : [];
+    const pw = p.w * PX_TO_MM;
+    const ph = p.h * PX_TO_MM;
+    for (const [x1, y1, x2, y2] of segs) {
+      // Panel-local px → panel-local mm, flip Y, offset to sheet.
+      const sx = ox + x1 * PX_TO_MM;
+      const sy = oy + (ph - y1 * PX_TO_MM);
+      const ex = ox + x2 * PX_TO_MM;
+      const ey = oy + (ph - y2 * PX_TO_MM);
+      lines.push("0", "LINE", "8", "GEOMETRY",
+        "10", sx.toFixed(4), "20", sy.toFixed(4), "30", "0",
+        "11", ex.toFixed(4), "21", ey.toFixed(4), "31", "0");
+    }
+    // AABB fallback if no viewer / no segments: emit nothing (blank panel).
+    void pw;
+  }
+
+  lines.push("0", "ENDSEC", "0", "EOF");
+  return lines.join("\n") + "\n";
 }
 
 // --- Download helper (UI side only — not used by tests) ------------------

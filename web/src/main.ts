@@ -17,7 +17,7 @@ import { opAddLabel, opBuildAnnotLine, getOpPhase, getLastOpFinishMs } from "./v
 import { ptIsCoordInputActive } from "./viewer/transforms";
 import { buildWorkbench } from "./shell/workbench";
 import { buildModes, activateMode, getLayoutHost } from "./shell/modes";
-import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback } from "./shell/layout";
+import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback, exportLayoutAsDxf } from "./shell/layout";
 import { initCmdK } from "./ui/cmdk";
 import { initExportDrawer, openExportDrawer } from "./io/export-drawer";
 import { Viewer } from "./viewer/viewer";
@@ -3207,11 +3207,14 @@ async function handleExport(fmt: string): Promise<void> {
         const buf = await exportLayoutAsPdf(host);
         downloadBlob(new Blob([buf], { type: "application/pdf" }), `${stem}.pdf`);
         setStatus(`Layout PDF · ${(buf.byteLength / 1024).toFixed(1)} KB`, "ok");
-      } else if (fmt === "dwg" || fmt === "dxf") {
+      } else if (fmt === "dxf") {
+        const text = exportLayoutAsDxf(host);
+        downloadBlob(new Blob([text], { type: "image/vnd.dxf" }), `${stem}.dxf`);
+        setStatus(`DXF vector · ${(text.length / 1024).toFixed(1)} KB`, "ok");
+      } else if (fmt === "dwg") {
         const text = exportLayoutAsDwgFallback(host);
-        const ext = "dxf";
-        downloadBlob(new Blob([text], { type: "image/vnd.dxf" }), `${stem}.${ext}`);
-        setStatus(`DXF (AutoCAD-compatible from Layout sheet) · ${(text.length / 1024).toFixed(1)} KB`, "ok");
+        downloadBlob(new Blob([text], { type: "image/vnd.dxf" }), `${stem}.dxf`);
+        setStatus(`DXF (LibreDWG-WASM unavailable — SVG sidecar) · ${(text.length / 1024).toFixed(1)} KB`, "ok");
       }
     } catch (e) {
       setStatus(`Layout export ${fmt.toUpperCase()} failed: ${(e as Error).message}`, "err");
