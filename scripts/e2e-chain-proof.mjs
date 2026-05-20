@@ -46,7 +46,7 @@ const _sigintBefore     = process.rawListeners('SIGINT').slice();
 const _beforeExitBefore = process.rawListeners('beforeExit').slice();
 const _sigtermBefore    = process.rawListeners('SIGTERM').slice();
 
-const browser = await chromium.connectOverCDP('http://localhost:9222');
+const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
 
 const purgeNew = (ev, before) =>
   process.rawListeners(ev).filter(l => !before.includes(l))
