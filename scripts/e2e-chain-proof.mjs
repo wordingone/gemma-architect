@@ -324,10 +324,26 @@ const turnTimeout  = new Promise(r => setTimeout(() => r({ source: 'timeout' }),
 const turnResult   = await Promise.race([turnFromPage, turnTimeout]);
 
 log(`Turn settled — source: ${turnResult.source}`);
+
+// On any timeout: surface [agent-harness] diagnostic dumps captured in consoleLogs
+function surfaceHarnessLogs(label) {
+  const harnessLines = consoleLogs.filter(l =>
+    l.includes('[agent-harness:turn-complete]') || l.includes('[agent-harness:zero-dispatch]')
+  );
+  if (harnessLines.length > 0) {
+    log(`🔍 ${label} — agent-harness diagnostic (${harnessLines.length} lines):`);
+    harnessLines.forEach(l => log(`   ${l}`));
+  } else {
+    log(`⚠️  ${label} — no [agent-harness] logs captured (model may not have completed a turn)`);
+  }
+}
+
 if (turnResult.source === 'dispatch-timeout') {
   log(`❌ DISPATCH TIMEOUT — model did not produce any scene geometry within 120s. Phase 5 will fail.`);
+  surfaceHarnessLogs('dispatch-timeout');
 } else if (turnResult.source === 'timeout') {
   log(`❌ TURN TIMEOUT — full ${DISPATCH_TIMEOUT_MS / 1000}s elapsed without turn completion.`);
+  surfaceHarnessLogs('turn-timeout');
 }
 
 // Phase 3.5 assertion: NL text visible in chat panel

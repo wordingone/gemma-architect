@@ -775,6 +775,9 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
       path: "remote",
     });
     const { dispatches, text } = parseDispatches(content);
+    const _pbc0 = (content.match(/<tool_call/gi) ?? []).length;
+    console.log(`[agent-harness:turn-complete] path=remote-completion dispatches=${dispatches.length} tool_call_blocks=${_pbc0} raw_len=${content.length}`);
+    if (dispatches.length === 0) console.warn(`[agent-harness:zero-dispatch] path=remote-completion raw_len=${content.length} excerpt=${JSON.stringify(content.slice(0, 800))}`);
     return { dispatches, text: text || content, raw: compJson };
   }
 
@@ -798,6 +801,9 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     path: "remote",
   });
   const { dispatches, text } = parseDispatches(content);
+  const _pbc1 = (content.match(/<tool_call/gi) ?? []).length;
+  console.log(`[agent-harness:turn-complete] path=remote dispatches=${dispatches.length} tool_call_blocks=${_pbc1} raw_len=${content.length}`);
+  if (dispatches.length === 0) console.warn(`[agent-harness:zero-dispatch] path=remote raw_len=${content.length} excerpt=${JSON.stringify(content.slice(0, 800))}`);
   return { dispatches, text: text || content, raw: json };
 }
 
@@ -834,6 +840,9 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
     return "";
   });
   const { dispatches, text } = parseDispatches(afterPlan);
+  const _pbc2 = (afterPlan.match(/<tool_call/gi) ?? []).length;
+  console.log(`[agent-harness:turn-complete] path=standard dispatches=${dispatches.length} tool_call_blocks=${_pbc2} raw_len=${responseText.length}`);
+  if (dispatches.length === 0) console.warn(`[agent-harness:zero-dispatch] path=standard raw_len=${responseText.length} excerpt=${JSON.stringify(responseText.slice(0, 800))}`);
   return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
 }
 
@@ -887,6 +896,9 @@ async function runWasmBackendTurn(req: AgentRequest): Promise<AgentResponse> {
   });
 
   const { dispatches, text } = parseDispatches(content);
+  const _pbc3 = (content.match(/<tool_call/gi) ?? []).length;
+  console.log(`[agent-harness:turn-complete] path=wasm dispatches=${dispatches.length} tool_call_blocks=${_pbc3} raw_len=${content.length}`);
+  if (dispatches.length === 0) console.warn(`[agent-harness:zero-dispatch] path=wasm raw_len=${content.length} excerpt=${JSON.stringify(content.slice(0, 800))}`);
   return { dispatches, text: text || content, raw: json };
 }
 
@@ -1011,6 +1023,9 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   });
 
   const { dispatches, text } = parseDispatches(afterPlan);
+  const _pbc4 = (afterPlan.match(/<tool_call/gi) ?? []).length;
+  console.log(`[agent-harness:turn-complete] path=webgpu dispatches=${dispatches.length} tool_call_blocks=${_pbc4} tokens_out=${tokensOut} raw_len=${responseText.length}`);
+  if (dispatches.length === 0) console.warn(`[agent-harness:zero-dispatch] path=webgpu raw_len=${responseText.length} excerpt=${JSON.stringify(responseText.slice(0, 800))}`);
   return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
 }
 
