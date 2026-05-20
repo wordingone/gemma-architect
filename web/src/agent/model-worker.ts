@@ -72,6 +72,31 @@ function checkBootComplete(): void {
   }
 }
 
+// Wrap Cache.put to swallow UnknownError / QuotaExceededError.
+// If Cache.put throws, transformers.js may consume (and corrupt) the response body before re-raising,
+// silently aborting the download pipeline.  We catch here and log to stall trace instead of throwing.
+function installCachePutGuard(): void {
+  if (!("caches" in globalThis)) return;
+  const cs = (globalThis as unknown as { caches: CacheStorage }).caches;
+  const origOpen = cs.open.bind(cs);
+  (globalThis as unknown as { caches: CacheStorage }).caches = Object.assign(Object.create(cs), {
+    open: async (...args: Parameters<CacheStorage["open"]>) => {
+      const cache = await origOpen(...args);
+      const origPut = cache.put.bind(cache);
+      return Object.assign(Object.create(cache), {
+        put: async (...putArgs: Parameters<Cache["put"]>) => {
+          try {
+            await origPut(...putArgs);
+          } catch (e) {
+            post({ type: "progress", phase: "cache-put-error", bytes: 0, total: 0,
+                   throughputBytesPerSec: 0, error: `Cache.put: ${(e as Error).message}` });
+          }
+        },
+      });
+    },
+  });
+}
+
 // Check if model weights are already in Cache API — indicates a returning user.
 // transformers.js stores downloaded files in Cache Storage keyed to their CDN URLs.
 async function checkReturningUser(modelId: string): Promise<boolean> {
@@ -124,6 +149,10 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     post({ type: "returning-user" });
   }
 
+  // Install Cache.put guard before from_pretrained runs — prevents UnknownError from
+  // aborting the download pipeline when Chrome's Cache API rejects the ONNX response.
+  installCachePutGuard();
+
   // Emit manifest with estimated total bytes so the overlay can show aggregate %.
   // E4B: model ONNX q4f16 ≈ 2.5 GB + drafter ≈ 158 MB + tokenizer files ≈ 5 MB.
   const ESTIMATED_MODEL_BYTES = 2_700_000_000;
@@ -132,7 +161,21 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // Cumulative bytes downloaded (all model files combined) for aggregate throughput.
   let _cumulativeBytes = 0;
 
+  // Stall detection: if no progress callback fires for STALL_AFTER_MANIFEST_MS after manifest,
+  // emit a diagnostic event so the boot-screen can surface a connection-issue hint before the
+  // generic 90s watchdog fires.
+  const STALL_AFTER_MANIFEST_MS = 30_000;
+  let _stallTimerId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    _stallTimerId = null;
+    post({ type: "progress", phase: "download-stall", bytes: 0, total: 0, throughputBytesPerSec: 0 });
+  }, STALL_AFTER_MANIFEST_MS);
+
+  const _clearStallTimer = () => {
+    if (_stallTimerId !== null) { clearTimeout(_stallTimerId); _stallTimerId = null; }
+  };
+
   const progressCb = (info: Record<string, unknown>) => {
+    _clearStallTimer(); // any progress event means download is live
     if (info.status === "downloading") {
       const bytes = (info.loaded as number | undefined) ?? 0;
       const total = (info.total as number | undefined) ?? 0;
@@ -149,6 +192,11 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       });
     } else if (info.status === "loading") {
       post({ type: "progress", phase: "model-init", bytes: 0, total: 0, throughputBytesPerSec: 0 });
+    } else {
+      // Surface unexpected statuses (e.g. "error", "done", "ready") in the stall trace.
+      post({ type: "progress", phase: `model-status-${String(info.status ?? "unknown")}`,
+             bytes: 0, total: 0, throughputBytesPerSec: 0,
+             statusDetail: String(info.message ?? info.file ?? info.name ?? "") });
     }
   };
 
@@ -191,15 +239,18 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       _model = model;
       _processor = processor;
       loadedLabel = label;
+      _clearStallTimer(); // model loaded — cancel stall detection
       break;
     } catch (e) {
       if (device === "webgpu") continue;
+      _clearStallTimer();
       post({ type: "error", error: (e as Error).message });
       return;
     }
   }
 
   if (!_model) {
+    _clearStallTimer();
     post({ type: "error", error: "No backend available for model load." });
     return;
   }
