@@ -11,23 +11,3 @@ two-story-house-chip  # pending #1225 verify-ordering  chips appear only after m
 ifc-picker-activation  # pending #1225 verify-ordering  inter-surface tool-state contamination from prior SdPolyline surface
 gable-trim-undo-roundtrip  # pending #1225 verify-ordering  scene contamination — no walls at test entry point
 agent-build-and-export  # pending #1225 verify-ordering  agent-dependent dispatch; model returning wrong output while loading
-export-ifc4  # pending fix/export-testmode-accessor  res.testMode reads outer envelope; testMode is at res.result.testMode
-export-3dm  # pending fix/export-testmode-accessor  same res.result.testMode pattern
-export-dwg  # pending fix/export-testmode-accessor  same res.result.testMode pattern
-export-obj  # pending fix/export-testmode-accessor  same res.result.testMode pattern
-export-stl  # pending fix/export-testmode-accessor  same res.result.testMode pattern
-export-usdz  # pending fix/export-testmode-accessor  same res.result.testMode pattern
-export-svg  # pending fix/export-testmode-accessor  same res.result.testMode pattern
-export-pdf  # pending fix/export-testmode-accessor  same res.result.testMode pattern
-comp-scope-toggle  # pending fix/verify-ui-selectors  #comp-scope-btn removed or renamed
-record-and-invoke-roundtrip  # pending fix/verify-ui-selectors  .skill-nodes-record-btn renamed; dispatch+geometry both work
-fillet-selected-edge  # pending fix/verify-ui-selectors  .coord-input renamed
-wall-params-input-parsing  # pending fix/verify-ui-selectors  #wall-params-section [data-wall-field="height"] stale
-export-dropdown-renders  # pending fix/verify-ui-selectors  .export-drawer.open may be .export-drawer--open or .is-open
-import-ifc-menu-item  # pending fix/verify-ui-selectors  [data-menu] button doesn't find "Import IFC..." text
-view-state-sidebar-lists-clip  # pending fix/verify-ui-selectors  VIEW STATE section uses div/class not span/text
-parity-dashboard  # pending fix/verify-ui-selectors  .parity-row .parity-sparkline .parity-delta selectors stale
-fzk-glb-door-window  # pending fix/verify-ui-selectors  test checks creator==='door'/'window'; actual is 'SdDoor'/'SdWindow'
-unit-display  # pending fix/verify-logic-assumptions  test expects imperial as default; after wipe it is undefined/metric
-dispatch-sweep  # pending fix/verify-logic-assumptions  SdSelect called without id; schema now requires id
-canvas-visible-width-skill-nodes  # pending fix/verify-logic-assumptions  CSS width:0 injection doesn't reduce measured canvas width; self-test logic stale
