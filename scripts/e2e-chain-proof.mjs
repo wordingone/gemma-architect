@@ -31,7 +31,7 @@ const TS        = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 
 const ARTIFACT_DIR = resolve(ROOT, `state/chain-proof-artifacts/${TS}`);
 mkdirSync(ARTIFACT_DIR, { recursive: true });
 
-const TARGET        = 'http://localhost:5847/';
+const TARGET        = process.env.CHAIN_PROOF_TARGET ?? 'http://localhost:5847/';
 const TARGET_ORIGIN = new URL(TARGET).origin;
 const BOOT_MS       = 20 * 60 * 1000; // 20 min — real CDN download of ~2.7GB (HuggingFace CDN can be slow)
 
