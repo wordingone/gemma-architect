@@ -1022,7 +1022,11 @@ registerHandler("SdDoor", (args) => {
       const voidCenter = mesh.position.clone();
       voidCenter.z = elevation + doorH / 2;
       const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, doorW, doorH);
-      if (voidGroup) pushReplaceAction(voidGroup, [host], "wall-void-cut");
+      if (voidGroup) {
+        pushReplaceAction(voidGroup, [host], "wall-void-cut");
+        // Set hostExpressID so rehostVoidCut can find and restore this void on move (#1221).
+        mesh.userData.hostExpressID = host.userData.expressID ?? host.uuid;
+      }
       voidCut = true;
     }
   }
@@ -1079,7 +1083,10 @@ registerHandler("SdWindow", (args) => {
       mesh.position.z + FZK_WINDOW_H / 2,
     );
     const voidGroup = cutRectVoidFromBoxMesh(hostObjWin, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
-    if (voidGroup) pushReplaceAction(voidGroup, [hostObjWin], "wall-void-cut");
+    if (voidGroup) {
+      pushReplaceAction(voidGroup, [hostObjWin], "wall-void-cut");
+      mesh.userData.hostExpressID = hostObjWin.userData.expressID ?? hostObjWin.uuid;
+    }
     voidCut = true;
   }
   pushAction(mesh, chain);

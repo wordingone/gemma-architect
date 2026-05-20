@@ -539,3 +539,116 @@ export function rerecutVoid(
 
   return { newGroup, oldGroup: restore.oldGroup };
 }
+
+// ── Cross-wall opening rehost (#1221) ─────────────────────────────────────────
+// Like rerecutVoid but handles the case where the opening has been dragged to a
+// DIFFERENT wall. Restores the old host wall (Wall A) and cuts into the nearest
+// wall at the new position (Wall B).
+//
+// Return shape carries enough info for a full two-replace undo transaction:
+//   isCrossWall=false → single pushReplaceAction(newVoidGroup, [oldVoidGroup])
+//   isCrossWall=true  → two pushReplaceActions:
+//     restoredWallMesh ← [oldVoidGroup]   (undo Wall A restore)
+//     newVoidGroup     ← [newHostMesh]    (undo Wall B void cut)
+export interface RehostResult {
+  newVoidGroup: THREE.Group;
+  oldVoidGroup: THREE.Group | null;
+  restoredWallMesh: THREE.Mesh | null;  // Wall A solid (cross-wall) or null (same-wall)
+  newHostMesh: THREE.Mesh;              // Wall B mesh before cut
+  isCrossWall: boolean;
+  newHostExpressID: string;
+}
+
+export function rehostVoidCut(
+  opening: THREE.Object3D,
+  scene: THREE.Scene,
+): RehostResult | null {
+  const ud = opening.userData as Record<string, unknown>;
+  const voidW = (ud.voidW as number | undefined) ?? 0.885;
+  const voidH = (ud.voidH as number | undefined) ?? 2.01;
+
+  opening.updateMatrixWorld(true);
+  const voidCenter = new THREE.Vector3();
+  opening.getWorldPosition(voidCenter);
+  voidCenter.z += voidH / 2;
+
+  // Restore old host wall (replaces Group→Mesh in scene).
+  const restore = restoreVoidCut(opening, scene);
+
+  // Try same-wall repositioning — only if void still overlaps the old wall's bounding box.
+  if (restore?.newWall && _voidOverlapsWall(restore.newWall, voidCenter, voidW, voidH)) {
+    const newVoidGroup = cutRectVoidFromBoxMesh(restore.newWall, voidCenter, voidW, voidH);
+    if (newVoidGroup) {
+      const hostId = (restore.newWall.userData as Record<string, unknown>).expressID as string | undefined ?? restore.newWall.uuid;
+      return {
+        newVoidGroup,
+        oldVoidGroup: restore.oldGroup,
+        restoredWallMesh: null,   // consumed by cutRect; not tracked separately for same-wall
+        newHostMesh: restore.newWall,
+        isCrossWall: false,
+        newHostExpressID: hostId,
+      };
+    }
+  }
+  // Old wall restored as solid Mesh (restore.newWall still in scene). Fall through to cross-wall.
+
+  // Cross-wall: find nearest Mesh wall at new position (exclude just-restored old wall).
+  const excludeUuid = restore?.newWall?.uuid;
+  const nearest = _findNearestWallMesh(voidCenter, scene, 3, excludeUuid);
+  if (!nearest) return null;
+
+  const newVoidGroup = cutRectVoidFromBoxMesh(nearest, voidCenter, voidW, voidH);
+  if (!newVoidGroup) return null;
+
+  const newId = (nearest.userData as Record<string, unknown>).expressID as string | undefined ?? nearest.uuid;
+  ud.hostExpressID = newId;
+
+  return {
+    newVoidGroup,
+    oldVoidGroup: restore?.oldGroup ?? null,
+    restoredWallMesh: restore?.newWall ?? null,
+    newHostMesh: nearest,
+    isCrossWall: true,
+    newHostExpressID: newId,
+  };
+}
+
+// Returns true if the void rectangle (centered at voidCenter, width voidW, height voidH)
+// overlaps the wall's local-space bounding box in both X and Z.
+function _voidOverlapsWall(
+  wall: THREE.Mesh,
+  voidCenter: THREE.Vector3,
+  voidW: number,
+  voidH: number,
+): boolean {
+  wall.updateMatrixWorld(true);
+  const geom = wall.geometry as THREE.BufferGeometry;
+  geom.computeBoundingBox();
+  const bb = geom.boundingBox;
+  if (!bb) return false;
+  const local = wall.worldToLocal(voidCenter.clone());
+  const overlapX = (local.x + voidW / 2 > bb.min.x + 0.01) && (local.x - voidW / 2 < bb.max.x - 0.01);
+  const overlapZ = (local.z + voidH / 2 > bb.min.z + 0.01) && (local.z - voidH / 2 < bb.max.z - 0.01);
+  return overlapX && overlapZ;
+}
+
+function _findNearestWallMesh(
+  pos: THREE.Vector3,
+  scene: THREE.Scene,
+  maxDist: number,
+  excludeUuid?: string,
+): THREE.Mesh | null {
+  let nearest: THREE.Mesh | null = null;
+  let minDist = maxDist;
+  scene.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    if (excludeUuid && obj.uuid === excludeUuid) return;
+    const creator = obj.userData?.creator as string | undefined;
+    if (creator !== "wall" && creator !== "SdWall") return;
+    const bb = new THREE.Box3().setFromObject(obj);
+    const center = bb.getCenter(new THREE.Vector3());
+    const dist = pos.distanceTo(new THREE.Vector3(center.x, center.y, pos.z));
+    if (dist < minDist) { minDist = dist; nearest = obj; }
+  });
+  return nearest;
+}

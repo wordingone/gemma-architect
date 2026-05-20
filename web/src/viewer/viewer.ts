@@ -17,8 +17,8 @@ import { getCurrentDispatchCtx } from "../commands/dispatch.js";
 import { WORLD_XY, resolveCPlane, type CPlane } from "./cplane.js";
 import { CPlaneGizmo } from "./cplane-gizmo.js";
 import { applyDrafting, removeDrafting, isDrafting, withoutDrafting } from "../geometry/drafting.js";
-import { pushAction, pushDeleteAction, pushReplaceAction, pushTransformAction, captureTransform, beginTransaction, endTransaction, type TransformSnapshot } from "../history.js";
-import { dissolveGroupForMesh, isOpening, nearestGroupMember, onElementCommitted, rerecutVoid, restoreVoidCut } from "../tools/join-groups.js";
+import { pushAction, pushDeleteAction, pushReplaceAction, pushTransformAction, pushCustomAction, captureTransform, beginTransaction, endTransaction, type TransformSnapshot } from "../history.js";
+import { dissolveGroupForMesh, isOpening, nearestGroupMember, onElementCommitted, rerecutVoid, rehostVoidCut, restoreVoidCut } from "../tools/join-groups.js";
 import { resetWallCorners, recomputeWallEndpoints, attemptWallCornerJoins } from "../tools/wall-corners.js";
 import { ClipFillManager } from "./clip-fill.js";
 import { getLayerForCreator } from "../geometry/layers.js";
@@ -619,14 +619,30 @@ export class Viewer {
                 }
                 _wallOpeningEntries = [];
               } else if (isOpening(_movedCreator) && _dragStartSnapshot) {
-                // AC3 (#875): restore old void, cut new void at current position.
-                const _rerect = rerecutVoid(this.targetObject, this.scene);
-                if (_rerect) {
+                // Restore old void, cut new void at current position (#875/#1221).
+                // rehostVoidCut handles both same-wall repositioning and cross-wall rehost.
+                const _rehost = rehostVoidCut(this.targetObject, this.scene);
+                if (_rehost) {
+                  const _oldHostId = (this.targetObject.userData as Record<string, unknown>).hostExpressID as string | undefined;
+                  const _newHostId = _rehost.newHostExpressID;
                   beginTransaction("move-opening");
                   pushTransformAction(this.targetObject, _dragStartSnapshot);
-                  pushReplaceAction(_rerect.newGroup, [_rerect.oldGroup], "wall-void-recut");
+                  if (_rehost.isCrossWall) {
+                    // Two wall changes: undo Wall A restore + undo Wall B void cut.
+                    if (_rehost.oldVoidGroup && _rehost.restoredWallMesh) {
+                      pushReplaceAction(_rehost.restoredWallMesh, [_rehost.oldVoidGroup], "wall-void-restore");
+                    }
+                    pushReplaceAction(_rehost.newVoidGroup, [_rehost.newHostMesh], "wall-void-cut");
+                    // Make hostExpressID update undoable.
+                    pushCustomAction(
+                      () => { (this.targetObject!.userData as Record<string, unknown>).hostExpressID = _oldHostId; },
+                      () => { (this.targetObject!.userData as Record<string, unknown>).hostExpressID = _newHostId; },
+                    );
+                  } else if (_rehost.oldVoidGroup) {
+                    pushReplaceAction(_rehost.newVoidGroup, [_rehost.oldVoidGroup], "wall-void-recut");
+                  }
                   endTransaction();
-                  _dragStartSnapshot = null;  // consumed by transaction — skip default push below
+                  _dragStartSnapshot = null;
                 }
               }
               onElementCommitted(this.targetObject, this.scene);
