@@ -436,24 +436,6 @@ export class ChatPanel {
         return;
       }
 
-      // §testMode: bypass real inference — inject fixture plan so verify can test
-      // foldable plan pane UI without a live model. SdExport as last dispatch
-      // terminates the run-plan loop on turn 1 (guarded by __testMode in SdExport handler).
-      if ((window as unknown as { __testMode?: boolean }).__testMode) {
-        this._removeThinking(thinking);
-        this._pushPlanMsg({
-          text: "Plan: small house fixture",
-          plan: "1. IfcWall\n2. IfcWall\n3. IfcSlab\n4. SdExport",
-          dispatches: [
-            { name: "IfcWall", arguments: {} },
-            { name: "IfcWall", arguments: {} },
-            { name: "IfcSlab", arguments: {} },
-            { name: "SdExport", arguments: { format: "gltf" } },
-          ],
-        });
-        return;
-      }
-
       // Evaluate VISUAL_RE first — visual queries must not trigger SdClearScene below.
       const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       const isVisualQuery = VISUAL_RE.test(text);
@@ -632,97 +614,6 @@ export class ChatPanel {
     }));
   }
 
-  private _pushPlanMsg(resp: AgentResponse): void {
-    const planText = resp.plan ?? resp.dispatches.map((d, i) => `${i + 1}. ${d.name}`).join("\n");
-
-    const item = document.createElement("div");
-    item.className = "chat-msg chat-msg-assistant chat-plan-pending";
-
-    // Foldable plan block (#413/SU-7)
-    const details = document.createElement("details");
-    details.open = true;
-    details.className = "chat-plan-details";
-    const summaryEl = document.createElement("summary");
-    summaryEl.className = "chat-plan-summary";
-    summaryEl.textContent = "Plan";
-    const planBlock = document.createElement("pre");
-    planBlock.className = "chat-plan-block";
-    planBlock.textContent = planText;
-    details.appendChild(summaryEl);
-    details.appendChild(planBlock);
-    item.appendChild(details);
-
-    // Per-turn dispatch summary (populated as each turn executes)
-    const turnsEl = document.createElement("div");
-    turnsEl.className = "chat-plan-turns";
-    item.appendChild(turnsEl);
-
-    const runBtn = document.createElement("button");
-    runBtn.className = "btn btn-accent btn-sm chat-plan-run-btn";
-    runBtn.textContent = "Run plan";
-    item.appendChild(runBtn);
-
-    runBtn.addEventListener("click", () => {
-      runBtn.disabled = true;
-      // Build local history: prior turns + plan assistant response
-      const localHistory: Array<{ role: "user" | "assistant"; content: string }> = [
-        ...this._history,
-        { role: "assistant", content: resp.text },
-      ];
-      const allVerbs: string[] = [];
-      let currentResp = resp;
-      let turnNum = 0;
-
-      void (async () => {
-        while (currentResp.dispatches.length > 0 && turnNum < 3) {
-          turnNum++;
-          runBtn.textContent = turnNum === 1 ? "Executing…" : `Executing turn ${turnNum}…`;
-
-          await this._runDispatches(currentResp);
-
-          const verbs = currentResp.dispatches.map((d) => d.name);
-          allVerbs.push(...verbs);
-          const turnEl = document.createElement("div");
-          turnEl.className = "chat-plan-turn";
-          turnEl.textContent = `Turn ${turnNum}: ${verbs.join(", ")}`;
-          turnsEl.appendChild(turnEl);
-          this._listEl.scrollTop = this._listEl.scrollHeight;
-
-          if (verbs.includes("SdExport") || turnNum >= 3) break;
-
-          // Continuation turn: ask model for next dispatch batch
-          const dispatchedSoFar = allVerbs.join(", ");
-          const continuationPrompt = `Continue plan execution. Already dispatched: ${dispatchedSoFar}. Dispatch the next batch of building elements (up to 10 commands). End with SdExport when all plan items are complete.`;
-          localHistory.push({ role: "user", content: continuationPrompt });
-          const nextResp = await runAgentTurn({
-            prompt: continuationPrompt,
-            history: localHistory.slice(0, -1),
-            maxNewTokens: 1024,
-          });
-          localHistory.push({ role: "assistant", content: nextResp.text });
-          currentResp = nextResp;
-        }
-
-        // Finalize: collapse plan, show done text
-        details.open = false;
-        runBtn.remove();
-        item.classList.remove("chat-plan-pending");
-        const doneText = `${allVerbs.length} dispatch${allVerbs.length !== 1 ? "es" : ""} in ${turnNum} turn${turnNum !== 1 ? "s" : ""}`;
-        const content = document.createElement("div");
-        content.className = "chat-msg-content";
-        content.textContent = doneText;
-        item.insertBefore(content, turnsEl);
-        this._history.push({ role: "assistant", content: doneText });
-        this._enforceHistoryBudget(); // §C-hist (#990)
-        (window as unknown as { __viewer?: { frameAllVisible?(): void } }).__viewer?.frameAllVisible?.();
-      })();
-    });
-
-    this._messages.push({ role: "assistant", content: planText });
-    this._listEl.appendChild(item);
-    this._listEl.scrollTop = this._listEl.scrollHeight;
-  }
-
   private _pushMsg(msg: Message): void {
     this._messages.push(msg);
     const item = document.createElement("div");
@@ -849,7 +740,6 @@ export async function runDesignLoop(
   maxTurns = 3,
 ): Promise<AgentResponse> {
   const allDispatches: AgentDispatch[] = [];
-  let planText: string | undefined;
   let lastText = "";
   const localHistory: Array<{ role: "user" | "assistant"; content: string }> = [...history];
 
@@ -871,7 +761,6 @@ export async function runDesignLoop(
 
     const resp = await runAgentTurn(req);
 
-    if (isFirst && resp.plan) planText = resp.plan;
     lastText = resp.text;
     allDispatches.push(...resp.dispatches);
 
@@ -882,5 +771,5 @@ export async function runDesignLoop(
     if (resp.dispatches.length === 0) break;
   }
 
-  return { dispatches: allDispatches, text: lastText, plan: planText };
+  return { dispatches: allDispatches, text: lastText };
 }
