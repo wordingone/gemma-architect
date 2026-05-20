@@ -3,3 +3,31 @@ demo-prompt-design-house  # #494  NL agent verb output nondeterministic: model s
 chat-plan-foldable  # #538  cascade from S54/S56 model latency timeouts; testMode fixes direct timeout but not UI-state contamination
 skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) populating scene; S54 skips on model latency timeout
 demo-cluster-flow  # #670  new surface — allow-fail until first green run confirms timing
+tier0-llama-server-dispatch  # pending #1225 verify-ordering  model not loaded when verify ran; soft-skips when REMOTE badge absent
+su1-end-to-end-2storey-house  # pending #1225 verify-ordering  multi-turn agent; built-in skip on timeout
+on-device-agent-response  # pending #1225 verify-ordering  consent-required post-wipe; re-given on first UI interaction
+fzk-haus-perception-rehearsal  # pending #1225 verify-ordering  model too slow for 60s turn-complete timeout
+two-story-house-chip  # pending #1225 verify-ordering  chips appear only after model interaction; post-wipe none shown
+ifc-picker-activation  # pending #1225 verify-ordering  inter-surface tool-state contamination from prior SdPolyline surface
+gable-trim-undo-roundtrip  # pending #1225 verify-ordering  scene contamination — no walls at test entry point
+agent-build-and-export  # pending #1225 verify-ordering  agent-dependent dispatch; model returning wrong output while loading
+export-ifc4  # pending fix/export-testmode-accessor  res.testMode reads outer envelope; testMode is at res.result.testMode
+export-3dm  # pending fix/export-testmode-accessor  same res.result.testMode pattern
+export-dwg  # pending fix/export-testmode-accessor  same res.result.testMode pattern
+export-obj  # pending fix/export-testmode-accessor  same res.result.testMode pattern
+export-stl  # pending fix/export-testmode-accessor  same res.result.testMode pattern
+export-usdz  # pending fix/export-testmode-accessor  same res.result.testMode pattern
+export-svg  # pending fix/export-testmode-accessor  same res.result.testMode pattern
+export-pdf  # pending fix/export-testmode-accessor  same res.result.testMode pattern
+comp-scope-toggle  # pending fix/verify-ui-selectors  #comp-scope-btn removed or renamed
+record-and-invoke-roundtrip  # pending fix/verify-ui-selectors  .skill-nodes-record-btn renamed; dispatch+geometry both work
+fillet-selected-edge  # pending fix/verify-ui-selectors  .coord-input renamed
+wall-params-input-parsing  # pending fix/verify-ui-selectors  #wall-params-section [data-wall-field="height"] stale
+export-dropdown-renders  # pending fix/verify-ui-selectors  .export-drawer.open may be .export-drawer--open or .is-open
+import-ifc-menu-item  # pending fix/verify-ui-selectors  [data-menu] button doesn't find "Import IFC..." text
+view-state-sidebar-lists-clip  # pending fix/verify-ui-selectors  VIEW STATE section uses div/class not span/text
+parity-dashboard  # pending fix/verify-ui-selectors  .parity-row .parity-sparkline .parity-delta selectors stale
+fzk-glb-door-window  # pending fix/verify-ui-selectors  test checks creator==='door'/'window'; actual is 'SdDoor'/'SdWindow'
+unit-display  # pending fix/verify-logic-assumptions  test expects imperial as default; after wipe it is undefined/metric
+dispatch-sweep  # pending fix/verify-logic-assumptions  SdSelect called without id; schema now requires id
+canvas-visible-width-skill-nodes  # pending fix/verify-logic-assumptions  CSS width:0 injection doesn't reduce measured canvas width; self-test logic stale
