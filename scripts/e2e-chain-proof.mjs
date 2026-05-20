@@ -321,7 +321,7 @@ log(`Turn settled — source: ${turnResult.source}`);
 // Phase 3.5 assertion: NL text visible in chat panel
 const nlText = await page.evaluate(() => {
   const msgs = Array.from(document.querySelectorAll(
-    '.chat-list .chat-message[data-role="assistant"], .chat-message.assistant, .chat-bubble.assistant'
+    '.chat-list .chat-msg.chat-msg-assistant:not(.chat-thinking) .chat-msg-content'
   ));
   return msgs.length ? (msgs[msgs.length - 1].textContent?.trim() ?? '') : null;
 }).catch(() => null);
