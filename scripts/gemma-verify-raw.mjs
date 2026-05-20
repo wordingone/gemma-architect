@@ -87,9 +87,11 @@ await send("Page.enable");
 // Bring tab to front so WebGL renders real frames (background tabs throttle rAF/canvas).
 await send("Page.bringToFront");
 
-async function evaluate(expression, returnByValue = true) {
-  const res = await send("Runtime.evaluate", { expression, returnByValue, awaitPromise: true });
-  if (res?.result?.exceptionDetails) return null; // expression threw — callers must null-check
+async function evaluate(expression, returnByValue = true, timeoutMs = 60_000) {
+  const sendProm = send("Runtime.evaluate", { expression, returnByValue, awaitPromise: true });
+  const timeoutProm = new Promise(resolve => setTimeout(() => resolve(null), timeoutMs));
+  const res = await Promise.race([sendProm, timeoutProm]);
+  if (!res || res?.result?.exceptionDetails) return null; // threw or timed out — callers must null-check
   return res?.result?.result?.value;
 }
 
@@ -656,7 +658,7 @@ await resetScene('before-box-inject');
       return { passed: aspectMatches && gateHeld && panelAdded,
                evidence: { aspect: aspectRatio, a1Aspect, aspectMatches, gateHeld, beforePanels, afterPanels, panelAdded } };
     })()`);
-  record("layout-tab-functional", r.passed, r.evidence);
+  record("layout-tab-functional", r?.passed ?? false, r?.evidence ?? { error: "evaluate threw or returned null" });
 }
 
 // ── Surface 10b: layout-mode-shell-intact (#199 regression) ──────────────────
