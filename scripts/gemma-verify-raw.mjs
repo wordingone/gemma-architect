@@ -6289,6 +6289,95 @@ await resetScene('before-box-inject');
   await resetScene('post-S129');
 }
 
+// ── S103: goal-mode-smoke (#980) ─────────────────────────────────────────────
+// Verify goal banner updates correctly when goal:changed events fire.
+// Phase 1: write active goal to IDB + fire event → banner shows data-status=active.
+// Phase 2: update to complete → banner shows data-status=complete.
+// Phase 3: delete + null event → banner hidden (style.display=none).
+{
+  // Ensure prompt tab is active so chat panel is in the live DOM.
+  await evaluate(`(async () => {
+    const tab = document.querySelector('[data-tab=prompt]');
+    if (tab) { tab.click(); await new Promise(r => setTimeout(r, 200)); }
+    const pill = document.querySelector('.mode-pill');
+    if (pill && pill.getAttribute('data-mode') !== 'prompt') {
+      pill.click(); await new Promise(r => setTimeout(r, 150));
+    }
+  })()`);
+
+  const s103 = await evaluate(`(async () => {
+    const DB_NAME = 'gemma-cad';
+    const STORE   = 'thread_goal';
+    const KEY     = 'current';
+
+    async function openGoalDB() {
+      return new Promise((res, rej) => {
+        const r = indexedDB.open(DB_NAME, 1);
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+        r.onupgradeneeded = (ev) => { ev.target.result.createObjectStore(STORE); };
+      });
+    }
+    async function writeGoal(db, goal) {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(goal, KEY);
+      return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+    }
+    async function deleteGoal(db) {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(KEY);
+      return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+    }
+    function bannerState() {
+      const b = document.querySelector('.chat-goal-banner');
+      if (!b) return { found: false };
+      return {
+        found: true,
+        displayNone: b.style.display === 'none',
+        status: b.dataset.status ?? null,
+        text: b.textContent.trim().slice(0, 80),
+      };
+    }
+
+    let db;
+    try { db = await openGoalDB(); }
+    catch (e) { return { passed: false, evidence: { reason: 'IDB open failed: ' + String(e) } }; }
+
+    const banner = document.querySelector('.chat-goal-banner');
+    if (!banner) return { passed: false, evidence: { reason: '.chat-goal-banner not found — chat panel not rendered' } };
+
+    // ── Phase 1: active ──────────────────────────────────────────────────────
+    const goal = { id: 'smoke-s103-' + Date.now(), objective: 'Build a two-story house',
+                   status: 'active', tokenBudget: 10000, tokensUsed: 0,
+                   timeUsedMs: 0, createdAtMs: Date.now(), updatedAtMs: Date.now() };
+    await writeGoal(db, goal);
+    window.dispatchEvent(new CustomEvent('goal:changed', { detail: goal }));
+    await new Promise(r => setTimeout(r, 200));
+    const s1 = bannerState();
+    const activeOk = s1.found && !s1.displayNone && s1.status === 'active';
+
+    // ── Phase 2: complete ────────────────────────────────────────────────────
+    const done = { ...goal, status: 'complete', updatedAtMs: Date.now() };
+    await writeGoal(db, done);
+    window.dispatchEvent(new CustomEvent('goal:changed', { detail: done }));
+    await new Promise(r => setTimeout(r, 200));
+    const s2 = bannerState();
+    const completeOk = s2.found && !s2.displayNone && s2.status === 'complete';
+
+    // ── Phase 3: clear ───────────────────────────────────────────────────────
+    await deleteGoal(db);
+    window.dispatchEvent(new CustomEvent('goal:changed', { detail: null }));
+    await new Promise(r => setTimeout(r, 200));
+    const s3 = bannerState();
+    const clearOk = s3.found && s3.displayNone;
+
+    const passed = activeOk && completeOk && clearOk;
+    return { passed, evidence: { activeOk, s1, completeOk, s2, clearOk, s3 } };
+  })()`);
+  if (!s103) record('goal-mode-smoke', false, { reason: 'evaluate returned null' });
+  else record('goal-mode-smoke', s103.passed, s103.evidence);
+}
+
 // ── S131 — first-load-consent-visible (#1133): consent dialog not hidden behind boot screen ──
 // Clears consent flag (not caches) and reloads. Within 5s, either the consent overlay or
 // the boot screen itself must be visible — confirming no blank-screen hang on fresh device.
