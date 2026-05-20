@@ -60,6 +60,16 @@ browser.close = async () => {};
 const ctx = browser.contexts()[0];
 if (ctx) ctx.close = async () => {};
 
+// Belt-and-suspenders: if any uncaught exception escapes our try/catch blocks,
+// log it but do NOT exit — let the script reach its natural end so Playwright's
+// cleanup doesn't fire on the exception path (which would close the shared browser).
+process.on('uncaughtException', e => {
+  console.error('[chain-proof] uncaught:', e?.stack ?? e);
+});
+process.on('unhandledRejection', e => {
+  console.error('[chain-proof] unhandled rejection:', e?.stack ?? e);
+});
+
 const pages = ctx.pages();
 const page  = pages.length > 0 ? pages[0] : await ctx.newPage();
 log(`Connected to :9222 — ${pages.length > 0 ? 'existing' : 'new'} tab`);
@@ -325,11 +335,14 @@ try {
   turnResult = await Promise.race([turnFromPage, turnTimeout]);
 } catch (err) {
   // Page navigated or tab crashed during the long wait — browser is gone.
-  // Exit cleanly so Playwright's exit handlers (which would close the browser) don't run.
+  // Write whatever artifacts we have, then exit cleanly (exit 6).
+  // Remove all process handlers first so Playwright's cleanup path cannot fire
+  // Browser.close CDP command against the shared :9222 window.
   if (err.message?.includes('Target page') || err.message?.includes('closed')) {
-    log('❌ Page navigated or closed during turn wait — exiting without browser close');
+    log('❌ Page navigated or closed during turn wait');
     log(`   Error: ${err.message.slice(0, 120)}`);
-    ['exit', 'SIGINT', 'beforeExit', 'SIGTERM', 'uncaughtException'].forEach(ev =>
+    try { writeFileSync(resolve(ARTIFACT_DIR, 'console.log'), consoleLogs.join('\n'), 'utf8'); log('📝 console.log (partial)'); } catch {}
+    ['exit', 'SIGINT', 'beforeExit', 'SIGTERM', 'uncaughtException', 'unhandledRejection'].forEach(ev =>
       process.rawListeners(ev).forEach(l => process.removeListener(ev, l)));
     process.exit(6);
   }
