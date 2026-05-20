@@ -91,8 +91,13 @@ console.log('══════════════════════�
 // OPFS.getDirectory() clears the model store, not the Chrome startup-URL origin.
 await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 
-await cdp.send('Storage.clearDataForOrigin', { origin: TARGET_ORIGIN, storageTypes: 'all' });
-await cdp.send('Network.clearBrowserCache');
+// Preserve cache_storage — that's where the Transformers.js model shards live.
+// Clearing it forces a full CDN re-download (>20 min) on every iter.
+// Session state (chat history, prefs, project) lives in IDB + localStorage.
+await cdp.send('Storage.clearDataForOrigin', {
+  origin: TARGET_ORIGIN,
+  storageTypes: 'cookies,indexeddb,local_storage,service_workers',
+});
 
 // Storage.clearDataForOrigin skips OPFS — unregister SW then clear OPFS explicitly
 const opfsClear = await page.evaluate(async () => {
@@ -111,7 +116,7 @@ const opfsClear = await page.evaluate(async () => {
   return { cleared: removed.length, names: removed };
 });
 log(`OPFS clear: ${JSON.stringify(opfsClear)}`);
-log('CDP wipe complete — IDB, Cache API, cookies, OPFS all cleared');
+log('CDP wipe complete — IDB, cookies, localStorage, SW unregistered (cache_storage preserved for model)');
 
 await page.goto(TARGET, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 log('App loaded — boot screen should appear');
