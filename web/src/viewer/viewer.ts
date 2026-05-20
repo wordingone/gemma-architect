@@ -3107,6 +3107,11 @@ export class Viewer {
       if (!this._thumbMatGhosted) this._thumbMatGhosted = new THREE.MeshBasicMaterial({ color: 0x9ec5d8, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
       this.scene.overrideMaterial = this._thumbMatGhosted;
     }
+    // Propagate active clip planes to override materials (#1144): scene.overrideMaterial bypasses
+    // per-material clippingPlanes, so wireframe/ghosted layout panels need the planes on the mat.
+    const activeClips = [...this._sectionPlanes, ...this._clipPlanes];
+    if (this._thumbMatWireframe) this._thumbMatWireframe.clippingPlanes = activeClips;
+    if (this._thumbMatGhosted)   this._thumbMatGhosted.clippingPlanes   = activeClips;
     // Drafting-apply-per-tick removed (#661): applyDrafting() walks every IFC mesh and
     // creates EdgesGeometry + LineSegments (~500 alloc/dealloc per tick for FZK-Haus).
     // Thumbnails now render whatever drafting state the scene already has.
