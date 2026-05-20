@@ -201,6 +201,7 @@ function initWorkerIfNeeded(): Worker {
         const bytes = (msg.bytes as number | undefined) ?? 0;
         const total = (msg.total as number | undefined) ?? 0;
         const throughputBytesPerSec = (msg.throughputBytesPerSec as number | undefined) ?? 0;
+        const workerError = (msg.error as string | undefined);
         if (phase === "drafter") {
           window.dispatchEvent(new CustomEvent("agentmodel:drafter:loading", {
             detail: { progress: msg.progress ?? 0, bytes, total, throughputBytesPerSec },
@@ -211,7 +212,7 @@ function initWorkerIfNeeded(): Worker {
           const label = [pct, file].filter(Boolean).join(" ");
           if (label) updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ${label}`);
           window.dispatchEvent(new CustomEvent("agentmodel:loading", {
-            detail: { progress: msg.progress ?? 0, file, bytes, total, throughputBytesPerSec, phase },
+            detail: { progress: msg.progress ?? 0, file, bytes, total, throughputBytesPerSec, phase, error: workerError },
           }));
         }
         break;

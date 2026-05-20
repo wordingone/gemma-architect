@@ -23,7 +23,7 @@
 //   {type:"generate-error", turnId, error}
 //   {type:"error",       error}
 
-import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage } from "@huggingface/transformers";
+import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, env } from "@huggingface/transformers";
 import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
 import { fetchDrafterCached } from "./drafter-cache.js";
 
@@ -129,27 +129,69 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   const ESTIMATED_MODEL_BYTES = 2_700_000_000;
   post({ type: "manifest", totalBytesExpected: ESTIMATED_MODEL_BYTES });
 
+  // Cache API probe (#1279): verify Cache.put works before calling from_pretrained.
+  // Chrome can reject Cache.put with UnknownError under quota/partition conditions —
+  // if the probe fails, disable browser caching so the download pipeline is not blocked.
+  try {
+    if ("caches" in globalThis) {
+      const _pc = await caches.open("gemma-cad-probe");
+      await _pc.put("https://probe.invalid/v1", new Response("ok", { headers: { "content-type": "text/plain" } }));
+      await caches.delete("gemma-cad-probe");
+    }
+  } catch (_cacheErr) {
+    env.useBrowserCache = false;
+    post({
+      type: "progress", phase: "cache-disabled", bytes: 0, total: 0, throughputBytesPerSec: 0,
+      error: `Cache API unavailable: ${(_cacheErr as Error).message}`,
+    });
+  }
+
   // Cumulative bytes downloaded (all model files combined) for aggregate throughput.
   let _cumulativeBytes = 0;
 
   const progressCb = (info: Record<string, unknown>) => {
-    if (info.status === "downloading") {
+    const status = info.status as string | undefined;
+    if (status === "downloading" || status === "progress") {
       const bytes = (info.loaded as number | undefined) ?? 0;
       const total = (info.total as number | undefined) ?? 0;
-      _cumulativeBytes = Math.max(_cumulativeBytes, bytes); // rough sum across files
+      _cumulativeBytes = Math.max(_cumulativeBytes, bytes);
       const throughputBytesPerSec = calcThroughput(_cumulativeBytes);
       post({
         type: "progress",
         phase: "model",
-        progress: (info.progress as number | undefined) ?? 0,
+        progress: (info.progress as number | undefined) ?? (total > 0 ? (bytes / total) * 100 : 0),
         file: ((info.name as string | undefined) ?? "").split("/").pop() ?? "",
         bytes,
         total,
         throughputBytesPerSec,
       });
-    } else if (info.status === "loading") {
+    } else if (status === "loading") {
       post({ type: "progress", phase: "model-init", bytes: 0, total: 0, throughputBytesPerSec: 0 });
+    } else if (status === "initiate") {
+      // File fetch starting — post a 0-byte event so the file name appears in the stall trace.
+      post({
+        type: "progress",
+        phase: "model",
+        progress: 0,
+        file: ((info.name as string | undefined) ?? "").split("/").pop() ?? "",
+        bytes: 0,
+        total: (info.total as number | undefined) ?? 0,
+        throughputBytesPerSec: 0,
+      });
+    } else if (status === "error") {
+      // Surface transformers.js internal errors so they appear in the stall trace (#1279).
+      post({
+        type: "progress",
+        phase: "model-error",
+        progress: 0,
+        file: ((info.name as string | undefined) ?? "").split("/").pop() ?? "",
+        bytes: 0,
+        total: 0,
+        throughputBytesPerSec: 0,
+        error: String((info.message as string | undefined) ?? (info.error as string | undefined) ?? "unknown"),
+      });
     }
+    // "done" — file complete, not posted (aggregate % reflects it automatically)
   };
 
   const backends: Array<{ device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string }> = [

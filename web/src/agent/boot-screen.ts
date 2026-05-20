@@ -35,7 +35,7 @@ let _firstLoadingReceived = false;
 let _stalledShown = false;
 
 // Download trace — in-memory log of all agentmodel:* events for STALLED diagnostics.
-type TraceEntry = { t: number; event: string; bytes?: number; total?: number; phase?: string };
+type TraceEntry = { t: number; event: string; bytes?: number; total?: number; phase?: string; error?: string };
 const _trace: TraceEntry[] = [];
 function _traceEvent(event: string, extra?: Omit<TraceEntry, 't' | 'event'>): void {
   _trace.push({ t: Math.round(performance.now()), event, ...extra });
@@ -101,13 +101,13 @@ function _wireEvents(): void {
 
   window.addEventListener('agentmodel:loading', (ev: Event) => {
     const d = (ev as CustomEvent<{
-      bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string; phase?: string;
+      bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string; phase?: string; error?: string;
     }>).detail ?? {};
     if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, d.bytes!);
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     if (d.file) _currentFile = d.file;
     if (!_totalBytes && d.total) _totalBytes = d.total;
-    _traceEvent('loading', { bytes: d.bytes, total: d.total, phase: d.phase });
+    _traceEvent('loading', { bytes: d.bytes, total: d.total, phase: d.phase, error: d.error });
     // Any loading event proves the pipeline is alive — clear a false-positive stall.
     _recoverFromStall();
     // Sliding-window: switch from 90s initial grace to 30s window only on first event
