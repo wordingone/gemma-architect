@@ -367,6 +367,26 @@ function initWorkerIfNeeded(): Worker {
           window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
             detail: { recycleCount: _modelWorkerRecycleCount, reason: "d3d12-oom" },
           }));
+          // §C-recycle-limit (#1381): 2+ GPU resets → page-level WGPU adapter irrecoverably
+          // corrupted. Auto-respawn produces "function signature mismatch" because the new
+          // worker's ONNX WASM imports fail against the torn adapter's device table.
+          // Surface user-actionable reload message and halt instead of spawning a doomed worker.
+          if (_modelWorkerRecycleCount >= 2) {
+            _webgpuFallbackEngaged = true;
+            _bootComplete = true;
+            _modelLoadError = "GPU memory exhausted after multiple resets — please refresh the page to continue.";
+            for (const [, cb] of _generateCallbacks) cb.reject(new Error(_modelLoadError));
+            _generateCallbacks.clear();
+            updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
+            window.dispatchEvent(new CustomEvent("agentmodel:fatal", {
+              detail: { reason: "recycle-limit", recycleCount: _modelWorkerRecycleCount },
+            }));
+            // Re-enable chat input so the error surfaces on the user's next send attempt.
+            window.dispatchEvent(new CustomEvent("agentmodel:boot-complete"));
+            setTimeout(() => { _w.terminate(); }, 400);
+            break;
+          }
+          // Normal first recycle (count === 1): respawn worker without warmup (#1377).
           updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
           for (const [, cb] of _generateCallbacks) cb.reject(new Error("d3d12-oom: worker recycled"));
           _generateCallbacks.clear();
