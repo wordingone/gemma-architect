@@ -41,6 +41,9 @@ type Listener<K extends keyof AppState> = (value: AppState[K]) => void;
 const listeners: { [K in keyof AppState]?: Set<Listener<K>> } = {};
 const state: AppState = { ...DEFAULT_STATE };
 
+// Expose state to window for verify-script access (__appState.unitSystem etc.)
+(window as unknown as { __appState: AppState }).__appState = state;
+
 export function getState<K extends keyof AppState>(key: K): AppState[K] {
   return state[key];
 }
