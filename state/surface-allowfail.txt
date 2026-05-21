@@ -14,8 +14,6 @@ door-wall-orientation  # #1235  wall not becoming Group after void-cut
 canvas-visible-width-skill-nodes  # #1255  liveH:280 — potential layout regression
 # Tracked regressions — individual issues filed (fix via Archie queue):
 layout-tab-functional  # #1328  panel interaction broken post-hackathon
-view-cplane-orientation  # #1329  CPlane not aligned to active view
-host-cplane-orientation  # #1330  CPlane not host-derived after door/window placement
 open-project-round-trip  # #1333  file save/load round-trip broken
 fillet-selected-edge  # #1339  fillet on selected edge broken
 copy-click-commits-selection  # #1341  copy tool click not committing selection
