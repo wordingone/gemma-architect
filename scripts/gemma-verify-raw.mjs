@@ -2133,7 +2133,7 @@ await resetScene('before-box-inject');
         if (!sc) return { passed: false, evidence: { reason: '__projectToScreen returned null for (5,0,0)' } };
 
         // 5. Find the canvas and dispatch a real PointerEvent 3px from the endpoint
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
         const mx = sc.x + 3;
         const my = sc.y - 2;
@@ -2210,7 +2210,7 @@ await resetScene('before-box-inject');
 
         // 3. Activate door tool and dispatch real pointerdown on wall face
         window.__dispatch('setActiveTool', { toolId: 'door' });
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
 
         const countBefore = window.__viewer.scene.children.length;
@@ -5314,7 +5314,7 @@ await resetScene('before-box-inject');
         const sc = window.__projectToScreen(fv.x, fv.y, fv.z);
         if (!sc) return { passed: false, evidence: { reason: 'projectToScreen null for face vertex', fv } };
 
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
         canvas.dispatchEvent(new PointerEvent('pointermove', {
           bubbles: true, cancelable: true,
@@ -5504,7 +5504,7 @@ await resetScene('before-box-inject');
         await new Promise(r => setTimeout(r, 40));
 
         // 4. Click base point at (0,0) and dir+dist point at (3,0).
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
 
         const base = window.__projectToScreen(0, 0, 0);
@@ -5580,7 +5580,7 @@ await resetScene('before-box-inject');
         await new Promise(r => setTimeout(r, 40));
 
         // 4. Click center at world (0, 0).
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
         const ctr = window.__projectToScreen(0, 0, 0);
         if (!ctr) return { passed: false, evidence: { reason: 'projectToScreen failed for origin' } };
@@ -5651,7 +5651,7 @@ await resetScene('before-box-inject');
         await new Promise(r => setTimeout(r, 40));
 
         // 4. Click base, X-dir, Y-dir points.
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
 
         const pts = [
@@ -5721,7 +5721,7 @@ await resetScene('before-box-inject');
         const wallsBefore = window.__viewer.scene.children.filter(c => c.userData.creator === 'wall').length;
 
         // 4. Single click on the rect at its center.
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
         const sc = window.__projectToScreen(2, 1.5, 0);
         if (!sc) return { passed: false, evidence: { reason: 'projectToScreen failed for rect center' } };
