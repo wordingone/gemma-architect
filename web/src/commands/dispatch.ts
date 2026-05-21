@@ -130,6 +130,11 @@ export function getRuntimeAliases(): Record<string, string> {
   return Object.fromEntries(runtimeAliases.entries());
 }
 
+/** Register a single runtime alias: synonym → canonical. */
+export function registerRuntimeAlias(synonym: string, canonical: string): void {
+  runtimeAliases.set(synonym.toLowerCase(), canonical);
+}
+
 // ============================================================
 // Verb resolution
 // ============================================================

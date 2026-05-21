@@ -66,7 +66,7 @@ import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge, getUniqueEdges } from "./viewer/csg";
-import { registerHandler, dispatch, dispatchSync, installDefaultHandlers } from "./commands/dispatch";
+import { registerHandler, dispatch, dispatchSync, installDefaultHandlers, registerRuntimeAlias } from "./commands/dispatch";
 import { registerGoalHandlers } from "./agent/goal-handlers";
 import { listClusters, getClusterByName, listCanvasClusters, type SkillClusterStep } from "./skills/skill-store";
 import { STARTER_LIBRARY } from "./skills/starter-library";
@@ -148,8 +148,11 @@ levelStore.subscribe(() => {
 });
 // Expose for in-browser debug + DevTools poking — read-only handle to scene state.
 (window as unknown as { __viewer: Viewer }).__viewer = viewer;
-// Expose dispatchSync + async dispatch for CDP-driven verification scripts.
-(window as unknown as { __dispatch: typeof dispatchSync }).__dispatch = dispatchSync;
+// Expose async dispatch for CDP-driven verification scripts.
+// __dispatch is the async variant so async handlers (SdInvokeSkill) resolve correctly.
+// __dispatchSync is the legacy sync alias for callers that cannot await.
+(window as unknown as { __dispatch: typeof dispatch }).__dispatch = dispatch;
+(window as unknown as { __dispatchSync: typeof dispatchSync }).__dispatchSync = dispatchSync;
 (window as unknown as { __dispatchAsync: typeof dispatch }).__dispatchAsync = dispatch;
 // Expose command-session control for test teardown (prevents picker-bridge session leak).
 (window as unknown as { __clearCommandSession: typeof clearCommandSession }).__clearCommandSession = clearCommandSession;
@@ -929,10 +932,17 @@ registerHandler("SdMember", (args) => {
 });
 
 registerHandler("SdStair", (args) => {
-  const s = (args.start as number[] | undefined) ?? [0, 0];
-  const e = (args.end   as number[] | undefined) ?? [4, 0];
-  let a = { x: s[0], y: s[1] };
-  let b = { x: e[0], y: e[1] };
+  // Accept start/end as either array [x, y] or object { x, y }.
+  const toXY = (v: unknown, dx: number, dy: number): { x: number; y: number } => {
+    if (Array.isArray(v)) return { x: (v[0] as number) ?? dx, y: (v[1] as number) ?? dy };
+    if (v && typeof v === "object") {
+      const obj = v as Record<string, unknown>;
+      return { x: (obj.x as number) ?? dx, y: (obj.y as number) ?? dy };
+    }
+    return { x: dx, y: dy };
+  };
+  let a = toXY(args.start, 0, 0);
+  let b = toXY(args.end,   4, 0);
   // Bounds-snap: if both start and end fall outside existing wall/slab extents,
   // translate the segment midpoint onto the scene bbox midpoint.
   const stairBbox = new THREE.Box3();
@@ -976,21 +986,27 @@ registerHandler("SdStair", (args) => {
   group.userData.chain = chain;
   viewer.addMesh(group, "brep");
 
-  // Cut a void in the slab above (at elev + stair rise) matching the stair footprint.
+  // Cut a void in the slab closest to (elev + targetH) matching the stair footprint.
+  // Uses closest-slab strategy (2m tolerance) rather than a rigid 0.5m window —
+  // handles level-state drift between surfaces without requiring exact elevation match.
   const targetH = stairParams.rise ?? stairParams.targetHeight ?? 3.0;
   const voidElev = elev + targetH;
   const clearance = 0.1;
+  let closestSlab: THREE.Object3D | null = null;
+  let closestDist = Infinity;
   viewer.forEachSceneChild((child) => {
     if (child.userData?.creator !== "slab") return;
-    const slabZ = child.position.z;
-    if (Math.abs(slabZ - voidElev) > 0.5) return;
+    const dist = Math.abs(child.position.z - voidElev);
+    if (dist < closestDist) { closestDist = dist; closestSlab = child; }
+  });
+  if (closestSlab && closestDist < 2.0) {
     cutSlabVoidFromBoxMesh(
-      child as THREE.Mesh,
+      closestSlab as THREE.Mesh,
       footprint.minX - clearance, footprint.minY - clearance,
       footprint.maxX + clearance, footprint.maxY + clearance,
     );
-    child.userData.ceilingHole = true;
-  });
+    (closestSlab as THREE.Object3D).userData.ceilingHole = true;
+  }
 
   return { created: "stair", type: stairParams.type };
 });
@@ -1751,15 +1767,28 @@ registerHandler("SdLine", (args) => {
   return { created: "line", start, end };
 });
 
+// SdRect is a runtime alias for SdRectangle (registered below).
+// Both accept {x, y, w, d} shorthand OR {center, width, length} long form.
+registerRuntimeAlias("SdRect", "SdRectangle");
 registerHandler("SdRectangle", (args) => {
-  const w = (args.width  as number | undefined) ?? 1;
-  const d = (args.length as number | undefined) ?? (args.height as number | undefined) ?? 1;
-  const c = (args.center as number[] | undefined) ?? [0, 0];
-  const cx = c[0] ?? 0, cy = c[1] ?? 0;
+  // {x, y, w, d} shorthand: x/y = center, w = width, d = depth
+  const hasShorthand = "w" in args || "d" in args;
+  const w = hasShorthand
+    ? ((args.w as number | undefined) ?? 1)
+    : ((args.width as number | undefined) ?? 1);
+  const d = hasShorthand
+    ? ((args.d as number | undefined) ?? 1)
+    : ((args.length as number | undefined) ?? (args.height as number | undefined) ?? 1);
+  const cx = hasShorthand
+    ? ((args.x as number | undefined) ?? 0)
+    : ((args.center as number[] | undefined)?.[0] ?? 0);
+  const cy = hasShorthand
+    ? ((args.y as number | undefined) ?? 0)
+    : ((args.center as number[] | undefined)?.[1] ?? 0);
   const a = { x: cx - w / 2, y: cy - d / 2 };
   const b = { x: cx + w / 2, y: cy + d / 2 };
   const { mesh, chain } = buildRect(a, b);
-  mesh.userData.creator = "SdRectangle";
+  mesh.userData.creator = "rect";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "mesh");
@@ -2173,6 +2202,7 @@ registerHandler("SdAlignedDim", (args) => {
   const dist = ptA.distanceTo(ptB);
   const mid = ptA.clone().add(ptB).multiplyScalar(0.5);
   const lineObj = opBuildAnnotLine([ptA, ptB]);
+  lineObj.userData.creator = "SdAlignedDim";
   viewer.addMesh(lineObj, "mesh");
   opAddLabel(formatLength(dist), mid, viewer);
   return { measured: "length", distance: parseFloat(dist.toFixed(4)), unit: "m", annotationUuid: lineObj.uuid };
@@ -2189,6 +2219,7 @@ registerHandler("SdAngularDim", (args) => {
   const d2 = ray2.clone().sub(vertex).normalize();
   const angleDeg = (Math.acos(Math.max(-1, Math.min(1, d1.dot(d2)))) * 180) / Math.PI;
   const lineObj = opBuildAnnotLine([vertex, ray1, vertex, ray2]);
+  lineObj.userData.creator = "SdAngularDim";
   viewer.addMesh(lineObj, "mesh");
   opAddLabel(`${angleDeg.toFixed(1)}°`, vertex, viewer);
   return { measured: "angle", angleDeg: parseFloat(angleDeg.toFixed(2)), unit: "deg", annotationUuid: lineObj.uuid };
