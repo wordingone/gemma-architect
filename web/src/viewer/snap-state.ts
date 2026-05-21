@@ -98,26 +98,9 @@ export function findHostMesh(
   clientY: number,
   validCreators: string[],
 ): THREE.Object3D | null {
-  const canvas = viewer.getCanvas();
-  const rect = canvas.getBoundingClientRect();
-  const ndc = new THREE.Vector2(
-    ((clientX - rect.left) / rect.width) * 2 - 1,
-    -((clientY - rect.top) / rect.height) * 2 + 1,
-  );
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(ndc, viewer.getActiveCamera());
-  const hits = raycaster.intersectObjects(viewer.getScene().children, true);
-  for (const hit of hits) {
-    const obj = hit.object;
-    const creator = (obj.userData as { creator?: string }).creator ?? "";
-    if (validCreators.includes(creator)) return obj;
-    const parent = obj.parent;
-    if (parent) {
-      const parentCreator = (parent.userData as { creator?: string }).creator ?? "";
-      if (validCreators.includes(parentCreator)) return parent;
-    }
-  }
-  return null;
+  // Delegate to viewer.raycastForCreator which uses pane-rect NDC + pane camera,
+  // matching the coordinate space of viewer.raycastForHover / onCanvasMouseDown.
+  return viewer.raycastForCreator(clientX, clientY, validCreators);
 }
 
 export function makeSnapId(x: number, y: number, z = 0): string {

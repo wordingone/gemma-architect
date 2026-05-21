@@ -9,7 +9,6 @@ copy-array-side-effects-stair  # #1236  stair array creates only 1 copy instead 
 copy-array-side-effects-door  # #1237  door array creates 0 copies
 wall-corner-rejoin  # #1239  userData.thickness not updated after geometry rebuild
 wall-slab-cross-level-trim  # #1240  TypeError: THREE.Box3 undefined at runtime
-host-aware-door-placement  # #1233  door placement rejected — host wall raycast failing
 door-wall-orientation  # #1235  wall not becoming Group after void-cut
 canvas-visible-width-skill-nodes  # #1255  liveH:280 — potential layout regression
 # Tracked regressions — individual issues filed (fix via Archie queue):

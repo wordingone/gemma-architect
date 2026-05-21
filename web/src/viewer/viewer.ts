@@ -2368,6 +2368,40 @@ export class Viewer {
     return null;
   }
 
+  /** Raycast for a scene object whose userData.creator is in validCreators.
+   *  Uses pane-rect NDC + pane camera — same coordinate space as raycastForHover.
+   *  Returns the matching Object3D (or its parent Group) or null. */
+  raycastForCreator(clientX: number, clientY: number, validCreators: string[]): THREE.Object3D | null {
+    const hitPane = this.panes.find(p => {
+      const r = p.el.getBoundingClientRect();
+      return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+    });
+    if (!hitPane) return null;
+    const pr = hitPane.el.getBoundingClientRect();
+    const ndcX = ((clientX - pr.left) / pr.width) * 2 - 1;
+    const ndcY = -((clientY - pr.top) / pr.height) * 2 + 1;
+    this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), hitPane.camera);
+    const gizmoSet = new Set<THREE.Object3D>(this.gizmos);
+    const pickables = this.scene.children.filter(
+      c => c !== this.grid && c !== this.axes && !(c instanceof THREE.Sprite) &&
+           !(c instanceof THREE.DirectionalLight) && !(c instanceof THREE.AmbientLight) &&
+           !gizmoSet.has(c) && c !== this.pivotProxy && c !== this._cplaneGizmo.group,
+    );
+    const hits = this.raycaster.intersectObjects(pickables, true);
+    for (const h of hits) {
+      const o = h.object;
+      if (o.userData.noSnap) continue;
+      const creator = (o.userData as { creator?: string }).creator ?? "";
+      if (validCreators.includes(creator)) return o;
+      const parent = o.parent;
+      if (parent && parent !== this.scene) {
+        const parentCreator = (parent.userData as { creator?: string }).creator ?? "";
+        if (validCreators.includes(parentCreator)) return parent;
+      }
+    }
+    return null;
+  }
+
   // noHistory: true opts out of the automatic undo push. Use for callers that
   // manage their own history entry (SdArray → pushBatchAction).
   addMesh(mesh: THREE.Object3D, _kind?: string, opts?: { noHistory?: boolean }): void {
