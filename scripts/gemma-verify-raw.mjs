@@ -5772,7 +5772,7 @@ await resetScene('before-box-inject');
         await new Promise(r => setTimeout(r, 30));
 
         // 3. Click the box to transition to fillet_edge phase.
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
         const sc = window.__projectToScreen(0, 0, 0.5);
         if (!sc) return { passed: false, evidence: { reason: 'projectToScreen failed' } };
