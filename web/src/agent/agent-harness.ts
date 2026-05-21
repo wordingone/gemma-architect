@@ -147,9 +147,10 @@ const _generateCallbacks = new Map<string, {
 // Terminate + reinitialize the inference worker every N turns to release
 // accumulated ONNX WebGPU buffer pool (KV cache residuals). Model weights
 // reload from browser cache — no network download after first load.
-const MODEL_WORKER_RECYCLE_AFTER = 2; // turns before forced recycle
+const MODEL_WORKER_RECYCLE_AFTER = 5; // turns before forced recycle (#1303-b: was 2, raised to reduce warmup overhead)
 let _modelWorkerTurnCount = 0;
 let _modelWorkerRecycleCount = 0;
+let _nextInitNoWarmup = false; // set by recycle path; GPU device+shaders persist, skip warmup
 if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>).__model_worker_recycle_count = 0;
 }
@@ -178,6 +179,7 @@ async function recycleModelWorkerIfNeeded(): Promise<void> {
   _bootComplete = false;
   _prefillDone = false;
   _modelWorkerTurnCount = 0;
+  _nextInitNoWarmup = true; // GPU device+compiled shaders persist; new worker skips warmup probe
   _modelWorkerRecycleCount++;
   (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
   window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
@@ -353,11 +355,14 @@ function initWorkerIfNeeded(): Worker {
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LOADING…`);
   window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
 
+  const _noWarmup = _nextInitNoWarmup;
+  _nextInitNoWarmup = false;
   _inferenceWorker.postMessage({
     type:             "init",
     modelId:          MODEL_ID,
     drafterUrl:       DRAFTER_ONNX_URL,
     drafterCacheKey:  DRAFTER_CACHE_KEY,
+    noWarmup:         _noWarmup,
   });
 
   return _inferenceWorker;

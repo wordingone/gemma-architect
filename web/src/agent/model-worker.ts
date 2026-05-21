@@ -116,6 +116,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   const modelId = data.modelId as string;
   const drafterUrl = data.drafterUrl as string;
   const drafterCacheKey = data.drafterCacheKey as string;
+  // noWarmup: set by recycle path. GPU device+compiled shaders persist across worker
+  // terminate/recreate; skip sanity probe and warmup to avoid ~120s re-compilation.
+  const noWarmup = (data.noWarmup as boolean | undefined) === true;
 
   // Returning-user detection: if model files are already in Cache API, skip the
   // loading screen and show a fast-path pulse instead.
@@ -169,8 +172,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       });
       const processor = await AutoProcessor.from_pretrained(modelId);
 
-      // WebGPU sanity probe — same as main-thread path (#128/#133)
-      if (device === "webgpu") {
+      // WebGPU sanity probe — same as main-thread path (#128/#133).
+      // Skipped on recycle (noWarmup): GPU device is persistent, shaders already compiled.
+      if (device === "webgpu" && !noWarmup) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const proc = processor as any;
@@ -208,23 +212,26 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   post({ type: "model-ready", device: loadedLabel });
   checkBootComplete();
 
-  // Warmup probe — warms GPU shader pipeline; non-fatal if it fails
-  try {
-    post({ type: "progress", phase: "warmup", bytes: 0, total: 0, throughputBytesPerSec: 0 });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const proc = _processor as any;
-    const chatText = proc.apply_chat_template(
-      [{ role: "user", content: "." }],
-      { add_generation_prompt: true, tokenize: false },
-    ) as string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const inputs: any = await proc(chatText, null);
-    const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
-    if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
+  // Warmup probe — warms GPU shader pipeline; non-fatal if it fails.
+  // Skipped on recycle (noWarmup): compiled pipelines persist in GPU driver cache.
+  if (!noWarmup) {
+    try {
+      post({ type: "progress", phase: "warmup", bytes: 0, total: 0, throughputBytesPerSec: 0 });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (_model as any).generate({ ...inputs, max_new_tokens: 1, do_sample: false });
-    }
-  } catch { /* warmup failure non-fatal */ }
+      const proc = _processor as any;
+      const chatText = proc.apply_chat_template(
+        [{ role: "user", content: "." }],
+        { add_generation_prompt: true, tokenize: false },
+      ) as string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const inputs: any = await proc(chatText, null);
+      const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
+      if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (_model as any).generate({ ...inputs, max_new_tokens: 1, do_sample: false });
+      }
+    } catch { /* warmup failure non-fatal */ }
+  }
 
   _bootWarmupDone = true;
   post({ type: "warmup-done" });
