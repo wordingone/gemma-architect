@@ -2241,7 +2241,7 @@ await resetScene('before-box-inject');
         window.__emitClickWorld({ x: 0, y: 0 }, { tool: 'polyline' });
         window.__emitClickWorld({ x: 2, y: 0 }, { tool: 'polyline' });
         window.__emitClickWorld({ x: 2, y: 2 }, { tool: 'polyline' });
-        const result = window.__emitClickWorld({ x: 0, y: 2 }, { tool: 'polyline' });
+        const result = window.__emitClickWorld({ x: 0, y: 2 }, { tool: 'polyline', commit: true });
         if (!result) return { passed: false, evidence: { reason: 'emitClickWorld returned null on 4th click' } };
         const after = window.__viewer.scene.children.length;
         const polylines = window.__viewer.scene.children.filter(c => c.userData?.kind === 'polyline');
@@ -3284,32 +3284,25 @@ await resetScene('before-box-inject');
 
 // ── Surface: skills-palette-templates (#838 AC9) ──────────────────────────────
 {
-  await send('Runtime.evaluate', {
-    expression: `(function() {
-      const tab = document.querySelector('.dock-tab[data-tab="skills"]');
-      if (!tab) return { passed: false, evidence: { reason: 'no skills tab' } };
-      tab.click();
-      return { clicked: true };
-    })()`,
-    awaitPromise: false,
-  });
+  await evaluate(`(() => {
+    const tab = document.querySelector('.dock-tab[data-tab="skills"]');
+    if (tab) tab.click();
+    return true;
+  })()`);
   await new Promise(r => setTimeout(r, 600));
-  const r = await send('Runtime.evaluate', {
-    expression: `(function() {
-      const templates = Array.from(document.querySelectorAll('.skill-canvas-palette-item[data-template]'));
-      const names = templates.map(el => el.textContent.trim());
-      const hasSkill = names.includes('+ Skill');
-      const hasScript = names.includes('+ Script');
-      const SYNTHETIC = ['fire-station','sf-residence-2br','hospitality-cabin','office-25desk','research-pavilion','align-to-grid','dimension-chain','extrude-walls','mirror-across-axis','place-doors','replicate-from-video','research-from-prompt','room-from-prompt','stair-from-points'];
-      const allItems = Array.from(document.querySelectorAll('.skill-canvas-palette-item'));
-      const syntheticPresent = allItems.some(el => SYNTHETIC.some(n => el.textContent.includes(n)));
-      const passed = hasSkill && hasScript && templates.length === 2 && !syntheticPresent;
-      return { passed, evidence: { templates: names, count: templates.length, hasSkill, hasScript, syntheticPresent } };
-    })()`,
-    awaitPromise: false,
-  });
-  const v = r?.result?.value ?? {};
-  record('skills-palette-templates', v.passed ?? false, v.evidence ?? {});
+  const r = await evaluate(`(() => {
+    const templates = Array.from(document.querySelectorAll('.skill-canvas-palette-item[data-template]'));
+    const names = templates.map(el => el.textContent.trim());
+    const hasSkill = names.includes('+ Skill');
+    const hasScript = names.includes('+ Script');
+    const SYNTHETIC = ['fire-station','sf-residence-2br','hospitality-cabin','office-25desk','research-pavilion','align-to-grid','dimension-chain','extrude-walls','mirror-across-axis','place-doors','replicate-from-video','research-from-prompt','room-from-prompt','stair-from-points'];
+    const allItems = Array.from(document.querySelectorAll('.skill-canvas-palette-item'));
+    const syntheticPresent = allItems.some(el => SYNTHETIC.some(n => el.textContent.includes(n)));
+    const passed = hasSkill && hasScript && templates.length === 2 && !syntheticPresent;
+    return { passed, evidence: { templates: names, count: templates.length, hasSkill, hasScript, syntheticPresent } };
+  })()`);
+  if (!r) record('skills-palette-templates', false, { reason: 'evaluate returned null' });
+  else record('skills-palette-templates', r.passed ?? false, r.evidence ?? {});
 }
 
 // ── Surface: roof-group-structure (#847 AC6) ───────────────────────────────
@@ -5348,7 +5341,7 @@ await resetScene('before-box-inject');
         const sc = window.__projectToScreen(2.5, 0, 0);
         if (!sc) return { passed: meshVisible === false, evidence: { reason: 'projectToScreen null — structural check only', meshVisible, levelId } };
 
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (canvas) {
           canvas.dispatchEvent(new PointerEvent('pointerdown', {
             bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
@@ -5396,7 +5389,7 @@ await resetScene('before-box-inject');
         // 3. Simulate click on the wall at its center screen position.
         const sc = window.__projectToScreen(2, 0, 0);
         if (!sc) return { passed: false, evidence: { reason: 'projectToScreen null for wall center' } };
-        const canvas = document.querySelector('canvas');
+        const canvas = document.querySelector('#viewer-canvas');
         if (!canvas) return { passed: false, evidence: { reason: 'canvas not found' } };
 
         canvas.dispatchEvent(new PointerEvent('pointerdown', {

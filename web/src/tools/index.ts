@@ -678,6 +678,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   }
 
   const out = handler.handler(pts);
+  if (!out.mesh.userData.levelId) out.mesh.userData.levelId = getActiveLevelId();
   applyDrawingLayer(out.mesh);
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh", { noHistory: true });
   if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
@@ -688,7 +689,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
 }
 
 // Test hook — emit a click programmatically given world-space coords.
-export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?: number }, opts?: { tool?: string }): { mesh: THREE.Object3D; chain: string } | null {
+export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?: number }, opts?: { tool?: string; commit?: boolean }): { mesh: THREE.Object3D; chain: string } | null {
   const tool = opts?.tool ?? readActiveTool();
   if (!tool) return null;
   const handler = TOOL_HANDLERS[tool];
@@ -703,6 +704,29 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   }
   if (handler.clicks === -1) {
     setPickerHint(`${tool} — ${_pending.length} point${_pending.length > 1 ? "s" : ""}  [double-click, Enter, or Space] commit  [Esc] cancel`);
+    if (opts?.commit && _pending.length >= 2) {
+      clearTemporary(viewer);
+      clearSmartTrack(viewer);
+      const pts = [..._pending];
+      _pending = [];
+      hideCursorDot();
+      setPickerHint(null);
+      if (handler.commitMulti) {
+        const results = handler.commitMulti(pts);
+        commitMultiWalls(viewer, results);
+        dispatchSync("setActiveTool", { toolId: "select" });
+        return results[0] ?? null;
+      }
+      const out = handler.handler(pts);
+      if (!out.mesh.userData.levelId) out.mesh.userData.levelId = getActiveLevelId();
+      applyDrawingLayer(out.mesh);
+      viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh", { noHistory: true });
+      if (out.mesh instanceof THREE.Mesh) onElementCommitted(out.mesh, viewer.getScene());
+      _createSequence.push(out.chain);
+      pushAction(out.mesh, out.chain);
+      dispatchSync("setActiveTool", { toolId: "select" });
+      return out;
+    }
     return null;
   }
   if (_pending.length < handler.clicks) return null;
@@ -710,6 +734,7 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
   clearTemporary(viewer);
   clearSmartTrack(viewer);
   const out = handler.handler(_pending);
+  if (!out.mesh.userData.levelId) out.mesh.userData.levelId = getActiveLevelId();
   if (handler.chain) {
     const newStart = { ..._pending[_pending.length - 1] };
     _pending = [newStart];

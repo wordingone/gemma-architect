@@ -3,7 +3,7 @@ import { dispatchSync } from "../commands/dispatch.js";
 import { buildPhoneSlider } from "../ui/phone-slider.js";
 import { getState, subscribe } from "../app-state.js";
 import { openExportDrawer } from "../io/export-drawer.js";
-import { subscribeSnap } from "../viewer/snap-state.js";
+import { subscribeSnap, getSnap } from "../viewer/snap-state.js";
 import { formatLength } from "../units.js";
 
 function escapeHtml(s: string): string {
@@ -864,14 +864,16 @@ function wireSnapCell(): void {
   const cell = document.getElementById("sb-snap");
   const v = cell?.querySelector(".v") as HTMLElement | null;
   if (!v) return;
-  subscribeSnap((s) => {
-    if (!s.snapOn) { v.textContent = "off"; return; }
+  function updateSnapCell(s: ReturnType<typeof getSnap>): void {
+    if (!s.snapOn) { v!.textContent = "off"; return; }
     const parts: string[] = [];
     if (s.gridOn)  parts.push(`grid · ${formatLength(s.step)}`);
     if (s.orthoOn) parts.push("ortho");
     if (s.polarOn) parts.push(`polar · ${s.angleStep}°`);
-    v.textContent = parts.length > 0 ? parts.join(" · ") : "on";
-  });
+    v!.textContent = parts.length > 0 ? parts.join(" · ") : "on";
+  }
+  subscribeSnap(updateSnapCell);
+  subscribe("unitSystem", () => updateSnapCell(getSnap()));
 }
 
 export function initShellChrome(opts?: { onModeChange?: (k: string) => void; onSplitMode?: (mode: "single" | "quad") => void }) {
