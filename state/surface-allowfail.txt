@@ -18,7 +18,6 @@ view-cplane-orientation  # #1268  hackathon sprint regression
 host-cplane-orientation  # #1268  hackathon sprint regression
 agent-invoke-skill  # #1268  hackathon sprint regression
 stair-parametric  # #1268  hackathon sprint regression
-unit-display  # #1268  hackathon sprint regression
 open-project-round-trip  # #1268  hackathon sprint regression
 wall-params-input-parsing  # #1268  hackathon sprint regression
 array-linear-spawns-copies  # #1268  hackathon sprint regression
@@ -35,5 +34,4 @@ stair-ceiling-hole  # #1268  hackathon sprint regression
 c2-minimum-args-smoke  # #1268  hackathon sprint regression
 dim-verb-alignment  # #1268  hackathon sprint regression
 polyline-render-after-4-click  # #1268  hackathon sprint regression
-comp-scope-toggle  # #1268  hackathon sprint regression
 skills-palette-templates  # #1268  hackathon sprint regression
