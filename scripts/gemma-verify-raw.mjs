@@ -4983,10 +4983,17 @@ await resetScene('before-box-inject');
 
       let wallTopZ = -Infinity, slabBottomZ = Infinity;
       v.scene.traverse(obj => {
-        const bb = new window.THREE.Box3().setFromObject(obj);
-        if (obj.userData?.creator === 'wall') {
+        const creator = obj.userData?.creator;
+        if (creator !== 'wall' && creator !== 'slab') return;
+        if (!obj.geometry) return;
+        obj.geometry.computeBoundingBox();
+        const local = obj.geometry.boundingBox;
+        if (!local) return;
+        // Apply world matrix to local bounding box: clone uses built-in THREE.Box3 methods.
+        const bb = local.clone().applyMatrix4(obj.matrixWorld);
+        if (creator === 'wall') {
           wallTopZ = Math.max(wallTopZ, bb.max.z);
-        } else if (obj.userData?.creator === 'slab') {
+        } else {
           slabBottomZ = Math.min(slabBottomZ, bb.min.z);
         }
       });
