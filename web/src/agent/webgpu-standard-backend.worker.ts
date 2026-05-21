@@ -35,7 +35,7 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
   try {
     if (type === "init") {
       const modelId = data.modelId as string;
-      const dtype = (data.dtype as "q4" | "q4f16") ?? "q4f16";
+      const dtype = (data.dtype as "q4" | "q4f16") ?? "q4"; // #1283: q4 default, consistent with model-worker
       _pipe = await pipeline("text-generation", modelId, {
         dtype,
         device: "webgpu",

@@ -98,7 +98,7 @@ let _useStandardOnModelWorker = false;
 function activateStandardBackend(): void {
   if (_standardBackend || _standardBackendActivating) return;
   _standardBackendActivating = true;
-  const sb = new StandardBackend({ modelId: MODEL_ID, dtype: "q4f16" });
+  const sb = new StandardBackend({ modelId: MODEL_ID, dtype: "q4" }); // #1283: consistent with model-worker
   sb.init()
     .then(() => {
       _standardBackend = sb;
