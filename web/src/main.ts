@@ -3286,18 +3286,40 @@ async function handleExport(fmt: string): Promise<void> {
         setStatus(`STL · ${(pendingStl.byteLength / 1024).toFixed(1)} KB`, "ok");
       } else {
         // General Three.js STL export when no replicad geometry is available.
-        const obj = viewer.getActiveObject();
-        if (!obj) { setStatus("No geometry loaded.", "warn"); return; }
-        const buf = exportStl(obj);
+        // #1304: same scene-kg fallback as below.
+        const stlSrc = viewer.getActiveObject() ?? (() => {
+          const scene = viewer.getScene();
+          const tagged = scene.children.filter(c => c.userData.creator);
+          const nodes = tagged.length ? tagged : scene.children.filter(c => c instanceof THREE.Mesh || c instanceof THREE.Group);
+          if (!nodes.length) return null;
+          if (nodes.length === 1) return nodes[0];
+          const g = new THREE.Group(); for (const c of nodes) g.add(c.clone()); return g;
+        })();
+        if (!stlSrc) { setStatus("No geometry loaded.", "warn"); return; }
+        const buf = exportStl(stlSrc);
         downloadBlob(new Blob([buf], { type: "model/stl" }), `${stem}.stl`);
         setStatus(`STL · ${(buf.byteLength / 1024).toFixed(1)} KB`, "ok");
       }
       return;
     }
-    const obj = viewer.getActiveObject();
+    // #1304: scene-kg fallback — active object preferred; fall back to
+    // all creator-tagged scene children when nothing is actively selected
+    // (agent dispatch doesn't set an active object).
+    let obj: THREE.Object3D | null = viewer.getActiveObject();
     if (!obj) {
-      setStatus("No geometry loaded.", "warn");
-      return;
+      const sceneRoot = viewer.getScene();
+      const tagged = sceneRoot.children.filter(c => c.userData.creator);
+      const geomNodes = tagged.length
+        ? tagged
+        : sceneRoot.children.filter(c => c instanceof THREE.Mesh || c instanceof THREE.Group);
+      if (!geomNodes.length) { setStatus("No geometry loaded.", "warn"); return; }
+      if (geomNodes.length === 1) {
+        obj = geomNodes[0];
+      } else {
+        const g = new THREE.Group();
+        for (const c of geomNodes) g.add(c.clone());
+        obj = g;
+      }
     }
     setStatus(`Exporting ${fmt.toUpperCase()}...`, "info");
     if (fmt === "obj") {
