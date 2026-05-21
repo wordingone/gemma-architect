@@ -409,6 +409,12 @@ function initWorkerIfNeeded(): Worker {
     drafterUrl:       DRAFTER_ONNX_URL,
     drafterCacheKey:  DRAFTER_CACHE_KEY,
     noWarmup:         _noWarmup,
+    // §C-warmup-context (#1362): pass representative system prompt so warmup probe
+    // exercises ~1000-token KV cache buffers matching real inference context size.
+    // Without this the probe uses ~6 tokens, leaving large GPU buffers unexercised
+    // and causing BufferManager::Download (buffer_manager.cc:553) to crash on first
+    // real inference with a full-length system prompt + user message (~1300 tokens).
+    warmupPrompt:     _noWarmup ? "" : buildWebGPUSystemPrompt(),
   });
 
   return _inferenceWorker;

@@ -120,6 +120,10 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // noWarmup: set by recycle path. GPU device+compiled shaders persist across worker
   // terminate/recreate; skip sanity probe and warmup to avoid ~120s re-compilation.
   const noWarmup = (data.noWarmup as boolean | undefined) === true;
+  // §C-warmup-context (#1362): representative system prompt passed from main thread.
+  // Used to exercise ~1000-token KV cache allocations during the warmup probe so the
+  // GPU buffer pools are pre-sized before the first real inference call.
+  const warmupPrompt = (data.warmupPrompt as string | undefined) ?? "";
 
   // Returning-user detection: if model files are already in Cache API, skip the
   // loading screen and show a fast-path pulse instead.
@@ -246,8 +250,15 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       post({ type: "progress", phase: "warmup", bytes: 0, total: 0, throughputBytesPerSec: 0 });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const proc = _processor as any;
+      // §C-warmup-context (#1362): include system prompt so the probe exercises the same
+      // KV cache buffer sizes as real inference (~1300 tokens). Without this, the probe
+      // uses ~6 tokens and leaves GPU buffers undersized, causing ORT buffer_manager.cc:553
+      // to crash (ERROR_CODE=1) on the first full-length inference call.
+      const warmupMessages: Array<{ role: string; content: string }> = warmupPrompt
+        ? [{ role: "system", content: warmupPrompt }, { role: "user", content: "." }]
+        : [{ role: "user", content: "." }];
       const chatText = proc.apply_chat_template(
-        [{ role: "user", content: "." }],
+        warmupMessages,
         { add_generation_prompt: true, tokenize: false },
       ) as string;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -257,7 +268,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (_model as any).generate({ ...inputs, max_new_tokens: 1, do_sample: false });
       }
-    } catch { /* warmup failure non-fatal */ }
+    } catch (e) {
+      console.warn("[model-worker] warmup probe failed:", (e as Error).message ?? e);
+    }
   }
 
   _bootWarmupDone = true;
