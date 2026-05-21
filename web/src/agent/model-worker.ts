@@ -200,7 +200,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   };
 
   const backends: Array<{ device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string }> = [
-    { device: "webgpu", dtype: "q4",    label: "GPU" }, // #1283: q4 avoids fp16 Slice path (ort#26690 regression)
+    { device: "webgpu", dtype: "q4f16", label: "GPU" },
     { device: "auto",   dtype: "q4",    label: "CPU" },
   ];
 
