@@ -252,7 +252,7 @@ console.log('══════════════════════�
 const DISPATCH_TIMEOUT_MS       = 20 * 60 * 1000; // 20 min total — covers Pages cold-cache ~782s post-prompt
 const FIRST_DISPATCH_TIMEOUT_MS = 900_000;         // 900s — Pages cold-cache GENERATE_DONE at ~782s + buffer
 
-const turnFromPage = page.evaluate(() => new Promise(resolve => {
+const turnFromPage = page.evaluate((firstDispatchTimeoutMs) => new Promise(resolve => {
   const t0 = Date.now();
   const elapsedS = () => Math.round((Date.now() - t0) / 1000);
 
@@ -283,7 +283,7 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
     clearInterval(poll);
     console.log(`[chainproof] dispatch-timeout at +${elapsedS()}s — no geometry dispatched (scene still at ${window.__viewer?.scene?.children?.length ?? -1}, initial=${initialCount})`);
     resolve({ source: 'dispatch-timeout', initialCount });
-  }, FIRST_DISPATCH_TIMEOUT_MS);
+  }, firstDispatchTimeoutMs);
 
   const poll = setInterval(() => {
     const count = window.__viewer?.scene?.children?.length ?? -1;
@@ -320,7 +320,7 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
     clearInterval(poll);
     clearTimeout(firstDispatchTimer);
   }, { once: true });
-}));
+}), FIRST_DISPATCH_TIMEOUT_MS);
 const turnTimeout  = new Promise(r => setTimeout(() => r({ source: 'timeout' }), DISPATCH_TIMEOUT_MS));
 const turnResult   = await Promise.race([turnFromPage, turnTimeout]);
 
