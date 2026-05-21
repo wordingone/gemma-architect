@@ -354,7 +354,12 @@ function initWorkerIfNeeded(): Worker {
           _prefillDone = false;
           _bootComplete = false;
           _modelWorkerTurnCount = 0;
-          _nextInitNoWarmup = false; // device destroyed — new worker must do full re-init
+          // §C-recycle-no-warmup (#1377): skip warmup on recycle path.
+          // Device IS destroyed, but the 1000-token warmup probe (#1362/#1373) hits the
+          // same buffer_manager.cc:553 OrtRun bug on the fresh GPU → recycled worker
+          // crashes silently during warmup → boot-complete never fires → 240s timeout.
+          // Shader compilation happens on the first real inference anyway. Skip warmup.
+          _nextInitNoWarmup = true;
           _modelWorkerRecycleCount++;
           (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
           const _win = window as unknown as Record<string, unknown>;
@@ -1097,7 +1102,10 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         _prefillDone = false;
         _bootComplete = false;
         _modelWorkerTurnCount = 0;
-        _nextInitNoWarmup = false; // device destroyed — full re-init required
+        // §C-recycle-no-warmup (#1377): same rationale as D3D12-OOM path. Skip warmup
+        // on recycle — the 1000-token probe (#1362/#1373) crashes on the fresh GPU,
+        // blocking boot-complete for 240s. First real inference compiles shaders anyway.
+        _nextInitNoWarmup = true;
         _modelWorkerRecycleCount++;
         (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
         window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
