@@ -91,9 +91,10 @@ async function checkReturningUser(modelId: string): Promise<boolean> {
 self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
   const { type, ...data } = ev.data;
   try {
-    if (type === "init")          await handleInit(data);
-    else if (type === "generate")  await handleGenerate(data);
-    else if (type === "shutdown")  await handleShutdown();
+    if (type === "init")             await handleInit(data);
+    else if (type === "generate")    await handleGenerate(data);
+    else if (type === "shutdown")    await handleShutdown();
+    else if (type === "destroy-device") handleDestroyDevice();
     // "abort" is handled via the AbortController in handleGenerate (future work)
   } catch (e) {
     post({ type: "error", error: (e as Error).message });
@@ -293,6 +294,18 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 }
 
 // ── Shutdown: release ORT sessions when worker is terminated ─────────────────
+// §B-device-destroy (#1313): destroy the underlying WebGPU GPUDevice so D3D12 buffer
+// pressure is fully released before the worker is terminated. Non-fatal — always posts
+// device-destroyed so the main thread can proceed without waiting indefinitely.
+function handleDestroyDevice(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const device = (tfEnv.backends as any)?.onnx?.webgpu?.device as GPUDevice | undefined;
+    if (device && typeof device.destroy === "function") device.destroy();
+  } catch { /* non-fatal — best-effort cleanup */ }
+  post({ type: "device-destroyed" });
+}
+
 // §A-shutdown (#990): called via {type:"shutdown"} message before terminateWorker().
 // Releases _drafterSession (ORT InferenceSession) and disposes _model (transformers.js).
 // Non-fatal on any release error — worker still posts shutdown-complete.

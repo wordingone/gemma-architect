@@ -344,12 +344,17 @@ function initWorkerIfNeeded(): Worker {
         // without engaging the fatal fallback path.
         const _isD3D12Oom = /OrtRun|buffer_manager|CreateCommittedResource/i.test(_errMsg);
         if (_isD3D12Oom && _inferenceWorker) {
-          _inferenceWorker.terminate();
+          // §B-device-destroy (#1313): destroy D3D12 buffers before worker terminate.
+          // Worker is still alive after OrtRun error — send destroy-device so it can
+          // call device.destroy() before we terminate; 400ms window then hard terminate.
+          _inferenceWorker.postMessage({ type: "destroy-device" });
+          const _w = _inferenceWorker;
           _inferenceWorker = null;
           _workerReady = false;
           _prefillDone = false;
+          _bootComplete = false;
           _modelWorkerTurnCount = 0;
-          _nextInitNoWarmup = true;
+          _nextInitNoWarmup = false; // device destroyed — new worker must do full re-init
           _modelWorkerRecycleCount++;
           (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
           const _win = window as unknown as Record<string, unknown>;
@@ -360,6 +365,7 @@ function initWorkerIfNeeded(): Worker {
           updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
           for (const [, cb] of _generateCallbacks) cb.reject(new Error("d3d12-oom: worker recycled"));
           _generateCallbacks.clear();
+          setTimeout(() => _w.terminate(), 400); // deferred: give destroy-device time to execute
           break;
         }
         // Non-OOM worker error: fatal path
@@ -1050,7 +1056,37 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   let result: WorkerGenResult;
   try {
     result = await new Promise<WorkerGenResult>((resolve, reject) => {
-      _generateCallbacks.set(turnId, { resolve, reject });
+      // §B-watchdog (#1313): if generate produces no output for 60s, force-terminate the
+      // worker and reject with a retryable error. Bounds the D3D12 silent-hang failure to
+      // 60s instead of 603s. Device is destroyed before terminate to release D3D12 buffers.
+      const _WATCHDOG_MS = 60_000;
+      let _watchdogTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+        _watchdogTimer = null;
+        _generateCallbacks.delete(turnId);
+        const _stalled = _inferenceWorker;
+        _inferenceWorker = null;
+        _workerReady = false;
+        _prefillDone = false;
+        _bootComplete = false;
+        _modelWorkerTurnCount = 0;
+        _nextInitNoWarmup = false; // device destroyed — full re-init required
+        _modelWorkerRecycleCount++;
+        (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
+        window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
+          detail: { recycleCount: _modelWorkerRecycleCount, reason: "generate-stall-watchdog" },
+        }));
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
+        if (_stalled) {
+          _stalled.postMessage({ type: "destroy-device" }); // best-effort D3D12 cleanup
+          setTimeout(() => _stalled.terminate(), 400);
+        }
+        reject(new Error("worker-stall: generate exceeded 60s, worker recycled"));
+      }, _WATCHDOG_MS);
+
+      _generateCallbacks.set(turnId, {
+        resolve: (r) => { if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } resolve(r); },
+        reject:  (e) => { if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } reject(e); },
+      });
       worker.postMessage({
         type:          "generate",
         turnId,
