@@ -6277,6 +6277,17 @@ await resetScene('before-box-inject');
         await window.__dispatch('SdWall', { start: {x:0,y:0,z:0}, end: {x:6,y:0,z:0}, height: 3.0, thickness: 0.2 });
         await new Promise(r => setTimeout(r, 60));
 
+        // Select the placed wall — _activeWalls is only populated when a wall is selected.
+        // Without selection, applyWallParam() returns early (guard: _activeWalls.length === 0).
+        const scene0 = window.__viewer?.getScene();
+        if (!scene0) return { passed: false, evidence: { reason: '__viewer not available before select' } };
+        let placedWall = null;
+        scene0.traverse((obj) => { if (obj.userData?.creator === 'wall') placedWall = obj; });
+        if (!placedWall) return { passed: false, evidence: { reason: 'placed wall not found in scene' } };
+        window.__setSelected?.({ topology: 'brep', uuid: placedWall.uuid, object: placedWall, transformTarget: placedWall });
+        window.dispatchEvent(new CustomEvent('viewer:select', { detail: { uuid: placedWall.uuid } }));
+        await new Promise(r => setTimeout(r, 100));
+
         // Activate Inspect tab so #wall-params-section is in the live DOM (tab swap detaches it).
         const inspectTab = document.querySelector('.sb-tab[data-tab="inspect"]');
         if (inspectTab) { inspectTab.click(); await new Promise(r => setTimeout(r, 80)); }
