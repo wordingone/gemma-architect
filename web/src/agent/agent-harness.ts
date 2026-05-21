@@ -147,7 +147,7 @@ const _generateCallbacks = new Map<string, {
 // Terminate + reinitialize the inference worker every N turns to release
 // accumulated ONNX WebGPU buffer pool (KV cache residuals). Model weights
 // reload from browser cache — no network download after first load.
-const MODEL_WORKER_RECYCLE_AFTER = 5; // turns before forced recycle (#1303-b: was 2, raised to reduce warmup overhead)
+const MODEL_WORKER_RECYCLE_AFTER = 10; // turns before forced recycle (#1303-b: was 2; 10 keeps VRAM safe while reducing recycle frequency)
 let _modelWorkerTurnCount = 0;
 let _modelWorkerRecycleCount = 0;
 let _nextInitNoWarmup = false; // set by recycle path; GPU device+shaders persist, skip warmup
