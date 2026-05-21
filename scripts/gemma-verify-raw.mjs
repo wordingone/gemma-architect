@@ -998,7 +998,7 @@ await resetScene('before-box-inject');
       const afterCount = window.__viewer?.scene?.children?.length ?? 0;
       let hasIfcWall = false;
       window.__viewer?.scene?.traverse?.(obj => {
-        if (obj.userData?.creator === 'IfcWall') hasIfcWall = true;
+        if (obj.userData?.creator === 'wall') hasIfcWall = true; // 'wall' post-#1309 normalization (was 'IfcWall')
       });
       const wallPassed = afterCount > beforeCount && hasIfcWall;
 
@@ -3687,7 +3687,7 @@ await resetScene('before-box-inject');
       const scene = window.__viewer?.scene;
       let doorObj = null;
       scene?.traverse?.((obj) => {
-        if (obj.userData?.creator === 'SdDoor') doorObj = obj;
+        if (obj.userData?.creator === 'door' || obj.userData?.creator === 'SdDoor') doorObj = obj;
       });
       if (doorObj) window.__viewer?.setActiveObject?.(doorObj);
 
@@ -6240,13 +6240,13 @@ await resetScene('before-box-inject');
         let doorGlb = false, windowGlb = false;
         scene.traverse((obj) => {
           if (!obj.userData?.creator) return;
-          // creator convention (C5): SdDoor handler sets userData.creator = 'SdDoor'
-          if (obj.userData.creator === 'SdDoor') {
+          // creator convention: 'door'/'window' post-#1309 normalization (was 'SdDoor'/'SdWindow')
+          if (obj.userData.creator === 'door' || obj.userData.creator === 'SdDoor') {
             let found = obj.userData.source === 'glb';
             if (!found) obj.traverse((c) => { if (c.userData?.source === 'glb') found = true; });
             if (found) doorGlb = true;
           }
-          if (obj.userData.creator === 'SdWindow') {
+          if (obj.userData.creator === 'window' || obj.userData.creator === 'SdWindow') {
             let found = obj.userData.source === 'glb';
             if (!found) obj.traverse((c) => { if (c.userData?.source === 'glb') found = true; });
             if (found) windowGlb = true;
