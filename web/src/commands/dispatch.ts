@@ -251,6 +251,8 @@ function findMissingEnumChoice(
   for (const spec of schema) {
     if (spec.type !== "enum_choice") continue;
     if (args[spec.name] !== undefined && args[spec.name] !== null) continue;
+    // If the schema declares a default, the handler will apply it — no UI prompt needed.
+    if (spec.default !== undefined) continue;
     // Missing enum_choice (required or optional with no default provided).
     return { arg: spec.name, options: spec.options ?? [] };
   }

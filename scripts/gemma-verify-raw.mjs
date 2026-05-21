@@ -1797,11 +1797,11 @@ await resetScene('before-box-inject');
         return { passed: false, evidence: { reason: 'SdBox not added', eventOk } };
       }
 
-      const boxes = viewer.scene.children.filter(m => m.userData && m.userData.creator === 'SdBox');
+      const boxes = viewer.scene.children.filter(m => m.userData && (m.userData.creator === 'box' || m.userData.creator === 'SdBox'));
       const box = boxes[boxes.length - 1];
       if (!box) {
         viewer.setView(prevView);
-        return { passed: false, evidence: { reason: 'no SdBox in scene', eventOk } };
+        return { passed: false, evidence: { reason: 'no box in scene', eventOk } };
       }
 
       box.updateMatrixWorld(true);
@@ -1835,8 +1835,8 @@ await resetScene('before-box-inject');
     const wallResult = dispatch('IfcWall', { profile: [[0,0],[5,5]], height: 3 });
     if (!wallResult || !wallResult.ok) return { passed: false, evidence: { reason: 'IfcWall dispatch failed', wallResult } };
 
-    const walls = scene.children.filter(o => o.userData && o.userData.creator === 'SdWall');
-    if (!walls.length) return { passed: false, evidence: { reason: 'no SdWall in scene' } };
+    const walls = scene.children.filter(o => o.userData && (o.userData.creator === 'wall' || o.userData.creator === 'SdWall'));
+    if (!walls.length) return { passed: false, evidence: { reason: 'no wall in scene' } };
     const wall = walls[walls.length - 1];
 
     // Place a door with hostUuid.
@@ -1845,8 +1845,8 @@ await resetScene('before-box-inject');
     });
     if (!doorResult || !doorResult.ok) return { passed: false, evidence: { reason: 'IfcDoor dispatch failed', doorResult } };
 
-    const doors = scene.children.filter(o => o.userData && o.userData.creator === 'SdDoor');
-    if (!doors.length) return { passed: false, evidence: { reason: 'no IfcDoor in scene' } };
+    const doors = scene.children.filter(o => o.userData && (o.userData.creator === 'door' || o.userData.creator === 'SdDoor'));
+    if (!doors.length) return { passed: false, evidence: { reason: 'no door in scene' } };
     const door = doors[doors.length - 1];
 
     const cplaneKind = door.userData.cplaneKind;

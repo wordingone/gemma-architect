@@ -662,7 +662,7 @@ registerHandler("SdBox", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdBox", args);
   mesh.userData.levelId = getActiveLevelId();
-  mesh.userData.creator = "SdBox";
+  mesh.userData.creator = "box";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
@@ -831,7 +831,7 @@ registerHandler("SdWall", (args) => {
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWall", args);
   mesh.userData.levelId = getActiveLevelId();
-  mesh.userData.creator = "SdWall";
+  mesh.userData.creator = "wall";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
@@ -1028,7 +1028,7 @@ registerHandler("SdDoor", (args) => {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
-  mesh.userData.creator = "SdDoor";
+  mesh.userData.creator = "door";
   mesh.userData.voidW = doorW;
   mesh.userData.voidH = doorH;
   mesh.userData.cplaneKind = cplane.kind;
@@ -1087,7 +1087,7 @@ registerHandler("SdWindow", (args) => {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
-  mesh.userData.creator = "SdWindow";
+  mesh.userData.creator = "window";
   mesh.userData.voidW = FZK_WINDOW_W;
   mesh.userData.voidH = FZK_WINDOW_H;
   mesh.userData.cplaneKind = cplane.kind;
