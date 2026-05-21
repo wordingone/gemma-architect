@@ -1262,7 +1262,7 @@ await resetScene('before-box-inject');
     const afterCount = children.length;
     const hasGrid  = children.some(c => c.userData?.creator === 'IfcGrid'  || c.userData?.kind === 'grid');
     const hasLevel = children.some(c => c.userData?.creator === 'IfcLevel' || c.userData?.kind === 'brep' && c.userData?.levelId);
-    const hasDatum = children.some(c => c.userData?.creator === 'SdDatum');
+    const hasDatum = children.some(c => c.userData?.creator === 'datum' || c.userData?.creator === 'SdDatum');
     const passed = hasGrid && hasLevel && hasDatum && afterCount > beforeCount;
     return { passed, evidence: { beforeCount, afterCount, hasGrid, hasLevel, hasDatum,
       gridOk: rGrid?.ok, levelOk: rLevel?.ok, datumOk: rDatum?.ok } };

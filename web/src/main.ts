@@ -678,7 +678,7 @@ registerHandler("SdSphere", (args) => {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.copy(cplane.normal.clone().multiplyScalar(r));
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdSphere";
+  mesh.userData.creator = "sphere";
   mesh.userData.cplaneKind = cplane.kind;
   viewer.addMesh(mesh, "brep");
   return { created: "sphere", radius: r };
@@ -695,7 +695,7 @@ registerHandler("SdCylinder", (args) => {
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cplane.normal);
   mesh.position.copy(cplane.normal.clone().multiplyScalar(h / 2));
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdCylinder";
+  mesh.userData.creator = "cylinder";
   mesh.userData.cplaneKind = cplane.kind;
   viewer.addMesh(mesh, "brep");
   return { created: "cylinder", radius: r, height: h };
@@ -712,7 +712,7 @@ registerHandler("SdCone", (args) => {
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cplane.normal);
   mesh.position.copy(cplane.normal.clone().multiplyScalar(h / 2));
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdCone";
+  mesh.userData.creator = "cone";
   mesh.userData.cplaneKind = cplane.kind;
   viewer.addMesh(mesh, "brep");
   return { created: "cone", radius: r, height: h };
@@ -923,7 +923,7 @@ registerHandler("SdMember", (args) => {
   const dir = new THREE.Vector3(axis[0], axis[1], axis[2]).normalize();
   if (Math.abs(dir.dot(up)) < 0.9999) mesh.quaternion.setFromUnitVectors(up, dir);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdMember";
+  mesh.userData.creator = "member";
   mesh.userData.layerId = resolveLayerId("SdMember", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
@@ -1436,7 +1436,7 @@ registerHandler("SdPlate", (args) => {
   const dir = new THREE.Vector3(norm[0], norm[1], norm[2]).normalize();
   if (Math.abs(dir.dot(up)) < 0.9999) mesh.quaternion.setFromUnitVectors(up, dir);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdPlate";
+  mesh.userData.creator = "plate";
   mesh.userData.layerId = resolveLayerId("SdPlate", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
@@ -1475,7 +1475,7 @@ registerHandler("SdOpening", (args) => {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
-  mesh.userData.creator = "SdOpening";
+  mesh.userData.creator = "opening";
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdOpening", args);
   mesh.userData.levelId = getActiveLevelId();
@@ -1679,7 +1679,7 @@ registerHandler("SdDatum", (args) => {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, elev);
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdDatum";
+  mesh.userData.creator = "datum";
   if (args.label) mesh.userData.label = args.label as string;
   viewer.addMesh(mesh, "brep");
   return { created: "datum", elevation: elev };
@@ -1712,7 +1712,7 @@ registerHandler("SdFurnishing", (args) => {
   mesh.position.set(pos?.[0] ?? 0, pos?.[1] ?? 0, pos?.[2] ?? getActiveLevelElevation());
   if (rotDeg) mesh.rotation.z = (rotDeg * Math.PI) / 180;
   mesh.userData.kind = "brep";
-  mesh.userData.creator = "SdFurnishing";
+  mesh.userData.creator = "furnishing";
   mesh.userData.layerId = resolveLayerId("SdFurnishing", args);
   mesh.userData.levelId = getActiveLevelId();
   mesh.userData.dispatchArgs = args;
@@ -1747,7 +1747,7 @@ registerHandler("SdPoint", (args) => {
   const pos = (args.position as number[] | undefined) ?? [0, 0];
   const p = { x: pos[0] ?? 0, y: pos[1] ?? 0 };
   const { mesh, chain } = buildPoint(p);
-  mesh.userData.creator = "SdPoint";
+  mesh.userData.creator = "point";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "mesh");
@@ -1760,7 +1760,7 @@ registerHandler("SdLine", (args) => {
   const a = { x: start[0] ?? 0, y: start[1] ?? 0 };
   const b = { x: end[0] ?? 1, y: end[1] ?? 0 };
   const { mesh, chain } = buildLine(a, b);
-  mesh.userData.creator = "SdLine";
+  mesh.userData.creator = "line";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "mesh");
@@ -1800,7 +1800,7 @@ registerHandler("SdPolyline", (args) => {
   if (points.length < 2) return { error: "SdPolyline requires at least 2 points", created: null };
   const pts = points.map((p) => ({ x: p[0] ?? 0, y: p[1] ?? 0 }));
   const { mesh, chain } = buildPolyline(pts);
-  mesh.userData.creator = "SdPolyline";
+  mesh.userData.creator = "polyline";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "mesh");
@@ -1842,7 +1842,7 @@ registerHandler("SdArc", (args) => {
   const pts = tessellate(nurbs, 64);
   const obj = new THREE.Line(polylineToGeom(pts), curveMat());
   obj.userData.kind = "arc";
-  obj.userData.creator = "SdArc";
+  obj.userData.creator = "arc";
   viewer.addMesh(obj, "mesh");
   return { created: "arc", center: ptToArray(arc.center), radius, startAngle, endAngle };
 });
@@ -1853,7 +1853,7 @@ registerHandler("SdCircle", (args) => {
   const center = { x: c[0] ?? 0, y: c[1] ?? 0 };
   const radial = { x: center.x + radius, y: center.y };
   const { mesh, chain } = buildCircle(center, radial);
-  mesh.userData.creator = "SdCircle";
+  mesh.userData.creator = "circle";
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "mesh");
@@ -1893,7 +1893,7 @@ registerHandler("SdEllipse", (args) => {
   const pts = tessellate(ellipseNurbs, 128);
   const obj = new THREE.LineLoop(polylineToGeom(pts), curveMat());
   obj.userData.kind = "ellipse";
-  obj.userData.creator = "SdEllipse";
+  obj.userData.creator = "ellipse";
   viewer.addMesh(obj, "mesh");
   return { created: "ellipse", center: ptToArray(center), rx, ry };
 });
@@ -1908,7 +1908,7 @@ registerHandler("SdSpline", (args) => {
   const tess = tessellate(nurbs, pts3.length * 16);
   const obj = new THREE.Line(polylineToGeom(tess), curveMat());
   obj.userData.kind = "spline";
-  obj.userData.creator = "SdSpline";
+  obj.userData.creator = "spline";
   obj.userData.controlPoints = pts3.map(p => new THREE.Vector3(p.x, p.y, p.z));
   viewer.addMesh(obj, "mesh");
   return { created: "spline", points: pts3.map(p => ptToArray(p)) };
@@ -1923,7 +1923,7 @@ registerHandler("SdCurve", (args) => {
   }
   const pts = rawPts.map(p => ({ x: p[0] ?? 0, y: p[1] ?? 0 }));
   const { mesh } = buildCurve(pts);
-  mesh.userData.creator = "SdCurve";
+  mesh.userData.creator = "curve";
   viewer.addMesh(mesh, "mesh");
   return { created: "curve", points: pts.length, nurbsKind: "catmull-rom" };
 });
@@ -1988,7 +1988,7 @@ registerHandler("SdRevolve", (args) => {
     const tess = tessellateSurface(surface, 32, 64);
     const obj = surfaceToMesh(tess);
     obj.userData.kind = "revolution";
-    obj.userData.creator = "SdRevolve";
+    obj.userData.creator = "revolve";
     viewer.addMesh(obj, "mesh");
     return { created: "revolution", axisFrom: args.axisFrom, axisTo: args.axisTo, angleStart: start, angleEnd: end };
   } catch (e) {
@@ -2004,7 +2004,7 @@ registerHandler("SdSweep", (args) => {
     const tess = tessellateSurface(surface, 32, 32);
     const obj = surfaceToMesh(tess);
     obj.userData.kind = "sweep";
-    obj.userData.creator = "SdSweep";
+    obj.userData.creator = "sweep";
     viewer.addMesh(obj, "mesh");
     return { created: "sweep" };
   } catch (e) {
@@ -2024,7 +2024,7 @@ registerHandler("SdLoft", (args) => {
     const tess = tessellateSurface(surface, 32, 32);
     const obj = surfaceToMesh(tess);
     obj.userData.kind = "loft";
-    obj.userData.creator = "SdLoft";
+    obj.userData.creator = "loft";
     viewer.addMesh(obj, "mesh");
     return { created: "loft", curveCount: curves.length };
   } catch (e) {
@@ -2056,7 +2056,7 @@ registerHandler("SdArray", (args) => {
     geom.setAttribute("position", new THREE.Float32BufferAttribute(position, 3));
     const obj = new THREE.Points(geom, buildPointMaterial());
     obj.userData.kind = "point";
-    obj.userData.creator = "SdArray";
+    obj.userData.creator = "array";
     return obj;
   }
 
@@ -2096,7 +2096,7 @@ registerHandler("SdArray", (args) => {
           baseObj.position.y + dy,
           baseObj.position.z + dz,
         );
-        clone.userData.creator = "SdArray";
+        clone.userData.creator = "array";
         viewer.addMesh(clone, (clone.userData.kind as string | undefined) ?? "mesh", { noHistory: true });
         batchObjs.push(clone);
       }
