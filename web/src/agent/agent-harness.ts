@@ -1035,8 +1035,22 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
   // Plain-text messages: worker splices image into last user message if imageUrl is set.
   // §C (#990): build once, reuse length for telemetry — avoids redundant 7K-char rebuild.
-  const MAX_HISTORY_MSGS = 60;
-  const trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+  const MAX_HISTORY_MSGS = 20;
+  let trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+  // Char-based safety trim: ~40K chars ≈ 10K tokens, leaves 6K headroom for sys+image+prompt
+  // within the 16384-token WEBGPU_CONTEXT_LIMIT. Drop oldest user+assistant pairs together.
+  const HISTORY_CHAR_BUDGET = 40_000;
+  {
+    let histChars = trimmedHistory.reduce(
+      (s, m) => s + (typeof m.content === "string" ? m.content.length : 0),
+      0,
+    );
+    while (histChars > HISTORY_CHAR_BUDGET && trimmedHistory.length >= 2) {
+      histChars -= (typeof trimmedHistory[0].content === "string" ? trimmedHistory[0].content.length : 0)
+                + (typeof trimmedHistory[1].content === "string" ? trimmedHistory[1].content.length : 0);
+      trimmedHistory = trimmedHistory.slice(2);
+    }
+  }
   const _sysPrompt = buildWebGPUSystemPrompt(req.skills);
   const messages = [
     { role: "system" as const, content: _sysPrompt },
