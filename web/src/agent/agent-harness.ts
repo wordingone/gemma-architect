@@ -143,6 +143,19 @@ const _generateCallbacks = new Map<string, {
   reject: (e: Error) => void;
 }>();
 
+// ── Silent-stall watchdog (#1313 follow-up) ──────────────────────────────────
+// PR #1317 lowered the recycle threshold 10→5 + added d3d12-oom regex
+// detection in the error path. Phase J post-#1317 cold-cache verification
+// (2026-05-21 10:50Z, results-compaction-post-1317-mixed/phase-J.json) showed
+// turn-6 still hangs 603s post-recycle with NO error event emitted — the
+// worker prefill stalls silently and no JS-layer error fires. This bounds the
+// failure mode: any 60s gap without a generate-progress / generate-done /
+// generate-error event triggers a forced recycle. Backstop only — does not
+// fix the underlying D3D12 buffer-release path.
+const GENERATE_STALL_TIMEOUT_MS = 60_000;
+const GENERATE_STALL_POLL_MS = 5_000;
+let _lastWorkerEventAt = 0;
+
 // ── Model-worker recycle (#1303) ─────────────────────────────────────────────
 // Terminate + reinitialize the inference worker every N turns to release
 // accumulated ONNX WebGPU buffer pool (KV cache residuals). Model weights
@@ -242,6 +255,7 @@ function initWorkerIfNeeded(): Worker {
 
   _inferenceWorker.onmessage = (ev: MessageEvent<Record<string, unknown>>) => {
     const msg = ev.data;
+    _lastWorkerEventAt = Date.now(); // #1313 follow-up: feed silent-stall watchdog
     switch (msg.type) {
       case "returning-user":
         window.dispatchEvent(new CustomEvent("agentmodel:returning-user"));
@@ -1051,6 +1065,36 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   try {
     result = await new Promise<WorkerGenResult>((resolve, reject) => {
       _generateCallbacks.set(turnId, { resolve, reject });
+      _lastWorkerEventAt = Date.now();
+
+      // #1313 follow-up: silent-stall watchdog
+      const _stallPoller = setInterval(() => {
+        if (!_generateCallbacks.has(turnId)) { clearInterval(_stallPoller); return; }
+        const _silentMs = Date.now() - _lastWorkerEventAt;
+        if (_silentMs < GENERATE_STALL_TIMEOUT_MS) return;
+        clearInterval(_stallPoller);
+        if (_inferenceWorker) {
+          _inferenceWorker.terminate();
+          _inferenceWorker = null;
+          _workerReady = false;
+          _prefillDone = false;
+          _modelWorkerTurnCount = 0;
+          _nextInitNoWarmup = true;
+          _modelWorkerRecycleCount++;
+          const _win = window as unknown as Record<string, unknown>;
+          _win.__agent_silent_stall_recycles =
+            ((_win.__agent_silent_stall_recycles as number | undefined) ?? 0) + 1;
+          _win.__model_worker_recycle_count = _modelWorkerRecycleCount;
+          window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
+            detail: { recycleCount: _modelWorkerRecycleCount, reason: "silent-stall" },
+          }));
+        }
+        for (const [, cb] of _generateCallbacks) {
+          cb.reject(new Error(`silent-stall: no worker event in ${Math.round(_silentMs)}ms`));
+        }
+        _generateCallbacks.clear();
+      }, GENERATE_STALL_POLL_MS);
+
       worker.postMessage({
         type:          "generate",
         turnId,
