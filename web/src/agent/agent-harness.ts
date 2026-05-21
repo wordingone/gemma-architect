@@ -147,7 +147,7 @@ const _generateCallbacks = new Map<string, {
 // Terminate + reinitialize the inference worker every N turns to release
 // accumulated ONNX WebGPU buffer pool (KV cache residuals). Model weights
 // reload from browser cache — no network download after first load.
-const MODEL_WORKER_RECYCLE_AFTER = 10; // turns before forced recycle (#1303-b: was 2; 10 keeps VRAM safe while reducing recycle frequency)
+const MODEL_WORKER_RECYCLE_AFTER = 5; // turns before forced recycle (#1313: was 10; Phase J data shows stall at turn 6 with threshold=10 — recycle after 5 turns prevents accumulated GPU state from reaching the stall point)
 let _modelWorkerTurnCount = 0;
 let _modelWorkerRecycleCount = 0;
 let _nextInitNoWarmup = false; // set by recycle path; GPU device+shaders persist, skip warmup
@@ -278,6 +278,11 @@ function initWorkerIfNeeded(): Worker {
         break;
       case "warmup-done":
         _prefillDone = true;
+        if (msg.skipped) {
+          // #1313: noWarmup path confirmed. Expose for harness (window.__agent_warmup_skipped_count).
+          const w = window as unknown as Record<string, unknown>;
+          w.__agent_warmup_skipped_count = ((w.__agent_warmup_skipped_count as number | undefined) ?? 0) + 1;
+        }
         updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · READY`);
         break;
       case "drafter-ready":

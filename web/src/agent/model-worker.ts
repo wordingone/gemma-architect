@@ -234,7 +234,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   }
 
   _bootWarmupDone = true;
-  post({ type: "warmup-done" });
+  post({ type: "warmup-done", skipped: noWarmup }); // #1313: skipped=true when noWarmup (recycle path)
   checkBootComplete();
 
   // Drafter load — fire after warmup; drafter-error is non-fatal (standard path covers)
