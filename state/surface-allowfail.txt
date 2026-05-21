@@ -26,12 +26,10 @@ array-rect-spawns-grid  # #1268  hackathon sprint regression
 walls-from-object-single-click  # #1268  hackathon sprint regression
 fillet-selected-edge  # #1268  hackathon sprint regression
 fillet-schema-edge-dispatch  # #1268  hackathon sprint regression
-agent-palette-parity  # #1268  hackathon sprint regression
 copy-click-commits-selection  # #1268  hackathon sprint regression
 hidden-level-unselectable  # #1268  hackathon sprint regression
 snap-face-vertex-priority  # #1268  hackathon sprint regression
 stair-ceiling-hole  # #1268  hackathon sprint regression
 c2-minimum-args-smoke  # #1268  hackathon sprint regression
-dim-verb-alignment  # #1268  hackathon sprint regression
 polyline-render-after-4-click  # #1268  hackathon sprint regression
 skills-palette-templates  # #1268  hackathon sprint regression
