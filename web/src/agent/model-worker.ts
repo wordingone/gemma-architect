@@ -467,6 +467,10 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
   // §A (#990): release GPU-backed ORT tensors after decode — prevents KV VRAM leak at 16K depth.
   try { if (generated !== outputs) (generated as any)?.dispose?.(); } catch { /* non-fatal */ }
   try { (outputs as any)?.dispose?.(); } catch { /* non-fatal */ }
+  // §A-inputs (#1303): release input tensors (WebGPU-backed by processor) each turn.
+  for (const v of Object.values(inputs ?? {})) {
+    try { (v as any)?.dispose?.(); } catch { /* non-fatal */ }
+  }
 
   post({
     type: "generate-done",

@@ -151,10 +151,9 @@ function estimateMaxTokens(prompt: string): number {
   // Multi-step design requests need headroom for plan + multiple tool_calls.
   // Covers all 10 P8a benchmark prompt categories (fire-station→station,
   // hospitality-cabin→cabin, walkup-4story→apartment, community-center→center/hall).
-  // 2048 (was 1024 #1194, was 2048 #1048, was 4096 #1058): iter 2 log showed out=1024==
-  // max_new_tokens — house response truncated mid SdSlab. 25 calls × ~35 tok + plan ≈ 1100 tok;
-  // 2048 gives headroom. WebGPU VRAM budget unaffected by output cap.
-  if (/\b(design|pavilion|room|building|house|complex|floor|facade|station|cabin|apartment|center|hall|clinic|library|residence|create|model)\b/.test(p)) return 2048;
+  // 4096 (was 2048 #1243-fix): Schultz hit exactly 2048 cap before SdRoof (25th tool_call);
+  // raising to 4096 gives full plan + 30+ tool_calls headroom. WebGPU VRAM unaffected by cap.
+  if (/\b(design|pavilion|room|building|house|complex|floor|facade|station|cabin|apartment|center|hall|clinic|library|residence|create|model)\b/.test(p)) return 4096;
   // Default: single geometry command fits in 512.
   return 512;
 }

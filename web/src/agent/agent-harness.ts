@@ -143,6 +143,48 @@ const _generateCallbacks = new Map<string, {
   reject: (e: Error) => void;
 }>();
 
+// ── Model-worker recycle (#1303) ─────────────────────────────────────────────
+// Terminate + reinitialize the inference worker every N turns to release
+// accumulated ONNX WebGPU buffer pool (KV cache residuals). Model weights
+// reload from browser cache — no network download after first load.
+const MODEL_WORKER_RECYCLE_AFTER = 2; // turns before forced recycle
+let _modelWorkerTurnCount = 0;
+let _modelWorkerRecycleCount = 0;
+if (typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__model_worker_recycle_count = 0;
+}
+
+async function recycleModelWorkerIfNeeded(): Promise<void> {
+  if (_modelWorkerTurnCount < MODEL_WORKER_RECYCLE_AFTER) return;
+  if (!_inferenceWorker) return;
+
+  // Graceful shutdown: let worker release ORT sessions + model before terminate.
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, 5000);
+    const onMsg = (ev: MessageEvent<Record<string, unknown>>) => {
+      if (ev.data.type === "shutdown-complete") {
+        clearTimeout(timeout);
+        _inferenceWorker?.removeEventListener("message", onMsg);
+        resolve();
+      }
+    };
+    _inferenceWorker!.addEventListener("message", onMsg);
+    _inferenceWorker!.postMessage({ type: "shutdown" });
+  });
+
+  _inferenceWorker!.terminate();
+  _inferenceWorker = null;
+  _workerReady = false;
+  _bootComplete = false;
+  _prefillDone = false;
+  _modelWorkerTurnCount = 0;
+  _modelWorkerRecycleCount++;
+  (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
+  window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
+    detail: { recycleCount: _modelWorkerRecycleCount },
+  }));
+}
+
 // CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#811).
 // Replace placeholder with actual HF Hub URL after drafter-e4b.onnx is uploaded.
 //   Recommended host: https://huggingface.co/<user>/<repo>/resolve/main/drafter-e4b.onnx
@@ -266,6 +308,7 @@ function initWorkerIfNeeded(): Worker {
         const cb = _generateCallbacks.get(msg.turnId as string);
         if (cb) {
           _generateCallbacks.delete(msg.turnId as string);
+          _modelWorkerTurnCount++; // #1303: track for recycle
           cb.resolve({
             text:         msg.text as string,
             specAttempts: msg.specAttempts as number,
@@ -933,6 +976,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // ── On-device path via Web Worker (#936) ─────────────────────────────────
   // Worker owns: from_pretrained, WebGPU probe, warmup, drafter load, tokenization,
   // generate, decode. Main thread never blocks during model load or inference.
+  await recycleModelWorkerIfNeeded(); // #1303: release ONNX WebGPU buffer pool every N turns
   const worker = initWorkerIfNeeded();
 
   // Get imageUrl for vision turns (worker loads RawImage internally — no transfer needed).
