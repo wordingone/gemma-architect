@@ -1085,6 +1085,8 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
   const useMtp = !_MTP_OFF;
   const turnId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  // §C-turn-start (#1371): observable marker so Phase J harness can confirm runAgentTurn fired.
+  window.dispatchEvent(new CustomEvent("agent:turn-start", { detail: { turnId } }));
 
   let result: WorkerGenResult;
   try {
@@ -1131,6 +1133,15 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         resolve: (r) => { if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } resolve(r); },
         reject:  (e) => { if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } reject(e); },
       });
+      // §C-stale-cb (#1371): if worker never responds within 5s of callback registration,
+      // log a diagnostic. Distinct from the 60s watchdog (which recycles) — this fires
+      // earlier and helps identify whether postMessage was enqueued or silently dropped.
+      setTimeout(() => {
+        if (_generateCallbacks.has(turnId)) {
+          console.warn("[agent-harness] generate-start-no-response: 5s with no worker response, turnId=%s", turnId);
+          window.dispatchEvent(new CustomEvent("agent:generate-stale", { detail: { turnId } }));
+        }
+      }, 5_000);
       worker.postMessage({
         type:          "generate",
         turnId,
