@@ -17,6 +17,10 @@
 //   {type:"drafter-ready"}
 //   {type:"drafter-error", error}
 //   {type:"boot-complete"}                    // model-ready + warmup-done + drafter done
+//   {type:"boot-gpu-info", gpu, adapterInfo?, limits?, reason?} // WebGPU env (#1294)
+//   {type:"boot-timings", timestamps}         // phase perf.now() map (#1294)
+//   {type:"gpu-device-lost", reason, message, lostAt} // GPUDevice.lost (#1294)
+//   {type:"gpu-unhandled-rejection", message, ts}    // worker-scope WebGPU errors (#1294)
 //   {type:"ready",       device}
 //   {type:"generate-done", turnId, text, specAttempts, specAccepts,
 //                          prefillMs, decodeMs, inputLength, tokensOut}
@@ -26,6 +30,84 @@
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage } from "@huggingface/transformers";
 import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
 import { fetchDrafterCached } from "./drafter-cache.js";
+
+// ── Boot instrumentation (#1294) ──────────────────────────────────────────────
+// Observability-only. Captures WebGPU environment (adapter info, limits) and
+// phase timestamps so Pages vs localhost cold-cache diffs can be diagnosed.
+// No functional effect on inference path.
+
+// Phase timestamps accumulated during handleInit; flushed with "boot-timings" post.
+const _bootTs: Record<string, number> = {};
+function ts(label: string): void { _bootTs[label] = performance.now(); }
+
+// Emit adapter info and limits before from_pretrained acquires the device.
+// Does NOT call adapter.requestDevice() — avoids a second GPUDevice.
+async function emitGpuAdapterInfo(): Promise<void> {
+  try {
+    if (!navigator.gpu) {
+      post({ type: "boot-gpu-info", gpu: false, reason: "navigator.gpu absent" });
+      return;
+    }
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      post({ type: "boot-gpu-info", gpu: false, reason: "requestAdapter returned null" });
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const info = await (adapter as any).requestAdapterInfo?.() ?? {};
+    const lim = adapter.limits;
+    post({
+      type: "boot-gpu-info",
+      gpu: true,
+      adapterInfo: {
+        vendor:       info.vendor       ?? null,
+        architecture: info.architecture ?? null,
+        device:       info.device       ?? null,
+        description:  info.description  ?? null,
+      },
+      limits: {
+        maxBufferSize:                       lim.maxBufferSize,
+        maxStorageBufferBindingSize:         lim.maxStorageBufferBindingSize,
+        maxUniformBufferBindingSize:         lim.maxUniformBufferBindingSize,
+        maxComputeWorkgroupStorageSize:      lim.maxComputeWorkgroupStorageSize,
+        maxComputeInvocationsPerWorkgroup:   lim.maxComputeInvocationsPerWorkgroup,
+        maxComputeWorkgroupSizeX:            lim.maxComputeWorkgroupSizeX,
+        maxStorageTexturesPerShaderStage:    lim.maxStorageTexturesPerShaderStage,
+        maxSampledTexturesPerShaderStage:    lim.maxSampledTexturesPerShaderStage,
+      },
+    });
+  } catch (e) {
+    post({ type: "boot-gpu-info", gpu: false, error: (e as Error).message?.slice(0, 120) });
+  }
+}
+
+// Attach device.lost listener to transformers.js's internal GPUDevice after model load.
+// Non-destructive introspection — no new device created.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function attachDeviceLostListener(model: any): void {
+  try {
+    const dev = model?._device?.device ?? model?.device;
+    if (dev?.lost) {
+      (dev.lost as Promise<GPUDeviceLostInfo>).then((info) => {
+        post({
+          type: "gpu-device-lost",
+          reason:  info.reason,
+          message: info.message,
+          lostAt:  performance.now(),
+        });
+      }).catch(() => { /* ignore — lost fires once then rejects */ });
+    }
+  } catch { /* non-fatal */ }
+}
+
+// Catch WebGPU errors surfacing as unhandled promise rejections in the worker.
+self.addEventListener("unhandledrejection", (ev) => {
+  const msg = String((ev as PromiseRejectionEvent).reason?.message ??
+                     (ev as PromiseRejectionEvent).reason ?? "");
+  if (/gpu|device lost|webgpu|Instance|WebGL/i.test(msg)) {
+    post({ type: "gpu-unhandled-rejection", message: msg.slice(0, 300), ts: performance.now() });
+  }
+});
 
 // ── Worker state ──────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,6 +208,7 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
 
 // ── Init: from_pretrained + warmup probe + drafter ───────────────────────────
 async function handleInit(data: Record<string, unknown>): Promise<void> {
+  ts("init_start");
   // §A-init (#990): dispose prior ORT sessions on re-init (model swap) — prevents VRAM leak.
   if (_drafterSession) {
     try { await (_drafterSession as any).release?.(); } catch { /* non-fatal */ }
@@ -140,6 +223,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   const modelId = data.modelId as string;
   const drafterUrl = data.drafterUrl as string;
   const drafterCacheKey = data.drafterCacheKey as string;
+
+  // Emit adapter info before transformers.js acquires the device.
+  await emitGpuAdapterInfo();
 
   // Returning-user detection: if model files are already in Cache API, skip the
   // loading screen and show a fast-path pulse instead.
@@ -208,12 +294,14 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 
   for (const { device, dtype, label } of backends) {
     try {
+      ts(`from_pretrained_start_${label}`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const model = await Gemma4ForConditionalGeneration.from_pretrained(modelId, {
         dtype,
         device,
         progress_callback: progressCb,
       });
+      ts(`from_pretrained_end_${label}`);
       const processor = await AutoProcessor.from_pretrained(modelId);
 
       // WebGPU sanity probe — same as main-thread path (#128/#133)
@@ -227,10 +315,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
             [{ role: "user", content: "test" }],
             { tokenize: false, add_generation_prompt: true },
           ) as string;
+          ts("sanity_probe_start");
           const probeIn = await proc(probeText);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (model as any).generate({ ...probeIn, max_new_tokens: 1 });
+          ts("sanity_probe_end");
         } catch {
+          ts("sanity_probe_failed");
           continue; // WebGPU probe failed → try CPU
         }
       }
@@ -239,6 +330,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       _processor = processor;
       loadedLabel = label;
       _clearStallTimer(); // model loaded — cancel stall detection
+      attachDeviceLostListener(_model);
       break;
     } catch (e) {
       if (device === "webgpu") continue;
@@ -265,6 +357,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // Windows TDR / GPU-process restart — surfacing as "A valid external Instance reference no
   // longer exists" + WebGL Context Lost cascade. max_new_tokens=4 exercises prefill AND decoder
   // shader paths (autoregressive Slice + KV step). Non-fatal on failure.
+  ts("warmup_start");
   try {
     post({ type: "progress", phase: "warmup", bytes: 0, total: 0, throughputBytesPerSec: 0 });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -282,6 +375,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       await (_model as any).generate({ ...inputs, max_new_tokens: 4, do_sample: false });
     }
   } catch { /* warmup failure non-fatal */ }
+  ts("warmup_end");
 
   _bootWarmupDone = true;
   post({ type: "warmup-done" });
@@ -298,6 +392,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // Lazy-create on first MTP-eligible turn (inputLength<900) keeps the fast-path warm
   // for short prompts without paying GPU residency cost on the typical long-prompt path.
   // drafter-error is still non-fatal (standard path covers).
+  ts("drafter_start");
   if (drafterUrl) {
     try {
       post({ type: "progress", phase: "drafter", progress: 0, bytes: 0, total: 0, throughputBytesPerSec: 0 });
@@ -319,16 +414,23 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         });
       });
       _bootDrafterDone = true;
+      ts("drafter_end");
       post({ type: "drafter-ready" });
     } catch (e) {
       _drafterBytes = null;
       _bootDrafterDone = true;
+      ts("drafter_error");
       post({ type: "drafter-error", error: (e as Error).message?.slice(0, 120) });
     }
   } else {
     // No drafter URL — drafter phase is skipped.
     _bootDrafterDone = true;
+    ts("drafter_end");
   }
+
+  ts("boot_complete");
+  // Flush all phase timestamps in one post — compare Pages vs localhost side-by-side.
+  post({ type: "boot-timings", timestamps: { ..._bootTs } });
 
   checkBootComplete();
   post({ type: "ready", device: loadedLabel });
