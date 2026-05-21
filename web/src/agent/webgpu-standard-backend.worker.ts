@@ -40,6 +40,17 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
         dtype,
         device: "webgpu",
       });
+      // Warmup probe — compile /lm_head/num_logits_to_keep/Slice shader at boot to remove it
+      // from the user-click cold-compile path. Same shape pattern as model-worker.ts:172-189.
+      // Non-fatal on failure (some shader paths can recover at real inference time).
+      try {
+        await _pipe(
+          [{ role: "user", content: "warmup" }],
+          { max_new_tokens: 1, do_sample: false },
+        );
+      } catch (e) {
+        console.warn("[std-backend] warmup probe failed (non-fatal):", (e as Error).message?.slice(0, 120));
+      }
       post({ type: "ready" });
     } else if (type === "generate") {
       await handleGenerate(data);
