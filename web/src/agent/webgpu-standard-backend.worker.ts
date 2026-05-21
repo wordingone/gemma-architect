@@ -44,9 +44,7 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
         session_options: {
           freeDimensionOverrides: {
             batch_size: 1,
-            sequence_length: 1024,
             past_sequence_length: 0,
-            total_sequence_length: 1024,
           },
         },
       });

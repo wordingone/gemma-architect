@@ -218,11 +218,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         // Demo prompt is ~997 tokens; 1024 gives headroom. Prompts >1024 tokens will fall back
         // to the CPU backend loop per the existing cascade.
         session_options: {
+          // #1283 fix #4a: lock only truly-static dims. sequence_length + total_sequence_length
+          // vary across sanity probe / warmup / real dispatch — locking them breaks OrtRun
+          // (ERROR_CODE 2: got N, expected 1024). Keep batch_size=1 + past_sequence_length=0
+          // which are always constant for our single-batch prefill-only path.
           freeDimensionOverrides: {
             batch_size: 1,
-            sequence_length: 1024,
             past_sequence_length: 0,
-            total_sequence_length: 1024,
           },
         },
       });
