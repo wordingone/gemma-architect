@@ -336,16 +336,43 @@ function initWorkerIfNeeded(): Worker {
         }
         break;
       }
-      case "error":
+      case "error": {
+        const _errMsg = (msg.error as string) ?? "Unknown model load error";
+        // #1313: D3D12 silent OOM — OrtRun throws buffer_manager/CreateCommittedResource
+        // but WebGPU reports DeviceRemovedReason=S_OK so no JS device-lost event fires.
+        // Detected via OrtRun error text. Recycle worker; next turn gets a fresh worker
+        // without engaging the fatal fallback path.
+        const _isD3D12Oom = /OrtRun|buffer_manager|CreateCommittedResource/i.test(_errMsg);
+        if (_isD3D12Oom && _inferenceWorker) {
+          _inferenceWorker.terminate();
+          _inferenceWorker = null;
+          _workerReady = false;
+          _prefillDone = false;
+          _modelWorkerTurnCount = 0;
+          _nextInitNoWarmup = true;
+          _modelWorkerRecycleCount++;
+          (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
+          const _win = window as unknown as Record<string, unknown>;
+          _win.__agent_d3d12_recycles = ((_win.__agent_d3d12_recycles as number | undefined) ?? 0) + 1;
+          window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
+            detail: { recycleCount: _modelWorkerRecycleCount, reason: "d3d12-oom" },
+          }));
+          updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
+          for (const [, cb] of _generateCallbacks) cb.reject(new Error("d3d12-oom: worker recycled"));
+          _generateCallbacks.clear();
+          break;
+        }
+        // Non-OOM worker error: fatal path
         _webgpuFallbackEngaged = true;
-        _modelLoadError = (msg.error as string) ?? "Unknown model load error"; // #1036
-        _bootComplete = true; // #1036: boot sequence ended (with error)
+        _modelLoadError = _errMsg; // #1036
+        _bootComplete = true;      // #1036: boot sequence ended (with error)
         console.error("[gemma] model load failed:", _modelLoadError); // #1036 DevTools AC1
         updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
         window.dispatchEvent(new CustomEvent("agentmodel:error", { detail: msg.error }));
-        for (const [, cb] of _generateCallbacks) cb.reject(new Error(msg.error as string));
+        for (const [, cb] of _generateCallbacks) cb.reject(new Error(_errMsg));
         _generateCallbacks.clear();
         break;
+      }
     }
   };
 
