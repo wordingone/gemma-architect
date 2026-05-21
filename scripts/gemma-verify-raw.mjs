@@ -3606,9 +3606,11 @@ await resetScene('before-box-inject');
 }
 
 // ── S68: copy-array-side-effects-parity — stair slab void (#914) ─────────────
-// Dispatches a slab + stair, then SdArrayLinear 3.
-// Verifies scene grew by 4 (1 stair original + 3 clones; not asserting void count
-// — void-cut state is geometry-level, observable only via visual check).
+// Dispatches a slab + stair, then SdArrayLinear count=3.
+// SdArrayLinear uses for(i=1; i<count; i++) — count=3 creates 2 copies.
+// Verifies scene grew by >= 2 (not asserting void count — geometry-level only).
+// Selection via window.__setSelected (exposed in main.ts); setActiveObject and
+// SdDeselect are not part of the public API and must not be used here.
 {
   await resetScene('copy-array-side-effects-stair');
 
@@ -3622,30 +3624,32 @@ await resetScene('before-box-inject');
       // Place a stair: 12 risers × 0.18 = 2.16 rise, goes up to z≈3.
       d('SdStair', { start: [0, 0], end: [0, 3.24], type: 'straight', count: 12, width: 1.0 });
 
-      const before = window.__viewer?.scene?.children?.length ?? 0;
-
-      // Select the last added object (stair) and array it.
-      d('SdSelectAll', {});
-      // Re-select just the stair by dispatching after clearing.
-      d('SdDeselect', {});
       const scene = window.__viewer?.scene;
       if (!scene) return { passed: false, evidence: { reason: 'no scene' } };
+
       // Find the stair group in scene.
       let stairObj = null;
       scene.traverse((obj) => {
         if (obj.userData?.creator === 'stair') stairObj = obj;
       });
       if (!stairObj) return { passed: false, evidence: { reason: 'no stair in scene' } };
-      // Manually activate it.
-      window.__viewer?.setActiveObject?.(stairObj);
 
+      // Select the stair using the exposed __setSelected (from selection-state.ts).
+      // SdSelectAll only populates multi-select and adds a proxy to the scene
+      // (polluting the child count); setActiveObject is not on the public Viewer API.
+      if (!window.__setSelected) return { passed: false, evidence: { reason: '__setSelected not exposed' } };
+      window.__setSelected({ topology: 'brep', uuid: stairObj.uuid, object: stairObj, transformTarget: stairObj });
+
+      const before = scene.children.length;
+
+      // count=3 → for(i=1; i<3; i++) → 2 clones, consistent with SdArrayPolar/Grid convention.
       d('SdArrayLinear', { count: 3, dx: 2, dy: 0 });
 
-      const after = window.__viewer?.scene?.children?.length ?? 0;
-      const grew = (after - before) >= 3;
+      const after = scene.children.length;
+      const grew = (after - before) >= 2;
       return {
         passed: grew,
-        evidence: { before, after, grew }
+        evidence: { before, after, grew, delta: after - before }
       };
     } catch(e) { return { passed: false, evidence: { error: e.message } }; }
   })()`);
@@ -3655,8 +3659,9 @@ await resetScene('before-box-inject');
 }
 
 // ── S69: copy-array-side-effects-parity — wall+door void (#914) ──────────────
-// Dispatches a wall, then SdCopy — verifies scene grew by at least 1.
+// Dispatches a wall + door, then SdCopy — verifies scene grew by at least 1.
 // (Full void-count assertion requires visual check; structural pass is scene growth.)
+// Selection via window.__setSelected; setActiveObject is not on the public Viewer API.
 {
   await resetScene('copy-array-side-effects-door');
 
@@ -3668,23 +3673,29 @@ await resetScene('before-box-inject');
       d('SdWall', { start: {x:0,y:0,z:0}, end: {x:6,y:0,z:0} });
       d('SdDoor', { position: [1.5, 0, 0], width: 0.9, height: 2.1 });
 
-      const before = window.__viewer?.scene?.children?.length ?? 0;
-
-      // Set door as active for copy.
       const scene = window.__viewer?.scene;
+      if (!scene) return { passed: false, evidence: { reason: 'no scene' } };
+
+      // Find the door in scene.
       let doorObj = null;
-      scene?.traverse?.((obj) => {
+      scene.traverse((obj) => {
         if (obj.userData?.creator === 'door' || obj.userData?.creator === 'SdDoor') doorObj = obj;
       });
-      if (doorObj) window.__viewer?.setActiveObject?.(doorObj);
+      if (!doorObj) return { passed: false, evidence: { reason: 'no door in scene' } };
+
+      // Select the door using the exposed __setSelected (from selection-state.ts).
+      if (!window.__setSelected) return { passed: false, evidence: { reason: '__setSelected not exposed' } };
+      window.__setSelected({ topology: 'brep', uuid: doorObj.uuid, object: doorObj, transformTarget: doorObj });
+
+      const before = scene.children.length;
 
       d('SdCopy', { x: 2, y: 0, z: 0 });
 
-      const after = window.__viewer?.scene?.children?.length ?? 0;
+      const after = scene.children.length;
       const grew = (after - before) >= 1;
       return {
         passed: grew,
-        evidence: { before, after, grew }
+        evidence: { before, after, grew, delta: after - before }
       };
     } catch(e) { return { passed: false, evidence: { error: e.message } }; }
   })()`);
