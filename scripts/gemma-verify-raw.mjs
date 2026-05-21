@@ -158,6 +158,40 @@ try {
 await send("Page.reload", { waitForNavigation: false });
 await delay(2000);
 
+// ── Boot gate (#1225) ─────────────────────────────────────────────────────────
+// Verify must run against a booted app, not a post-wipe tab still on the download screen.
+// Waits for agentmodel:boot-complete / agentmodel:returning-user.
+// If the app is already loaded (returning session), resolves immediately.
+// Timeout: 20 min covers Pages cold-cache CDN download (~217s observed).
+{
+  const BOOT_TIMEOUT_MS = 20 * 60 * 1000;
+  console.log("  Waiting for app boot (up to 20 min — covers Pages cold-cache)…");
+  const bootResult = await evaluate(`(() => new Promise(resolve => {
+    if (window.__viewer && typeof window.__dispatch === 'function') {
+      resolve({ event: 'already-loaded' }); return;
+    }
+    const done = ev => () => resolve({ event: ev });
+    window.addEventListener('agentmodel:boot-complete',  done('boot-complete'),  { once: true });
+    window.addEventListener('agentmodel:returning-user', done('returning-user'), { once: true });
+    window.addEventListener('agentmodel:error', e => resolve({ event: 'error', detail: String(e?.detail ?? e) }), { once: true });
+  }))()`, true, BOOT_TIMEOUT_MS + 10_000);
+  if (!bootResult || bootResult.event === 'error') {
+    const reason = bootResult?.event === 'error'
+      ? `agentmodel:error: ${bootResult.detail}`
+      : "boot timed out after 20 min — CDN stalled or app never loaded";
+    console.error(`  ✗ ${reason}`);
+    console.error("  gemma-verify requires a booted app. Let the model finish loading before running verify.");
+    const failReceipt = {
+      sha, timestamp, attached_via_cdp: true, all_passed: false,
+      surfaces: [{ name: "boot-gate", passed: false, evidence: { reason } }],
+    };
+    writeFileSync(outFile, JSON.stringify(failReceipt, null, 2));
+    await cleanup();
+    process.exit(1);
+  }
+  console.log(`  ✓ App ready — ${bootResult.event}`);
+}
+
 // ── Test hook ─────────────────────────────────────────────────────────────────
 await evaluate(`(window.__gemmaTest = { events: {}, surfaceResults: [] }, true)`);
 // Enable test mode: SdExport short-circuits to prevent real Downloads pollution (#262).

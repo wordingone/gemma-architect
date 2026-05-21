@@ -3,11 +3,3 @@ demo-prompt-design-house  # #494  NL agent verb output nondeterministic: model s
 chat-plan-foldable  # #538  cascade from S54/S56 model latency timeouts; testMode fixes direct timeout but not UI-state contamination
 skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) populating scene; S54 skips on model latency timeout
 demo-cluster-flow  # #670  new surface — allow-fail until first green run confirms timing
-tier0-llama-server-dispatch  # pending #1225 verify-ordering  model not loaded when verify ran; soft-skips when REMOTE badge absent
-su1-end-to-end-2storey-house  # pending #1225 verify-ordering  multi-turn agent; built-in skip on timeout
-on-device-agent-response  # pending #1225 verify-ordering  consent-required post-wipe; re-given on first UI interaction
-fzk-haus-perception-rehearsal  # pending #1225 verify-ordering  model too slow for 60s turn-complete timeout
-two-story-house-chip  # pending #1225 verify-ordering  chips appear only after model interaction; post-wipe none shown
-ifc-picker-activation  # pending #1225 verify-ordering  inter-surface tool-state contamination from prior SdPolyline surface
-gable-trim-undo-roundtrip  # pending #1225 verify-ordering  scene contamination — no walls at test entry point
-agent-build-and-export  # pending #1225 verify-ordering  agent-dependent dispatch; model returning wrong output while loading
