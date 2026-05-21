@@ -12,9 +12,12 @@ let _isReturningUser = false;
 
 // Bytes progress state
 let _totalBytes = 0;             // from agentmodel:manifest
-let _loadedBytes = 0;            // cumulative from loading events
+let _loadedBytes = 0;            // cumulative from loading events (file-banking approach)
+let _completedFileBytes = 0;     // sum of total bytes for fully-transitioned files
+let _lastFile = '';              // filename of the in-progress file
+let _lastFileTotal = 0;          // total bytes of the in-progress file
 let _throughput = 0;             // bytes/sec (last reported)
-let _currentFile = '';
+let _currentFile = '';           // display label (current file basename)
 
 // DOM refs
 let _overlay: HTMLDivElement | null = null;
@@ -106,27 +109,35 @@ function _wireEvents(): void {
     const d = (ev as CustomEvent<{
       bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string; phase?: string;
     }>).detail ?? {};
-    if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, d.bytes!);
+    // Cumulative bytes tracking: bank each completed file's total when the filename changes,
+    // then add current-file loaded bytes. This matches model-consent.ts and avoids the
+    // Math.max stall where per-file bytes reset to 0 on each new shard (#1379 Bug 2).
+    const shortFile = d.file ? (d.file.split('/').pop() ?? d.file) : '';
+    const bytes = d.bytes ?? 0;
+    const total = d.total ?? 0;
+    if (shortFile && shortFile !== _lastFile && _lastFile !== '') {
+      _completedFileBytes += _lastFileTotal;
+    }
+    if (shortFile) { _lastFile = shortFile; _lastFileTotal = total; }
+    if (bytes > 0 || _completedFileBytes > 0) {
+      _loadedBytes = _completedFileBytes + bytes;
+    }
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     if (d.file) _currentFile = d.file;
-    if (!_totalBytes && d.total) _totalBytes = d.total;
-    _traceEvent('loading', { bytes: d.bytes, total: d.total, phase: d.phase });
+    if (!_totalBytes && total) _totalBytes = total;
+    _traceEvent('loading', { bytes, total, phase: d.phase });
     // Any loading event proves the pipeline is alive — clear a false-positive stall.
     _recoverFromStall();
-    // Sliding-window: switch from 90s initial grace to 30s window only on first event
-    // with real bytes (pre-manifest loading events fire with empty detail and must not
-    // trigger the transition).
-    // After first real bytes: reset 30s window on ANY loading event, including shard-boundary
-    // events where bytes=0 (new shard starting) — these prove the connection is alive.
-    // Without this, inter-shard gaps on slow CDN nodes exceed 30s and fire false STALLED.
+    // Sliding-window watchdog: arm/reset on each event.
     //
-    // model-init phase: ORT/WebGPU deserialization is CPU/GPU-bound, not network-bound.
-    // It takes 60-180s and fires no intermediate progress — use 180s window so a genuine
-    // init stall still surfaces, but normal GPU load doesn't false-trigger STALLED.
-    // model-init: ORT/WebGPU deserialisation — CPU/GPU-bound, 60-180s.
-    // warmup: GPU shader compilation at real context length (#1362/#1365) — can take
-    //   30-120s on cold-cache; using 30s window here triggers false STALLED.
-    const watchdogMs = (d.phase === 'model-init' || d.phase === 'warmup') ? 180_000 : 30_000;
+    // model-init: ORT/WebGPU deserialisation — CPU/GPU-bound, 60-180s. 180s window.
+    // warmup: GPU shader compilation — 30-120s on cold-cache. 180s window.
+    // model download: CDN transfer. 60s window — doubled from prior 30s to absorb CDN
+    //   inter-shard gaps and the download→model-init transition gap (#1379 Bug 1).
+    //   The transition between the last "model" download event and the first "model-init"
+    //   event (ORT weight loading) can exceed 30s on some systems; 60s tolerates this
+    //   without masking a genuine stall.
+    const watchdogMs = (d.phase === 'model-init' || d.phase === 'warmup') ? 180_000 : 60_000;
     if (!_firstLoadingReceived && _loadedBytes > 0) {
       _firstLoadingReceived = true;
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
