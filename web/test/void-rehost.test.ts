@@ -87,9 +87,9 @@ describe("rehostVoidCut — cross-wall rehost", () => {
 
     // Wall B's void Group should be in scene
     expect(result!.newVoidGroup).toBeInstanceOf(THREE.Group);
-    // Wall B mesh was replaced by void group in scene
+    // Wall B uuid now resolves to the void Group (uuid preserved on replacement, #1235)
     const wallBInScene = scene.getObjectByProperty("uuid", wallB.uuid);
-    expect(wallBInScene).toBeUndefined(); // Wall B mesh removed from scene
+    expect(wallBInScene).toBeInstanceOf(THREE.Group);
     expect(result!.newVoidGroup.parent).toBe(scene); // void group added
 
     // hostExpressID updated to Wall B

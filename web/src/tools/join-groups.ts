@@ -365,6 +365,10 @@ export function cutRectVoidFromBoxMesh(
   group.rotation.copy(host.rotation);
   group.scale.copy(host.scale);
   group.userData = { ...host.userData };
+  // Preserve the host uuid so scene.getObjectByProperty('uuid', wallUuid) still resolves
+  // to the Group after void-cut (#1235). The mesh is removed from the scene immediately
+  // below, so there is no uuid collision.
+  group.uuid = host.uuid;
 
   // Swap host with group in parent
   const parent = host.parent;
@@ -440,6 +444,7 @@ export function cutSlabVoidFromBoxMesh(
   group.rotation.copy(slab.rotation);
   group.scale.copy(slab.scale);
   group.userData = { ...slab.userData, stairVoidCut: true };
+  group.uuid = slab.uuid;
 
   const parent = slab.parent;
   if (!parent) return null;
