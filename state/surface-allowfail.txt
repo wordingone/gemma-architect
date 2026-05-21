@@ -12,24 +12,24 @@ wall-slab-cross-level-trim  # #1240  TypeError: THREE.Box3 undefined at runtime
 host-aware-door-placement  # #1233  door placement rejected — host wall raycast failing
 door-wall-orientation  # #1235  wall not becoming Group after void-cut
 canvas-visible-width-skill-nodes  # #1255  liveH:280 — potential layout regression
-# Untracked regressions — fix via Archie queue or follow-up PRs:
-layout-tab-functional  # #1268  hackathon sprint regression
-view-cplane-orientation  # #1268  hackathon sprint regression
-host-cplane-orientation  # #1268  hackathon sprint regression
-agent-invoke-skill  # #1268  hackathon sprint regression
-stair-parametric  # #1268  hackathon sprint regression
-open-project-round-trip  # #1268  hackathon sprint regression
-wall-params-input-parsing  # #1268  hackathon sprint regression
-array-linear-spawns-copies  # #1268  hackathon sprint regression
-array-polar-spawns-radial  # #1268  hackathon sprint regression
-array-rect-spawns-grid  # #1268  hackathon sprint regression
-walls-from-object-single-click  # #1268  hackathon sprint regression
-fillet-selected-edge  # #1268  hackathon sprint regression
-fillet-schema-edge-dispatch  # #1268  hackathon sprint regression
-copy-click-commits-selection  # #1268  hackathon sprint regression
-hidden-level-unselectable  # #1268  hackathon sprint regression
-snap-face-vertex-priority  # #1268  hackathon sprint regression
-stair-ceiling-hole  # #1268  hackathon sprint regression
-c2-minimum-args-smoke  # #1268  hackathon sprint regression
-polyline-render-after-4-click  # #1268  hackathon sprint regression
-skills-palette-templates  # #1268  hackathon sprint regression
+# Tracked regressions — individual issues filed (fix via Archie queue):
+layout-tab-functional  # #1328  panel interaction broken post-hackathon
+view-cplane-orientation  # #1329  CPlane not aligned to active view
+host-cplane-orientation  # #1330  CPlane not host-derived after door/window placement
+agent-invoke-skill  # #1331  skill invocation via agent dispatch fails
+stair-parametric  # #1332  stair riser/tread/count wrong
+open-project-round-trip  # #1333  file save/load round-trip broken
+wall-params-input-parsing  # #1334  imperial height input not converting to metres
+array-linear-spawns-copies  # #1335  linear array count not spawning N copies
+array-polar-spawns-radial  # #1336  polar array not placing radial copies
+array-rect-spawns-grid  # #1337  rectangular array not spawning grid copies
+walls-from-object-single-click  # #1338  wall tool single-click not committing
+fillet-selected-edge  # #1339  fillet on selected edge broken
+fillet-schema-edge-dispatch  # #1340  fillet dispatch via schema args broken
+copy-click-commits-selection  # #1341  copy tool click not committing selection
+hidden-level-unselectable  # #1342  hidden level objects remain selectable
+snap-face-vertex-priority  # #1343  vertex snap not taking priority over face snap
+stair-ceiling-hole  # #1344  stair does not cut hole in ceiling slab
+c2-minimum-args-smoke  # #1345  wall/slab/roof/door/window minimal-args dispatch fails
+polyline-render-after-4-click  # #1346  polyline not rendering after 4th click
+skills-palette-templates  # #1347  skill palette not showing template entries
