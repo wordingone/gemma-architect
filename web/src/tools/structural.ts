@@ -49,6 +49,11 @@ export function rebuildWallParams(
   const t = params.thickness ?? (mesh.userData.wallThickness as number | undefined) ?? DEFAULT_WALL_THICKNESS;
   const h = params.height ?? (mesh.userData.wallHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
 
+  // Write metadata before the controlPoints guard — thickness/height must be
+  // persisted even when geometry can't be rebuilt (e.g. wall with no CPs yet).
+  mesh.userData.wallThickness = t;
+  mesh.userData.wallHeight = h;
+
   const cps = mesh.userData.controlPoints as THREE.Vector3[] | undefined;
   if (!cps || cps.length < 2) return;
 
@@ -74,8 +79,6 @@ export function rebuildWallParams(
   cps[0].set(-len / 2, 0, 0);
   cps[1].set(len / 2, 0, 0);
 
-  mesh.userData.wallThickness = t;
-  mesh.userData.wallHeight = h;
   mesh.userData.endpoints = [
     { x: wA.x, y: wA.y, z: zOff, id: makeSnapId(wA.x, wA.y, zOff) },
     { x: wB.x, y: wB.y, z: zOff, id: makeSnapId(wB.x, wB.y, zOff) },

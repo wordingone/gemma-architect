@@ -7,7 +7,6 @@ demo-cluster-flow  # #670  new surface — allow-fail until first green run conf
 # Archie queue (individual issues filed):
 copy-array-side-effects-stair  # #1236  stair array creates only 1 copy instead of N
 copy-array-side-effects-door  # #1237  door array creates 0 copies
-wall-corner-rejoin  # #1239  userData.thickness not updated after geometry rebuild
 wall-slab-cross-level-trim  # #1240  TypeError: THREE.Box3 undefined at runtime
 # Tracked regressions — individual issues filed (fix via Archie queue):
 layout-tab-functional  # #1328  panel interaction broken post-hackathon
