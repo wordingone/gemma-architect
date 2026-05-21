@@ -357,7 +357,8 @@ async function handleDestroyDevice(): Promise<void> {
     if (device && typeof device.destroy === "function") {
       device.destroy();
       // L2: await actual device loss before proceeding
-      try { await device.lost; } catch { /* non-fatal — lost always resolves on destroy */ }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      try { await (device as any).lost; } catch { /* non-fatal — lost always resolves on destroy */ }
     }
     // L1: null the reference so ORT cannot resolve it on next load
     if (backends?.onnx?.webgpu) backends.onnx.webgpu.device = null;
