@@ -120,7 +120,12 @@ function openDB(): Promise<IDBDatabase> {
         db.createObjectStore(CANVAS_CLUSTER_STORE, { keyPath: "id" });
       }
     };
-    req.onsuccess = () => { _db = req.result; resolve(_db); };
+    req.onsuccess = () => {
+      _db = req.result;
+      _db.onclose = () => { _db = null; };
+      _db.onversionchange = () => { _db?.close(); _db = null; };
+      resolve(_db);
+    };
     req.onerror   = () => reject(req.error);
   });
 }
