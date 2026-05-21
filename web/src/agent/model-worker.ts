@@ -26,6 +26,11 @@
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, env as tfEnv } from "@huggingface/transformers";
 import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
 import { fetchDrafterCached } from "./drafter-cache.js";
+// §C-ort-static (#1375): static import bundles ORT directly into the worker chunk.
+// Dynamic `await import("onnxruntime-web")` caused vite to emit a separate
+// hash-stamped ort.bundle.min-*.js that could 404 on Pages when deployment
+// hashes drifted between builds. Static import eliminates the separate chunk.
+import * as ort from "onnxruntime-web";
 
 // ── Worker state ──────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,8 +292,6 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   if (drafterUrl) {
     try {
       post({ type: "progress", phase: "drafter", progress: 0, bytes: 0, total: 0, throughputBytesPerSec: 0 });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ort = (globalThis as any).ort ?? await import("onnxruntime-web");
       let _drafterLastBytes = 0;
       let _drafterLastTs = Date.now();
       const drafterBuf = await fetchDrafterCached(drafterUrl, drafterCacheKey, (loaded, total) => {
@@ -460,8 +463,6 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
   // WEBGPU_CONTEXT_LIMIT is now 16384 — this threshold is about drafter quality, not ceiling.
   if (useMtp && _drafterSession && MTP_VERIFICATION_WIRED && inputLength < 900) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ort = (globalThis as any).ort ?? await import("onnxruntime-web");
       const mtpSessions = getMtpSessions(_model);
       if (mtpSessions) {
         const inputIdsTensor = inputs.input_ids as { data: BigInt64Array; dims: number[] };
