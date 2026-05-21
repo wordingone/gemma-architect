@@ -150,6 +150,19 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         total,
         throughputBytesPerSec,
       });
+    } else if (info.status === "initiate") {
+      // §A-shard-boundary (#1216): "initiate" fires when a new shard fetch starts,
+      // before first bytes arrive. Without this, the 30s stall watchdog fires
+      // during the CDN inter-shard gap, producing variable STALLED screen counts.
+      post({
+        type: "progress",
+        phase: "model",
+        progress: 0,
+        file: ((info.name as string | undefined) ?? "").split("/").pop() ?? "",
+        bytes: 0,
+        total: 0,
+        throughputBytesPerSec: 0,
+      });
     } else if (info.status === "loading") {
       post({ type: "progress", phase: "model-init", bytes: 0, total: 0, throughputBytesPerSec: 0 });
     }

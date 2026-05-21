@@ -33,6 +33,7 @@ let _rafId = 0;
 let _watchdogId: ReturnType<typeof setTimeout> | null = null;
 let _firstLoadingReceived = false;
 let _stalledShown = false;
+let _stallCount = 0;   // incremented each time _showStalled fires; exposed as window.__boot_stall_count
 
 // Download trace — in-memory log of all agentmodel:* events for STALLED diagnostics.
 type TraceEntry = { t: number; event: string; bytes?: number; total?: number; phase?: string };
@@ -67,6 +68,8 @@ function _showStalled(): void {
   if (_done) return;
   _watchdogId = null;
   _stalledShown = true;
+  _stallCount++;
+  (window as unknown as Record<string, unknown>).__boot_stall_count = _stallCount;
   if (!_statusEl) return;
   Object.assign(_statusEl.style, { color: '#ff9900', display: 'block' });
   _statusEl.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
