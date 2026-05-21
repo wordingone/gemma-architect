@@ -3390,67 +3390,54 @@ await resetScene('before-box-inject');
 }
 
 // ── Surface: door-wall-orientation (#845 AC7) ─────────────────────────────────
-// Place wall + door via DSL → assert door rotation matches wall, door z ≈ 0 (level floor),
-// wall replaced by Group (void cut present). Undo → wall restored, door gone.
+// Place wall + door via __dispatch → assert door rotation matches wall, door z ≈ 0,
+// wall replaced by Group (void cut present).
+// Uses __dispatch directly; the console DSL does not support key=value args
+// (e.g. hostUuid=<uuid>) without the ':' prefix, which would break door placement.
 {
   await resetScene("door-wall-orientation");
 
   const r = await evaluate(`(async () => {
     try {
       const v = window.__viewer;
+      const d = window.__dispatch;
       if (!v) return { passed: false, reason: 'no __viewer' };
+      if (!d) return { passed: false, reason: 'no __dispatch' };
 
-      // Switch to prompt/console mode
-      const tab = document.querySelector('[data-tab=prompt]');
-      if (tab) tab.click();
-      await new Promise(r => setTimeout(r, 200));
-      const pill = document.querySelector('.mode-pill');
-      if (pill && pill.getAttribute('data-mode') !== 'console') {
-        pill.click();
-        await new Promise(r => setTimeout(r, 300));
-      }
-      const input = document.querySelector('#console-input');
-      if (!input) return { passed: false, reason: 'no #console-input' };
-
-      const send = async (cmd) => {
-        input.value = cmd;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keyup',  { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-        await new Promise(r => setTimeout(r, 600));
-      };
-
-      // Place a horizontal wall (rotation.z ≈ 0) at y=0
+      // Place a horizontal wall at y=0.
       const before = v.scene.children.length;
-      await send('SdWall 0 0 4 0');
+      d('SdWall', { start: { x: 0, y: 0 }, end: { x: 4, y: 0 } });
+      await new Promise(r => setTimeout(r, 300));
+
       const afterWall = v.scene.children.length;
       if (afterWall <= before) return { passed: false, reason: 'wall not added', before, afterWall };
 
+      // Get the last added scene child as wall.
       const wall = v.scene.children[v.scene.children.length - 1];
       const wallRotZ = wall ? wall.rotation.z : null;
       const wallUuid = wall ? wall.uuid : null;
 
-      // Place door on that wall (center, 2m in)
-      await send('SdDoor 2 0 hostUuid=' + JSON.stringify(wallUuid));
-      const afterDoor = v.scene.children.length;
+      // Place door on that wall using hostUuid (center at 2m).
+      d('SdDoor', { x: 2, y: 0, z: 0, hostUuid: wallUuid, width: 0.9, height: 2.1 });
+      await new Promise(r => setTimeout(r, 300));
 
-      // Find door mesh
+      // Find door mesh.
       const door = Array.from(v.scene.children).find(o =>
         o.userData && (o.userData.creator === 'door' || o.userData.creator === 'SdDoor')
       );
-      if (!door) return { passed: false, reason: 'door not in scene', afterDoor, children: v.scene.children.map(c => c.userData?.creator) };
+      if (!door) return { passed: false, reason: 'door not in scene', children: v.scene.children.map(c => c.userData?.creator) };
 
-      // Assert door z ≈ active level elevation (default 0)
+      // Assert door z ≈ active level elevation (default 0).
       const doorZ = door.position.z;
       const zOk = Math.abs(doorZ) < 0.05;
 
-      // Assert door rotation matches wall (both ≈ 0 for a horizontal wall)
+      // Assert door rotation matches wall (both ≈ 0 for a horizontal wall).
       const doorRotZ = door.rotation.z;
       const rotOk = Math.abs(doorRotZ - (wallRotZ ?? 0)) < 0.05;
 
-      // Assert wall was replaced by Group (void cut)
+      // Assert wall was replaced by Group (cutRectVoidFromBoxMesh was called).
       const wallAfter = v.scene.getObjectByProperty('uuid', wallUuid);
-      const wallIsGroup = wallAfter && wallAfter.type === 'Group';
+      const wallIsGroup = !!(wallAfter && wallAfter.type === 'Group');
 
       const passed = zOk && rotOk && wallIsGroup;
       return { passed, doorZ, zOk, doorRotZ, wallRotZ, rotOk, wallIsGroup, creator: door.userData?.creator };
