@@ -293,6 +293,38 @@ export class ChatPanel {
       }
     });
 
+    // #1354: gate chat-input across worker-recycle/re-init window. agent-harness.ts
+    // sets _bootComplete=false on planned recycle (L1084), watchdog recycle (L1087),
+    // and D3D12-OOM recycle (L355). Boot screen is one-shot (boot-screen.ts:256 removed
+    // the overlay) so user can otherwise submit a prompt mid-recycle and hit the
+    // "Model is still loading" guard at agent-harness.ts:1015.
+    //
+    // Disable on agentmodel:worker-recycled; re-enable on the next agentmodel:boot-complete.
+    // Skip if a send is already in flight (sendBtn already disabled with "…" text — let the
+    // in-progress send finish or fail by its own path).
+    const _savedPlaceholder = this._inputEl.placeholder;
+    let _recyclePending = false;
+    window.addEventListener("agentmodel:worker-recycled", () => {
+      _recyclePending = true;
+      this._inputEl.disabled = true;
+      this._inputEl.placeholder = "restarting model…";
+      // Don't clobber an in-progress send (text "…"). Only override when idle ("SEND").
+      if (this._sendBtn.textContent === "SEND") {
+        this._sendBtn.disabled = true;
+        this._sendBtn.textContent = "WAIT";
+      }
+    });
+    window.addEventListener("agentmodel:boot-complete", () => {
+      if (!_recyclePending) return;
+      _recyclePending = false;
+      this._inputEl.disabled = false;
+      this._inputEl.placeholder = _savedPlaceholder;
+      if (this._sendBtn.textContent === "WAIT") {
+        this._sendBtn.disabled = false;
+        this._sendBtn.textContent = "SEND";
+      }
+    });
+
     // Attach button → file picker
     const attachBtn = this._root.querySelector<HTMLButtonElement>(".chat-attach-btn")!;
     attachBtn.addEventListener("click", () => this._fileInputEl.click());
