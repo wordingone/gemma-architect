@@ -300,7 +300,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 function handleDestroyDevice(): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const device = (tfEnv.backends as any)?.onnx?.webgpu?.device as GPUDevice | undefined;
+    const device = (tfEnv.backends as any)?.onnx?.webgpu?.device as
+      | { destroy?: () => void }
+      | undefined;
     if (device && typeof device.destroy === "function") device.destroy();
   } catch { /* non-fatal — best-effort cleanup */ }
   post({ type: "device-destroyed" });
