@@ -30,9 +30,11 @@ function grantConsent(): void {
 // ---- Download progress strip ---------------------------------------------------
 
 let _progressStrip: HTMLElement | null = null;
-// Track both model and drafter completion before hiding strip (#780).
+// Track model completion before hiding strip.
 let _modelDone = false;
-let _drafterDone = false;
+// Drafter progress is handled inside loading-screen overlay only (#1370).
+// Bottom strip no longer waits on drafter — set true so maybeHideStrip fires on model-done.
+let _drafterDone = true;
 // Aggregate byte-progress tracking: manifest provides expected total;
 // we accumulate per-file totals as files complete to compute overall %.
 let _totalBytesExpected = 0;
@@ -153,15 +155,9 @@ function wireProgressEvents(): void {
     setTimeout(() => hideProgressStrip(), 6000);
   }, { once: true });
 
-  // Drafter events (real ReadableStream byte progress + indeterminate ORT parse phase).
-  window.addEventListener("agentmodel:drafter:loading", (e) => {
-    const { progress } = (e as CustomEvent<{ progress: number; bytes: number; total: number }>).detail;
-    updateProgress(progress, progress >= 0 ? "DRAFTER  ·  DOWNLOADING" : "DRAFTER  ·  FINALIZING");
-  });
-  window.addEventListener("agentmodel:drafter:ready", () => { _drafterDone = true; maybeHideStrip(); }, { once: true });
-  window.addEventListener("agentmodel:drafter:error", () => { _drafterDone = true; maybeHideStrip(); }, { once: true });
   // Boot-screen close = main UI visible; strip must not outlive it (#1134).
-  window.addEventListener("agentmodel:boot-complete", () => { _modelDone = true; _drafterDone = true; hideProgressStrip(); }, { once: true });
+  // Drafter progress belongs inside loading-screen overlay only (#1370) — no listener here.
+  window.addEventListener("agentmodel:boot-complete", () => { _modelDone = true; hideProgressStrip(); }, { once: true });
 }
 
 // ---- Consent dialog ------------------------------------------------------------
