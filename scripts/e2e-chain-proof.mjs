@@ -249,8 +249,8 @@ console.log('PHASE 3.5 — Agent NL reply + tool dispatches (watching live)');
 console.log('  Waiting for agent:turn-complete...');
 console.log('════════════════════════════════════════════════════════');
 
-const DISPATCH_TIMEOUT_MS       = 3 * 60 * 1000; // 3 min total for NL + geometry
-const FIRST_DISPATCH_TIMEOUT_MS = 120_000;         // 120s — explicit FAIL if model never dispatches
+const DISPATCH_TIMEOUT_MS       = 20 * 60 * 1000; // 20 min total — covers Pages cold-cache ~782s post-prompt
+const FIRST_DISPATCH_TIMEOUT_MS = 900_000;         // 900s — Pages cold-cache GENERATE_DONE at ~782s + buffer
 
 const turnFromPage = page.evaluate(() => new Promise(resolve => {
   const t0 = Date.now();
@@ -276,13 +276,14 @@ const turnFromPage = page.evaluate(() => new Promise(resolve => {
   // objects quickly then pauses >10s before architectural dispatch begins.
   const STABLE_MS = 60_000, POLL_MS = 1_000;
 
-  // Explicit timeout: if model does not dispatch any geometry in 120s, FAIL.
+  // Explicit timeout: if model does not dispatch any geometry within FIRST_DISPATCH_TIMEOUT_MS, FAIL.
   // Distinguishes "model silent" from "scene-stable fired too early."
+  // 900s: Pages cold-cache GENERATE_DONE observed at ~782s post-prompt-fire (Leo, 2026-05-20).
   const firstDispatchTimer = setTimeout(() => {
     clearInterval(poll);
     console.log(`[chainproof] dispatch-timeout at +${elapsedS()}s — no geometry dispatched (scene still at ${window.__viewer?.scene?.children?.length ?? -1}, initial=${initialCount})`);
     resolve({ source: 'dispatch-timeout', initialCount });
-  }, 120_000);
+  }, FIRST_DISPATCH_TIMEOUT_MS);
 
   const poll = setInterval(() => {
     const count = window.__viewer?.scene?.children?.length ?? -1;
@@ -339,7 +340,7 @@ function surfaceHarnessLogs(label) {
 }
 
 if (turnResult.source === 'dispatch-timeout') {
-  log(`❌ DISPATCH TIMEOUT — model did not produce any scene geometry within 120s. Phase 5 will fail.`);
+  log(`❌ DISPATCH TIMEOUT — model did not produce any scene geometry within ${FIRST_DISPATCH_TIMEOUT_MS / 1000}s. Phase 5 will fail.`);
   surfaceHarnessLogs('dispatch-timeout');
 } else if (turnResult.source === 'timeout') {
   log(`❌ TURN TIMEOUT — full ${DISPATCH_TIMEOUT_MS / 1000}s elapsed without turn completion.`);
