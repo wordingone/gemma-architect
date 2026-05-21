@@ -213,6 +213,18 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         dtype,
         device,
         progress_callback: progressCb,
+        // #1283 fix #4: lock tensor shapes at session creation so /lm_head/num_logits_to_keep/Slice
+        // compiles once at boot instead of cold-compiling on the first user-click inference.
+        // Demo prompt is ~997 tokens; 1024 gives headroom. Prompts >1024 tokens will fall back
+        // to the CPU backend loop per the existing cascade.
+        session_options: {
+          freeDimensionOverrides: {
+            batch_size: 1,
+            sequence_length: 1024,
+            past_sequence_length: 0,
+            total_sequence_length: 1024,
+          },
+        },
       });
       const processor = await AutoProcessor.from_pretrained(modelId);
 

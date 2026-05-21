@@ -39,6 +39,16 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
       _pipe = await pipeline("text-generation", modelId, {
         dtype,
         device: "webgpu",
+        // #1283 fix #4: consistent with model-worker.ts; no runtime effect (worker not spawned
+        // in drafter-failed path per #1288) but defensive if worker is ever used explicitly.
+        session_options: {
+          freeDimensionOverrides: {
+            batch_size: 1,
+            sequence_length: 1024,
+            past_sequence_length: 0,
+            total_sequence_length: 1024,
+          },
+        },
       });
       // Warmup probe — compile /lm_head/num_logits_to_keep/Slice shader at boot to remove it
       // from the user-click cold-compile path. Same shape pattern as model-worker.ts:172-189.
