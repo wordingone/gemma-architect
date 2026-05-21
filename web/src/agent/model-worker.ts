@@ -265,6 +265,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       // KV cache buffer sizes as real inference (~1300 tokens). Without this, the probe
       // uses ~6 tokens and leaves GPU buffers undersized, causing ORT buffer_manager.cc:553
       // to crash (ERROR_CODE=1) on the first full-length inference call.
+      //
+      // §C-warmup-decode (#1362-B): generate 8 tokens (not 1) to exercise the GPU→CPU
+      // readback path (BufferManager::Download) across multiple decode steps. The cold-cache
+      // Schultz crash fires during multi-step decode — a 1-step warmup leaves the
+      // wgpuBufferMapAsync→unmap pipeline untested, letting the race condition manifest on
+      // the first real inference. 8 steps add ~1.5s to warmup and pre-allocate the decode
+      // buffer pool to steady-state before the user submits any prompt.
       const warmupMessages: Array<{ role: string; content: string }> = warmupPrompt
         ? [{ role: "system", content: warmupPrompt }, { role: "user", content: "." }]
         : [{ role: "user", content: "." }];
@@ -277,7 +284,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
       if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (_model as any).generate({ ...inputs, max_new_tokens: 1, do_sample: false });
+        await (_model as any).generate({ ...inputs, max_new_tokens: 8, do_sample: false });
       }
     } catch (e) {
       console.warn("[model-worker] warmup probe failed:", (e as Error).message ?? e);
@@ -510,13 +517,28 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
         }
       },
     };
+    // §C-decode-retry (#1362-C): buffer_manager.cc:553 "Buffer was unmapped before mapping
+    // was resolved" is a D3D12 CPU/GPU sync race triggered during multi-step decode.
+    // One retry after 500ms gives the GPU pipeline a chance to quiesce between attempts.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    outputs = await (_model as any).generate({
+    const _doGenerate = () => (_model as any).generate({
       ...inputs,
       max_new_tokens: safeMaxNewTokens,
       do_sample: false,
       streamer: _progressStreamer,
     });
+    try {
+      outputs = await _doGenerate();
+    } catch (genErr) {
+      const _msg = String(genErr);
+      if (/buffer_manager|BufferManager|unmapped before mapping/i.test(_msg)) {
+        console.warn("[model-worker] buffer_manager race — retrying after 500ms", _msg.slice(0, 120));
+        await new Promise(r => setTimeout(r, 500));
+        outputs = await _doGenerate();
+      } else {
+        throw genErr;
+      }
+    }
   }
 
   const tGen = performance.now();
