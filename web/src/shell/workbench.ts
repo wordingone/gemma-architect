@@ -1195,15 +1195,16 @@ function buildInspectTab(): HTMLElement {
     }
   }
 
-  function applyWallParam(field: "thickness" | "height" | "bottom", rawVal: string): void {
+  function applyWallParam(field: "thickness" | "height" | "bottom", rawVal: string, alreadyMeters = false): void {
     let val: number | null;
     if (field === "bottom") {
       // Elevation — can be negative (below grade); unit-convert bare numbers only
       const bare = parseFloat(rawVal);
       if (!isFinite(bare)) return;
-      val = getState("unitSystem") === "imperial" ? bare * 0.3048 : bare;
+      val = (!alreadyMeters && getState("unitSystem") === "imperial") ? bare * 0.3048 : bare;
     } else {
-      val = parseLength(rawVal);
+      // Slider stores values in metres; skip parseLength to avoid double-conversion.
+      val = alreadyMeters ? parseFloat(rawVal) : parseLength(rawVal);
     }
     if (val === null || _activeWalls.length === 0) return;
     for (const m of _activeWalls) {
@@ -1236,7 +1237,7 @@ function buildInspectTab(): HTMLElement {
       sld?.addEventListener("input", (e) => {
         const meters = parseFloat((e.target as HTMLInputElement).value);
         if (inp && isFinite(meters)) inp.value = formatLengthNum(meters);
-        applyWallParam(field, String(meters));
+        applyWallParam(field, String(meters), true);
       });
     }
     // Re-render wall param displays when unit system changes
