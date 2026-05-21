@@ -138,13 +138,19 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   post({ type: "manifest", totalBytesExpected: ESTIMATED_MODEL_BYTES });
 
   // Cumulative bytes downloaded (all model files combined) for aggregate throughput.
+  // Track per-file to correctly accumulate across shard boundaries — `info.loaded`
+  // resets to 0 for each new file, so Math.max() was wrong (#1365).
+  const _fileBytes = new Map<string, number>();
   let _cumulativeBytes = 0;
 
   const progressCb = (info: Record<string, unknown>) => {
     if (info.status === "downloading") {
       const bytes = (info.loaded as number | undefined) ?? 0;
       const total = (info.total as number | undefined) ?? 0;
-      _cumulativeBytes = Math.max(_cumulativeBytes, bytes); // rough sum across files
+      const name = (info.name as string | undefined) ?? "";
+      const prev = _fileBytes.get(name) ?? 0;
+      _fileBytes.set(name, bytes);
+      _cumulativeBytes += bytes - prev;
       const throughputBytesPerSec = calcThroughput(_cumulativeBytes);
       post({
         type: "progress",

@@ -123,7 +123,10 @@ function _wireEvents(): void {
     // model-init phase: ORT/WebGPU deserialization is CPU/GPU-bound, not network-bound.
     // It takes 60-180s and fires no intermediate progress — use 180s window so a genuine
     // init stall still surfaces, but normal GPU load doesn't false-trigger STALLED.
-    const watchdogMs = d.phase === 'model-init' ? 180_000 : 30_000;
+    // model-init: ORT/WebGPU deserialisation — CPU/GPU-bound, 60-180s.
+    // warmup: GPU shader compilation at real context length (#1362/#1365) — can take
+    //   30-120s on cold-cache; using 30s window here triggers false STALLED.
+    const watchdogMs = (d.phase === 'model-init' || d.phase === 'warmup') ? 180_000 : 30_000;
     if (!_firstLoadingReceived && _loadedBytes > 0) {
       _firstLoadingReceived = true;
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
