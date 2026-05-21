@@ -365,7 +365,15 @@ function initWorkerIfNeeded(): Worker {
           updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
           for (const [, cb] of _generateCallbacks) cb.reject(new Error("d3d12-oom: worker recycled"));
           _generateCallbacks.clear();
-          setTimeout(() => _w.terminate(), 400); // deferred: give destroy-device time to execute
+          // #1366: terminate old worker, then eagerly spawn the replacement so that
+          // `agentmodel:boot-complete` fires when re-init completes. Without this respawn,
+          // the next `runAgentTurn()` is the only caller of `initWorkerIfNeeded()`, but
+          // the chat-input gate (PR #1355) blocks user prompt submission until boot-complete
+          // fires → hard deadlock: app wedges until page refresh after any model crash.
+          setTimeout(() => {
+            _w.terminate();
+            initWorkerIfNeeded();
+          }, 400);
           break;
         }
         // Non-OOM worker error: fatal path
@@ -1092,7 +1100,14 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
         if (_stalled) {
           _stalled.postMessage({ type: "destroy-device" }); // best-effort D3D12 cleanup
-          setTimeout(() => _stalled.terminate(), 400);
+          // #1366: terminate then eagerly spawn replacement so agentmodel:boot-complete
+          // fires + chat-input gate (PR #1355) re-enables SEND. Without respawn, the next
+          // runAgentTurn call (which spawns the worker via initWorkerIfNeeded) never
+          // happens because SEND stays disabled → hard deadlock.
+          setTimeout(() => {
+            _stalled.terminate();
+            initWorkerIfNeeded();
+          }, 400);
         }
         reject(new Error("worker-stall: generate exceeded 60s, worker recycled"));
       }, _WATCHDOG_MS);
