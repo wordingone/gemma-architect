@@ -3,3 +3,37 @@ demo-prompt-design-house  # #494  NL agent verb output nondeterministic: model s
 chat-plan-foldable  # #538  cascade from S54/S56 model latency timeouts; testMode fixes direct timeout but not UI-state contamination
 skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) populating scene; S54 skips on model latency timeout
 demo-cluster-flow  # #670  new surface — allow-fail until first green run confirms timing
+# --- hackathon sprint regressions (#1268) — gate suspended 2026-05-15..2026-05-19 ---
+# Archie queue (individual issues filed):
+copy-array-side-effects-stair  # #1236  stair array creates only 1 copy instead of N
+copy-array-side-effects-door  # #1237  door array creates 0 copies
+wall-corner-rejoin  # #1239  userData.thickness not updated after geometry rebuild
+wall-slab-cross-level-trim  # #1240  TypeError: THREE.Box3 undefined at runtime
+host-aware-door-placement  # #1233  door placement rejected — host wall raycast failing
+door-wall-orientation  # #1235  wall not becoming Group after void-cut
+canvas-visible-width-skill-nodes  # #1255  liveH:280 — potential layout regression
+# Untracked regressions — fix via Archie queue or follow-up PRs:
+layout-tab-functional  # #1268  hackathon sprint regression
+view-cplane-orientation  # #1268  hackathon sprint regression
+host-cplane-orientation  # #1268  hackathon sprint regression
+agent-invoke-skill  # #1268  hackathon sprint regression
+stair-parametric  # #1268  hackathon sprint regression
+unit-display  # #1268  hackathon sprint regression
+open-project-round-trip  # #1268  hackathon sprint regression
+wall-params-input-parsing  # #1268  hackathon sprint regression
+array-linear-spawns-copies  # #1268  hackathon sprint regression
+array-polar-spawns-radial  # #1268  hackathon sprint regression
+array-rect-spawns-grid  # #1268  hackathon sprint regression
+walls-from-object-single-click  # #1268  hackathon sprint regression
+fillet-selected-edge  # #1268  hackathon sprint regression
+fillet-schema-edge-dispatch  # #1268  hackathon sprint regression
+agent-palette-parity  # #1268  hackathon sprint regression
+copy-click-commits-selection  # #1268  hackathon sprint regression
+hidden-level-unselectable  # #1268  hackathon sprint regression
+snap-face-vertex-priority  # #1268  hackathon sprint regression
+stair-ceiling-hole  # #1268  hackathon sprint regression
+c2-minimum-args-smoke  # #1268  hackathon sprint regression
+dim-verb-alignment  # #1268  hackathon sprint regression
+polyline-render-after-4-click  # #1268  hackathon sprint regression
+comp-scope-toggle  # #1268  hackathon sprint regression
+skills-palette-templates  # #1268  hackathon sprint regression
