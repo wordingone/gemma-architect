@@ -1026,9 +1026,14 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
   // #1036: Guard against chip-click-before-ready (loading bar "done" but model not loaded).
   if (_modelLoadError) {
+    // §C-error-wording (#1369): only blame WebGPU when the error text actually implicates it.
+    // _modelLoadError is set on ANY fatal worker error (fetch 401, ONNX session, etc.) — the
+    // blanket "WebGPU not supported" wording was wrong for non-adapter failures.
+    const _isWebGpuError = /WebGPU|adapter|GPUDevice|requestAdapter/i.test(_modelLoadError);
     throw new Error(
-      `Model failed to load — WebGPU may not be supported on this device. ` +
-      `Try Chrome 115+ on a desktop with a dedicated GPU. (${_modelLoadError})`
+      _isWebGpuError
+        ? `Model failed to load — WebGPU may not be supported on this device. Try Chrome 115+ on a desktop with a dedicated GPU. (${_modelLoadError})`
+        : `Model failed to load — ${_modelLoadError}. Try refreshing or check the browser console for details.`
     );
   }
   if (!_bootComplete) {
