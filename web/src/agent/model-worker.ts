@@ -23,7 +23,7 @@
 //   {type:"generate-error", turnId, error}
 //   {type:"error",       error}
 
-import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage } from "@huggingface/transformers";
+import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, env as tfEnv } from "@huggingface/transformers";
 import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
 import { fetchDrafterCached } from "./drafter-cache.js";
 
@@ -178,11 +178,24 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   for (const { device, dtype, label } of backends) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const model = await Gemma4ForConditionalGeneration.from_pretrained(modelId, {
-        dtype,
-        device,
-        progress_callback: progressCb,
-      });
+      let model: Awaited<ReturnType<typeof Gemma4ForConditionalGeneration.from_pretrained>>;
+      try {
+        model = await Gemma4ForConditionalGeneration.from_pretrained(modelId, {
+          dtype, device, progress_callback: progressCb,
+        });
+      } catch (loadErr) {
+        // §B-cache-retry (#1316): Cache.put() failure on fresh chromium profiles causes
+        // Cache API to drop model shards silently, making ORT unable to find external data.
+        // Retry once with browser cache disabled — forces direct fetch, bypassing Cache API.
+        const isExternalDataErr = /Failed to load external data file|Can't create a session|Deserialize tensor/i
+          .test((loadErr as Error).message ?? "");
+        if (!isExternalDataErr) throw loadErr;
+        tfEnv.useBrowserCache = false;
+        await new Promise<void>(r => setTimeout(r, 500));
+        model = await Gemma4ForConditionalGeneration.from_pretrained(modelId, {
+          dtype, device, progress_callback: progressCb,
+        });
+      }
       const processor = await AutoProcessor.from_pretrained(modelId);
 
       // WebGPU sanity probe — same as main-thread path (#128/#133).
