@@ -90,6 +90,10 @@ let _prefillDone = false;
 // through model-worker.ts's inline model.generate() call.
 let _standardBackend: StandardBackend | null = null;
 let _standardBackendActivating = false;
+// #1283 fix #2: when drafter fails, route through model-worker (useMtp=false) instead of
+// spawning a second WebGPU worker. Two GPUDevice handles in the same tab saturate the
+// GPU process under Pages cold-cache delivery, triggering Chrome's GPU watchdog.
+let _useStandardOnModelWorker = false;
 
 function activateStandardBackend(): void {
   if (_standardBackend || _standardBackendActivating) return;
@@ -243,7 +247,7 @@ function initWorkerIfNeeded(): Worker {
       case "drafter-error":
         (globalThis as any).__drafterLoaded = false;
         window.dispatchEvent(new CustomEvent("agentmodel:drafter:error", { detail: msg.error }));
-        activateStandardBackend(); // spawn dedicated standard-path worker (#929)
+        _useStandardOnModelWorker = true; // #1283: route through model-worker (no second GPU adapter)
         break;
       case "boot-complete":
         _bootComplete = true; // #1036
@@ -1185,7 +1189,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     { role: "user" as const, content: req.prompt },
   ];
 
-  const useMtp = !_MTP_OFF;
+  const useMtp = !_MTP_OFF && !_useStandardOnModelWorker; // #1283: no MTP when routed through model-worker as standard fallback
   const turnId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
   let result: WorkerGenResult;
