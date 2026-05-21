@@ -103,18 +103,6 @@ function _wireEvents(): void {
     const d = (ev as CustomEvent<{
       bytes?: number; total?: number; throughputBytesPerSec?: number; file?: string; phase?: string;
     }>).detail ?? {};
-    // 30s stall early hint — CDN hasn't sent first byte yet; show user-facing warning
-    // before the 90s watchdog fires.  Don't reset the watchdog here.
-    if (d.phase === 'download-stall') {
-      if (_hintEl) {
-        _hintEl.textContent = 'Connecting to model CDN — download starting, please wait…';
-        _hintEl.style.color = '#cc7700';
-        _hintEl.style.opacity = '1';
-      }
-      return;
-    }
-    // Cache.put failure: worker continues without caching; no UI change needed.
-    if (d.phase === 'cache-put-error') return;
     if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, d.bytes!);
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     if (d.file) _currentFile = d.file;
