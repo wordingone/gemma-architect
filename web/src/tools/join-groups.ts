@@ -732,7 +732,7 @@ export interface RehostResult {
   newVoidGroup: THREE.Group;
   oldVoidGroup: THREE.Group | null;
   restoredWallMesh: THREE.Mesh | null;  // Wall A solid (cross-wall) or null (same-wall)
-  newHostMesh: THREE.Mesh;              // Wall B mesh before cut
+  newHostMesh: THREE.Object3D;          // Wall B before cut (Mesh or Group if already void-cut)
   isCrossWall: boolean;
   newHostExpressID: string;
 }
@@ -770,12 +770,13 @@ export function rehostVoidCut(
   }
   // Old wall restored as solid Mesh (restore.newWall still in scene). Fall through to cross-wall.
 
-  // Cross-wall: find nearest Mesh wall at new position (exclude just-restored old wall).
+  // Cross-wall: find nearest wall (Mesh or Group) at new position (exclude just-restored old wall).
   const excludeUuid = restore?.newWall?.uuid;
   const nearest = _findNearestWallMesh(voidCenter, scene, 3, excludeUuid);
   if (!nearest) return null;
 
-  const newVoidGroup = cutRectVoidFromBoxMesh(nearest, voidCenter, voidW, voidH);
+  // addVoidToWallObject handles both Mesh and Group hosts (#1536).
+  const newVoidGroup = addVoidToWallObject(nearest, voidCenter, voidW, voidH);
   if (!newVoidGroup) return null;
 
   const newId = (nearest.userData as Record<string, unknown>).expressID as string | undefined ?? nearest.uuid;
@@ -815,11 +816,12 @@ function _findNearestWallMesh(
   scene: THREE.Scene,
   maxDist: number,
   excludeUuid?: string,
-): THREE.Mesh | null {
-  let nearest: THREE.Mesh | null = null;
+): THREE.Object3D | null {
+  let nearest: THREE.Object3D | null = null;
   let minDist = maxDist;
   scene.traverse((obj) => {
-    if (!(obj instanceof THREE.Mesh)) return;
+    // Accept both Mesh walls and Group walls (Group arises after addVoidToWallObject cuts a prior void).
+    if (!(obj instanceof THREE.Mesh) && !(obj instanceof THREE.Group)) return;
     if (excludeUuid && obj.uuid === excludeUuid) return;
     const creator = obj.userData?.creator as string | undefined;
     if (creator !== "wall" && creator !== "SdWall") return;
