@@ -627,7 +627,7 @@ export class ChatPanel {
           history: this._history.slice(0, -1),
           skills: skillsToPass,
           skillsTotal: this._skills.length,
-          maxNewTokens: 1024,
+          maxNewTokens: 2048,
           userImage: effectiveImage,
         });
       } finally {
@@ -945,7 +945,7 @@ export async function runIteration(
   return runAgentTurn({
     prompt: lines.join("\n"),
     userImage,
-    maxNewTokens: 1024,
+    maxNewTokens: 2048,
   });
 }
 
