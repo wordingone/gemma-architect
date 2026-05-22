@@ -37,6 +37,19 @@ const MAX_AGE_MS = Number(
 );
 const DRY_RUN = process.argv.includes("--dry-run");
 
+// Canonical launch URL: passed via --canonical-url=<prefix> or read from .shared-browser/launch-url.txt
+// (start.ps1 writes both; this ensures Pages URL is never swept as a stale tab).
+const SHARED_BROWSER_DIR = join(ROOT, ".shared-browser");
+const LAUNCH_URL_PREFIXES = [];
+// CLI arg takes precedence (set by start.ps1 when spawning the watcher process)
+const _cliUrl = process.argv.find((a) => a.startsWith("--canonical-url="))?.split("=").slice(1).join("=");
+if (_cliUrl) LAUNCH_URL_PREFIXES.push(_cliUrl);
+// Sidecar fallback (for manual sweep invocations without CLI arg)
+try {
+  const _sidecarUrl = readFileSync(join(SHARED_BROWSER_DIR, "launch-url.txt"), "utf8").trim();
+  if (_sidecarUrl && !LAUNCH_URL_PREFIXES.includes(_sidecarUrl)) LAUNCH_URL_PREFIXES.push(_sidecarUrl);
+} catch { /* absent = no extra canonical */ }
+
 function ts() {
   return new Date().toISOString();
 }
@@ -140,7 +153,16 @@ async function sweep() {
 
   for (const tab of pageTabs) {
     const url = tab.url ?? "";
-    if (url.startsWith(`http://localhost:${DEV_PORT}/`) || url === "about:blank") continue;
+    const isCanonical =
+      url.startsWith(`http://localhost:${DEV_PORT}/`) ||
+      url === "about:blank" ||
+      LAUNCH_URL_PREFIXES.some((p) => url.startsWith(p));
+    if (isCanonical) {
+      if (LAUNCH_URL_PREFIXES.some((p) => url.startsWith(p))) {
+        log(`SKIP-CANONICAL ${tab.id} ${url.slice(0, 80)}`);
+      }
+      continue;
+    }
 
     const firstSeen = seen[tab.id] ?? now;
     const ageMs = now - firstSeen;

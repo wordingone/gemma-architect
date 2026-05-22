@@ -9,10 +9,11 @@
 
 param([switch]$Force)
 
-$CDP_PORT      = if ($env:CDP_PORT) { [int]$env:CDP_PORT } else { 9222 }
-$DEV_URL       = "https://wordingone.github.io/gemma-architect/"
-$ChromeDataDir = "B:\M\gemma-architect-master\.shared-browser\profile"
-$CDP_JSON      = "B:\M\gemma-architect-master\.shared-browser\cdp.json"
+$CDP_PORT       = if ($env:CDP_PORT) { [int]$env:CDP_PORT } else { 9222 }
+$DEV_URL        = "https://wordingone.github.io/gemma-architect/"
+$ChromeDataDir  = "B:\M\gemma-architect-master\.shared-browser\profile"
+$CDP_JSON       = "B:\M\gemma-architect-master\.shared-browser\cdp.json"
+$LaunchUrlFile  = "B:\M\gemma-architect-master\.shared-browser\launch-url.txt"
 
 # --- Locate Playwright bundled Chromium ---
 $MS_PW    = "$env:LOCALAPPDATA\ms-playwright"
@@ -45,6 +46,7 @@ if (-not $Force) {
         $data = '{"endpoint":"' + $wsUrl + '","started_at":"' + (Get-Date -Format "o") + '","pid":' + $pidVal + '}'
         New-Item -ItemType Directory -Path (Split-Path $CDP_JSON) -Force | Out-Null
         [System.IO.File]::WriteAllText($CDP_JSON, $data, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($LaunchUrlFile, $DEV_URL, [System.Text.UTF8Encoding]::new($false))
         Write-Host "Already up - cdp.json updated: $CDP_JSON"
         Write-Host "endpoint: $wsUrl"
         exit 0
@@ -95,9 +97,11 @@ if (-not $wsUrl) {
     exit 1
 }
 
-# --- Write cdp.json (no BOM — PS5.1 Set-Content -Encoding utf8 adds BOM) ---
+# --- Write cdp.json + launch-url.txt (no BOM — PS5.1 Set-Content -Encoding utf8 adds BOM) ---
 $data = '{"endpoint":"' + $wsUrl + '","started_at":"' + (Get-Date -Format "o") + '","pid":' + $proc.Id + '}'
 [System.IO.File]::WriteAllText($CDP_JSON, $data, [System.Text.UTF8Encoding]::new($false))
+# Sidecar for shared-browser-sweep.mjs: treat tabs at this URL as canonical (never close them)
+[System.IO.File]::WriteAllText($LaunchUrlFile, $DEV_URL, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host ""
 Write-Host "Shared browser is up."
