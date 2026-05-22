@@ -760,6 +760,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
+    "SCENE QUERY RESPONSE: when asked to describe the scene, what you see, what is in the scene, or what the default scene looks like — respond with PLAIN TEXT ONLY. Do NOT emit <plan> or <tool_call> blocks. Describe what you see: shapes, materials, arrangement. One natural prose paragraph.",
     WEBGPU_HOUSE_FEW_SHOT,
     verbList,
   ].filter(Boolean).join("\n\n");
