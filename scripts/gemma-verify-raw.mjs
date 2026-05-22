@@ -6532,13 +6532,32 @@ await resetScene('before-box-inject');
     const r1 = await evaluate(`(function() {
       const v = window.__viewer;
       const wall = v.scene.getObjectByProperty('uuid', '${wallUuid1}');
-      const isGroup   = !!(wall && wall.type === 'Group');
+      const isGroup    = !!(wall && wall.type === 'Group');
       const childCount = isGroup ? wall.children.filter(c => c.isMesh || c.isGroup).length : 0;
-      const history   = wall?.userData?.cutHistory;
-      const histLen   = Array.isArray(history) ? history.length : -1;
-      return { isGroup, childCount, histLen, wallType: wall?.type ?? 'absent' };
+      const history    = wall?.userData?.cutHistory;
+      const histLen    = Array.isArray(history) ? history.length : -1;
+
+      // Z-gap: no child in void X strip (±1.0 around x=0) should span void center Z (1.5m).
+      // sill=0.9, FZK_WINDOW_H=1.2 → voidCenterZ=0.9+0.6=1.5
+      const voidCenterX = 0, voidCenterZ = 1.5;
+      let zGapOk = true, anyInStrip = false;
+      for (const child of (wall?.children ?? [])) {
+        if (!child.isMesh || !child.geometry) continue;
+        child.geometry.computeBoundingBox();
+        const gbb = child.geometry.boundingBox;
+        if (!gbb) continue;
+        const cXMin = child.position.x + gbb.min.x, cXMax = child.position.x + gbb.max.x;
+        if (cXMin <= voidCenterX + 0.05 && cXMax >= voidCenterX - 0.05) {
+          anyInStrip = true;
+          const cZMin = child.position.z + gbb.min.z, cZMax = child.position.z + gbb.max.z;
+          if (cZMin < voidCenterZ - 0.05 && cZMax > voidCenterZ + 0.05) { zGapOk = false; }
+        }
+      }
+      if (!anyInStrip) zGapOk = false;
+
+      return { isGroup, childCount, histLen, zGapOk, wallType: wall?.type ?? 'absent' };
     })()`);
-    record('window-void-single', !!(r1?.isGroup && r1?.childCount >= 2 && r1?.histLen === 1),
+    record('window-void-single', !!(r1?.isGroup && r1?.childCount >= 2 && r1?.histLen === 1 && r1?.zGapOk),
       r1 ?? { reason: 'evaluate returned null' });
   }
 }
@@ -6586,9 +6605,32 @@ await resetScene('before-box-inject');
       const childCount = isGroup ? wall.children.filter(c => c.isMesh || c.isGroup).length : 0;
       const history    = wall?.userData?.cutHistory;
       const histLen    = Array.isArray(history) ? history.length : -1;
-      return { isGroup, childCount, histLen, wallType: wall?.type ?? 'absent' };
+
+      // Z-gap: check BOTH void X centers (x=0 and x=-2) have empty void Z region (1.5m).
+      const voidCenterZ = 1.5;
+      function checkGap(voidCenterX) {
+        let ok = true, any = false;
+        for (const child of (wall?.children ?? [])) {
+          if (!child.isMesh || !child.geometry) continue;
+          child.geometry.computeBoundingBox();
+          const gbb = child.geometry.boundingBox;
+          if (!gbb) continue;
+          const cXMin = child.position.x + gbb.min.x, cXMax = child.position.x + gbb.max.x;
+          if (cXMin <= voidCenterX + 0.05 && cXMax >= voidCenterX - 0.05) {
+            any = true;
+            const cZMin = child.position.z + gbb.min.z, cZMax = child.position.z + gbb.max.z;
+            if (cZMin < voidCenterZ - 0.05 && cZMax > voidCenterZ + 0.05) { ok = false; }
+          }
+        }
+        return any ? ok : false;
+      }
+      const zGapVoid1 = checkGap(0);   // window 1 at world x=0
+      const zGapVoid2 = checkGap(-2);  // window 2 at world x=-2
+      const zGapOk = zGapVoid1 && zGapVoid2;
+
+      return { isGroup, childCount, histLen, zGapOk, zGapVoid1, zGapVoid2, wallType: wall?.type ?? 'absent' };
     })()`);
-    record('window-void-compound', !!(r2?.isGroup && r2?.childCount >= 3 && r2?.histLen === 2),
+    record('window-void-compound', !!(r2?.isGroup && r2?.childCount >= 3 && r2?.histLen === 2 && r2?.zGapOk),
       r2 ?? { reason: 'evaluate returned null' });
   }
 }
