@@ -9,7 +9,7 @@
 
 import * as THREE from "three";
 import { attemptWallCornerJoins } from "../tools/wall-corners";
-import { cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh } from "../tools/join-groups";
+import { addVoidToWallObject, cutSlabVoidFromBoxMesh } from "../tools/join-groups";
 
 /**
  * After cloning a source mesh and adding it to the scene, call this to replay
@@ -67,11 +67,12 @@ export function replayCloneSideEffects(
     const voidCenter = clonePos.clone();
     voidCenter.z = clonePos.z + voidH / 2;
 
-    // Find the closest wall mesh whose bounding box contains the clone's XY.
-    let bestHost: THREE.Mesh | null = null;
+    // Find the closest wall (Mesh or Group) whose bounding box contains the clone's XY.
+    // Group walls arise when addVoidToWallObject has already cut a prior void (#1534).
+    let bestHost: THREE.Object3D | null = null;
     let bestDist = Infinity;
     scene.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
+      if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.Group)) return;
       if (child.userData?.creator !== "wall") return;
       child.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(child);
@@ -85,7 +86,7 @@ export function replayCloneSideEffects(
     });
 
     if (bestHost) {
-      cutRectVoidFromBoxMesh(bestHost, voidCenter, voidW, voidH);
+      addVoidToWallObject(bestHost, voidCenter, voidW, voidH);
     }
     return;
   }

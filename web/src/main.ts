@@ -56,7 +56,7 @@ import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
-import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh, addVoidToWallObject } from "./tools/join-groups";
+import { onElementCommitted, cutSlabVoidFromBoxMesh, addVoidToWallObject } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
@@ -1504,10 +1504,11 @@ registerHandler("SdOpening", (args) => {
   beginTransaction("SdOpening");
   if (hostUuidOp) {
     const host = viewer.getScene().getObjectByProperty("uuid", hostUuidOp);
-    if (host instanceof THREE.Mesh) {
+    if (host instanceof THREE.Mesh || host instanceof THREE.Group) {
       const voidCenter = mesh.position.clone();
       voidCenter.z = elevation + 1;
-      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, 1, 2);
+      // addVoidToWallObject handles Mesh + Group; preserves all prior voids (#1534).
+      const voidGroup = addVoidToWallObject(host, voidCenter, 1, 2);
       if (voidGroup) pushReplaceAction(voidGroup, [host], "wall-void-cut");
       voidCut = true;
     }
