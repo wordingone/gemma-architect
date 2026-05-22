@@ -115,11 +115,11 @@ Each class has: reference behavior (FZK cite), current observed behavior (CDP ev
 | Field | Value |
 |---|---|
 | **Reference** | FZK-Haus gable end walls (OG east and west) follow the roof pitch — the wall top is angled to match the roof slope, not a flat rectangular top. |
-| **Current** | Eli running CDP eval for `cutHistory` gable-trim entries on L2 walls (BROWSER LOCKED 2026-05-22 23:33Z). Status unknown pending eval. |
-| **Acceptance** | L2 east and west walls must have `cutHistory` entry with `type='gable_trim'`. Visually the wall top matches roof slope angle. |
+| **Current** | **PASSED** — Eli CDP eval 2026-05-22 23:32Z confirmed: 2/4 L2 walls have `userData.topProfile='pitched'` (east + west gable ends). 2/4 left flat (north + south eave walls, correct). Mechanism lives in `userData.topProfile`, not `cutHistory`. |
+| **Acceptance** | L2 east and west walls must have `userData.topProfile === 'pitched'`. Visually the wall top matches 30° roof slope. |
 | **Verify surface** | S135 (existing in gemma-verify-raw.mjs) or new S142 |
-| **Root cause** | Previous impl in PR #916 (8a1eb95). Potential regression post-#1544. Eli owns eval + fix if regressed. |
-| **Issue** | #1549 — regression-check (Eli leads) |
+| **Root cause** | Previous impl in PR #916 (8a1eb95). Intact as of 2026-05-22 (no regression). |
+| **Issue** | #1549 — **CLOSED** 2026-05-22 23:32Z (PASS) |
 
 ---
 
@@ -127,9 +127,9 @@ Each class has: reference behavior (FZK cite), current observed behavior (CDP ev
 
 | Field | Value |
 |---|---|
-| **Reference** | FZK-Haus roof: 2 pitched slabs (Dach-1, Dach-2), gable orientation NS, pitch ~38° (estimated from IFC geometry), ridge beam at apex, 2 purlins per slope, eave overhang. |
-| **Current** | SdRoof emits 39-segment mesh. Specific geometry parameters (pitch angle, ridge height, overhang) not yet audited against IFC reference. User: "significant disparity, zero room for deviance." |
-| **Acceptance** | SdRoof with `{type:'gable', span:7.92, length:6.1, pitch:38}` must produce geometry matching FZK roof within 2% dimensional tolerance (ridge height, eave length, slope surface area). |
+| **Reference** | FZK-Haus roof: 2 pitched slabs (Dach-1, Dach-2). Pitch **30°** — confirmed from `IFCPLANEANGLEMEASURE(30.)` property 'Neigung' on both Dach-1 (IFC #59605) and Dach-2 (IFC #59805). Eave height 3.2m above ground (`Höhenangabe zum Projekt-Nullpunkt=3.2`). Ridge beam (First) at apex. 2 purlins per slope (Pfette-1-1, Pfette-2-1). Each slope panel area = 82.56 m², perimeter = 38.7m. |
+| **Current** | SdRoof emits 39-segment mesh. Pitch, ridge height, eave overhang not audited against IFC reference. User: "significant disparity, zero room for deviance." |
+| **Acceptance** | SdRoof with `{type:'gable', pitch:30}` and FZK building dimensions must produce geometry matching FZK roof within 2% dimensional tolerance (ridge height, eave length, slope surface area = 82.56 m²). |
 | **Verify surface** | S143 — see §Verify Surfaces |
 | **Root cause** | Parametric builder may use approximated parameters. Exact FZK pitch angle, ridge height, overhang not extracted from IFC and fed into builder. |
 | **Issue** | #1553 — paired Archie + Eli |
@@ -202,9 +202,10 @@ Assertion: `gardenWalls.every(w => w.bboxZ >= 0.8)`.
 ### S143 — SdRoof gable pitch within 2% of FZK reference (D8 acceptance)
 
 ```js
-// FZK-Haus reference: span 7.92m, length 6.1m, ridge height ~3.16m above OG floor
-// (= 2.74 + ~2.05m pitch rise for ~28° pitch on 7.92m span).
-// Pass: SdRoof with FZK params produces mesh with max Z within 5% of expected ridge height.
+// FZK-Haus reference: pitch=30° (verified IFC IFCPLANEANGLEMEASURE(30.) on Dach-1+Dach-2).
+// Eave height=3.2m above ground. Slope panel area=82.56 m² each. Ridge beam at apex.
+// Pass: SdRoof with FZK-matching params produces mesh with max Z within 5% of expected
+// ridge height, and slope surface area within 2% of 82.56 m².
 // Covers D8 — roof parametric exact match.
 ```
 
