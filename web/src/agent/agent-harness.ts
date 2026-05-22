@@ -743,8 +743,8 @@ export function buildSystemPrompt(skills?: Skill[]): string {
 export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
   const dict = getDictionary();
   const implemented = new Set(listHandlers());
-  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.canonical_name)) : dict;
-  const verbNames = available.map((e) => e.canonical_name).join(", ");
+  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.name)) : dict;
+  const verbNames = available.map((e) => e.name).join(", ");
   const verbList = verbNames.length > 0
     ? `Available verbs (use ONLY these exact names): ${verbNames}`
     : "No verbs currently available. Do not emit function calls.";

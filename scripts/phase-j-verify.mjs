@@ -175,7 +175,7 @@ window.addEventListener('agent:turn-complete',function(e){
   var v=e.detail&&e.detail.verbs?e.detail.verbs:[];
   window.__phase_j_current.dispatchVerbs=v;
 });
-window.addEventListener('goal:state-change',function(e){
+window.addEventListener('goal:changed',function(e){
   window.__phase_j_current.goalState=e.detail&&e.detail.status?e.detail.status:'unknown';
 });`,
 });
