@@ -307,13 +307,15 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 
   // Drafter load — fire after warmup; drafter-error is non-fatal (standard path covers)
   if (drafterUrl) {
+    // §#1454: hoisted so catch block can check byteLength for WASM fallback.
+    let drafterBuf: ArrayBuffer | null = null;
     try {
       post({ type: "progress", phase: "drafter", progress: 0, bytes: 0, total: 0, throughputBytesPerSec: 0 });
       let _drafterLastBytes = 0;
       let _drafterLastTs = Date.now();
       // §#1420: 10-min fetch cap — drafter is ~300MB; 10 min allows for slow CDN.
       // Reject path falls through to catch → drafter-error (non-fatal, standard backend covers).
-      const drafterBuf = await Promise.race([
+      drafterBuf = await Promise.race([
         fetchDrafterCached(drafterUrl, drafterCacheKey, (loaded, total) => {
           const now = Date.now();
           const dtMs = now - _drafterLastTs;
