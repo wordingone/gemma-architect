@@ -175,11 +175,13 @@ await cdp("Page.addScriptToEvaluateOnNewDocument", {
 //   Fix: drain __dispatchLedger inside the same event handler, atomic with dispatchVerbs capture.
 await cdp("Page.addScriptToEvaluateOnNewDocument", {
   source: `window.__phase_j_turns=[];window.__phase_j_current={dispatchVerbs:[],goalState:'absent',dispatchLedger:[]};
+window.__phase_j_turn_done=0;
 window.addEventListener('agent:turn-complete',function(e){
   var v=e.detail&&e.detail.verbs?e.detail.verbs:[];
   window.__phase_j_current.dispatchVerbs=v;
   var l=window.__dispatchLedger;window.__dispatchLedger=[];
   window.__phase_j_current.dispatchLedger=Array.isArray(l)?l:[];
+  window.__phase_j_turn_done++;
 });
 window.addEventListener('goal:changed',function(e){
   window.__phase_j_current.goalState=e.detail&&e.detail.status?e.detail.status:'unknown';
@@ -350,6 +352,15 @@ if (bootComplete) {
       }
       if (state === "ready" && elapsed > 5000) {
         outcome = "generate-done";
+        // §#1508: GENERATE_DONE (ARC→ready) fires before _executeAndPush() runs dispatches.
+        // Reading __phase_j_current immediately misses the ledger — dispatchLedger=[] every turn.
+        // Wait up to 10s for agent:turn-complete to increment __phase_j_turn_done.
+        const _expectTurnDone = i + 1;
+        for (let _tw = 0; _tw < 20; _tw++) {
+          const _td = await evaluate("window.__phase_j_turn_done ?? 0");
+          if ((_td ?? 0) >= _expectTurnDone) break;
+          await delay(500);
+        }
         break;
       }
       if (state === "failed") {
