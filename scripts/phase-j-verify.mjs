@@ -28,7 +28,7 @@ const NO_RELOAD   = process.argv.includes("--no-reload");
 // Model re-downloads (~2.5GB) — run once per PR cycle, not every iteration.
 const COLD_CACHE  = process.argv.includes("--cold") && !NO_RELOAD;
 const PROMPT_N    = Number(process.argv.find(a => a.startsWith("--prompts="))?.split("=")[1] ?? 5);
-const BOOT_TIMEOUT_MS  = COLD_CACHE ? 20 * 60 * 1000 : 10 * 60 * 1000;  // 20 min cold, 10 min warm
+const BOOT_TIMEOUT_MS  = COLD_CACHE ? 35 * 60 * 1000 : 10 * 60 * 1000;  // 35 min cold (2.5GB re-download), 10 min warm
 const TURN_TIMEOUT_MS  =  3 * 60 * 1000;  // 3 min per turn
 
 const DEMO_PROMPTS = [
