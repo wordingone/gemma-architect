@@ -957,7 +957,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   const t0 = Date.now();
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ⟳`);
 
-  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 384 });
+  const stream = sb.generate({ messages, maxNewTokens: Math.min(req.maxNewTokens ?? 384, 384) });
   // Drain the token stream (satisfies AC: tokens stream back via postMessage inside worker)
   for await (const _tok of stream) { /* tokens flow via postMessage internally */ }
 
@@ -1000,7 +1000,7 @@ async function runWasmBackendTurn(req: AgentRequest): Promise<AgentResponse> {
 
   const json = await wasmChatCompletion({
     messages,
-    max_tokens:  req.maxNewTokens ?? 384,
+    max_tokens:  Math.min(req.maxNewTokens ?? 384, 384),
     temperature: 0.1,
   });
 
@@ -1191,7 +1191,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         messages,
         imageUrl,
         videoUrls,     // §#693 — defined when VITE_VIDEO_INPUT + req.frames
-        maxNewTokens:  req.maxNewTokens ?? 384,
+        maxNewTokens:  Math.min(req.maxNewTokens ?? 384, 384),
         eosId:         1, // Gemma 4 EOS; worker also reads model.config as fallback
         draftK:        MTP_DRAFT_N,
         useMtp,
