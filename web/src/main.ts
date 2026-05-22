@@ -56,7 +56,7 @@ import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
-import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh } from "./tools/join-groups";
+import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh, addVoidToWallObject } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
@@ -1015,43 +1015,8 @@ registerHandler("SdStair", (args) => {
   return { created: "stair", type: stairParams.type };
 });
 
-// §#1516/#1518: void-cut helper that handles both Mesh (fresh wall) and Group (already void-cut wall).
-// Group walls occur when a previous opening already cut the wall. Rebuilds solid from originalWallDims,
-// then applies the new void. Prior voids on same wall are temporarily cleared — compound-void (#1519).
-function cutVoidFromWallObject(
-  wallObj: THREE.Object3D,
-  voidCenter: THREE.Vector3,
-  voidW: number,
-  voidH: number,
-): THREE.Group | null {
-  if (wallObj instanceof THREE.Mesh) {
-    return cutRectVoidFromBoxMesh(wallObj, voidCenter, voidW, voidH);
-  }
-  if (wallObj instanceof THREE.Group) {
-    const dims = (wallObj.userData as Record<string, unknown>).originalWallDims as
-      { w: number; d: number; h: number } | undefined;
-    if (!dims) return null;
-    let srcMat: THREE.Material | null = null;
-    wallObj.traverse(c => {
-      if (!srcMat && c instanceof THREE.Mesh)
-        srcMat = (Array.isArray(c.material) ? c.material[0] : c.material) as THREE.Material;
-    });
-    const mat = srcMat ? (srcMat as THREE.Material).clone() : new THREE.MeshStandardMaterial({ color: 0xcccccc });
-    const solid = new THREE.Mesh(new THREE.BoxGeometry(dims.w, dims.d, dims.h), mat);
-    solid.position.copy(wallObj.position);
-    solid.quaternion.copy(wallObj.quaternion);
-    solid.scale.copy(wallObj.scale);
-    solid.userData = { ...wallObj.userData };
-    delete (solid.userData as Record<string, unknown>).originalWallDims;
-    solid.uuid = wallObj.uuid;
-    solid.updateMatrix();
-    solid.updateMatrixWorld(true);
-    wallObj.parent?.remove(wallObj);
-    wallObj.parent?.add(solid);
-    return cutRectVoidFromBoxMesh(solid, voidCenter, voidW, voidH);
-  }
-  return null;
-}
+// §#1520: compound-void preservation — addVoidToWallObject (join-groups.ts) replaces the
+// local addVoidToWallObject that discarded prior voids on Group walls.
 
 registerHandler("SdDoor", (args) => {
   const hostUuidDoor = args.hostUuid as string | undefined;
@@ -1098,7 +1063,7 @@ registerHandler("SdDoor", (args) => {
   if (hostObjDoor) {
     const voidCenter = mesh.position.clone();
     voidCenter.z = elevation + doorH / 2;
-    const voidGroup = cutVoidFromWallObject(hostObjDoor, voidCenter, doorW, doorH);
+    const voidGroup = addVoidToWallObject(hostObjDoor, voidCenter, doorW, doorH);
     if (voidGroup) {
       pushReplaceAction(voidGroup, [hostObjDoor], "wall-void-cut");
       mesh.userData.hostExpressID = (hostObjDoor.userData as Record<string, unknown>).expressID as string ?? hostObjDoor.uuid;
@@ -1151,14 +1116,14 @@ registerHandler("SdWindow", (args) => {
   let voidCut = false;
   beginTransaction("SdWindow");
   if (hostObjWin) {
-    // §#1518: use cutVoidFromWallObject (handles Mesh + Group walls) instead of instanceof-only guard.
+    // §#1518: use addVoidToWallObject (handles Mesh + Group walls) instead of instanceof-only guard.
     // Window mesh is positioned at sill height; voidCenter is mid-height of opening.
     const voidCenter = new THREE.Vector3(
       mesh.position.x,
       mesh.position.y,
       mesh.position.z + FZK_WINDOW_H / 2,
     );
-    const voidGroup = cutVoidFromWallObject(hostObjWin, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
+    const voidGroup = addVoidToWallObject(hostObjWin, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
     if (voidGroup) {
       pushReplaceAction(voidGroup, [hostObjWin], "wall-void-cut");
       mesh.userData.hostExpressID = (hostObjWin.userData as Record<string, unknown>).expressID as string ?? hostObjWin.uuid;

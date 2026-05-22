@@ -377,9 +377,182 @@ export function cutRectVoidFromBoxMesh(
   geom.dispose();
   parent.add(group);
 
-  // Store original wall dims in Group so restoreVoidCut can recreate the solid (#875).
-  group.userData.originalWallDims = { w: wallLen, d: wallThick, h: wallHt };
+  // Store original wall dims + one-entry cut history in Group.
+  group.userData.originalWallDims = { w: wallLen, d: wallThick, h: wallHt, zMin: wallZMin };
+  group.userData.cutHistory = [{ cx: voidWorldCenter.x, cy: voidWorldCenter.y, cz: voidWorldCenter.z, w: voidW, h: voidH }];
   return group;
+}
+
+// ── Multi-void decomposition (#1520) ─────────────────────────────────────────
+// Column-first decomposition: sorts all void X boundaries, then for each X strip
+// computes the union of applicable Z holes. Handles N non-overlapping or overlapping
+// voids in a single pass on a fresh solid wall Mesh.
+// Internal — call addVoidToWallObject() from outside this module.
+function _applyAllVoids(
+  wallMesh: THREE.Mesh,
+  voids: Array<{ center: THREE.Vector3; w: number; h: number }>,
+): THREE.Group | null {
+  wallMesh.updateMatrixWorld(true);
+  const geom = wallMesh.geometry as THREE.BufferGeometry;
+  geom.computeBoundingBox();
+  const bb = geom.boundingBox;
+  if (!bb) return null;
+
+  const wallLen   = bb.max.x - bb.min.x;
+  const wallThick = bb.max.y - bb.min.y;
+  const wallHt    = bb.max.z - bb.min.z;
+  const wallZMin  = bb.min.z;
+  const wallXMin  = bb.min.x;
+  const wallXMax  = bb.max.x;
+  const wallZMax  = wallZMin + wallHt;
+
+  const mat = (Array.isArray(wallMesh.material) ? wallMesh.material[0] : wallMesh.material) as THREE.Material;
+
+  // Convert void world centers → wall local space; clamp to wall bounds.
+  type LocalVoid = { xMin: number; xMax: number; zBot: number; zTop: number };
+  const localVoids: LocalVoid[] = voids.map(v => {
+    const lc = wallMesh.worldToLocal(v.center.clone());
+    return {
+      xMin: Math.max(lc.x - v.w / 2, wallXMin),
+      xMax: Math.min(lc.x + v.w / 2, wallXMax),
+      zBot: Math.max(lc.z - v.h / 2, wallZMin),
+      zTop: Math.min(lc.z + v.h / 2, wallZMax),
+    };
+  }).filter(v => v.xMin < v.xMax - 0.001 && v.zBot < v.zTop - 0.001);
+
+  if (localVoids.length === 0) return null;
+
+  // Collect all X-axis boundaries from all voids.
+  const xBoundsSet = new Set<number>([wallXMin, wallXMax]);
+  for (const v of localVoids) { xBoundsSet.add(v.xMin); xBoundsSet.add(v.xMax); }
+  const xBounds = [...xBoundsSet].sort((a, b) => a - b);
+
+  const group = new THREE.Group();
+
+  const addSeg = (x0: number, x1: number, z0: number, z1: number) => {
+    const sw = x1 - x0, sh = z1 - z0;
+    if (sw <= 0.001 || sh <= 0.001) return;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sw, wallThick, sh), mat);
+    m.position.set(x0 + sw / 2, 0, z0 + sh / 2);
+    group.add(m);
+  };
+
+  for (let xi = 0; xi < xBounds.length - 1; xi++) {
+    const x0 = xBounds[xi];
+    const x1 = xBounds[xi + 1];
+
+    // Voids that fully cover this X strip.
+    const active = localVoids.filter(v => v.xMin <= x0 + 0.0001 && v.xMax >= x1 - 0.0001);
+
+    if (active.length === 0) {
+      addSeg(x0, x1, wallZMin, wallZMax);
+    } else {
+      // Merge overlapping Z holes, then build wall segments around them.
+      const holes = active.map(v => ({ z0: v.zBot, z1: v.zTop })).sort((a, b) => a.z0 - b.z0);
+      const merged: { z0: number; z1: number }[] = [];
+      for (const h of holes) {
+        if (merged.length > 0 && h.z0 < merged[merged.length - 1].z1) {
+          merged[merged.length - 1].z1 = Math.max(merged[merged.length - 1].z1, h.z1);
+        } else {
+          merged.push({ ...h });
+        }
+      }
+      let prev = wallZMin;
+      for (const h of merged) {
+        addSeg(x0, x1, prev, h.z0);
+        prev = h.z1;
+      }
+      addSeg(x0, x1, prev, wallZMax);
+    }
+  }
+
+  // Copy transform + metadata; preserve uuid so wall lookups still resolve.
+  group.position.copy(wallMesh.position);
+  group.rotation.copy(wallMesh.rotation);
+  group.scale.copy(wallMesh.scale);
+  group.userData = { ...wallMesh.userData };
+  group.uuid = wallMesh.uuid;
+
+  const parent = wallMesh.parent;
+  if (!parent) return null;
+  parent.remove(wallMesh);
+  geom.dispose();
+  parent.add(group);
+
+  group.userData.originalWallDims = { w: wallLen, d: wallThick, h: wallHt, zMin: wallZMin };
+  group.userData.cutHistory = voids.map(v => ({
+    cx: v.center.x, cy: v.center.y, cz: v.center.z, w: v.w, h: v.h,
+  }));
+  return group;
+}
+
+/** Void-cut helper that preserves all prior voids (#1520 compound-void preservation).
+ *  Call this instead of cutRectVoidFromBoxMesh whenever the host wall may already
+ *  be a Group (previously void-cut). Replays all prior cuts + the new cut in a single
+ *  column-decomposition pass so no voids are lost.
+ *
+ *  Works on both Mesh (fresh wall) and Group (already void-cut wall). */
+export function addVoidToWallObject(
+  wallObj: THREE.Object3D,
+  voidWorldCenter: THREE.Vector3,
+  voidW: number,
+  voidH: number,
+): THREE.Group | null {
+  type CutEntry = { cx: number; cy: number; cz: number; w: number; h: number };
+  const newEntry = { center: voidWorldCenter, w: voidW, h: voidH };
+
+  if (wallObj instanceof THREE.Mesh) {
+    return _applyAllVoids(wallObj, [newEntry]);
+  }
+
+  if (wallObj instanceof THREE.Group) {
+    const dims = wallObj.userData.originalWallDims as
+      { w: number; d: number; h: number; zMin?: number } | undefined;
+    if (!dims) return null;
+
+    const history = (wallObj.userData.cutHistory as CutEntry[] | undefined) ?? [];
+
+    // Rebuild solid wall from stored dims.
+    let srcMat: THREE.Material | null = null;
+    wallObj.traverse(c => {
+      if (!srcMat && c instanceof THREE.Mesh)
+        srcMat = (Array.isArray(c.material) ? c.material[0] : c.material) as THREE.Material;
+    });
+    const mat = srcMat
+      ? (srcMat as THREE.Material).clone()
+      : new THREE.MeshStandardMaterial({ color: 0xcccccc });
+
+    const geo = new THREE.BoxGeometry(dims.w, dims.d, dims.h);
+    // Restore non-default Z origin if needed (walls translated so bottom at z=0).
+    const defaultZMin = -dims.h / 2;
+    const zShift = (dims.zMin ?? defaultZMin) - defaultZMin;
+    if (Math.abs(zShift) > 0.001) geo.translate(0, 0, zShift);
+
+    const solid = new THREE.Mesh(geo, mat);
+    solid.position.copy(wallObj.position);
+    solid.quaternion.copy(wallObj.quaternion);
+    solid.scale.copy(wallObj.scale);
+    solid.userData = { ...wallObj.userData };
+    delete (solid.userData as Record<string, unknown>).originalWallDims;
+    delete (solid.userData as Record<string, unknown>).cutHistory;
+    solid.uuid = wallObj.uuid;
+    solid.updateMatrix();
+    solid.updateMatrixWorld(true);
+
+    const parent = wallObj.parent;
+    if (!parent) return null;
+    parent.remove(wallObj);
+    parent.add(solid);
+
+    // Apply ALL voids (history + new) in one pass.
+    const allVoids = [
+      ...history.map(e => ({ center: new THREE.Vector3(e.cx, e.cy, e.cz), w: e.w, h: e.h })),
+      newEntry,
+    ];
+    return _applyAllVoids(solid, allVoids);
+  }
+
+  return null;
 }
 
 // ── Stair void cut for slabs (#900) ──────────────────────────────────────────

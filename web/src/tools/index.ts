@@ -19,7 +19,7 @@ import { initPtOverlay, registerHideCursorDot, ptGetTarget, ptPrompt, ptClearPro
 import { registerOpToolHooks, opStartTool, opHandleClick, opHandleEnter as _opHandleEnter, opHandleCoordSubmit as _opHandleCoordSubmit, opCancel, opFinish, opPhaseIsObjectSelect, opPhaseSupressesSnap, opRaycastObject, opUpdateExtrudePreview, opUpdateSelectHoverPreview, opUpdateDimPreview, opUpdateCopyPreview, opUpdateFilletEdge, getOpPhase, setSelDragging, _selDragging, opGetScreenYtoDz } from "../viewer/op-tool";
 import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelOverlay, clearMultiSelHighlights, applyMultiSelHL, runRectSel, runPolySel, isSelHLOwned } from "../viewer/selection-ops";
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildStairOnPolyline, buildStairOnCurve, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildClipPlanePlan, buildClipPlaneSection, buildBox, buildExtrude } from "./structural";
-import { onElementCommitted, cutRectVoidFromBoxMesh, restoreVoidCut } from "./join-groups";
+import { onElementCommitted, addVoidToWallObject } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./openings";
@@ -806,16 +806,10 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
           out.mesh.userData.voidH = _vH;
           const _vc = out.mesh.position.clone();
           _vc.z += _vH / 2;
-          if (_host instanceof THREE.Mesh) {
-            _voidCutHost  = _host;
-            _voidCutGroup = cutRectVoidFromBoxMesh(_host, _vc, _vW, _vH);
-          } else if (_host instanceof THREE.Group) {
-            // Wall was previously void-cut — restore solid, then cut new void (#1151).
-            const _restore = restoreVoidCut(out.mesh, viewer.getScene());
-            if (_restore) {
-              _voidCutHost  = _restore.newWall;
-              _voidCutGroup = cutRectVoidFromBoxMesh(_restore.newWall, _vc, _vW, _vH);
-            }
+          // addVoidToWallObject handles Mesh + Group; preserves all prior voids (#1520).
+          if (_host instanceof THREE.Mesh || _host instanceof THREE.Group) {
+            _voidCutHost  = _host as THREE.Mesh;
+            _voidCutGroup = addVoidToWallObject(_host, _vc, _vW, _vH);
           }
         }
       }
