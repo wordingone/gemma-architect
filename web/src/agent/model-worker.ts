@@ -229,6 +229,31 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     };
   }
 
+  // §#1501: pre-acquire WebGPU device so ORT uses our reference (not an unexposed internal
+  // one). On some integrated GPUs requestDevice() resolves AFTER ORT "loads" successfully
+  // but before ort.env.webgpu.device is populated — causing warmup-flush + post-drafter-flush
+  // to see hasDevice:false and skip, leaving the GPU command queue unflushed → buffer_manager
+  // OOM on first real inference. Pre-acquiring here guarantees ort.env.webgpu.device is
+  // non-null for the entire warmup path.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let _preAcquiredGpuDevice: any = null;
+  try {
+    const nav = (globalThis as unknown as { navigator?: Navigator }).navigator;
+    if (nav?.gpu) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const adapter = await (nav.gpu as any).requestAdapter({ powerPreference: "high-performance" })
+        .catch(() => null);
+      if (adapter) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _preAcquiredGpuDevice = await (adapter as any).requestDevice().catch(() => null) as GPUDevice | null;
+        if (_preAcquiredGpuDevice) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (ort.env as any).webgpu = { ...((ort.env as any).webgpu ?? {}), device: _preAcquiredGpuDevice };
+        }
+      }
+    }
+  } catch { /* navigator.gpu unavailable — fall through to CPU backend */ }
+
   const backends: Array<{ device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string }> = [
     { device: "webgpu", dtype: "q4f16", label: "GPU" },
     { device: "auto",   dtype: "q4",    label: "CPU" },
@@ -237,6 +262,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   let loadedLabel = "CPU";
 
   for (const { device, dtype, label } of backends) {
+    // §#1501: if WebGPU device acquisition failed at the top, skip webgpu backend entirely
+    // and proceed directly to the CPU fallback — avoids a load attempt that ORT would also fail.
+    if (device === "webgpu" && !_preAcquiredGpuDevice) continue;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let model: Awaited<ReturnType<typeof Gemma4ForConditionalGeneration.from_pretrained>>;
