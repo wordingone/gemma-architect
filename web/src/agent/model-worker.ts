@@ -357,24 +357,19 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           setTimeout(() => reject(new Error("drafter-fetch-timeout-600s")), 600_000)
         ),
       ]);
-      // §#1420: 60s ORT-init cap — WebGPU shader compilation can deadlock indefinitely.
-      // If it times out, reject falls to catch → WASM retry (avoids GPU conflict on inference).
-      // §#1463-revert: restore WebGPU-first path; WASM-only (#1460) caused recovery worker
-      // to hang indefinitely (from_pretrained blocked on bad GPU state, no timeout path).
-      // §#1458: timeout extended 60s → 180s. OOM analysis: drafter InferenceSession.create
-      // takes ~120s on cold-cache (WebGPU shader compilation). The 60s timeout abandoned
-      // the create while GPU work was still running; 60s into turn 1 the GPU allocation
-      // completed and collided with the main model's OrtRun → buffer_manager OOM.
-      // At 180s, session.create finishes before timeout → GPU is clean at boot-complete.
-      _drafterSession = await Promise.race([
-        ort.InferenceSession.create(drafterBuf, {
-          executionProviders: ["webgpu", "wasm"],
-          preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
-        }),
-        new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error("drafter-ort-timeout-180s")), 180_000)
-        ),
-      ]);
+      // §#1470: WASM-only drafter — diagnostic for +60s turn-1 buffer_manager OOM.
+      // 5 SHAs tested (b336897, 3427aeb, 63a60fd, a0a5541, 91bb931): OOM at exactly
+      // +60574ms into turn 1 regardless of drafter WebGPU timeout (60s, 180s), device
+      // flush path, or warmup max_new_tokens (8, 2048). Hypothesis: drafter WebGPU
+      // session holds GPU VRAM (weight buffers + shader intermediates) that competes
+      // with the main model's KV cache growth during decode. WASM-only → zero GPU VRAM
+      // consumed by drafter → more headroom for KV cache → OOM moves later or disappears.
+      // MTP gate (line 594: inputLength < 900) already skips drafter on typical prompts;
+      // WASM decode speed loss is irrelevant for those cases.
+      _drafterSession = await ort.InferenceSession.create(drafterBuf, {
+        executionProviders: ["wasm"],
+        preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
+      });
       _bootDrafterDone = true;
       post({ type: "drafter-ready" });
     } catch (e) {
