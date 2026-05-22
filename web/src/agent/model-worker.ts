@@ -295,6 +295,17 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           (_model as any).generate({ ...inputs, max_new_tokens: 8, do_sample: false }),
           new Promise<void>(r => setTimeout(r, 30_000)),
         ]);
+        // §#1463: flush GPU command queue after warmup generate so all pending D3D12
+        // buffer destructions complete before turn 1's OrtRun allocates. Without this,
+        // async destroy() calls queue D3D12 commands that haven't executed by the time
+        // turn 1 allocates, causing buffer_manager.cc:553 OOM → recycle.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const _wgpuDev = (tfEnv.backends as any)?.onnx?.webgpu?.device as
+          | { queue?: { onSubmittedWorkDone?: () => Promise<void> } }
+          | undefined;
+        if (_wgpuDev?.queue?.onSubmittedWorkDone) {
+          await _wgpuDev.queue.onSubmittedWorkDone().catch(() => {/* non-fatal */});
+        }
       }
     } catch (e) {
       console.warn("[model-worker] warmup probe failed:", (e as Error).message ?? e);
@@ -335,19 +346,17 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           setTimeout(() => reject(new Error("drafter-fetch-timeout-600s")), 600_000)
         ),
       ]);
-      // §#1460: WASM-only for drafter ORT init — eliminates GPU queue contention on turn 1.
-      // WebGPU path (#1420/#1454) consistently timed out at 60s, leaving an abandoned
-      // shader-compilation job that clashed with main-model OrtRun. Promise.race cancels
-      // the wait but not the work; the background GPU ops persisted through turn 1.
-      // Using WASM from the start avoids all GPU contention and matches the actual outcome
-      // (model always ended up on WASM anyway via the #1454 fallback).
+      // §#1420: 60s ORT-init cap — WebGPU shader compilation can deadlock indefinitely.
+      // If it times out, reject falls to catch → WASM retry (avoids GPU conflict on inference).
+      // §#1463-revert: restore WebGPU-first path; WASM-only (#1460) caused recovery worker
+      // to hang indefinitely (from_pretrained blocked on bad GPU state, no timeout path).
       _drafterSession = await Promise.race([
         ort.InferenceSession.create(drafterBuf, {
-          executionProviders: ["wasm"],
+          executionProviders: ["webgpu", "wasm"],
           preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
         }),
         new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error("drafter-wasm-timeout-120s")), 120_000)
+          setTimeout(() => reject(new Error("drafter-ort-timeout-60s")), 60_000)
         ),
       ]);
       _bootDrafterDone = true;
@@ -355,7 +364,27 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     } catch (e) {
       _bootDrafterDone = true;
       const errMsg = (e as Error).message ?? "";
-      post({ type: "drafter-error", error: errMsg.slice(0, 120) });
+      if (errMsg === "drafter-ort-timeout-60s" && (drafterBuf as ArrayBuffer)?.byteLength > 0) {
+        // §#1454: WebGPU shader compilation deadlocked. The abandoned ORT init still holds
+        // the GPU queue, causing OrtRun failures on the main model during inference.
+        // Retry with WASM-only — CPU execution avoids the GPU device conflict entirely.
+        try {
+          _drafterSession = await Promise.race([
+            ort.InferenceSession.create(drafterBuf as ArrayBuffer, {
+              executionProviders: ["wasm"],
+              preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
+            }),
+            new Promise<any>((_, reject) =>
+              setTimeout(() => reject(new Error("drafter-wasm-timeout-120s")), 120_000)
+            ),
+          ]);
+          post({ type: "drafter-ready" });
+        } catch (wasmErr) {
+          post({ type: "drafter-error", error: `gpu-deadlock+wasm-failed: ${(wasmErr as Error).message?.slice(0, 80)}` });
+        }
+      } else {
+        post({ type: "drafter-error", error: errMsg.slice(0, 120) });
+      }
     }
   } else {
     // No drafter URL — drafter phase is skipped.
@@ -385,6 +414,15 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           (_model as any).generate({ ..._syncIn, max_new_tokens: 1, do_sample: false }),
           new Promise<void>(r => setTimeout(r, 30_000)),
         ]);
+        // §#1463: same GPU queue flush as main warmup probe — ensures post-drafter
+        // probe's GPU commands complete before boot-complete fires.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const _wgpuDev2 = (tfEnv.backends as any)?.onnx?.webgpu?.device as
+          | { queue?: { onSubmittedWorkDone?: () => Promise<void> } }
+          | undefined;
+        if (_wgpuDev2?.queue?.onSubmittedWorkDone) {
+          await _wgpuDev2.queue.onSubmittedWorkDone().catch(() => {/* non-fatal */});
+        }
       }
     } catch { /* non-fatal — flush is best-effort */ }
   }
