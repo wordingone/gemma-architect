@@ -6635,6 +6635,73 @@ await resetScene('before-box-inject');
   }
 }
 
+// ── S132 — agent-verb-completeness (#1527): canonical prompt → ≥20 dispatched verbs ──
+// Requires on-device model (arc.state==='ready'). In surface-allowfail.txt — no model in CI.
+// Validates agent dispatch width: wall + window/door + ≥20 total verbs from starter prompt.
+{
+  // Wait up to 120s for arc to be ready (model may still booting after S131 page reload).
+  let arcReady = false;
+  for (let i = 0; i < 60; i++) {
+    const state = await evaluate(`window.__arc?.state ?? 'absent'`);
+    if (state === 'ready') { arcReady = true; break; }
+    if (state === 'failed') break;
+    await delay(2000);
+  }
+
+  if (!arcReady) {
+    record('agent-verb-completeness', false, { reason: 'arc not ready — model not loaded or failed' });
+  } else {
+    const STARTER = "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.";
+
+    const r132 = await evaluate(`(async function() {
+      try {
+        const input   = document.querySelector('.chat-input');
+        const sendBtn = document.querySelector('.chat-send-btn');
+        if (!input || !sendBtn) {
+          return { passed: false, evidence: { reason: 'chat UI not found', inputFound: !!input, sendBtnFound: !!sendBtn } };
+        }
+        if (sendBtn.disabled) {
+          return { passed: false, evidence: { reason: 'send-btn disabled — turn already in progress' } };
+        }
+
+        // Clear any stale ledger entries before this turn.
+        window.__dispatchLedger = [];
+
+        // Set up turn-complete listener before submitting.
+        const turnPromise = new Promise(resolve => {
+          const t = setTimeout(() => resolve({ timedOut: true }), 600000);
+          window.addEventListener('agent:turn-complete', () => {
+            clearTimeout(t);
+            resolve({ timedOut: false });
+          }, { once: true });
+        });
+
+        // Submit prompt via button click (canonical user flow).
+        input.value = ${JSON.stringify(STARTER)};
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        sendBtn.click();
+
+        const turn = await turnPromise;
+        const ledger  = window.__dispatchLedger ?? [];
+        const verbs   = ledger.map(e => e.verb);
+        const verbSet = new Set(verbs);
+        const verbCount = verbs.length;
+        const hasWall   = verbSet.has('SdWall');
+        const hasWindow = verbSet.has('SdWindow');
+        const hasDoor   = verbSet.has('SdDoor');
+
+        const passed = !turn.timedOut && verbCount >= 20 && hasWall && (hasWindow || hasDoor);
+        return { passed, evidence: { timedOut: turn.timedOut ?? false, verbCount, hasWall, hasWindow, hasDoor, verbSample: verbs.slice(0, 30) } };
+      } catch (e) {
+        return { passed: false, evidence: { reason: 'exception', message: String(e) } };
+      }
+    })()`, true, 660000);
+
+    if (!r132) record('agent-verb-completeness', false, { reason: 'evaluate returned null' });
+    else record('agent-verb-completeness', r132.passed, r132.evidence);
+  }
+}
+
 } finally {
   await cleanup();
 }
