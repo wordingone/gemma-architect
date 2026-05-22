@@ -142,8 +142,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   }
 
   // Emit manifest with estimated total bytes so the overlay can show aggregate %.
-  // E4B: model ONNX q4f16 ≈ 2.5 GB + drafter ≈ 158 MB + tokenizer files ≈ 5 MB.
-  const ESTIMATED_MODEL_BYTES = 2_700_000_000;
+  // E4B: model ONNX q4f16 ≈ 2.5 GB + embed_tokens ≈ 2.0 GB + drafter ≈ 158 MB + tokenizer ≈ 5 MB.
+  // 5.5 GB ceiling (~300 MB headroom) prevents bar freeze at 69% when actual > estimate (#1452).
+  const ESTIMATED_MODEL_BYTES = 5_500_000_000;
   post({ type: "manifest", totalBytesExpected: ESTIMATED_MODEL_BYTES });
 
   // Cumulative bytes downloaded (all model files combined) for aggregate throughput.
