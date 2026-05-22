@@ -38,8 +38,10 @@ export type TransitionCallback = (
 // Allowed transitions. Any event not listed for a state is INVALID.
 const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], RuntimeState>>> = {
   idle:       { BOOT_REQUESTED: "booting" },
-  booting:    { MODEL_READY: "booting", BOOT_COMPLETE: "ready", FATAL_ERROR: "failed" },
-  ready:      { GENERATE_REQUESTED: "generating", BOOT_REQUESTED: "booting" },
+  booting:    { MODEL_READY: "booting", BOOT_COMPLETE: "ready", FATAL_ERROR: "failed",
+                PREFILL_DONE: "booting" }, // warmup-done fires before boot-complete (#1407)
+  ready:      { GENERATE_REQUESTED: "generating", BOOT_REQUESTED: "booting",
+                PREFILL_DONE: "ready" },   // warmup-done after recycle if noWarmup=false
   generating: {
     PREFILL_DONE:     "generating",
     GENERATE_DONE:    "ready",

@@ -152,6 +152,22 @@ describe("AgentRuntimeController", () => {
     expect(ctrl.chatInputEnabled).toBe(true);
   });
 
+  // Scenario 11: boot-time warmup (PREFILL_DONE fires while in booting state — #1407 regression)
+  it("PREFILL_DONE during boot is a self-loop in booting state", () => {
+    ctrl.dispatch({ type: "BOOT_REQUESTED" });
+    ctrl.dispatch({ type: "MODEL_READY", device: "GPU" });
+    expect(ctrl.state).toBe("booting");
+    // warmup-done fires before boot-complete; must NOT log invalid transition
+    ctrl.dispatch({ type: "PREFILL_DONE" });
+    expect(ctrl.state).toBe("booting");
+    expect(ctrl.prefillDone).toBe(true);
+    ctrl.dispatch({ type: "BOOT_COMPLETE" });
+    expect(ctrl.state).toBe("ready");
+    expect(ctrl.bootComplete).toBe(true);
+    // prefillDone survives into ready (cleared on next GENERATE_REQUESTED)
+    expect(ctrl.prefillDone).toBe(true);
+  });
+
   // Bonus: invalid transition throws in strict mode
   it("invalid transition throws in strict mode", () => {
     expect(() => ctrl.dispatch({ type: "GENERATE_REQUESTED", turnId: "t1" })).toThrow(
