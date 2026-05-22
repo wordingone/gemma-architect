@@ -5575,11 +5575,15 @@ await resetScene('before-box-inject');
         if (rects.length === 0) return { passed: false, evidence: { reason: 'rect not created' } };
         const countBefore = rects.length;
 
-        // 2. Select the rect and activate Array tool.
+        // 2. Select the rect via __setSelected (sets selection-state ptGetTarget reads).
         const rectObj = rects[rects.length - 1];
-        window.__viewer.selectObject(rectObj);
+        if (window.__setSelected) {
+          window.__setSelected({ topology: 'mesh', uuid: rectObj.uuid, object: rectObj, transformTarget: rectObj });
+        } else {
+          window.__viewer.selectObject(rectObj);
+        }
         window.__dispatch('setActiveTool', { toolId: 'array' });
-        await new Promise(r => setTimeout(r, 60));
+        await new Promise(r => setTimeout(r, 100));
 
         // 3. Click the "Polar" chooser chip.
         const chips = Array.from(document.querySelectorAll('.chooser-chip'));
@@ -5646,11 +5650,15 @@ await resetScene('before-box-inject');
         if (rects.length === 0) return { passed: false, evidence: { reason: 'rect not created' } };
         const countBefore = rects.length;
 
-        // 2. Select the rect and activate Array tool.
+        // 2. Select the rect via __setSelected (sets selection-state ptGetTarget reads).
         const rectObj = rects[rects.length - 1];
-        window.__viewer.selectObject(rectObj);
+        if (window.__setSelected) {
+          window.__setSelected({ topology: 'mesh', uuid: rectObj.uuid, object: rectObj, transformTarget: rectObj });
+        } else {
+          window.__viewer.selectObject(rectObj);
+        }
         window.__dispatch('setActiveTool', { toolId: 'array' });
-        await new Promise(r => setTimeout(r, 60));
+        await new Promise(r => setTimeout(r, 100));
 
         // 3. Click the "Rectangular" chooser chip.
         const chips = Array.from(document.querySelectorAll('.chooser-chip'));
