@@ -1161,7 +1161,7 @@ export function initCreateMode(viewer: Viewer): void {
     }
 
     if (tool === "wall-pick") {
-      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY);
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, true);
       if (!hit) {
         setPickerHint("wall-pick — click a polygon, polyline, circle, or line to trace walls");
         return;
@@ -1320,7 +1320,7 @@ export function initCreateMode(viewer: Viewer): void {
       opSetHover(hit ? hit.obj : null);
     } else if (tool === "wall-pick") {
       // #952: wall-pick is a pure mesh-click mode — hover highlight, no cursor dot.
-      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, false, true);
+      const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, true, true);
       opSetHover(hit ? hit.obj : null);
     } else {
       opSetHover(null);
