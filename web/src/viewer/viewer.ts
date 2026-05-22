@@ -2678,7 +2678,8 @@ export class Viewer {
     this.scene.updateMatrixWorld(true);
     const box = new THREE.Box3();
     this.scene.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      // Group walls (void-cut) carry kind="brep" on the Group; child segments have no kind.
+      if (!(obj instanceof THREE.Mesh) && !(obj instanceof THREE.Group)) return;
       const kind = (obj.userData as Record<string, unknown>).kind;
       if (kind !== "brep" && kind !== "compound") return;
       box.expandByObject(obj);
@@ -2922,7 +2923,8 @@ export class Viewer {
     this.scene.updateMatrixWorld(true);
     const box = new THREE.Box3();
     this.scene.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      // Group walls (void-cut) carry kind="brep" on the Group; child segments have no kind.
+      if (!(obj instanceof THREE.Mesh) && !(obj instanceof THREE.Group)) return;
       const ud = (obj as any).userData as Record<string, unknown>;
       if (ud?.kind !== "brep" && ud?.kind !== "compound") return;
       box.expandByObject(obj);
