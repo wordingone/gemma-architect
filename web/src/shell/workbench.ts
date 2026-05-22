@@ -44,7 +44,7 @@ import { STARTER_LIBRARY } from "../skills/starter-library";
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { SkillCanvas } from "../skills/skill-canvas";
-import { rebuildWallParams } from "../tools/structural";
+import { rebuildWallParams, rebuildGroupWallHeight } from "../tools/structural";
 import { attemptWallCornerJoins } from "../tools/wall-corners";
 import { initWallHeightHandle, showWallHeightHandle, hideWallHeightHandle } from "../viewer/wall-height-handle";
 
@@ -1069,10 +1069,10 @@ function buildInspectTab(): HTMLElement {
       }
       // Wall params: batch multi-select (all walls → pre-populate if same value)
       const wallMeshes = multi
-        .map((s) => s.object as THREE.Mesh)
+        .map((s) => s.object as THREE.Object3D)
         .filter((o) => o.userData?.creator === "wall");
       updateWallSection(wallMeshes);
-      if (wallMeshes.length === 1) showWallHeightHandle(wallMeshes[0]);
+      if (wallMeshes.length === 1) showWallHeightHandle(wallMeshes[0] as THREE.Mesh | THREE.Group);
       else hideWallHeightHandle();
       return;
     }
@@ -1135,10 +1135,10 @@ function buildInspectTab(): HTMLElement {
       sizeAxes.forEach((a) => (a.textContent = "—"));
     }
 
-    // Wall params section
+    // Wall params section — Group walls arise after addVoidToWallObject cuts a void (#1537).
     if (obj.userData?.creator === "wall") {
-      updateWallSection(obj instanceof THREE.Mesh ? [obj] : []);
-      showWallHeightHandle(obj instanceof THREE.Mesh ? obj : obj as unknown as THREE.Group);
+      updateWallSection([obj]);
+      showWallHeightHandle(obj as THREE.Mesh | THREE.Group);
     } else {
       updateWallSection([]);
       hideWallHeightHandle();
@@ -1146,9 +1146,9 @@ function buildInspectTab(): HTMLElement {
   }
 
   // ── Wall parameters section ────────────────────────────────────────────────
-  let _activeWalls: THREE.Mesh[] = [];
+  let _activeWalls: THREE.Object3D[] = [];
 
-  function updateWallSection(walls: THREE.Mesh[]): void {
+  function updateWallSection(walls: THREE.Object3D[]): void {
     const sec = wrap.querySelector<HTMLElement>("#wall-params-section");
     if (!sec) return;
     _activeWalls = walls;
@@ -1207,15 +1207,25 @@ function buildInspectTab(): HTMLElement {
     }
     if (val === null || _activeWalls.length === 0) return;
     for (const m of _activeWalls) {
-      if (field === "thickness") rebuildWallParams(m, { thickness: Math.max(0.01, val) });
-      else if (field === "height") rebuildWallParams(m, { height: Math.max(0.01, val) });
-      else if (field === "bottom") rebuildWallParams(m, { bottomElevation: val });
+      if (m instanceof THREE.Group) {
+        // Group walls arise after a void cut. Height and bottom use Group-aware helpers;
+        // thickness rebuild is not yet supported for Group walls (#1537).
+        if (field === "height") rebuildGroupWallHeight(m, Math.max(0.01, val));
+        else if (field === "bottom") { m.position.z = val; m.updateMatrixWorld(true); }
+      } else if (m instanceof THREE.Mesh) {
+        if (field === "thickness") rebuildWallParams(m, { thickness: Math.max(0.01, val) });
+        else if (field === "height") rebuildWallParams(m, { height: Math.max(0.01, val) });
+        else if (field === "bottom") rebuildWallParams(m, { bottomElevation: val });
+      }
     }
     // Re-apply corner joins after geometry rebuild — rebuildWallParams creates a fresh
     // BoxGeometry which drops the mitre/butt cuts from the original join.
+    // Skip Group walls: their segments are managed by rebuildGroupWallHeight, not corner joins.
     const scene = (window as unknown as { __viewer?: { getScene(): THREE.Scene } }).__viewer?.getScene();
     if (scene) {
-      for (const m of _activeWalls) attemptWallCornerJoins(m, scene);
+      for (const m of _activeWalls) {
+        if (m instanceof THREE.Mesh) attemptWallCornerJoins(m, scene);
+      }
     }
     // Refresh display values to reflect clamping
     updateWallSection(_activeWalls);

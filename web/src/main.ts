@@ -58,7 +58,7 @@ import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFro
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted, cutSlabVoidFromBoxMesh, addVoidToWallObject } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
-import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
+import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, rebuildGroupWallHeight, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
 import { buildDoor, buildWindow, buildOpening, DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
@@ -2681,7 +2681,7 @@ function _showDoorInspector(mesh: THREE.Mesh): void {
 
 let _wallInspectorMeshUuid: string | null = null;
 
-function _showWallInspector(mesh: THREE.Mesh): void {
+function _showWallInspector(mesh: THREE.Object3D): void {
   _wallInspectorMeshUuid = mesh.uuid;
   _roofInspectorMeshUuid = null;
   _stairInspectorGroupUuid = null;
@@ -2692,7 +2692,9 @@ function _showWallInspector(mesh: THREE.Mesh): void {
   _roofInspectorEl.appendChild(_inspectorTitle("Wall"));
   _roofInspectorEl.appendChild(_mkInspectorSlider("Height", 2.13, 4.27, 0.05, curH, "m", (v) => {
     const cur = viewer.getScene().getObjectByProperty("uuid", _wallInspectorMeshUuid ?? "");
-    if (cur instanceof THREE.Mesh) rebuildWallParams(cur, { height: v });
+    // Group walls arise after addVoidToWallObject cuts a void (#1537).
+    if (cur instanceof THREE.Group) rebuildGroupWallHeight(cur, v);
+    else if (cur instanceof THREE.Mesh) rebuildWallParams(cur, { height: v });
   }));
   _roofInspectorEl.style.display = "";
 }
@@ -2731,7 +2733,7 @@ window.addEventListener("viewer:select", (e) => {
     }
   } else if ((creator === "door" || creator === "SdDoor") && obj instanceof THREE.Mesh) {
     _showDoorInspector(obj);
-  } else if (creator === "wall" && obj instanceof THREE.Mesh) {
+  } else if (creator === "wall" && (obj instanceof THREE.Mesh || obj instanceof THREE.Group)) {
     _showWallInspector(obj);
   } else {
     _hideInspector();
