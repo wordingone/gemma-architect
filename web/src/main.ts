@@ -1015,11 +1015,63 @@ registerHandler("SdStair", (args) => {
   return { created: "stair", type: stairParams.type };
 });
 
+// §#1516/#1518: void-cut helper that handles both Mesh (fresh wall) and Group (already void-cut wall).
+// Group walls occur when a previous opening already cut the wall. Rebuilds solid from originalWallDims,
+// then applies the new void. Prior voids on same wall are temporarily cleared — compound-void (#1519).
+function cutVoidFromWallObject(
+  wallObj: THREE.Object3D,
+  voidCenter: THREE.Vector3,
+  voidW: number,
+  voidH: number,
+): THREE.Group | null {
+  if (wallObj instanceof THREE.Mesh) {
+    return cutRectVoidFromBoxMesh(wallObj, voidCenter, voidW, voidH);
+  }
+  if (wallObj instanceof THREE.Group) {
+    const dims = (wallObj.userData as Record<string, unknown>).originalWallDims as
+      { w: number; d: number; h: number } | undefined;
+    if (!dims) return null;
+    let srcMat: THREE.Material | null = null;
+    wallObj.traverse(c => {
+      if (!srcMat && c instanceof THREE.Mesh)
+        srcMat = (Array.isArray(c.material) ? c.material[0] : c.material) as THREE.Material;
+    });
+    const mat = srcMat ? (srcMat as THREE.Material).clone() : new THREE.MeshStandardMaterial({ color: 0xcccccc });
+    const solid = new THREE.Mesh(new THREE.BoxGeometry(dims.w, dims.d, dims.h), mat);
+    solid.position.copy(wallObj.position);
+    solid.quaternion.copy(wallObj.quaternion);
+    solid.scale.copy(wallObj.scale);
+    solid.userData = { ...wallObj.userData };
+    delete (solid.userData as Record<string, unknown>).originalWallDims;
+    solid.uuid = wallObj.uuid;
+    solid.updateMatrix();
+    solid.updateMatrixWorld(true);
+    wallObj.parent?.remove(wallObj);
+    wallObj.parent?.add(solid);
+    return cutRectVoidFromBoxMesh(solid, voidCenter, voidW, voidH);
+  }
+  return null;
+}
+
 registerHandler("SdDoor", (args) => {
   const hostUuidDoor = args.hostUuid as string | undefined;
-  const hostObjDoor = hostUuidDoor
+  let hostObjDoor: THREE.Object3D | undefined = hostUuidDoor
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidDoor) ?? undefined
     : undefined;
+  // §#1516: auto-find nearest wall within 3 m when hostUuid absent (mirrors SdWindow auto-find).
+  // Without this, agent dispatch without hostUuid produces door with default Y-orientation (perpendicular to wall).
+  if (!hostObjDoor) {
+    const posArr = args.position as number[] | undefined;
+    const doorXY = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, 0);
+    let minDist = 3;
+    viewer.forEachSceneChild((child) => {
+      const c = child.userData?.creator;
+      if (c !== "SdWall" && c !== "wall") return;
+      const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
+      const dist = doorXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
+      if (dist < minDist) { minDist = dist; hostObjDoor = child; }
+    });
+  }
   const cplane = resolveCPlane("SdDoor", args as Record<string, unknown>, viewer, hostObjDoor);
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
@@ -1043,19 +1095,15 @@ registerHandler("SdDoor", (args) => {
   viewer.addMesh(mesh, "brep", { noHistory: true });
   let voidCut = false;
   beginTransaction("SdDoor");
-  if (hostUuidDoor) {
-    const host = viewer.getScene().getObjectByProperty("uuid", hostUuidDoor);
-    if (host instanceof THREE.Mesh) {
-      const voidCenter = mesh.position.clone();
-      voidCenter.z = elevation + doorH / 2;
-      const voidGroup = cutRectVoidFromBoxMesh(host, voidCenter, doorW, doorH);
-      if (voidGroup) {
-        pushReplaceAction(voidGroup, [host], "wall-void-cut");
-        // Set hostExpressID so rehostVoidCut can find and restore this void on move (#1221).
-        mesh.userData.hostExpressID = host.userData.expressID ?? host.uuid;
-      }
-      voidCut = true;
+  if (hostObjDoor) {
+    const voidCenter = mesh.position.clone();
+    voidCenter.z = elevation + doorH / 2;
+    const voidGroup = cutVoidFromWallObject(hostObjDoor, voidCenter, doorW, doorH);
+    if (voidGroup) {
+      pushReplaceAction(voidGroup, [hostObjDoor], "wall-void-cut");
+      mesh.userData.hostExpressID = (hostObjDoor.userData as Record<string, unknown>).expressID as string ?? hostObjDoor.uuid;
     }
+    voidCut = true;
   }
   pushAction(mesh, chain);
   endTransaction();
@@ -1102,17 +1150,18 @@ registerHandler("SdWindow", (args) => {
   viewer.addMesh(mesh, "brep", { noHistory: true });
   let voidCut = false;
   beginTransaction("SdWindow");
-  if (hostObjWin instanceof THREE.Mesh) {
-    // Window mesh is positioned at sill height; voidCenter is mid-height of opening
+  if (hostObjWin) {
+    // §#1518: use cutVoidFromWallObject (handles Mesh + Group walls) instead of instanceof-only guard.
+    // Window mesh is positioned at sill height; voidCenter is mid-height of opening.
     const voidCenter = new THREE.Vector3(
       mesh.position.x,
       mesh.position.y,
       mesh.position.z + FZK_WINDOW_H / 2,
     );
-    const voidGroup = cutRectVoidFromBoxMesh(hostObjWin, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
+    const voidGroup = cutVoidFromWallObject(hostObjWin, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
     if (voidGroup) {
       pushReplaceAction(voidGroup, [hostObjWin], "wall-void-cut");
-      mesh.userData.hostExpressID = hostObjWin.userData.expressID ?? hostObjWin.uuid;
+      mesh.userData.hostExpressID = (hostObjWin.userData as Record<string, unknown>).expressID as string ?? hostObjWin.uuid;
     }
     voidCut = true;
   }
