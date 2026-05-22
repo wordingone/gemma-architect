@@ -2700,8 +2700,20 @@ window.addEventListener("viewer:select", (e) => {
   if (creator === "roof" && obj instanceof THREE.Mesh) {
     _stairInspectorGroupUuid = null; _doorInspectorMeshUuid = null; _wallInspectorMeshUuid = null;
     _showRoofInspector(obj);
-  } else if (creator === "stair" && obj?.userData?.stairParams) {
-    _showStairInspector(obj);
+  } else if (creator === "stair") {
+    // Walk up to find the stair group (has stairParams). Selected obj may be a
+    // flight wrapper (polyline/curve stairs) or direct child of the stair group.
+    let stairGroup: THREE.Object3D | null = null;
+    let cur: THREE.Object3D | null = obj ?? null;
+    while (cur) {
+      if (cur.userData?.stairParams) { stairGroup = cur; break; }
+      cur = cur.parent;
+    }
+    if (stairGroup) {
+      _showStairInspector(stairGroup);
+    } else {
+      _hideInspector();
+    }
   } else if ((creator === "door" || creator === "SdDoor") && obj instanceof THREE.Mesh) {
     _showDoorInspector(obj);
   } else if (creator === "wall" && obj instanceof THREE.Mesh) {

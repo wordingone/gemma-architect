@@ -562,16 +562,13 @@ export function buildStairOnPolyline(
     zCurrent += n * riser;
 
     if (seg < pts.length - 2) {
-      // Offset landing center by stairW/2 in current segment direction so
-      // it starts at pB instead of overlapping the flight end.
-      const segLen2 = Math.sqrt(dx * dx + dy * dy) || 1;
       const landing = new THREE.Mesh(
         new THREE.BoxGeometry(stairW, stairW, landingT),
         _stepMat(),
       );
       landing.position.set(
-        pB.x + (dx / segLen2) * (stairW / 2),
-        pB.y + (dy / segLen2) * (stairW / 2),
+        pB.x,
+        pB.y,
         zCurrent + landingT / 2,
       );
       landing.userData.kind = "brep";
