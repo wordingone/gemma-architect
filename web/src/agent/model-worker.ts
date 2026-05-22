@@ -288,11 +288,17 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       const inputs: any = await proc(chatText, null);
       const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
       if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
-        // §#1420: 30s timeout — same pattern as post-drafter probe (#1417). Warmup is
-        // best-effort; timeout lets boot continue if WebGPU decode stalls on first call.
+        // §#1420: 30s timeout — best-effort; lets boot continue if WebGPU stalls.
+        // §#1469: max_new_tokens 8 → 2048. Root cause: ORT buffer_manager pre-allocates
+        // the KV pool based on max_new_tokens. With max_new_tokens=8, pool is sized for
+        // input_len+8 tokens. Turn 1 decode grows KV past that boundary at ~step 300
+        // (≈60s at 5 tps) → buffer_manager.cc:553 OOM. With 2048, pool is pre-sized for
+        // input_len+2048, covering all practical turn-1 decode lengths.
+        // Actual generation still terminates at 30s (pool pre-alloc happens on the first
+        // OrtRun, not when all 2048 tokens are generated).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await Promise.race([
-          (_model as any).generate({ ...inputs, max_new_tokens: 8, do_sample: false }),
+          (_model as any).generate({ ...inputs, max_new_tokens: 2048, do_sample: false }),
           new Promise<void>(r => setTimeout(r, 30_000)),
         ]);
         // §#1463: flush GPU command queue after warmup generate so all pending D3D12
