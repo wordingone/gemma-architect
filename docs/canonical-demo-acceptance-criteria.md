@@ -54,7 +54,7 @@ Each class has: reference behavior (FZK cite), current observed behavior (CDP ev
 | **Acceptance** | No wall in scene has `bbox.x < 0.5m AND bbox.y < 0.5m` (i.e. both horizontal extents degenerate). Minimum wall width 0.5m per axis. |
 | **Verify surface** | S137 — see §Verify Surfaces |
 | **Root cause** | Model emits corner-filler SdWall calls with start==end (or near-zero-length segment). Wall builder does not reject below-minimum-length walls. Handler needs a minimum-length guard (~0.5m). |
-| **Issue** | New — file as #1554 |
+| **Issue** | #1555 — zero-width corner walls |
 
 ---
 
@@ -67,7 +67,7 @@ Each class has: reference behavior (FZK cite), current observed behavior (CDP ev
 | **Acceptance** | Post-demo build of two-story house, scene must contain ≥ 1 interior wall (`userData.creator==='wall'` AND position is NOT on the perimeter bbox of the building footprint). |
 | **Verify surface** | S140 — see §Verify Surfaces |
 | **Root cause** | Demo prompt does not instruct model to emit interior partition walls. Model omits them entirely. Either prompt needs interior-wall instructions or SdRoom decomposition is needed. |
-| **Issue** | New — file as #1555 |
+| **Issue** | #1556 — interior partition walls missing |
 
 ---
 
@@ -80,7 +80,7 @@ Each class has: reference behavior (FZK cite), current observed behavior (CDP ev
 | **Acceptance** | Scene must contain at least 1 slab at OG base elevation (z ≈ 2.74m in FZK-Haus) with horizontal extent matching house footprint (~7.9m × 6.1m). |
 | **Verify surface** | S138 — see §Verify Surfaces |
 | **Root cause** | Demo prompt may not instruct model to place an intermediate floor slab. SdSlab handler exists but model omits this dispatch. |
-| **Issue** | New — file as #1556 |
+| **Issue** | #1557 — intermediate floor slab absent |
 
 ---
 
@@ -106,7 +106,7 @@ Each class has: reference behavior (FZK cite), current observed behavior (CDP ev
 | **Acceptance** | Garden wall height ≥ 0.8m. |
 | **Verify surface** | S141 — see §Verify Surfaces |
 | **Root cause** | SdWall handler or demo prompt passes incorrect height parameter (0.3m instead of 1.2–1.8m) for garden boundary. Possible schema default being applied. |
-| **Issue** | New — file as #1557 |
+| **Issue** | #1558 — garden wall height anomaly |
 
 ---
 
