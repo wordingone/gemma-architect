@@ -289,16 +289,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
       if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
         // §#1420: 30s timeout — best-effort; lets boot continue if WebGPU stalls.
-        // §#1469: max_new_tokens 8 → 2048. Root cause: ORT buffer_manager pre-allocates
-        // the KV pool based on max_new_tokens. With max_new_tokens=8, pool is sized for
-        // input_len+8 tokens. Turn 1 decode grows KV past that boundary at ~step 300
-        // (≈60s at 5 tps) → buffer_manager.cc:553 OOM. With 2048, pool is pre-sized for
-        // input_len+2048, covering all practical turn-1 decode lengths.
-        // Actual generation still terminates at 30s (pool pre-alloc happens on the first
-        // OrtRun, not when all 2048 tokens are generated).
+        // §#1469-revert: max_new_tokens 2048 → 8. Phase J runs on b336897→91bb931 (5 SHAs)
+        // confirmed max_new_tokens has no effect on +60s OOM — ORT does not pre-allocate
+        // KV pool based on max_new_tokens (lazy-allocates per decode step instead). 2048 added
+        // ~20s boot overhead with zero diagnostic value; reverting to minimize boot noise.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await Promise.race([
-          (_model as any).generate({ ...inputs, max_new_tokens: 2048, do_sample: false }),
+          (_model as any).generate({ ...inputs, max_new_tokens: 8, do_sample: false }),
           new Promise<void>(r => setTimeout(r, 30_000)),
         ]);
         // §#1463: flush GPU command queue after warmup generate so all pending D3D12
@@ -327,8 +324,16 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   post({ type: "warmup-done", skipped: noWarmup }); // #1313: skipped=true when noWarmup (recycle path)
   checkBootComplete();
 
+  // §#1471-diag: Force drafter disabled — definitive isolation for +60s turn-1 OOM.
+  // b336897 (iter-3) + 2e18375 (iter-8) both used WASM-only drafter (zero GPU VRAM) and
+  // still showed +60s OOM. VRAM competition theory falsified. This diagnostic removes the
+  // drafter entirely (no fetch, no session.create, no CPU RAM overhead) to test whether
+  // drafter LOADING in any form triggers the OOM vs main-model decode being the source.
+  // If OOM disappears → some aspect of drafter loading (shared ORT state, async init, event
+  // loop pressure) is the trigger. If OOM persists → drafter is irrelevant, decode path itself.
+  const _effectiveDrafterUrl: string | null = null;
   // Drafter load — fire after warmup; drafter-error is non-fatal (standard path covers)
-  if (drafterUrl) {
+  if (_effectiveDrafterUrl) {
     // §#1454: hoisted so catch block can check byteLength for WASM fallback.
     let drafterBuf: ArrayBuffer | null = null;
     try {
