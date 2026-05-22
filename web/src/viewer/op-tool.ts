@@ -880,8 +880,8 @@ export function opRaycastObject(
   if (!hits.length) return null;
   const hit = hits[0];
   let hitObj: THREE.Object3D = hit.object;
-  // #953: resolve roof child to parent Group for group-level operations.
-  if (hitObj.parent instanceof THREE.Group && hitObj.parent.userData.creator === "roof") hitObj = hitObj.parent;
+  // Resolve child mesh of any creator-tagged Group (roof, void-cut wall, etc.) to the Group.
+  if (hitObj.parent instanceof THREE.Group && hitObj.parent.userData.creator) hitObj = hitObj.parent;
   return { obj: hitObj, point: hit.point.clone() };
 }
 
