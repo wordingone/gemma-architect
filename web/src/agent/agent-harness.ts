@@ -388,7 +388,12 @@ function initWorkerIfNeeded(): Worker {
           }
           // Normal first recycle (count === 1): respawn worker without warmup (#1377).
           updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
-          for (const [, cb] of _generateCallbacks) cb.reject(new Error("d3d12-oom: worker recycled"));
+          // §C-recycle-silent (#1394): tag with isD3D12Recycle so chat-panel suppresses
+          // the error bubble. Recycle is a background recovery — badge shows ⟳, user retries.
+          for (const [, cb] of _generateCallbacks) {
+            const _re = Object.assign(new Error("d3d12-oom: worker recycled"), { isD3D12Recycle: true });
+            cb.reject(_re);
+          }
           _generateCallbacks.clear();
           // #1366: terminate old worker, then eagerly spawn the replacement so that
           // `agentmodel:boot-complete` fires when re-init completes. Without this respawn,

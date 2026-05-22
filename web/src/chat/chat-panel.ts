@@ -577,6 +577,10 @@ export class ChatPanel {
       await this._executeAndPush(resp, _turnStart);
     } catch (e) {
       this._removeThinking(thinking);
+      // §C-recycle-silent (#1394): D3D12-OOM recycle is a background recovery path.
+      // Badge already shows ⟳ via agentmodel:worker-recycled; no chat bubble needed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((e as any)?.isD3D12Recycle) { return; }
       const err = e as Error;
       this._pushMsg({ role: "assistant", content: "", error: err.message });
       // QW-3: track inference/dispatch errors for external monitoring.
