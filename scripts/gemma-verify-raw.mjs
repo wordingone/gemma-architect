@@ -6702,6 +6702,55 @@ await resetScene('before-box-inject');
   }
 }
 
+// ── S133 — wall-window-void-cut (#1545): SdWindow punches geometric void through SdWall ──
+// Verifies the WRITE path: after SdWindow, the host wall becomes a THREE.Group with the
+// correct child segment count (sill + lintel + 2 solid strips) and a cutHistory entry.
+// Regression-net for PR #1519 (void-cut) + #1524 (addVoidToWallObject).
+{
+  await resetScene('pre-S133');
+  const s133 = await evaluate(`(async () => {
+    try {
+      const scene = __viewer.getScene();
+
+      // 1. Place a wall (6 m, axis-aligned).
+      __dispatchSync('SdWall', { start: { x: 0, y: 0 }, end: { x: 6, y: 0 }, height: 2.74 });
+      await new Promise(r => setTimeout(r, 200));
+
+      // 2. Confirm wall is a Mesh before the void cut.
+      let wallBefore = null;
+      scene.traverse(o => { if (!wallBefore && o.userData && o.userData.creator === 'wall') wallBefore = o; });
+      if (!wallBefore) return { passed: false, evidence: { reason: 'wall not found after SdWall' } };
+      const typeBefore = wallBefore.type;
+
+      // 3. Place a window at the wall midpoint — should trigger addVoidToWallObject.
+      const winResult = __dispatchSync('SdWindow', { position: [3, 0, 0] });
+      await new Promise(r => setTimeout(r, 200));
+
+      // 4. Re-find the wall (uuid preserved by addVoidToWallObject).
+      let wallAfter = null;
+      scene.traverse(o => { if (!wallAfter && o.userData && o.userData.creator === 'wall') wallAfter = o; });
+
+      const voidCut = !!(winResult?.result?.voidCut);
+      const wallType = wallAfter ? wallAfter.type : 'missing';
+      // Correct decomposition: 2 solid strips + sill + lintel = 4 children.
+      // (More children occur when prior voids exist — this surface runs on a clean scene.)
+      const childCount = wallAfter ? wallAfter.children.length : -1;
+      const cutHistoryLen = wallAfter && wallAfter.userData.cutHistory
+        ? wallAfter.userData.cutHistory.length : -1;
+
+      const passed = voidCut && wallType === 'Group' && childCount === 4 && cutHistoryLen === 1;
+      return {
+        passed,
+        evidence: { typeBefore, voidCut, wallType, childCount, cutHistoryLen }
+      };
+    } catch (e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('wall-window-void-cut', !!(s133?.passed), s133 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S133');
+}
+
 } finally {
   await cleanup();
 }
