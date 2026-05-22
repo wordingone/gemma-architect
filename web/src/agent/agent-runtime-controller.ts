@@ -1,0 +1,193 @@
+// §P0-ARC (#1389): Typed runtime state machine for the model-worker lifecycle.
+// Replaces scattered boolean flags (_bootComplete, _workerReady, _prefillDone,
+// _nextInitNoWarmup, _webgpuFallbackEngaged, _modelLoadError, _modelWorkerRecycleCount,
+// _modelWorkerTurnCount, _nextInitNoWarmup) with a single controller instance.
+//
+// Design: pure state machine — no DOM, no Worker references, no side effects.
+// Callers receive transition callbacks and execute side effects themselves.
+
+export type RuntimeState =
+  | "idle"
+  | "booting"
+  | "ready"
+  | "generating"
+  | "recycling"
+  | "recovering"
+  | "failed";
+
+export type RuntimeEvent =
+  | { type: "BOOT_REQUESTED" }
+  | { type: "MODEL_READY"; device: string }
+  | { type: "BOOT_COMPLETE" }
+  | { type: "GENERATE_REQUESTED"; turnId: string }
+  | { type: "PREFILL_DONE" }
+  | { type: "GENERATE_DONE"; turnId: string }
+  | { type: "D3D12_OOM"; reason?: string }
+  | { type: "WATCHDOG_TIMEOUT"; turnId: string }
+  | { type: "WORKER_RECYCLED"; recycleCount: number; reason: string }
+  | { type: "RECOVERY_COMPLETE" }
+  | { type: "FATAL_ERROR"; error: string; reason?: string };
+
+export type TransitionCallback = (
+  from: RuntimeState,
+  event: RuntimeEvent,
+  to: RuntimeState,
+  ctrl: AgentRuntimeController,
+) => void;
+
+// Allowed transitions. Any event not listed for a state is INVALID.
+const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], RuntimeState>>> = {
+  idle:       { BOOT_REQUESTED: "booting" },
+  booting:    { MODEL_READY: "booting", BOOT_COMPLETE: "ready", FATAL_ERROR: "failed" },
+  ready:      { GENERATE_REQUESTED: "generating", BOOT_REQUESTED: "booting" },
+  generating: {
+    PREFILL_DONE:     "generating",
+    GENERATE_DONE:    "ready",
+    D3D12_OOM:        "recycling",
+    WATCHDOG_TIMEOUT: "recycling",
+    FATAL_ERROR:      "failed",
+    // Post-planned-recycle race: new worker sends model-ready/boot-complete while a
+    // generate is in flight (the old turn is still awaiting resolution).
+    MODEL_READY:      "generating",
+    BOOT_COMPLETE:    "ready",
+  },
+  recycling:  { WORKER_RECYCLED: "recovering", FATAL_ERROR: "failed" },
+  recovering: {
+    MODEL_READY:        "recovering",
+    BOOT_COMPLETE:      "ready",
+    FATAL_ERROR:        "failed",
+    // Post-planned-recycle: first turn submitted before new worker finishes booting.
+    GENERATE_REQUESTED: "generating",
+  },
+  // failed is terminal — only BOOT_REQUESTED (manual reload path) escapes it
+  failed:     { BOOT_REQUESTED: "booting" },
+};
+
+/** Set to true in tests to make invalid transitions throw instead of console.error. */
+export let strictMode = false;
+export function setStrictMode(v: boolean): void { strictMode = v; }
+
+export class AgentRuntimeController {
+  // ── Current state ──────────────────────────────────────────────────────────
+  state: RuntimeState = "idle";
+
+  // ── Derived fields (backwards-compatible with old flag names) ─────────────
+  bootComplete       = false;
+  workerReady        = false;
+  prefillDone        = false;
+  nextInitNoWarmup   = false;
+  webgpuFallbackEngaged = false;
+  modelLoadError: string | null = null;
+  deviceLabel        = "GPU";
+  recycleCount       = 0;
+  turnCount          = 0;
+  activeTurnId: string | null = null;
+
+  // ── Listeners ─────────────────────────────────────────────────────────────
+  private _listeners: TransitionCallback[] = [];
+
+  onTransition(cb: TransitionCallback): () => void {
+    this._listeners.push(cb);
+    return () => { this._listeners = this._listeners.filter(l => l !== cb); };
+  }
+
+  // ── Dispatch ─────────────────────────────────────────────────────────────
+  dispatch(event: RuntimeEvent): void {
+    const from = this.state;
+    const table = TRANSITIONS[from];
+    const to = (table as Record<string, RuntimeState>)[event.type];
+
+    if (!to) {
+      const msg = `[ARC] invalid transition: ${from} + ${event.type}`;
+      if (strictMode) throw new Error(msg);
+      console.error(msg, { state: from, event });
+      return;
+    }
+
+    this._apply(event);
+    this.state = to;
+
+    const detail = { from, event: event.type, to, turnId: this.activeTurnId ?? undefined };
+    console.debug("[ARC]", from, "──", event.type, "──>", to, detail);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("arc:transition", { detail }));
+    }
+
+    for (const l of this._listeners) {
+      try { l(from, event, to, this); } catch (e) { console.error("[ARC] listener error", e); }
+    }
+  }
+
+  // ── State mutation (called inside dispatch before updating this.state) ────
+  private _apply(ev: RuntimeEvent): void {
+    switch (ev.type) {
+      case "BOOT_REQUESTED":
+        this.bootComplete = false;
+        this.workerReady  = false;
+        this.prefillDone  = false;
+        this.webgpuFallbackEngaged = false;
+        this.modelLoadError = null;
+        this.activeTurnId = null;
+        break;
+      case "MODEL_READY":
+        this.deviceLabel = ev.device;
+        this.workerReady = true;
+        break;
+      case "BOOT_COMPLETE":
+        this.bootComplete = true;
+        // Clear nextInitNoWarmup after it was consumed
+        this.nextInitNoWarmup = false;
+        break;
+      case "GENERATE_REQUESTED":
+        this.activeTurnId = ev.turnId;
+        this.prefillDone  = false;
+        this.turnCount++;
+        break;
+      case "PREFILL_DONE":
+        this.prefillDone = true;
+        break;
+      case "GENERATE_DONE":
+        this.prefillDone  = false;
+        this.activeTurnId = null;
+        break;
+      case "D3D12_OOM":
+      case "WATCHDOG_TIMEOUT":
+        this.workerReady  = false;
+        this.bootComplete = false;
+        this.prefillDone  = false;
+        this.turnCount    = 0;
+        this.nextInitNoWarmup = true;
+        this.recycleCount++;
+        break;
+      case "WORKER_RECYCLED":
+        // Transition to "recovering" — new worker is about to be spawned.
+        // recycleCount already updated in D3D12_OOM/WATCHDOG_TIMEOUT.
+        break;
+      case "RECOVERY_COMPLETE":
+        // Unused — use BOOT_COMPLETE from recovering state instead.
+        break;
+      case "FATAL_ERROR":
+        this.webgpuFallbackEngaged = true;
+        this.bootComplete  = true; // unblocks chat-input gate
+        this.modelLoadError = ev.error;
+        this.workerReady   = false;
+        break;
+    }
+  }
+
+  // ── Convenience: is chat input allowed? ───────────────────────────────────
+  get chatInputEnabled(): boolean {
+    // Enabled when: ready, generating (streaming), or failed (so user can see error on next send).
+    // Disabled during: idle, booting, recycling, recovering.
+    return (
+      this.bootComplete &&
+      !this.webgpuFallbackEngaged &&
+      (this.state === "ready" || this.state === "generating" || this.state === "failed")
+    ) || (this.webgpuFallbackEngaged && this.bootComplete);
+  }
+
+  // ── Convenience: is a boot overlay needed? ───────────────────────────────
+  get showBootOverlay(): boolean {
+    return this.state === "idle" || this.state === "booting" || this.state === "recovering";
+  }
+}

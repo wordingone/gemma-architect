@@ -30,6 +30,9 @@ import {
   wasmChatCompletion,
 } from "./wasm-backend";
 import { VIDEO_INPUT_ENABLED, buildVideoDataUrls } from "./video-input";
+// §P0-ARC (#1389): typed runtime state machine — replaces scattered lifecycle booleans.
+import { AgentRuntimeController } from "./agent-runtime-controller";
+const _arc = new AgentRuntimeController();
 
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
@@ -77,13 +80,10 @@ export type AgentResponse = {
 
 const REMOTE_URL: string = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
 
-// P10-2: session-level flag; set on first worker error.
-// When true, all subsequent runAgentTurn() calls route to remote.
-let _webgpuFallbackEngaged = false;
-let _deviceLabel = "GPU"; // updated from worker model-ready message
-
-// Warmup deduplication guard — set to true when worker sends warmup-done.
-let _prefillDone = false;
+// §P0-ARC (#1389): lifecycle flags now live on _arc. Module-scope aliases for
+// backwards-compatible read access; all mutations go through _arc.dispatch().
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(window as any).__arc = _arc; // DevTools inspection
 
 // Standard backend (#929): dedicated Web Worker for the standard fallback path.
 // Activated when the drafter ONNX fails to load so subsequent turns don't go
@@ -131,9 +131,6 @@ const BADGE_ID = "ai-model-badge";
 
 // ── Worker state (#936) ──────────────────────────────────────────────────────
 let _inferenceWorker: Worker | null = null;
-let _workerReady = false;
-let _modelLoadError: string | null = null; // #1036: set when worker posts type:"error"
-let _bootComplete = false;                 // #1036: set when worker posts type:"boot-complete"
 type WorkerGenResult = {
   text: string; specAttempts: number; specAccepts: number;
   prefillMs: number; decodeMs: number; inputLength: number; tokensOut: number;
@@ -148,15 +145,12 @@ const _generateCallbacks = new Map<string, {
 // accumulated ONNX WebGPU buffer pool (KV cache residuals). Model weights
 // reload from browser cache — no network download after first load.
 const MODEL_WORKER_RECYCLE_AFTER = 5; // turns before forced recycle (#1313: was 10; Phase J data shows stall at turn 6 with threshold=10 — recycle after 5 turns prevents accumulated GPU state from reaching the stall point)
-let _modelWorkerTurnCount = 0;
-let _modelWorkerRecycleCount = 0;
-let _nextInitNoWarmup = false; // set by recycle path; GPU device+shaders persist, skip warmup
 if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>).__model_worker_recycle_count = 0;
 }
 
 async function recycleModelWorkerIfNeeded(): Promise<void> {
-  if (_modelWorkerTurnCount < MODEL_WORKER_RECYCLE_AFTER) return;
+  if (_arc.turnCount < MODEL_WORKER_RECYCLE_AFTER) return;
   if (!_inferenceWorker) return;
 
   // Graceful shutdown: let worker release ORT sessions + model before terminate.
@@ -175,16 +169,12 @@ async function recycleModelWorkerIfNeeded(): Promise<void> {
 
   _inferenceWorker!.terminate();
   _inferenceWorker = null;
-  _workerReady = false;
-  _bootComplete = false;
-  _prefillDone = false;
-  _modelWorkerTurnCount = 0;
-  _nextInitNoWarmup = true; // GPU device+compiled shaders persist; new worker skips warmup probe
-  _modelWorkerRecycleCount++;
-  (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
+  _arc.dispatch({ type: "D3D12_OOM", reason: "planned" }); // resets lifecycle flags, state → recycling
+  (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _arc.recycleCount;
   window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
-    detail: { recycleCount: _modelWorkerRecycleCount },
+    detail: { recycleCount: _arc.recycleCount },
   }));
+  _arc.dispatch({ type: "WORKER_RECYCLED", recycleCount: _arc.recycleCount, reason: "planned" }); // → recovering
 }
 
 // CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#811).
@@ -239,6 +229,11 @@ function initWorkerIfNeeded(): Worker {
     new URL("./model-worker.ts", import.meta.url),
     { type: "module" },
   );
+  // §P0-ARC: signal boot start only from quiescent states; recovering path skips BOOT_REQUESTED
+  // (it goes directly from recovering → ready via MODEL_READY + BOOT_COMPLETE from new worker).
+  if (_arc.state === "idle" || _arc.state === "ready" || _arc.state === "failed") {
+    _arc.dispatch({ type: "BOOT_REQUESTED" });
+  }
 
   _inferenceWorker.onmessage = (ev: MessageEvent<Record<string, unknown>>) => {
     const msg = ev.data;
@@ -272,18 +267,18 @@ function initWorkerIfNeeded(): Worker {
         break;
       }
       case "model-ready":
-        _deviceLabel = (msg.device as string) === "GPU" ? "GPU" : "CPU";
-        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel}`);
-        window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device: _deviceLabel } }));
+        _arc.dispatch({ type: "MODEL_READY", device: (msg.device as string) === "GPU" ? "GPU" : "CPU" });
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel}`);
+        window.dispatchEvent(new CustomEvent("agentmodel:ready", { detail: { device: _arc.deviceLabel } }));
         break;
       case "warmup-done":
-        _prefillDone = true;
+        _arc.dispatch({ type: "PREFILL_DONE" });
         if (msg.skipped) {
           // #1313: noWarmup path confirmed. Expose for harness (window.__agent_warmup_skipped_count).
           const w = window as unknown as Record<string, unknown>;
           w.__agent_warmup_skipped_count = ((w.__agent_warmup_skipped_count as number | undefined) ?? 0) + 1;
         }
-        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · READY`);
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · READY`);
         break;
       case "drafter-ready":
         (globalThis as any).__drafterLoaded = true;
@@ -295,11 +290,11 @@ function initWorkerIfNeeded(): Worker {
         activateStandardBackend(); // spawn dedicated standard-path worker (#929)
         break;
       case "boot-complete":
-        _bootComplete = true; // #1036
+        _arc.dispatch({ type: "BOOT_COMPLETE" }); // #1036 — sets bootComplete, clears nextInitNoWarmup
         window.dispatchEvent(new CustomEvent("agentmodel:boot-complete"));
         break;
       case "ready":
-        _workerReady = true;
+        // workerReady already set by MODEL_READY dispatch — no additional state mutation needed
         break;
       case "generate-progress":
         window.dispatchEvent(new CustomEvent("agentmodel:generate-progress", {
@@ -315,7 +310,7 @@ function initWorkerIfNeeded(): Worker {
         const cb = _generateCallbacks.get(msg.turnId as string);
         if (cb) {
           _generateCallbacks.delete(msg.turnId as string);
-          _modelWorkerTurnCount++; // #1303: track for recycle
+          // turnCount incremented by GENERATE_REQUESTED dispatch at turn start
           cb.resolve({
             text:         msg.text as string,
             specAttempts: msg.specAttempts as number,
@@ -350,36 +345,26 @@ function initWorkerIfNeeded(): Worker {
           _inferenceWorker.postMessage({ type: "destroy-device" });
           const _w = _inferenceWorker;
           _inferenceWorker = null;
-          _workerReady = false;
-          _prefillDone = false;
-          _bootComplete = false;
-          _modelWorkerTurnCount = 0;
-          // §C-recycle-no-warmup (#1377): skip warmup on recycle path.
-          // Device IS destroyed, but the 1000-token warmup probe (#1362/#1373) hits the
-          // same buffer_manager.cc:553 OrtRun bug on the fresh GPU → recycled worker
-          // crashes silently during warmup → boot-complete never fires → 240s timeout.
-          // Shader compilation happens on the first real inference anyway. Skip warmup.
-          _nextInitNoWarmup = true;
-          _modelWorkerRecycleCount++;
-          (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
+          // §P0-ARC: D3D12_OOM resets all lifecycle flags and increments recycleCount.
+          _arc.dispatch({ type: "D3D12_OOM" }); // → state = recycling
+          (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _arc.recycleCount;
           const _win = window as unknown as Record<string, unknown>;
           _win.__agent_d3d12_recycles = ((_win.__agent_d3d12_recycles as number | undefined) ?? 0) + 1;
           window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
-            detail: { recycleCount: _modelWorkerRecycleCount, reason: "d3d12-oom" },
+            detail: { recycleCount: _arc.recycleCount, reason: "d3d12-oom" },
           }));
           // §C-recycle-limit (#1381): 2+ GPU resets → page-level WGPU adapter irrecoverably
           // corrupted. Auto-respawn produces "function signature mismatch" because the new
           // worker's ONNX WASM imports fail against the torn adapter's device table.
           // Surface user-actionable reload message and halt instead of spawning a doomed worker.
-          if (_modelWorkerRecycleCount >= 2) {
-            _webgpuFallbackEngaged = true;
-            _bootComplete = true;
-            _modelLoadError = "GPU memory exhausted after multiple resets — please refresh the page to continue.";
-            for (const [, cb] of _generateCallbacks) cb.reject(new Error(_modelLoadError));
+          if (_arc.recycleCount >= 2) {
+            const _fatalMsg = "GPU memory exhausted after multiple resets — please refresh the page to continue.";
+            _arc.dispatch({ type: "FATAL_ERROR", error: _fatalMsg }); // sets webgpuFallbackEngaged, bootComplete, modelLoadError
+            for (const [, cb] of _generateCallbacks) cb.reject(new Error(_fatalMsg));
             _generateCallbacks.clear();
             updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
             window.dispatchEvent(new CustomEvent("agentmodel:fatal", {
-              detail: { reason: "recycle-limit", recycleCount: _modelWorkerRecycleCount },
+              detail: { reason: "recycle-limit", recycleCount: _arc.recycleCount },
             }));
             // Re-enable chat input so the error surfaces on the user's next send attempt.
             window.dispatchEvent(new CustomEvent("agentmodel:boot-complete"));
@@ -387,7 +372,8 @@ function initWorkerIfNeeded(): Worker {
             break;
           }
           // Normal first recycle (count === 1): respawn worker without warmup (#1377).
-          updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
+          _arc.dispatch({ type: "WORKER_RECYCLED", recycleCount: _arc.recycleCount, reason: "d3d12-oom" }); // → recovering
+          updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ⟳`);
           // §C-recycle-silent (#1394): tag with isD3D12Recycle so chat-panel suppresses
           // the error bubble. Recycle is a background recovery — badge shows ⟳, user retries.
           for (const [, cb] of _generateCallbacks) {
@@ -407,10 +393,8 @@ function initWorkerIfNeeded(): Worker {
           break;
         }
         // Non-OOM worker error: fatal path
-        _webgpuFallbackEngaged = true;
-        _modelLoadError = _errMsg; // #1036
-        _bootComplete = true;      // #1036: boot sequence ended (with error)
-        console.error("[gemma] model load failed:", _modelLoadError); // #1036 DevTools AC1
+        _arc.dispatch({ type: "FATAL_ERROR", error: _errMsg }); // #1036 — sets webgpuFallbackEngaged, bootComplete, modelLoadError
+        console.error("[gemma] model load failed:", _errMsg); // #1036 DevTools AC1
         updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
         window.dispatchEvent(new CustomEvent("agentmodel:error", { detail: msg.error }));
         for (const [, cb] of _generateCallbacks) cb.reject(new Error(_errMsg));
@@ -421,7 +405,7 @@ function initWorkerIfNeeded(): Worker {
   };
 
   _inferenceWorker.onerror = (e) => {
-    _webgpuFallbackEngaged = true;
+    _arc.webgpuFallbackEngaged = true; // direct assignment — onerror can fire from any state
     const errMsg = e.message ?? "worker error";
     updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
     for (const [, cb] of _generateCallbacks) cb.reject(new Error(errMsg));
@@ -431,8 +415,7 @@ function initWorkerIfNeeded(): Worker {
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LOADING…`);
   window.dispatchEvent(new CustomEvent("agentmodel:loading", { detail: { progress: 0 } }));
 
-  const _noWarmup = _nextInitNoWarmup;
-  _nextInitNoWarmup = false;
+  const _noWarmup = _arc.nextInitNoWarmup; // consumed — controller clears on BOOT_COMPLETE
   _inferenceWorker.postMessage({
     type:             "init",
     modelId:          MODEL_ID,
@@ -469,8 +452,8 @@ export function prefetchModel(): void {
 
 /** Remote KV warmup (#492). On-device warmup is handled by the worker. */
 async function prefillSystemPromptAsync(): Promise<void> {
-  if (_prefillDone) return;
-  _prefillDone = true;
+  if (_arc.prefillDone) return;
+  _arc.dispatch({ type: "PREFILL_DONE" });
 
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · ⟳ PRIMING`);
   try {
@@ -485,7 +468,7 @@ async function prefillSystemPromptAsync(): Promise<void> {
     });
     updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE · READY`);
   } catch {
-    _prefillDone = false;
+    _arc.prefillDone = false; // reset on failure so next call retries
     updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · REMOTE`);
   }
 }
@@ -958,7 +941,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   ];
 
   const t0 = Date.now();
-  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ⟳`);
 
   const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 4096 });
   // Drain the token stream (satisfies AC: tokens stream back via postMessage inside worker)
@@ -967,7 +950,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   const { text: responseText, tokensOut } = await stream.resultPromise;
   const decodeMs = Date.now() - t0;
   const tgTps = decodeMs > 0 ? tokensOut / (decodeMs / 1000) : 0;
-  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ${tgTps.toFixed(0)} t/s`);
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ${tgTps.toFixed(0)} t/s`);
 
   let plan: string | undefined;
   const afterPlan = responseText.replace(/<plan>([\s\S]*?)<\/plan>/i, (_, inner: string) => {
@@ -1035,7 +1018,7 @@ async function runWasmBackendTurn(req: AgentRequest): Promise<AgentResponse> {
 
 export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // P10-2: if a prior worker error engaged the session-level fallback, route remote.
-  if (REMOTE_URL && _webgpuFallbackEngaged) return runRemoteAgentTurn(req);
+  if (REMOTE_URL && _arc.webgpuFallbackEngaged) return runRemoteAgentTurn(req);
   if (REMOTE_URL) return runRemoteAgentTurn(req);
 
   // #736: WASM backend — env-gated, runs turboquant MTP in-browser via Emscripten.
@@ -1050,18 +1033,18 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   }
 
   // #1036: Guard against chip-click-before-ready (loading bar "done" but model not loaded).
-  if (_modelLoadError) {
+  if (_arc.modelLoadError) {
     // §C-error-wording (#1369): only blame WebGPU when the error text actually implicates it.
-    // _modelLoadError is set on ANY fatal worker error (fetch 401, ONNX session, etc.) — the
+    // modelLoadError is set on ANY fatal worker error (fetch 401, ONNX session, etc.) — the
     // blanket "WebGPU not supported" wording was wrong for non-adapter failures.
-    const _isWebGpuError = /WebGPU|adapter|GPUDevice|requestAdapter/i.test(_modelLoadError);
+    const _isWebGpuError = /WebGPU|adapter|GPUDevice|requestAdapter/i.test(_arc.modelLoadError);
     throw new Error(
       _isWebGpuError
-        ? `Model failed to load — WebGPU may not be supported on this device. Try Chrome 115+ on a desktop with a dedicated GPU. (${_modelLoadError})`
-        : `Model failed to load — ${_modelLoadError}. Try refreshing or check the browser console for details.`
+        ? `Model failed to load — WebGPU may not be supported on this device. Try Chrome 115+ on a desktop with a dedicated GPU. (${_arc.modelLoadError})`
+        : `Model failed to load — ${_arc.modelLoadError}. Try refreshing or check the browser console for details.`
     );
   }
-  if (!_bootComplete) {
+  if (!_arc.bootComplete) {
     throw new Error("Model is still loading — please wait a moment and try again.");
   }
 
@@ -1115,6 +1098,9 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
 
   const useMtp = !_MTP_OFF;
   const turnId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  // §P0-ARC: advance state machine; increments turnCount (used by recycle threshold).
+  // Valid from "ready" or "recovering" (post-planned-recycle first turn).
+  _arc.dispatch({ type: "GENERATE_REQUESTED", turnId });
   // §C-turn-start (#1371): observable marker so Phase J harness can confirm runAgentTurn fired.
   window.dispatchEvent(new CustomEvent("agent:turn-start", { detail: { turnId } }));
 
@@ -1130,20 +1116,14 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         _generateCallbacks.delete(turnId);
         const _stalled = _inferenceWorker;
         _inferenceWorker = null;
-        _workerReady = false;
-        _prefillDone = false;
-        _bootComplete = false;
-        _modelWorkerTurnCount = 0;
-        // §C-recycle-no-warmup (#1377): same rationale as D3D12-OOM path. Skip warmup
-        // on recycle — the 1000-token probe (#1362/#1373) crashes on the fresh GPU,
-        // blocking boot-complete for 240s. First real inference compiles shaders anyway.
-        _nextInitNoWarmup = true;
-        _modelWorkerRecycleCount++;
-        (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _modelWorkerRecycleCount;
+        // §P0-ARC: WATCHDOG_TIMEOUT resets lifecycle flags and increments recycleCount.
+        _arc.dispatch({ type: "WATCHDOG_TIMEOUT", turnId }); // → recycling
+        _arc.dispatch({ type: "WORKER_RECYCLED", recycleCount: _arc.recycleCount, reason: "generate-stall-watchdog" }); // → recovering
+        (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _arc.recycleCount;
         window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
-          detail: { recycleCount: _modelWorkerRecycleCount, reason: "generate-stall-watchdog" },
+          detail: { recycleCount: _arc.recycleCount, reason: "generate-stall-watchdog" },
         }));
-        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ⟳`);
+        updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ⟳`);
         if (_stalled) {
           _stalled.postMessage({ type: "destroy-device" }); // best-effort D3D12 cleanup
           // #1366: terminate then eagerly spawn replacement so agentmodel:boot-complete
@@ -1187,7 +1167,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
     if (msg.includes("input too long") && REMOTE_URL) return runRemoteAgentTurn(req);
-    if (_webgpuFallbackEngaged && REMOTE_URL) return runRemoteAgentTurn(req);
+    if (_arc.webgpuFallbackEngaged && REMOTE_URL) return runRemoteAgentTurn(req);
     throw err;
   }
 
@@ -1197,8 +1177,9 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const ppTps = prefillMs > 0 ? inputLength / (prefillMs / 1000) : 0;
   const _specAcceptRate = specAttempts > 0 ? specAccepts / specAttempts : 0;
   console.debug(`[agent] prefill=${Math.round(prefillMs)}ms decode=${Math.round(decodeMs)}ms in=${inputLength} out=${tokensOut} tg=${tgTps.toFixed(1)}t/s mtp=${_mtpActive}`);
+  _arc.dispatch({ type: "GENERATE_DONE", turnId }); // §P0-ARC: state → ready
   const _mtpSuffix = _mtpActive ? " · MTP" : "";
-  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_deviceLabel} · ${tgTps.toFixed(0)} t/s${_mtpSuffix}`);
+  updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ${tgTps.toFixed(0)} t/s${_mtpSuffix}`);
   recordTurn({
     ts:                  Date.now(),
     prefill_ms:          prefillMs,
