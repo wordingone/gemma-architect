@@ -300,7 +300,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         // async destroy() calls queue D3D12 commands that haven't executed by the time
         // turn 1 allocates, causing buffer_manager.cc:553 OOM → recycle.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const _wgpuDev = (tfEnv.backends as any)?.onnx?.webgpu?.device as
+        const _wgpuDev = (ort.env as any)?.webgpu?.device as
           | { queue?: { onSubmittedWorkDone?: () => Promise<void> } }
           | undefined;
         if (_wgpuDev?.queue?.onSubmittedWorkDone) {
@@ -308,8 +308,8 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           await _wgpuDev.queue.onSubmittedWorkDone().catch(() => {/* non-fatal */});
         } else {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const _b = tfEnv.backends as any;
-          console.log("[#1463] warmup-flush skipped — webgpu device unavailable", { hasBackends: !!_b, hasOnnx: !!_b?.onnx, hasWebgpu: !!_b?.onnx?.webgpu });
+          const _ortEnv = ort.env as any;
+          console.log("[#1463] warmup-flush skipped — webgpu device unavailable", { hasWebgpu: !!_ortEnv?.webgpu, hasDevice: !!_ortEnv?.webgpu?.device });
         }
       }
     } catch (e) {
@@ -422,7 +422,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         // §#1463: same GPU queue flush as main warmup probe — ensures post-drafter
         // probe's GPU commands complete before boot-complete fires.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const _wgpuDev2 = (tfEnv.backends as any)?.onnx?.webgpu?.device as
+        const _wgpuDev2 = (ort.env as any)?.webgpu?.device as
           | { queue?: { onSubmittedWorkDone?: () => Promise<void> } }
           | undefined;
         if (_wgpuDev2?.queue?.onSubmittedWorkDone) {
@@ -430,8 +430,8 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           await _wgpuDev2.queue.onSubmittedWorkDone().catch(() => {/* non-fatal */});
         } else {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const _b2 = tfEnv.backends as any;
-          console.log("[#1463] post-drafter-flush skipped — webgpu device unavailable", { hasBackends: !!_b2, hasOnnx: !!_b2?.onnx, hasWebgpu: !!_b2?.onnx?.webgpu });
+          const _ortEnv2 = ort.env as any;
+          console.log("[#1463] post-drafter-flush skipped — webgpu device unavailable", { hasWebgpu: !!_ortEnv2?.webgpu, hasDevice: !!_ortEnv2?.webgpu?.device });
         }
       }
     } catch { /* non-fatal — flush is best-effort */ }
