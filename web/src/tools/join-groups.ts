@@ -382,6 +382,123 @@ export function cutRectVoidFromBoxMesh(
   return group;
 }
 
+// ── Compound void cut (#1520) ─────────────────────────────────────────────────
+// Cuts multiple rectangular voids from a solid box mesh in one pass.
+// Avoids the single-void rebuild-and-re-cut chain that drops prior openings.
+// Single-void calls delegate to cutRectVoidFromBoxMesh (unchanged path).
+
+export interface VoidSpec {
+  center: THREE.Vector3; // world space
+  w: number;
+  h: number;
+}
+
+export function cutMultipleRectsVoidFromBoxMesh(
+  host: THREE.Mesh,
+  voids: VoidSpec[],
+): THREE.Group | null {
+  if (voids.length === 0) return null;
+  if (voids.length === 1) return cutRectVoidFromBoxMesh(host, voids[0].center, voids[0].w, voids[0].h);
+
+  host.updateMatrixWorld(true);
+  const geom = host.geometry as THREE.BufferGeometry;
+  geom.computeBoundingBox();
+  const bb = geom.boundingBox;
+  if (!bb) return null;
+
+  const wallLen   = bb.max.x - bb.min.x;
+  const wallThick = bb.max.y - bb.min.y;
+  const wallHt    = bb.max.z - bb.min.z;
+  const wallXMin  = bb.min.x;
+  const wallXMax  = bb.max.x;
+  const wallZMin  = bb.min.z;
+  const wallZMax  = bb.max.z;
+
+  // Convert void centers to wall-local X/Z ranges
+  const localVoids = voids.map(v => {
+    const lc = host.worldToLocal(v.center.clone());
+    return {
+      xMin: lc.x - v.w / 2,
+      xMax: lc.x + v.w / 2,
+      zMin: lc.z - v.h / 2,
+      zMax: lc.z + v.h / 2,
+    };
+  });
+
+  // Collect all unique X boundaries that lie inside the wall
+  const rawX = new Set<number>([wallXMin, wallXMax]);
+  for (const lv of localVoids) {
+    if (lv.xMin > wallXMin && lv.xMin < wallXMax) rawX.add(lv.xMin);
+    if (lv.xMax > wallXMin && lv.xMax < wallXMax) rawX.add(lv.xMax);
+  }
+  const xBounds = Array.from(rawX).sort((a, b) => a - b);
+
+  const mat = (Array.isArray(host.material) ? host.material[0] : host.material) as THREE.Material;
+  const group = new THREE.Group();
+  const MIN_DIM = 0.001;
+
+  const addSeg = (segW: number, segH: number, cx: number, cz: number) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(segW, wallThick, segH), mat);
+    m.position.set(cx, 0, cz);
+    group.add(m);
+  };
+
+  for (let i = 0; i < xBounds.length - 1; i++) {
+    const xL = xBounds[i];
+    const xR = xBounds[i + 1];
+    const stripW = xR - xL;
+    if (stripW < MIN_DIM) continue;
+
+    // Collect void Z intervals that cover this X strip (fully or partially)
+    const voidZs: Array<{ zMin: number; zMax: number }> = [];
+    for (const lv of localVoids) {
+      if (lv.xMax <= xL || lv.xMin >= xR) continue;
+      voidZs.push({ zMin: Math.max(lv.zMin, wallZMin), zMax: Math.min(lv.zMax, wallZMax) });
+    }
+
+    // Merge overlapping Z void intervals
+    voidZs.sort((a, b) => a.zMin - b.zMin);
+    const merged: Array<{ zMin: number; zMax: number }> = [];
+    for (const vi of voidZs) {
+      if (merged.length > 0 && vi.zMin <= merged[merged.length - 1].zMax) {
+        merged[merged.length - 1].zMax = Math.max(merged[merged.length - 1].zMax, vi.zMax);
+      } else {
+        merged.push({ ...vi });
+      }
+    }
+
+    // Emit solid Z segments (complement of merged void intervals)
+    let solidZ = wallZMin;
+    for (const vi of merged) {
+      if (vi.zMin > solidZ + MIN_DIM) {
+        const segH = vi.zMin - solidZ;
+        addSeg(stripW, segH, xL + stripW / 2, solidZ + segH / 2);
+      }
+      solidZ = vi.zMax;
+    }
+    if (solidZ < wallZMax - MIN_DIM) {
+      const segH = wallZMax - solidZ;
+      addSeg(stripW, segH, xL + stripW / 2, solidZ + segH / 2);
+    }
+  }
+
+  // Copy transform + metadata
+  group.position.copy(host.position);
+  group.rotation.copy(host.rotation);
+  group.scale.copy(host.scale);
+  group.userData = { ...host.userData };
+  group.uuid = host.uuid;
+
+  const parent = host.parent;
+  if (!parent) return null;
+  parent.remove(host);
+  geom.dispose();
+  parent.add(group);
+
+  group.userData.originalWallDims = { w: wallLen, d: wallThick, h: wallHt };
+  return group;
+}
+
 // ── Stair void cut for slabs (#900) ──────────────────────────────────────────
 // Cuts a rectangular opening in a horizontal slab mesh (XY cut, opposite of
 // cutRectVoidFromBoxMesh which cuts in XZ). Returns a Group in place of the slab,

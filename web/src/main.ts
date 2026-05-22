@@ -56,7 +56,7 @@ import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
-import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh } from "./tools/join-groups";
+import { onElementCommitted, cutRectVoidFromBoxMesh, cutSlabVoidFromBoxMesh, cutMultipleRectsVoidFromBoxMesh, type VoidSpec } from "./tools/join-groups";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
@@ -1018,6 +1018,9 @@ registerHandler("SdStair", (args) => {
 // §#1516/#1518: void-cut helper that handles both Mesh (fresh wall) and Group (already void-cut wall).
 // Group walls occur when a previous opening already cut the wall. Rebuilds solid from originalWallDims,
 // then applies the new void. Prior voids on same wall are temporarily cleared — compound-void (#1519).
+// §#1520: Stored cut-history entry — world-space center array + void dims.
+type CutHistoryEntry = { center: [number, number, number]; w: number; h: number };
+
 function cutVoidFromWallObject(
   wallObj: THREE.Object3D,
   voidCenter: THREE.Vector3,
@@ -1025,7 +1028,14 @@ function cutVoidFromWallObject(
   voidH: number,
 ): THREE.Group | null {
   if (wallObj instanceof THREE.Mesh) {
-    return cutRectVoidFromBoxMesh(wallObj, voidCenter, voidW, voidH);
+    const result = cutRectVoidFromBoxMesh(wallObj, voidCenter, voidW, voidH);
+    if (result) {
+      // §#1520: seed cut history so Group-path replays preserve prior voids.
+      (result.userData as Record<string, unknown>).cutHistory = [
+        { center: voidCenter.toArray() as [number, number, number], w: voidW, h: voidH },
+      ] satisfies CutHistoryEntry[];
+    }
+    return result;
   }
   if (wallObj instanceof THREE.Group) {
     const dims = (wallObj.userData as Record<string, unknown>).originalWallDims as
@@ -1041,14 +1051,31 @@ function cutVoidFromWallObject(
     solid.position.copy(wallObj.position);
     solid.quaternion.copy(wallObj.quaternion);
     solid.scale.copy(wallObj.scale);
+    // Copy userData EXCEPT originalWallDims (the solid is fresh; Group gets it set by cut fn).
     solid.userData = { ...wallObj.userData };
     delete (solid.userData as Record<string, unknown>).originalWallDims;
+    delete (solid.userData as Record<string, unknown>).cutHistory;
     solid.uuid = wallObj.uuid;
     solid.updateMatrix();
     solid.updateMatrixWorld(true);
     wallObj.parent?.remove(wallObj);
     wallObj.parent?.add(solid);
-    return cutRectVoidFromBoxMesh(solid, voidCenter, voidW, voidH);
+
+    // §#1520: gather all prior cuts + the new cut, replay at once so every void is preserved.
+    const history = ((wallObj.userData as Record<string, unknown>).cutHistory ?? []) as CutHistoryEntry[];
+    const allVoids: VoidSpec[] = [
+      ...history.map(e => ({ center: new THREE.Vector3(...e.center), w: e.w, h: e.h })),
+      { center: voidCenter, w: voidW, h: voidH },
+    ];
+    const result = cutMultipleRectsVoidFromBoxMesh(solid, allVoids);
+    if (result) {
+      (result.userData as Record<string, unknown>).cutHistory = allVoids.map(v => ({
+        center: v.center.toArray() as [number, number, number],
+        w: v.w,
+        h: v.h,
+      })) satisfies CutHistoryEntry[];
+    }
+    return result;
   }
   return null;
 }
