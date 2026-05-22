@@ -286,6 +286,70 @@ export interface StairFootprint { minX: number; minY: number; maxX: number; maxY
 const _stepMat = (): THREE.MeshStandardMaterial =>
   new THREE.MeshStandardMaterial({ color: 0xc8b8a2, roughness: 0.7, metalness: 0.0 });
 
+// 2D line intersection. Returns null if lines are parallel (cross product ≈ 0).
+function _intersect2D(
+  p1: { x: number; y: number }, d1: { x: number; y: number },
+  p2: { x: number; y: number }, d2: { x: number; y: number },
+): { x: number; y: number } | null {
+  const cross = d1.x * d2.y - d1.y * d2.x;
+  if (Math.abs(cross) < 1e-9) return null;
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  const t = (dx * d2.y - dy * d2.x) / cross;
+  return { x: p1.x + t * d1.x, y: p1.y + t * d1.y };
+}
+
+// Build a parametric landing mesh whose plan-shape is a parallelogram aligned to the
+// incoming (d1) and outgoing (d2) flight directions. Replaces the fixed square box.
+// Falls back to a rectangular box when flights are nearly parallel (|sin θ| < 0.1).
+function _makeLandingMesh(
+  pB: { x: number; y: number },
+  d1n: { x: number; y: number }, // normalized incoming direction
+  d2n: { x: number; y: number }, // normalized outgoing direction
+  stairW: number,
+  landingT: number,
+  zBase: number,
+  stairId: string,
+): THREE.Mesh {
+  const half = stairW / 2;
+  const n1 = { x: -d1n.y, y: d1n.x }; // left-normal of d1
+  const n2 = { x: -d2n.y, y: d2n.x }; // left-normal of d2
+
+  // Four bounding edge lines of the landing (pair aligned to each flight direction).
+  const pL1 = { x: pB.x + n1.x * half, y: pB.y + n1.y * half };
+  const pR1 = { x: pB.x - n1.x * half, y: pB.y - n1.y * half };
+  const pL2 = { x: pB.x + n2.x * half, y: pB.y + n2.y * half };
+  const pR2 = { x: pB.x - n2.x * half, y: pB.y - n2.y * half };
+
+  // Fallback corners (axis-aligned square) used when flights are parallel.
+  const fallback: Array<{ x: number; y: number }> = [
+    { x: pB.x - half, y: pB.y + half },
+    { x: pB.x - half, y: pB.y - half },
+    { x: pB.x + half, y: pB.y - half },
+    { x: pB.x + half, y: pB.y + half },
+  ];
+
+  const A = _intersect2D(pL1, d1n, pL2, d2n) ?? fallback[0];
+  const B = _intersect2D(pR1, d1n, pL2, d2n) ?? fallback[1];
+  const C = _intersect2D(pR1, d1n, pR2, d2n) ?? fallback[2];
+  const D = _intersect2D(pL1, d1n, pR2, d2n) ?? fallback[3];
+
+  const shape = new THREE.Shape();
+  shape.moveTo(A.x - pB.x, A.y - pB.y);
+  shape.lineTo(B.x - pB.x, B.y - pB.y);
+  shape.lineTo(C.x - pB.x, C.y - pB.y);
+  shape.lineTo(D.x - pB.x, D.y - pB.y);
+  shape.closePath();
+
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: landingT, bevelEnabled: false });
+  const mesh = new THREE.Mesh(geo, _stepMat());
+  mesh.position.set(pB.x, pB.y, zBase);
+  mesh.userData.kind = "brep";
+  mesh.userData.creator = "stair";
+  mesh.userData.ifcClass = "IfcSlab";
+  mesh.userData.parentId = stairId;
+  return mesh;
+}
+
 // Single-solid stair flight: stepped top + diagonal underside (stringer) as one ExtrudeGeometry.
 // Shape in XY with Y negative = height, so makeRotationX(-PI/2) maps: shape-X→world-X, shape-Y→world-Z.
 function _buildFlightSolid(
@@ -562,19 +626,12 @@ export function buildStairOnPolyline(
     zCurrent += n * riser;
 
     if (seg < pts.length - 2) {
-      const landing = new THREE.Mesh(
-        new THREE.BoxGeometry(stairW, stairW, landingT),
-        _stepMat(),
-      );
-      landing.position.set(
-        pB.x,
-        pB.y,
-        zCurrent + landingT / 2,
-      );
-      landing.userData.kind = "brep";
-      landing.userData.creator = "stair";
-      landing.userData.ifcClass = "IfcSlab";
-      landing.userData.parentId = stairId;
+      const pC = pts[seg + 2];
+      const dx2 = pC.x - pB.x, dy2 = pC.y - pB.y;
+      const segLen2 = Math.sqrt(dx2 * dx2 + dy2 * dy2) || 1;
+      const d1n = { x: dx / segLen, y: dy / segLen };
+      const d2n = { x: dx2 / segLen2, y: dy2 / segLen2 };
+      const landing = _makeLandingMesh(pB, d1n, d2n, stairW, landingT, zCurrent, stairId);
       group.add(landing);
       zCurrent += landingT; // next flight starts above the landing
     }
@@ -602,20 +659,15 @@ export function buildStairOnCurve(
   group.userData.creator = "stair";
   group.userData.stairId = stairId;
 
-  // Tessellate the curve.
+  // Tessellate the curve via Catmull-Rom spline so flights actually arc.
   const sampleCount = Math.max(ctrlPts.length * 32, 128);
   const sampled: Array<{ x: number; y: number }> = [];
   if (ctrlPts.length >= 2) {
-    // Linear interpolation fallback when NURBS unavailable; proper NURBS via buildCurve path.
-    for (let i = 0; i <= sampleCount; i++) {
-      const t = i / sampleCount;
-      const si = Math.min(Math.floor(t * (ctrlPts.length - 1)), ctrlPts.length - 2);
-      const lt = t * (ctrlPts.length - 1) - si;
-      sampled.push({
-        x: ctrlPts[si].x * (1 - lt) + ctrlPts[si + 1].x * lt,
-        y: ctrlPts[si].y * (1 - lt) + ctrlPts[si + 1].y * lt,
-      });
-    }
+    const crCurve = new THREE.CatmullRomCurve3(
+      ctrlPts.map(p => new THREE.Vector3(p.x, p.y, 0)),
+      false, "catmullrom", 0.5,
+    );
+    crCurve.getPoints(sampleCount).forEach(v => sampled.push({ x: v.x, y: v.y }));
   }
 
   // Arc lengths.
@@ -659,13 +711,14 @@ export function buildStairOnCurve(
     _landingStepIndices.add(Math.min(stepIdx, nRisers - 1));
     const pos = sampleAt(_ctrlArcLens[k]);
     const zLanding = stepIdx * riser;
-    const ldg = new THREE.Mesh(new THREE.BoxGeometry(stairW * 1.2, stairW * 1.2, landingT), _stepMat());
-    ldg.position.set(pos.x, pos.y, zLanding + landingT / 2);
-    ldg.rotation.z = pos.angRad;
-    ldg.userData.kind = "brep";
-    ldg.userData.creator = "stair";
-    ldg.userData.ifcClass = "IfcSlab";
-    ldg.userData.parentId = stairId;
+    // Parametric landing aligned to incoming and outgoing curve tangents.
+    const prevPos = sampleAt(Math.max(0, _ctrlArcLens[k] - actualT * 0.5));
+    const nextPos = sampleAt(Math.min(totalArcLen, _ctrlArcLens[k] + actualT * 0.5));
+    const d1Len = Math.sqrt((pos.x - prevPos.x) ** 2 + (pos.y - prevPos.y) ** 2) || 1;
+    const d2Len = Math.sqrt((nextPos.x - pos.x) ** 2 + (nextPos.y - pos.y) ** 2) || 1;
+    const d1n = { x: (pos.x - prevPos.x) / d1Len, y: (pos.y - prevPos.y) / d1Len };
+    const d2n = { x: (nextPos.x - pos.x) / d2Len, y: (nextPos.y - pos.y) / d2Len };
+    const ldg = _makeLandingMesh(pos, d1n, d2n, stairW, landingT, zLanding, stairId);
     group.add(ldg);
   }
 

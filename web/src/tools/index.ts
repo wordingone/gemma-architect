@@ -376,12 +376,20 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   stair:           { clicks: 2,  handler: atZ(([a, b]) => {
     const lvl = levelStore.get(getActiveLevelId());
     const rise = lvl?.height ?? 3.0;
-    // Run-derived count: step count adapts to drag distance; riser scaled to reach floor.
     const dx = b.x - a.x, dy = b.y - a.y;
     const totalRun = Math.sqrt(dx * dx + dy * dy) || 0.2794;
-    const count = Math.max(2, Math.round(totalRun / 0.2794));
+    // Run-derived count from IBC 11" tread; rise-derived count from IBC 7" max riser.
+    // Use whichever requires more steps — prevents oversized risers on short drags.
+    const runCount  = Math.max(2, Math.round(totalRun / 0.2794));
+    const riseCount = Math.max(2, Math.ceil(rise / 0.1778));
+    const count = Math.max(runCount, riseCount);
     const riserHeight = rise / count;
-    const { group, chain } = buildStair(a, b, { count, riserHeight });
+    // If rise-derived count dominates, extend endpoint so treads stay 11".
+    const neededRun = count * 0.2794;
+    const bEff = neededRun > totalRun
+      ? { x: a.x + dx * (neededRun / totalRun), y: a.y + dy * (neededRun / totalRun) }
+      : b;
+    const { group, chain } = buildStair(a, bEff, { count, riserHeight });
     return { mesh: group, chain };
   }) },
   "stair-polyline": { clicks: -1, handler: atZ((pts) => { const lvl = levelStore.get(getActiveLevelId()); const rise = lvl?.height ?? 3.0; const { group, chain } = buildStairOnPolyline(pts, { rise }); return { mesh: group, chain }; }) },
