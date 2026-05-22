@@ -355,13 +355,18 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       // If it times out, reject falls to catch → WASM retry (avoids GPU conflict on inference).
       // §#1463-revert: restore WebGPU-first path; WASM-only (#1460) caused recovery worker
       // to hang indefinitely (from_pretrained blocked on bad GPU state, no timeout path).
+      // §#1458: timeout extended 60s → 180s. OOM analysis: drafter InferenceSession.create
+      // takes ~120s on cold-cache (WebGPU shader compilation). The 60s timeout abandoned
+      // the create while GPU work was still running; 60s into turn 1 the GPU allocation
+      // completed and collided with the main model's OrtRun → buffer_manager OOM.
+      // At 180s, session.create finishes before timeout → GPU is clean at boot-complete.
       _drafterSession = await Promise.race([
         ort.InferenceSession.create(drafterBuf, {
           executionProviders: ["webgpu", "wasm"],
           preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
         }),
         new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error("drafter-ort-timeout-60s")), 60_000)
+          setTimeout(() => reject(new Error("drafter-ort-timeout-180s")), 180_000)
         ),
       ]);
       _bootDrafterDone = true;
@@ -369,7 +374,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     } catch (e) {
       _bootDrafterDone = true;
       const errMsg = (e as Error).message ?? "";
-      if (errMsg === "drafter-ort-timeout-60s" && (drafterBuf as ArrayBuffer)?.byteLength > 0) {
+      if (errMsg === "drafter-ort-timeout-180s" && (drafterBuf as ArrayBuffer)?.byteLength > 0) {
         // §#1454: WebGPU shader compilation deadlocked. The abandoned ORT init still holds
         // the GPU queue, causing OrtRun failures on the main model during inference.
         // Retry with WASM-only — CPU execution avoids the GPU device conflict entirely.
