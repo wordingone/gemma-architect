@@ -3,8 +3,5 @@ demo-prompt-design-house  # #494  NL agent verb output nondeterministic: model s
 chat-plan-foldable  # #538  cascade from S54/S56 model latency timeouts; testMode fixes direct timeout but not UI-state contamination
 skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) populating scene; S54 skips on model latency timeout
 demo-cluster-flow  # #670  new surface — allow-fail until first green run confirms timing
-# --- hackathon sprint regressions (#1268) — gate suspended 2026-05-15..2026-05-19 ---
-# Archie queue (individual issues filed):
-wall-slab-cross-level-trim  # #1240  TypeError: THREE.Box3 undefined at runtime
-# Tracked regressions — individual issues filed (fix via Archie queue):
+# Tracked regression — individual issue filed:
 open-project-round-trip  # #1333  file save/load round-trip broken
