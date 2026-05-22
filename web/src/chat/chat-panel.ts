@@ -191,6 +191,7 @@ export class ChatPanel {
   private _fileInputEl!: HTMLInputElement;
   private _continuationRunning = false;
   private _continuationSuppressed = false;
+  private _continuationCount = 0;
   private _fatalBubbleShown = false;
   private _watchdogTimeoutPending = false;
   private _contextChipEl!: HTMLDivElement;
@@ -259,7 +260,15 @@ export class ChatPanel {
       if (this._continuationRunning || this._sendBtn.disabled) return;
       if (this._continuationSuppressed) return;
       if (detail.verbs.length === 0) {
-        this._continuationSuppressed = true;
+        if (this._continuationCount === 0) {
+          // #1482 (A): Initial user turn emitted plan-prose but no dispatches.
+          // Plan is the model's thinking — not doneness. Fire an execute-plan
+          // continuation to flush the planned tool_calls rather than suppressing.
+          void this._runContinuation(goal, "execute-plan");
+        } else {
+          // Continuation turn produced no dispatches — model has nothing more to do.
+          this._continuationSuppressed = true;
+        }
         return;
       }
       void this._runContinuation(goal);
@@ -564,6 +573,7 @@ export class ChatPanel {
         }
       }
       this._continuationSuppressed = false;
+      this._continuationCount = 0;
 
       // Auto-clear scene for fresh design prompts — file-loaded IFC or prior geometry
       // pollutes the agent context and produces geometry on top of existing structure (#476).
@@ -617,7 +627,9 @@ export class ChatPanel {
           history: this._history.slice(0, -1),
           skills: skillsToPass,
           skillsTotal: this._skills.length,
-          maxNewTokens: estimateMaxTokens(text),
+          // #1482 (B2): cap initial turn at 384 tokens so the model emits compact plan +
+          // 3-5 dispatches. Continuation turns pass maxNewTokens:2048 via _runContinuation.
+          maxNewTokens: Math.min(estimateMaxTokens(text), 384),
           userImage: effectiveImage,
         });
       } finally {
@@ -632,43 +644,6 @@ export class ChatPanel {
       // #980: goal-mode default — always auto-execute, no plan-pending UI.
       await this._executeAndPush(resp, _turnStart);
     } catch (e) {
-      // §C-recycle-silent (#1394): D3D12-OOM / WASM-heap recycle — keep thinking visible,
-      // wait for fresh worker, then auto-retry the same prompt. (#688)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((e as any)?.isD3D12Recycle) {
-        await new Promise<void>(res =>
-          window.addEventListener("agentmodel:boot-complete", res as EventListener, { once: true })
-        );
-        // #688 iter-11G: boot-complete fires before ARC transitions recovering→ready.
-        // Starting PREFILL while ARC is in recovering causes PREFILL_DONE invalid-transition
-        // → second recycle → recycleCount=2 → fatal. Poll until ready (max 5s).
-        for (let _i = 0; _i < 10; _i++) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          if ((window as any).__arc?.state === "ready") break;
-          await new Promise(r => setTimeout(r, 500));
-        }
-        try {
-          const _s2 = this._skills.length > 0 ? findSkillsForPrompt(this._skills, text) : this._skills;
-          const resp2 = await runAgentTurn({
-            prompt: text,
-            // #688 iter-11G: fresh WASM heap after recycle can't handle full-history re-PREFILL.
-            // Sending empty history keeps the input_ids tensor tiny → no alignment issue.
-            history: [],
-            skills: _s2,
-            skillsTotal: this._skills.length,
-            maxNewTokens: estimateMaxTokens(text),
-            userImage,
-          });
-          this._removeThinking(thinking);
-          await this._executeAndPush(resp2, _turnStart);
-        } catch (retryErr) {
-          this._removeThinking(thinking);
-          const _msg2 = (retryErr as Error).message ?? String(retryErr);
-          this._pushMsg({ role: "assistant", content: "", error: _msg2 });
-          (window as unknown as _GemmaW).__gemmaSession.errorCount++;
-        }
-        return;
-      }
       this._removeThinking(thinking);
       const err = e as Error;
       const isGpuFatal = err.message.includes("GPU memory exhausted");
@@ -811,14 +786,19 @@ export class ChatPanel {
   }
 
   // A6 (#980): continuation turn — runs one more agent turn while goal is active.
-  private async _runContinuation(goal: Goal): Promise<void> {
+  // #1482 (A): mode="execute-plan" fires when the initial turn emitted plan-prose but
+  // no dispatches. Uses a stronger prompt so the model emits tool_calls immediately.
+  private async _runContinuation(goal: Goal, mode?: "execute-plan"): Promise<void> {
     if (this._continuationRunning) return;
     this._continuationRunning = true;
+    this._continuationCount++;
     this._sendBtn.disabled = true;
     this._sendBtn.textContent = "…";
     const thinking = this._appendThinking();
     try {
-      const continuationPrompt = `Continue working toward the goal: "${goal.objective}". Dispatch the next batch of building elements. Call update_goal({"status":"complete"}) when fully done.`;
+      const continuationPrompt = mode === "execute-plan"
+        ? `Your previous turn emitted a <plan> block but no <tool_call> dispatches. Execute the plan now — output ONLY <tool_call> blocks (5-10 per turn maximum). Do not re-state the plan. When all planned steps are dispatched, emit <tool_call>{"name":"update_goal","arguments":{"status":"complete"},"metadata":{"source":"agent"}}</tool_call>.`
+        : `Continue working toward the goal: "${goal.objective}". Dispatch the next batch of building elements (5-10 tool_calls maximum per turn). Call update_goal({"status":"complete"}) when fully done.`;
       this._history.push({ role: "user", content: continuationPrompt });
       this._enforceHistoryBudget();
       const resp = await runAgentTurn({

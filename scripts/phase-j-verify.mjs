@@ -31,13 +31,18 @@ const PROMPT_N    = Number(process.argv.find(a => a.startsWith("--prompts="))?.s
 const BOOT_TIMEOUT_MS  = COLD_CACHE ? 65 * 60 * 1000 : 10 * 60 * 1000;  // 65 min cold (local override — 2.5GB re-download), 10 min warm
 const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retry (90s recovery + 226s generation)
 
-const DEMO_PROMPTS = [
-  "Design a house",
-  "Design an apartment",
-  "Design a 2-storey house",
-  "Design a small office",
-  "Design a tiny home",
-].slice(0, PROMPT_N);
+// #1476/#1482: use STARTER_PROMPTS sequence per user directive 2026-05-21.
+// Turn 1: full architectural goal (tests goal-mode + multi-turn dispatch).
+// Turn 2: scene-query (tests NL-only response path — no dispatches expected).
+// Turns 3-5: continuation goals.
+const STARTER_PROMPTS = [
+  "Build a two-story residential house, 8m wide by 6m deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
+  "What's currently in the scene?",
+  "Add a single-car garage attached to the south wall, 5m wide by 4m deep.",
+  "What's currently in the scene?",
+  "Add a garden wall along the north boundary, 12m long and 1m tall.",
+];
+const DEMO_PROMPTS = STARTER_PROMPTS.slice(0, PROMPT_N);
 
 function ts() { return new Date().toISOString(); }
 function getSHA() {
@@ -161,6 +166,18 @@ eventHandlers.push(evt => {
 
 await cdp("Page.addScriptToEvaluateOnNewDocument", {
   source: `window.__compact_events=[];window.addEventListener('agentmodel:compact',function(e){window.__compact_events.push({ts:Date.now(),preTurns:e.detail.preTurns,postTurns:e.detail.postTurns});});`,
+});
+
+// #1482: capture per-turn dispatch counts + goal state for receipt schema extensions.
+await cdp("Page.addScriptToEvaluateOnNewDocument", {
+  source: `window.__phase_j_turns=[];window.__phase_j_current={dispatchVerbs:[],goalState:'absent'};
+window.addEventListener('agent:turn-complete',function(e){
+  var v=e.detail&&e.detail.verbs?e.detail.verbs:[];
+  window.__phase_j_current.dispatchVerbs=v;
+});
+window.addEventListener('goal:state-change',function(e){
+  window.__phase_j_current.goalState=e.detail&&e.detail.status?e.detail.status:'unknown';
+});`,
 });
 
 // ── Reload tab (unless --no-reload) ───────────────────────────────────────────
@@ -350,13 +367,34 @@ if (bootComplete) {
     const turnBufferErrors = bufferManagerErrors.length - preErrorCount;
     if (i === 0) turn1BufferManagerErrors = turnBufferErrors;
 
+    // #1482: collect dispatch count + goal state from injected collector.
+    const phaseTurnData = await evaluate("window.__phase_j_current ?? {}", 5000) ?? {};
+    const dispatchVerbs = Array.isArray(phaseTurnData.dispatchVerbs) ? phaseTurnData.dispatchVerbs : [];
+    const dispatchCount = dispatchVerbs.length;
+    const goalState     = phaseTurnData.goalState ?? "absent";
+    const isNlResponse  = dispatchCount === 0 && outcome === "generate-done";
+    // Reset for next turn.
+    await evaluate("window.__phase_j_current={dispatchVerbs:[],goalState:'absent'}", 2000).catch(() => null);
+
     const durationMs = Date.now() - turnMs0;
     const fatalErrorMsg = outcome === "fatal-error" ? (turnResults._lastFatalMsg ?? null) : undefined;
     delete turnResults._lastFatalMsg;
     const icon = outcome === "generate-done" && !workerRecycled ? "✓" : "✗";
-    console.log(`  ${icon} outcome=${outcome} recycled=${workerRecycled} bufferMgrErrors=${turnBufferErrors} duration=${Math.round(durationMs/1000)}s`);
+    const dispatchTag = dispatchCount > 0 ? ` dispatches=${dispatchCount}` : (isNlResponse ? " nl-only" : "");
+    console.log(`  ${icon} outcome=${outcome} recycled=${workerRecycled} bufferMgrErrors=${turnBufferErrors}${dispatchTag} goalState=${goalState} duration=${Math.round(durationMs/1000)}s`);
 
-    const turnEntry = { prompt, sent: true, outcome, workerRecycled, bufferManagerErrors: turnBufferErrors, durationMs };
+    const turnEntry = {
+      prompt,
+      sent: true,
+      outcome,
+      workerRecycled,
+      bufferManagerErrors: turnBufferErrors,
+      dispatchCount,
+      dispatchVerbs,
+      goalState,
+      nlResponse: isNlResponse,
+      durationMs,
+    };
     if (fatalErrorMsg !== undefined) turnEntry.fatalErrorMsg = fatalErrorMsg;
     turnResults.push(turnEntry);
   }
@@ -397,7 +435,8 @@ if (compactEvents.length > 0) {
 console.log(`├──────────────────────────────────────────────────────┤`);
 for (const r of turnResults) {
   const icon = r.outcome === "generate-done" && !r.workerRecycled ? "✓" : "✗";
-  const label = `${icon} ${r.prompt.slice(0,25).padEnd(25)} [${r.outcome}${r.workerRecycled?" recycled":""}${r.bufferManagerErrors>0?" bufMgr!":""}]`;
+  const tags = [r.outcome, r.workerRecycled?"recycled":"", r.bufferManagerErrors>0?"bufMgr!":"", r.nlResponse?"nl-only":r.dispatchCount>0?`d=${r.dispatchCount}`:"", r.goalState!=="absent"?`goal:${r.goalState}`:""].filter(Boolean).join(" ");
+  const label = `${icon} ${r.prompt.slice(0,22).padEnd(22)} [${tags}]`;
   console.log(`│  ${label.padEnd(52)}│`);
 }
 const passed = bootComplete && arcInvClean && bufMgrClean && cleanTurns >= Math.ceil(PROMPT_N * 0.6);
@@ -407,6 +446,12 @@ console.log(verdict.padEnd(54) + "  │");
 console.log(`└──────────────────────────────────────────────────────┘`);
 
 // ── Write receipt ──────────────────────────────────────────────────────────────
+
+// #1482: aggregate dispatch metrics across all turns.
+const totalDispatches  = turnResults.reduce((s, r) => s + (r.dispatchCount ?? 0), 0);
+const turnsWithDispatch = turnResults.filter(r => (r.dispatchCount ?? 0) > 0).length;
+const turn1DispatchCount = turnResults[0]?.dispatchCount ?? 0;
+const turn1GoalState     = turnResults[0]?.goalState ?? "absent";
 
 const receipt = {
   sha,
@@ -420,6 +465,11 @@ const receipt = {
   arc_invalid_clean: arcInvClean,
   buffer_manager_errors: bufferManagerErrors,
   buffer_manager_turn1_clean: bufMgrClean,
+  // #1482 dispatch metrics
+  turn1_dispatch_count: turn1DispatchCount,
+  turn1_goal_state: turn1GoalState,
+  total_dispatches: totalDispatches,
+  turns_with_dispatch: turnsWithDispatch,
   turns: turnResults,
   clean_turns: cleanTurns,
   done_turns: doneTurns,
