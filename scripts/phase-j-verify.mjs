@@ -439,8 +439,17 @@ for (const r of turnResults) {
   const label = `${icon} ${r.prompt.slice(0,22).padEnd(22)} [${tags}]`;
   console.log(`│  ${label.padEnd(52)}│`);
 }
-const passed = bootComplete && arcInvClean && bufMgrClean && cleanTurns >= Math.ceil(PROMPT_N * 0.6);
+// #1482/#1477: dispatch gate — turn 1 must dispatch tool_calls (not plan-only);
+// turn 2 (scene-query) must produce NL-only response (no dispatch).
+const turn1DispatchOk = turn1DispatchCount >= 3;
+const turn2NlOk       = turnResults[1]?.nlResponse === true;
+const passed = bootComplete && arcInvClean && bufMgrClean
+  && cleanTurns >= Math.ceil(PROMPT_N * 0.6)
+  && turn1DispatchOk
+  && turn2NlOk;
 console.log(`├──────────────────────────────────────────────────────┤`);
+console.log(`│  turn1 dispatch: ${String(turn1DispatchOk ? `${turn1DispatchCount} dispatches ✓` : `${turn1DispatchCount} dispatches ✗ (need ≥3)`).padEnd(35)}│`);
+console.log(`│  turn2 NL-only : ${String(turn2NlOk ? "true ✓" : `${turnResults[1]?.nlResponse} ✗`).padEnd(35)}│`);
 const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : "FAIL"}`;
 console.log(verdict.padEnd(54) + "  │");
 console.log(`└──────────────────────────────────────────────────────┘`);
