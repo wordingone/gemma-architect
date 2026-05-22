@@ -351,7 +351,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       ) as string;
       const _syncIn = await proc(_syncText, null);
       if ((_syncIn.input_ids?.dims?.[1] ?? 0) < WEBGPU_CONTEXT_LIMIT - 64) {
-        await (_model as any).generate({ ..._syncIn, max_new_tokens: 1, do_sample: false });
+        // §#1416: Promise.race with 30s timeout — generate() can hang indefinitely on
+        // cold-cache if drafter ORT WebGPU shader compilation still holds the GPU queue.
+        // The probe is best-effort; timeout ensures checkBootComplete() always runs.
+        await Promise.race([
+          (_model as any).generate({ ..._syncIn, max_new_tokens: 1, do_sample: false }),
+          new Promise<void>(r => setTimeout(r, 30_000)),
+        ]);
       }
     } catch { /* non-fatal — flush is best-effort */ }
   }
