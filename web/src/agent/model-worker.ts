@@ -334,7 +334,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         ),
       ]);
       // §#1420: 60s ORT-init cap — WebGPU shader compilation can deadlock indefinitely.
-      // If it times out, reject falls to catch → drafter-error, standard backend takes over.
+      // If it times out, reject falls to catch → WASM retry (avoids GPU conflict on inference).
       _drafterSession = await Promise.race([
         ort.InferenceSession.create(drafterBuf, {
           executionProviders: ["webgpu", "wasm"],
@@ -348,7 +348,28 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       post({ type: "drafter-ready" });
     } catch (e) {
       _bootDrafterDone = true;
-      post({ type: "drafter-error", error: (e as Error).message?.slice(0, 120) });
+      const errMsg = (e as Error).message ?? "";
+      if (errMsg === "drafter-ort-timeout-60s" && (drafterBuf as ArrayBuffer)?.byteLength > 0) {
+        // §#1454: WebGPU shader compilation deadlocked. The abandoned ORT init still holds
+        // the GPU queue, causing OrtRun failures on the main model during inference.
+        // Retry with WASM-only — CPU execution avoids the GPU device conflict entirely.
+        try {
+          _drafterSession = await Promise.race([
+            ort.InferenceSession.create(drafterBuf as ArrayBuffer, {
+              executionProviders: ["wasm"],
+              preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
+            }),
+            new Promise<any>((_, reject) =>
+              setTimeout(() => reject(new Error("drafter-wasm-timeout-120s")), 120_000)
+            ),
+          ]);
+          post({ type: "drafter-ready" });
+        } catch (wasmErr) {
+          post({ type: "drafter-error", error: `gpu-deadlock+wasm-failed: ${(wasmErr as Error).message?.slice(0, 80)}` });
+        }
+      } else {
+        post({ type: "drafter-error", error: errMsg.slice(0, 120) });
+      }
     }
   } else {
     // No drafter URL — drafter phase is skipped.
