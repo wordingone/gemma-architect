@@ -29,7 +29,7 @@ const NO_RELOAD   = process.argv.includes("--no-reload");
 const COLD_CACHE  = process.argv.includes("--cold") && !NO_RELOAD;
 const PROMPT_N    = Number(process.argv.find(a => a.startsWith("--prompts="))?.split("=")[1] ?? 5);
 const BOOT_TIMEOUT_MS  = COLD_CACHE ? 65 * 60 * 1000 : 10 * 60 * 1000;  // 65 min cold (local override — 2.5GB re-download), 10 min warm
-const TURN_TIMEOUT_MS  =  5 * 60 * 1000;  // 5 min — belt-and-suspenders for 512-token cap at ~2.8 tps (~181s+overhead)
+const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retry (90s recovery + 226s generation)
 
 const DEMO_PROMPTS = [
   "Design a house",
@@ -302,6 +302,7 @@ if (bootComplete) {
     // Poll for turn completion: check arc state + look for recycling event
     let outcome = "timeout";
     let workerRecycled = false;
+    let _recycleRecoveryPending = false;  // §#688: recycle seen, awaiting auto-retry generation
     const turnDeadline = Date.now() + TURN_TIMEOUT_MS;
     // §#1461: snapshot recycleCount BEFORE this turn to detect per-turn recycles.
     const initialRecycleCount = await evaluate("window.__arc?.recycleCount ?? 0");
@@ -313,17 +314,30 @@ if (bootComplete) {
       const elapsed = Date.now() - turnMs0;
       console.log(`  [+${elapsed}ms] arc.state=${state} recycleCount=${recycleCount}`);
 
+      if (state === "recycling" || state === "recovering") {
+        workerRecycled = true;
+        _recycleRecoveryPending = true;
+        // Wait for recovery
+        await delay(5000);
+        continue;
+      }
+      // §#688: first 'ready' after recycle = worker recovered, auto-retry about to fire.
+      // Do NOT count as generate-done — wait for the retry generation to complete.
+      if (state === "ready" && _recycleRecoveryPending) {
+        _recycleRecoveryPending = false;  // recovery done; now wait for auto-retry's generating→ready
+        console.log(`  → recycle-recovery complete, waiting for auto-retry generation...`);
+        await delay(5000);
+        continue;
+      }
       if (state === "ready" && elapsed > 5000) {
         outcome = "generate-done";
         break;
       }
-      if (state === "recycling" || state === "recovering") {
-        workerRecycled = true;
-        // Wait for recovery
-        await delay(5000);
-      }
       if (state === "failed") {
         outcome = "fatal-error";
+        const fatalMsg = await evaluate("window.__arc?.modelLoadError ?? null");
+        if (fatalMsg) console.error(`    fatal-error reason: ${fatalMsg}`);
+        turnResults._lastFatalMsg = fatalMsg;  // stash for receipt
         break;
       }
     }
@@ -337,10 +351,14 @@ if (bootComplete) {
     if (i === 0) turn1BufferManagerErrors = turnBufferErrors;
 
     const durationMs = Date.now() - turnMs0;
+    const fatalErrorMsg = outcome === "fatal-error" ? (turnResults._lastFatalMsg ?? null) : undefined;
+    delete turnResults._lastFatalMsg;
     const icon = outcome === "generate-done" && !workerRecycled ? "✓" : "✗";
     console.log(`  ${icon} outcome=${outcome} recycled=${workerRecycled} bufferMgrErrors=${turnBufferErrors} duration=${Math.round(durationMs/1000)}s`);
 
-    turnResults.push({ prompt, sent: true, outcome, workerRecycled, bufferManagerErrors: turnBufferErrors, durationMs });
+    const turnEntry = { prompt, sent: true, outcome, workerRecycled, bufferManagerErrors: turnBufferErrors, durationMs };
+    if (fatalErrorMsg !== undefined) turnEntry.fatalErrorMsg = fatalErrorMsg;
+    turnResults.push(turnEntry);
   }
 }
 
@@ -360,6 +378,7 @@ ws.close();
 
 const totalMs     = Date.now() - startMs;
 const cleanTurns  = turnResults.filter(r => r.outcome === "generate-done" && !r.workerRecycled).length;
+const doneTurns   = turnResults.filter(r => r.outcome === "generate-done").length;  // §#688: includes recycle-recovered
 const arcInvClean = arcInvalidTransitions.length === 0;
 const bufMgrClean = turn1BufferManagerErrors === 0;
 
@@ -370,7 +389,7 @@ console.log(`│  mode          : ${String(COLD_CACHE ? "COLD-CACHE" : "warm").p
 console.log(`│  boot-complete : ${String(bootComplete).padEnd(35)}│`);
 console.log(`│  ARC inv-trans : ${String(arcInvalidTransitions.length === 0 ? "CLEAN" : `${arcInvalidTransitions.length} errors`).padEnd(35)}│`);
 console.log(`│  bufMgr turn-1 : ${String(bufMgrClean ? "CLEAN" : `${turn1BufferManagerErrors} errors`).padEnd(35)}│`);
-console.log(`│  GENERATE_DONE : ${String(`${cleanTurns}/${DEMO_PROMPTS.length} turns`).padEnd(35)}│`);
+console.log(`│  GENERATE_DONE : ${String(`${cleanTurns}/${DEMO_PROMPTS.length} clean, ${doneTurns} total`).padEnd(35)}│`);
 console.log(`│  total time    : ${String(`${Math.round(totalMs/1000)}s`).padEnd(35)}│`);
 if (compactEvents.length > 0) {
   console.log(`│  compact_events: ${String(`${compactEvents.length} compaction(s)`).padEnd(35)}│`);
@@ -403,6 +422,7 @@ const receipt = {
   buffer_manager_turn1_clean: bufMgrClean,
   turns: turnResults,
   clean_turns: cleanTurns,
+  done_turns: doneTurns,
   total_turns: DEMO_PROMPTS.length,
   total_ms: totalMs,
   compact_events: compactEvents,
