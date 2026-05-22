@@ -99,7 +99,7 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
     if (type === "init")             await handleInit(data);
     else if (type === "generate")    await handleGenerate(data);
     else if (type === "shutdown")    await handleShutdown();
-    else if (type === "destroy-device") await handleDestroyDevice();
+    else if (type === "destroy-device") handleDestroyDevice();
     // "abort" is handled via the AbortController in handleGenerate (future work)
   } catch (e) {
     post({ type: "error", error: (e as Error).message });
@@ -342,24 +342,18 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 //
 // §C-destroy-null-ref (#1381-L1): after destroy(), null out the tfEnv device reference
 // so ORT cannot reuse the destroyed handle on the next load path.
-// §C-destroy-await-lost (#1381-L2): GPUDevice.destroy() is async-internal; await
-// device.lost so the destroyed device's command queue drains before posting device-destroyed.
-// Without this, the 400ms terminate-wait in agent-harness.ts can expire while the device
-// is still mid-drain, causing the next Worker's WASM function table to bind to a
-// half-destroyed device → "function signature mismatch".
-async function handleDestroyDevice(): Promise<void> {
+// NOTE: Lead 2 (await device.lost) was reverted — it caused a NEW failure class
+// ("operation does not support unaligned accesses" + Aborted()) by leaving the WebGPU
+// buffer pool partially-released before the null assignment, producing misaligned offsets
+// on the next Worker's WASM imports. Synchronous destroy + immediate null is the correct shape.
+function handleDestroyDevice(): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const backends = (tfEnv.backends as any);
     const device = backends?.onnx?.webgpu?.device as
-      | (GPUDevice & { destroy?: () => void })
+      | { destroy?: () => void }
       | undefined;
-    if (device && typeof device.destroy === "function") {
-      device.destroy();
-      // L2: await actual device loss before proceeding
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      try { await (device as any).lost; } catch { /* non-fatal — lost always resolves on destroy */ }
-    }
+    if (device && typeof device.destroy === "function") device.destroy();
     // L1: null the reference so ORT cannot resolve it on next load
     if (backends?.onnx?.webgpu) backends.onnx.webgpu.device = null;
   } catch { /* non-fatal — best-effort cleanup */ }
