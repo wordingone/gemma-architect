@@ -169,11 +169,17 @@ await cdp("Page.addScriptToEvaluateOnNewDocument", {
 });
 
 // #1482: capture per-turn dispatch counts + goal state for receipt schema extensions.
+// #1491 gap-1: dispatchLedger captured synchronously inside agent:turn-complete to avoid CDP timing race.
+//   Prior approach: separate CDP drain evaluate ran AFTER reading __phase_j_current; race with
+//   _runDispatches executing between the two CDP round-trips → always returned [].
+//   Fix: drain __dispatchLedger inside the same event handler, atomic with dispatchVerbs capture.
 await cdp("Page.addScriptToEvaluateOnNewDocument", {
-  source: `window.__phase_j_turns=[];window.__phase_j_current={dispatchVerbs:[],goalState:'absent'};
+  source: `window.__phase_j_turns=[];window.__phase_j_current={dispatchVerbs:[],goalState:'absent',dispatchLedger:[]};
 window.addEventListener('agent:turn-complete',function(e){
   var v=e.detail&&e.detail.verbs?e.detail.verbs:[];
   window.__phase_j_current.dispatchVerbs=v;
+  var l=window.__dispatchLedger;window.__dispatchLedger=[];
+  window.__phase_j_current.dispatchLedger=Array.isArray(l)?l:[];
 });
 window.addEventListener('goal:changed',function(e){
   window.__phase_j_current.goalState=e.detail&&e.detail.status?e.detail.status:'unknown';
@@ -373,13 +379,11 @@ if (bootComplete) {
     const dispatchCount = dispatchVerbs.length;
     const goalState     = phaseTurnData.goalState ?? "absent";
     const isNlResponse  = dispatchCount === 0 && outcome === "generate-done";
-    // #1487: capture per-dispatch ledger from source instrumentation (verb+args+status+sceneChildrenDelta).
-    const turnLedger = await evaluate(
-      "(function(){var l=window.__dispatchLedger;window.__dispatchLedger=[];return Array.isArray(l)?l:[];})()",
-      5000
-    ).catch(() => []) ?? [];
+    // #1491 gap-1: ledger was captured synchronously in agent:turn-complete handler; read it from phaseTurnData.
+    //   Previous separate CDP drain evaluate had a timing race and always returned [].
+    const turnLedger = Array.isArray(phaseTurnData.dispatchLedger) ? phaseTurnData.dispatchLedger : [];
     // Reset for next turn.
-    await evaluate("window.__phase_j_current={dispatchVerbs:[],goalState:'absent'}", 2000).catch(() => null);
+    await evaluate("window.__phase_j_current={dispatchVerbs:[],goalState:'absent',dispatchLedger:[]}", 2000).catch(() => null);
 
     const durationMs = Date.now() - turnMs0;
     const fatalErrorMsg = outcome === "fatal-error" ? (turnResults._lastFatalMsg ?? null) : undefined;
