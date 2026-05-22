@@ -639,11 +639,21 @@ export class ChatPanel {
         await new Promise<void>(res =>
           window.addEventListener("agentmodel:boot-complete", res as EventListener, { once: true })
         );
+        // #688 iter-11G: boot-complete fires before ARC transitions recovering→ready.
+        // Starting PREFILL while ARC is in recovering causes PREFILL_DONE invalid-transition
+        // → second recycle → recycleCount=2 → fatal. Poll until ready (max 5s).
+        for (let _i = 0; _i < 10; _i++) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((window as any).__arc?.state === "ready") break;
+          await new Promise(r => setTimeout(r, 500));
+        }
         try {
           const _s2 = this._skills.length > 0 ? findSkillsForPrompt(this._skills, text) : this._skills;
           const resp2 = await runAgentTurn({
             prompt: text,
-            history: this._history.slice(0, -1),
+            // #688 iter-11G: fresh WASM heap after recycle can't handle full-history re-PREFILL.
+            // Sending empty history keeps the input_ids tensor tiny → no alignment issue.
+            history: [],
             skills: _s2,
             skillsTotal: this._skills.length,
             maxNewTokens: estimateMaxTokens(text),
