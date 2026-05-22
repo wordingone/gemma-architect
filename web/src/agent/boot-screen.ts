@@ -19,6 +19,30 @@ let _lastFileTotal = 0;          // total bytes of the in-progress file
 let _throughput = 0;             // bytes/sec (last reported)
 let _currentFile = '';           // display label (current file basename)
 
+// Phase-based progress weighting (#1425).
+// Spec'd from issue body 2026-05-22; swap hard-coded rates for #1424 measured baselines.
+// Phases advance monotonically; _updateProgress() maps phase → % range.
+type _BootPhase = 'download' | 'model-init' | 'warmup' | 'drafter' | 'final';
+const _PHASE_RANGE: Record<_BootPhase, readonly [number, number]> = {
+  'download':   [0,  70],
+  'model-init': [70, 80],
+  'warmup':     [80, 88],
+  'drafter':    [88, 95],
+  'final':      [95, 100],
+};
+// Slow advance rate (%/s) for time-based phases — keeps bar moving without overshooting ceiling.
+// model-init: 0.08%/s → 125s to cross 10%; warmup: 0.02%/s → 400s to cross 8% (warmup 60-1800s).
+const _PHASE_RATE: Partial<Record<_BootPhase, number>> = {
+  'model-init': 0.08,
+  'warmup':     0.02,
+  'drafter':    0.10, // fallback if no bytes (30s to cross 3%)
+  'final':      0.50,
+};
+let _bootPhase: _BootPhase = 'download';
+let _phaseEnteredAt = 0;
+let _drafterLoadedBytes = 0;
+let _drafterTotalBytes = 0;
+
 // DOM refs
 let _overlay: HTMLDivElement | null = null;
 let _headPath: SVGPathElement | null = null;
@@ -96,6 +120,18 @@ function _showStalled(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Phase advancement
+
+function _advanceToPhase(phase: _BootPhase): void {
+  const order: _BootPhase[] = ['download', 'model-init', 'warmup', 'drafter', 'final'];
+  if (order.indexOf(phase) > order.indexOf(_bootPhase)) {
+    _bootPhase = phase;
+    _phaseEnteredAt = performance.now();
+    _currentFile = phase === 'download' ? _currentFile : phase;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Event wiring
 
 function _wireEvents(): void {
@@ -130,6 +166,9 @@ function _wireEvents(): void {
     if (d.file) _currentFile = d.file;
     if (!_totalBytes && total) _totalBytes = total;
     _traceEvent('loading', { bytes, total, phase: d.phase });
+    // Phase-gate advancement (#1425): transition bar phase on first event for each phase.
+    if (d.phase === 'model-init') _advanceToPhase('model-init');
+    else if (d.phase === 'warmup') _advanceToPhase('warmup');
     // Any loading event proves the pipeline is alive — clear a false-positive stall.
     _recoverFromStall();
     // Sliding-window watchdog: arm/reset on each event.
@@ -157,14 +196,15 @@ function _wireEvents(): void {
     const d = (ev as CustomEvent<{
       bytes?: number; total?: number; throughputBytesPerSec?: number;
     }>).detail ?? {};
-    const prevLoaded = _loadedBytes;
-    if ((d.bytes ?? 0) > 0) _loadedBytes = Math.max(_loadedBytes, (_totalBytes * 0.85) + (d.bytes! * 0.15));
+    // Track drafter bytes separately for phase-based progress (#1425).
+    if ((d.total ?? 0) > 0) _drafterTotalBytes = d.total!;
+    if ((d.bytes ?? 0) > 0) _drafterLoadedBytes = d.bytes!;
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
-    _currentFile = 'drafter';
     _traceEvent('drafter:loading', { bytes: d.bytes, total: d.total });
+    _advanceToPhase('drafter'); // first drafter event → advance phase
     _recoverFromStall();
     // Also slide the watchdog window on drafter progress (drafter = active connection).
-    if (_loadedBytes > prevLoaded) {
+    if ((d.bytes ?? 0) > 0) {
       if (_watchdogId !== null) { clearTimeout(_watchdogId); _watchdogId = null; }
       _watchdogId = setTimeout(_showStalled, 30_000);
     }
@@ -177,6 +217,7 @@ function _wireEvents(): void {
   }, { once: true });
   window.addEventListener('agentmodel:boot-complete', () => {
     _traceEvent('boot-complete');
+    _advanceToPhase('final'); // ensures bar reaches 95%+ before _onDone() sets 100%
     // returning-user path installs its own boot-complete listener with READY_HOLD_MS delay;
     // calling _onDone() here would bypass that hold and fade the overlay immediately.
     void (async () => {
@@ -205,6 +246,8 @@ function _tick(): void {
   const pct = elapsed / LOOP_MS;
   // Traveling head: offset sweeps 0 → -(pathLen) then wraps
   _headPath.style.strokeDashoffset = `${-(_pathLen * pct)}`;
+  // Drive time-based progress bar animation during non-bytes phases (#1425)
+  if (_bootPhase !== 'download') _updateProgress();
   _rafId = requestAnimationFrame(_tick);
 }
 
@@ -213,25 +256,44 @@ function _tick(): void {
 
 function _updateProgress(): void {
   if (_done || !_pctEl) return;
-  const pct = _totalBytes > 0 ? Math.min((_loadedBytes / _totalBytes) * 100, 99) : 0;
+
+  // Phase-based progress (#1425): each boot phase maps to a sub-range of 0-100%.
+  // Within each phase, progress is bytes-based (download, drafter) or time-based (rest).
+  let pct: number;
+  const [phaseStart, phaseEnd] = _PHASE_RANGE[_bootPhase];
+  if (_bootPhase === 'download') {
+    pct = _totalBytes > 0 ? Math.min((_loadedBytes / _totalBytes) * 70, phaseEnd - 1) : 0;
+  } else if (_bootPhase === 'drafter' && _drafterTotalBytes > 0) {
+    pct = Math.min(phaseStart + (_drafterLoadedBytes / _drafterTotalBytes) * (phaseEnd - phaseStart), phaseEnd - 1);
+  } else {
+    // Time-based: advance slowly within phase, never reaching ceiling (next phase event does that).
+    const elapsed = (performance.now() - _phaseEnteredAt) / 1000;
+    const rate = _PHASE_RATE[_bootPhase] ?? 0.1;
+    pct = Math.min(phaseStart + elapsed * rate, phaseEnd - 1);
+  }
+
   _pctEl.textContent = pct > 0 ? `${Math.round(pct)}%` : '';
   if (_barFill) _barFill.style.width = `${pct}%`;
 
   // Hide first-visit hint once loading starts
   if (pct > 0 && _hintEl) _hintEl.style.opacity = '0';
 
-  // File label (basename only)
+  // File label (phase label or file basename during download)
   if (_fileEl) {
     const base = _currentFile ? _currentFile.split('/').pop() ?? _currentFile : '';
     _fileEl.textContent = base;
   }
 
-  // ETA
+  // ETA — only meaningful during download phase with known throughput
   if (_etaEl) {
-    const remainingBytes = _totalBytes - _loadedBytes;
-    if (_throughput > 0 && remainingBytes > 0) {
-      const secs = Math.ceil(remainingBytes / _throughput);
-      _etaEl.textContent = `~${secs}s remaining`;
+    if (_bootPhase === 'download' && _throughput > 0) {
+      const remainingBytes = _totalBytes - _loadedBytes;
+      if (remainingBytes > 0) {
+        const secs = Math.ceil(remainingBytes / _throughput);
+        _etaEl.textContent = `~${secs}s remaining`;
+      } else {
+        _etaEl.textContent = '';
+      }
     } else {
       _etaEl.textContent = '';
     }
