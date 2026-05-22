@@ -594,7 +594,7 @@ function showClipModeMenu(anchor: HTMLElement): void {
   document.querySelector(".sel-mode-menu")?.remove();
 
   const modes: Array<{ label: string; sub: string; toolId: string }> = [
-    { label: "Plan Mode",    sub: "1 click — horizontal plane at picked Z", toolId: "clip"         },
+    { label: "Horizontal Cut", sub: "1 click — horizontal plane at picked Z", toolId: "clip"         },
     { label: "Section Mode", sub: "2 clicks — vertical plane along line",   toolId: "clip-section" },
   ];
 
