@@ -39,6 +39,9 @@ let _model: any = null;
 let _processor: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _drafterSession: any = null;
+// §#1410: true when model weights weren't in Cache API at boot time (cold download).
+// Cold-cache paths have more pending GPU work after load → larger race window.
+let _coldCacheBoot = false;
 
 const WEBGPU_CONTEXT_LIMIT = 16384;
 
@@ -133,6 +136,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // Returning-user detection: if model files are already in Cache API, skip the
   // loading screen and show a fast-path pulse instead.
   const isReturning = await checkReturningUser(modelId);
+  _coldCacheBoot = !isReturning; // §#1410: track cold-cache state for retry backoff + post-drafter probe
   if (isReturning) {
     post({ type: "returning-user" });
   }
@@ -329,6 +333,27 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   } else {
     // No drafter URL — drafter phase is skipped.
     _bootDrafterDone = true;
+  }
+
+  // §C-post-drafter-probe (#1410): The main warmup probe runs before the drafter
+  // ORT session initializes its WebGPU context. ORT's WebGPU pipeline compilation
+  // queues GPU commands that can interfere with the buffer Download path, causing
+  // wgpuBufferMapAsync to fire BEFORE the buffer is ready. Run one generate step
+  // after drafter init to flush the GPU command queue into steady state before
+  // the first real inference. Only needed on cold-cache boot — warm-cache skips
+  // the drafter WebGPU init path (ORT session is restored from OPFS cache).
+  if (!noWarmup && _coldCacheBoot && _model && _processor) {
+    try {
+      const proc = _processor as any;
+      const _syncText = proc.apply_chat_template(
+        [{ role: "user", content: "." }],
+        { add_generation_prompt: true, tokenize: false },
+      ) as string;
+      const _syncIn = await proc(_syncText, null);
+      if ((_syncIn.input_ids?.dims?.[1] ?? 0) < WEBGPU_CONTEXT_LIMIT - 64) {
+        await (_model as any).generate({ ..._syncIn, max_new_tokens: 1, do_sample: false });
+      }
+    } catch { /* non-fatal — flush is best-effort */ }
   }
 
   checkBootComplete();
@@ -542,9 +567,24 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
     } catch (genErr) {
       const _msg = String(genErr);
       if (/buffer_manager|BufferManager|unmapped before mapping/i.test(_msg)) {
-        console.warn("[model-worker] buffer_manager race — retrying after 500ms", _msg.slice(0, 120));
-        await new Promise(r => setTimeout(r, 500));
-        outputs = await _doGenerate();
+        // §C-decode-retry (#1362-C, updated #1410): cold-cache boot accumulates more
+        // pending GPU work (2.5GB upload pipeline). The post-drafter probe should have
+        // flushed the queue; this retry is belt-and-suspenders for residual race window.
+        const _delay1 = _coldCacheBoot ? 2000 : 500;
+        console.warn("[model-worker] buffer_manager race — retrying after " + _delay1 + "ms", _msg.slice(0, 120));
+        await new Promise(r => setTimeout(r, _delay1));
+        try {
+          outputs = await _doGenerate();
+        } catch (retryErr) {
+          // §#1410: second retry for cold-cache (larger race window after 2.5GB download).
+          if (_coldCacheBoot && /buffer_manager|BufferManager|unmapped before mapping/i.test(String(retryErr))) {
+            console.warn("[model-worker] buffer_manager retry-2 — cold-cache, waiting 3000ms");
+            await new Promise(r => setTimeout(r, 3000));
+            outputs = await _doGenerate(); // final attempt — throws to outer catch if still failing
+          } else {
+            throw retryErr;
+          }
+        }
       } else {
         throw genErr;
       }
