@@ -21,7 +21,6 @@ import {
   setRenderMode, setLineType, setLineWeight, getRenderMode, getLineType, getLineWeight,
   type RenderMode, type LineType, type LineWeight,
 } from "../viewer/render-modes";
-import { generateGeometry, GenerateError } from "../agent/ai-generate";
 import { ChatPanel } from "../chat/chat-panel";
 import { compileDsl } from "../commands/dsl-eval";
 import { dispatch, dispatchSync, registerPostDispatch, type DispatchArgs } from "../commands/dispatch";
@@ -175,7 +174,7 @@ const DOCK_TABS: DockTab[] = [
 ];
 
 // Merged PROMPT/CONSOLE input: one tab, two modes. Shift+Tab toggles.
-//   "prompt"  → NL → ai-generate (cache → LoRA fallback) → JS → kernel
+//   "prompt"  → NL → ChatPanel / agent-harness → JS → kernel
 //   "console" → DSL / `:verb` registry → compileDsl/dispatchSync → JS → kernel
 // Persists per-session via localStorage.
 type ConsoleMode = "prompt" | "console";
