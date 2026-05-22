@@ -5827,20 +5827,27 @@ await resetScene('before-box-inject');
         }));
         await new Promise(r => setTimeout(r, 60));
 
-        // 4. Simulate a pointermove over the box face so _opHoverEdgePts is populated.
+        // 4. Simulate a pointermove at the midpoint of a real hard edge (0.5,-0.5,0.5):
+        //    front-right vertical edge of the 1×1×1 box. After PR #1272 rewrote
+        //    getUniqueEdges to filter coplanar seams, face-split diagonals no longer
+        //    appear in the edge list, so hovering the face center no longer triggers
+        //    edge detection (60px threshold not met). Projecting an on-edge world point
+        //    guarantees closestPtOnSegToRay returns distance ≈ 0 for this edge.
+        const edgeSc = window.__projectToScreen(0.5, -0.5, 0.5);
+        if (!edgeSc) return { passed: false, evidence: { reason: 'projectToScreen failed for edge midpoint' } };
         canvas.dispatchEvent(new PointerEvent('pointermove', {
-          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          bubbles: true, cancelable: true, clientX: edgeSc.x, clientY: edgeSc.y,
           button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
         }));
         await new Promise(r => setTimeout(r, 30));
 
         // 5. Click to confirm edge selection (uses _opHoverEdgePts from pointermove).
         canvas.dispatchEvent(new PointerEvent('pointerdown', {
-          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          bubbles: true, cancelable: true, clientX: edgeSc.x, clientY: edgeSc.y,
           button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
         }));
         canvas.dispatchEvent(new PointerEvent('pointerup', {
-          bubbles: true, cancelable: true, clientX: sc.x, clientY: sc.y,
+          bubbles: true, cancelable: true, clientX: edgeSc.x, clientY: edgeSc.y,
           button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
         }));
         await new Promise(r => setTimeout(r, 60));

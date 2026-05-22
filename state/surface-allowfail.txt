@@ -10,6 +10,5 @@ copy-array-side-effects-door  # #1237  door array creates 0 copies
 wall-slab-cross-level-trim  # #1240  TypeError: THREE.Box3 undefined at runtime
 # Tracked regressions — individual issues filed (fix via Archie queue):
 open-project-round-trip  # #1333  file save/load round-trip broken
-fillet-selected-edge  # #1339  fillet on selected edge broken
 copy-click-commits-selection  # #1341  copy tool click not committing selection
 hidden-level-unselectable  # #1342  hidden level objects remain selectable
