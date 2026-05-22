@@ -4652,12 +4652,13 @@ await resetScene('before-box-inject');
     if (groups.length === 0) return { passed: false, evidence: { reason: 'no stair group added' } };
     const grp = groups[groups.length - 1];
 
-    // Collect step meshes (individual tagged steps)
+    // Collect flight meshes (1 per flight in the new solid-flight impl; N in the old per-step impl).
     const steps = [];
     grp.traverse(o => {
       if (o.isMesh && o.userData && o.userData.ifcClass === 'IfcStairFlight') steps.push(o);
     });
-    if (steps.length < 2) return { passed: false, evidence: { reason: 'stepCount < 2, got ' + steps.length } };
+    // Require at least 1 IfcStairFlight mesh; actual step count is in stairParams.nRisers.
+    if (steps.length === 0) return { passed: false, evidence: { reason: 'no IfcStairFlight mesh found' } };
 
     // Verify consistent riser heights: each step's box height = (stepIndex+1)*riser
     // so height ratio between consecutive steps should equal 1 + 1/stepIndex
