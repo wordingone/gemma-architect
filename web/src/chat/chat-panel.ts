@@ -24,6 +24,7 @@ type Message = {
   content: string;
   dispatches?: AgentDispatch[];
   error?: string;
+  recovery?: "reload"; // adds a "Refresh page" button below the error text
 };
 
 // QW-3 (#409): session context global — mirrors avir-cli's session state.
@@ -190,6 +191,7 @@ export class ChatPanel {
   private _fileInputEl!: HTMLInputElement;
   private _continuationRunning = false;
   private _continuationSuppressed = false;
+  private _fatalBubbleShown = false;
 
   constructor(private _root: HTMLElement) {
     this._build();
@@ -324,6 +326,20 @@ export class ChatPanel {
         this._sendBtn.textContent = "SEND";
       }
     });
+
+    // §C-gpu-fatal (#1427): surface Refresh button when GPU adapter is irrecoverably torn.
+    // Fatal fires synchronously before _send() callback rejection; once: true is correct —
+    // GPU OOM only fires once per session (agent-harness.ts:360 halts after 2 recycles).
+    window.addEventListener("agentmodel:fatal", () => {
+      if (!this._fatalBubbleShown) {
+        this._fatalBubbleShown = true;
+        this._pushMsg({
+          role: "assistant", content: "",
+          error: "GPU memory exhausted after multiple resets — please refresh the page to continue.",
+          recovery: "reload",
+        });
+      }
+    }, { once: true });
 
     // Attach button → file picker
     const attachBtn = this._root.querySelector<HTMLButtonElement>(".chat-attach-btn")!;
@@ -582,7 +598,16 @@ export class ChatPanel {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((e as any)?.isD3D12Recycle) { return; }
       const err = e as Error;
-      this._pushMsg({ role: "assistant", content: "", error: err.message });
+      const isGpuFatal = err.message.includes("GPU memory exhausted");
+      // agentmodel:fatal listener already pushed the bubble synchronously before this catch
+      // runs (callback rejection is a microtask; fatal fires synchronously). Skip to avoid
+      // a duplicate bubble, but still track error count.
+      if (isGpuFatal && this._fatalBubbleShown) {
+        (window as unknown as _GemmaW).__gemmaSession.errorCount++;
+        return;
+      }
+      if (isGpuFatal) this._fatalBubbleShown = true;
+      this._pushMsg({ role: "assistant", content: "", error: err.message, ...(isGpuFatal ? { recovery: "reload" } : {}) });
       // QW-3: track inference/dispatch errors for external monitoring.
       (window as unknown as _GemmaW).__gemmaSession.errorCount++;
     } finally {
@@ -745,6 +770,13 @@ export class ChatPanel {
       errSpan.className = "chat-msg-error";
       errSpan.textContent = `⚠ ${msg.error}`;
       item.appendChild(errSpan);
+      if (msg.recovery === "reload") {
+        const refreshBtn = document.createElement("button");
+        refreshBtn.className = "chat-refresh-btn";
+        refreshBtn.textContent = "↺ Refresh page";
+        refreshBtn.addEventListener("click", () => window.location.reload());
+        item.appendChild(refreshBtn);
+      }
     } else {
       const content = document.createElement("div");
       content.className = "chat-msg-content";

@@ -477,6 +477,20 @@
   padding: 4px 8px;
   border-left: 2px solid var(--red, #e06c75);
 }
+.chat-refresh-btn {
+  display: block;
+  margin: 6px 8px 2px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--red, #e06c75);
+  background: transparent;
+  border: 1px solid var(--red, #e06c75);
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.chat-refresh-btn:hover { opacity: 1; }
 .chat-dispatch-pills {
   display: flex;
   flex-wrap: wrap;
