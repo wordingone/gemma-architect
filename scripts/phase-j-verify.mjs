@@ -301,10 +301,6 @@ if (bootComplete) {
     const preErrorCount = bufferManagerErrors.length;
     console.log(`\n[+${Date.now()-startMs}ms] Turn ${i+1}/${DEMO_PROMPTS.length}: "${prompt}"`);
 
-    // Reset scene before each turn
-    await evaluate(`window.__dispatch?.('SdClearScene', {})`, 5000).catch(() => null);
-    await delay(300);
-
     // Type prompt into chat input and submit
     const sent = await evaluate(`(function() {
       const inp = document.querySelector('.chat-input, textarea[name="prompt"], [data-role="chat-input"]');
