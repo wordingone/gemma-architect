@@ -627,9 +627,7 @@ export class ChatPanel {
           history: this._history.slice(0, -1),
           skills: skillsToPass,
           skillsTotal: this._skills.length,
-          // #1482 (B2): cap initial turn at 384 tokens so the model emits compact plan +
-          // 3-5 dispatches. Continuation turns pass maxNewTokens:2048 via _runContinuation.
-          maxNewTokens: Math.min(estimateMaxTokens(text), 384),
+          maxNewTokens: 1024,
           userImage: effectiveImage,
         });
       } finally {
