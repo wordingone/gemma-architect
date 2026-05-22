@@ -99,6 +99,20 @@ export function clearMultiSelHighlights(): void {
 }
 
 export function applyMultiSelHL(obj: THREE.Object3D): void {
+  if (obj instanceof THREE.Group) {
+    // Group walls (void-cut): highlight each child mesh individually so
+    // clearMultiSelHighlights can restore without special Group handling.
+    obj.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      if (child.userData._selHL !== undefined) return;
+      const m = child.material as THREE.MeshStandardMaterial;
+      if (!m?.emissive) return;
+      child.userData._selHL = m.emissive.getHex();
+      m.emissive.setHex(0x223355);
+      _multiSelHighlighted.push(child);
+    });
+    return;
+  }
   if (obj.userData._selHL !== undefined) return;
   if (obj instanceof THREE.Mesh && (obj.material as THREE.MeshStandardMaterial).emissive) {
     obj.userData._selHL = (obj.material as THREE.MeshStandardMaterial).emissive.getHex();
@@ -120,12 +134,27 @@ export function applyMultiSelHL(obj: THREE.Object3D): void {
 export function collectSelectable(viewer: Viewer): THREE.Object3D[] {
   const markerMesh = _getMarkerMesh();
   const shiftAxisLine = _getSketchShiftAxisLine();
+  const seen = new Set<string>();
   const out: THREE.Object3D[] = [];
   viewer.getScene().traverse((o) => {
     if (o.userData.noSnap || !o.visible) return;
-    if (!(o instanceof THREE.Mesh) && !(o instanceof THREE.Line) && !(o instanceof THREE.Points)) return;
-    if (o === markerMesh || o === shiftAxisLine) return;
-    out.push(o);
+    // Resolve child meshes of void-cut Group walls to their parent Group so
+    // rubber-band select returns the whole wall, not individual segments.
+    const isChildOfCreatorGroup =
+      (o instanceof THREE.Mesh) &&
+      (o.parent instanceof THREE.Group) &&
+      !!(o.parent.userData?.creator);
+    const target = isChildOfCreatorGroup ? (o.parent as THREE.Group) : o;
+    if (seen.has(target.uuid)) return;
+    const isSelectable =
+      (target instanceof THREE.Mesh) ||
+      (target instanceof THREE.Line) ||
+      (target instanceof THREE.Points) ||
+      (target instanceof THREE.Group && !!(target.userData?.creator));
+    if (!isSelectable) return;
+    if (target === markerMesh || target === shiftAxisLine) return;
+    seen.add(target.uuid);
+    out.push(target);
   });
   return out;
 }
