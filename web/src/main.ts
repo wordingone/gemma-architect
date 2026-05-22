@@ -1023,19 +1023,31 @@ registerHandler("SdDoor", (args) => {
   let hostObjDoor: THREE.Object3D | undefined = hostUuidDoor
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidDoor) ?? undefined
     : undefined;
-  // §#1516: auto-find nearest wall within 3 m when hostUuid absent (mirrors SdWindow auto-find).
-  // Without this, agent dispatch without hostUuid produces door with default Y-orientation (perpendicular to wall).
+  // §#1516,#1546: auto-find nearest wall within 3 m when hostUuid absent.
+  // 2-pass: prefer walls on active level first (multi-storey buildings share XY wall centers).
   if (!hostObjDoor) {
     const posArr = args.position as number[] | undefined;
     const doorXY = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, 0);
+    const activeLvlIdDoor = getActiveLevelId();
     let minDist = 3;
     viewer.forEachSceneChild((child) => {
       const c = child.userData?.creator;
       if (c !== "SdWall" && c !== "wall") return;
+      if (child.userData?.levelId !== activeLvlIdDoor) return;
       const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
       const dist = doorXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
       if (dist < minDist) { minDist = dist; hostObjDoor = child; }
     });
+    if (!hostObjDoor) {
+      minDist = 3;
+      viewer.forEachSceneChild((child) => {
+        const c = child.userData?.creator;
+        if (c !== "SdWall" && c !== "wall") return;
+        const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
+        const dist = doorXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
+        if (dist < minDist) { minDist = dist; hostObjDoor = child; }
+      });
+    }
   }
   const cplane = resolveCPlane("SdDoor", args as Record<string, unknown>, viewer, hostObjDoor);
   const pos = args.position as number[] | undefined;
@@ -1081,18 +1093,31 @@ registerHandler("SdWindow", (args) => {
   let hostObjWin: THREE.Object3D | undefined = hostUuidWin
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidWin) ?? undefined
     : undefined;
-  // Auto-find nearest wall within 3 m when hostUuid absent
+  // §#1545: 2-pass auto-find nearest wall within 3 m when hostUuid absent.
+  // Pass 1 filters by active level to avoid XY-tie bug in multi-storey buildings.
   if (!hostObjWin) {
     const posArr = args.position as number[] | undefined;
     const winXY = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, 0);
+    const activeLvlIdWin = getActiveLevelId();
     let minDist = 3;
     viewer.forEachSceneChild((child) => {
       const c = child.userData?.creator;
       if (c !== "SdWall" && c !== "wall") return;
+      if (child.userData?.levelId !== activeLvlIdWin) return;
       const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
       const dist = winXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
       if (dist < minDist) { minDist = dist; hostObjWin = child; }
     });
+    if (!hostObjWin) {
+      minDist = 3;
+      viewer.forEachSceneChild((child) => {
+        const c = child.userData?.creator;
+        if (c !== "SdWall" && c !== "wall") return;
+        const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
+        const dist = winXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
+        if (dist < minDist) { minDist = dist; hostObjWin = child; }
+      });
+    }
   }
   const cplane = resolveCPlane("SdWindow", args as Record<string, unknown>, viewer, hostObjWin);
   const pos = args.position as number[] | undefined;
