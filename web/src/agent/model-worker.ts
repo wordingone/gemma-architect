@@ -147,6 +147,25 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   const ESTIMATED_MODEL_BYTES = 5_500_000_000;
   post({ type: "manifest", totalBytesExpected: ESTIMATED_MODEL_BYTES });
 
+  // §C-quota-probe (#1490): incognito / low-storage devices expose only ~100–200 MB quota.
+  // When transformers.js calls cache.put() on model shards, the write fails with
+  // UnknownError. The download loop stalls at 0 bytes because transformers.js retries
+  // cache writes without surfacing the error. Fix: check available quota upfront and
+  // skip caching entirely when quota < model size, so the worker streams directly to
+  // memory without ever touching the Cache API.
+  try {
+    const nav = globalThis.navigator as (Navigator & { storage?: StorageManager }) | undefined;
+    if (nav?.storage && typeof nav.storage.estimate === "function") {
+      const est = await nav.storage.estimate();
+      const quota = est.quota ?? 0;
+      const used  = est.usage ?? 0;
+      const free  = quota - used;
+      if (quota > 0 && free < ESTIMATED_MODEL_BYTES) {
+        tfEnv.useBrowserCache = false;
+      }
+    }
+  } catch { /* navigator.storage not available in all worker contexts */ }
+
   // Cumulative bytes downloaded (all model files combined) for aggregate throughput.
   // Track per-file to correctly accumulate across shard boundaries — `info.loaded`
   // resets to 0 for each new file, so Math.max() was wrong (#1365).
