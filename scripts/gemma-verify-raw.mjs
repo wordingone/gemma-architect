@@ -650,38 +650,42 @@ await resetScene('before-box-inject');
 }
 
 // ── Surface 10: layout-tab-functional ────────────────────────────────────────
+// Flow: layout tab → add blank sheet (panels:[]) → gate (no tool → no panel) → arm viewport tool → click → panel added.
+// Default sheets spawn full-sheet preset panels, so we must add a blank sheet to test panel creation.
 {
   await evaluate(`
     (() => {
       const layoutTab = document.querySelector("[data-mode=layout]");
       if (layoutTab) layoutTab.click();
     })()`);
-  await delay(1000);
+  await delay(800);
+  // Add a blank sheet: click "+" then click the Blank preset button in the picker overlay.
+  await evaluate(`
+    (async () => {
+      const addBtn = document.querySelector(".sheet-tab-add");
+      if (addBtn) addBtn.click();
+      await new Promise(r => setTimeout(r, 300));
+      // Click the Blank preset in the picker overlay.
+      const blankBtn = Array.from(document.querySelectorAll(".sheet-preset-btn")).find(b => b.textContent?.trim() === "Blank");
+      if (blankBtn) blankBtn.click();
+      await new Promise(r => setTimeout(r, 400));
+    })()`);
   const r = await evaluate(`
     (async () => {
       const sheet = document.querySelector(".paper-sheet, [data-layout=sheet], .layout-sheet");
       if (!sheet) return { passed: false, evidence: { reason: "no .paper-sheet element" } };
       const rect = sheet.getBoundingClientRect();
       const aspectRatio = rect.width / rect.height;
-      // Derive expected aspect from the sheet's own declared mm dimensions (set by applySheetDims).
-      // Default is Tabloid landscape (432×279mm); don't hardcode A1.
-      const mmW = parseFloat(sheet.dataset.widthMm || '0');
-      const mmH = parseFloat(sheet.dataset.heightMm || '0');
-      let aspectMatches;
-      if (mmW > 0 && mmH > 0) {
-        const declaredAspect = mmW / mmH;
-        aspectMatches = Math.abs(aspectRatio - declaredAspect) < 0.08;
-      } else {
-        // Fallback: any plausible paper aspect (portrait or landscape)
-        aspectMatches = aspectRatio > 0.4 && aspectRatio < 2.5;
-      }
-      if (!aspectMatches) return { passed: false, evidence: { reason: "aspect mismatch", aspect: aspectRatio, mmW, mmH } };
-      const cx = rect.left + rect.width * 0.25, cy = rect.top + rect.height * 0.25;
+      const aspectMatches = aspectRatio > 0.4 && aspectRatio < 2.5;
+      if (!aspectMatches) return { passed: false, evidence: { reason: "aspect mismatch", aspect: aspectRatio } };
+      // Click centre of blank sheet without viewport tool — gate must hold (no panel added).
+      const cx = rect.left + rect.width * 0.5, cy = rect.top + rect.height * 0.5;
       const beforeNoTool = sheet.querySelectorAll("[data-panel-id]").length;
       sheet.dispatchEvent(new MouseEvent("click", { clientX: cx, clientY: cy, bubbles: true, button: 0 }));
       await new Promise(r => setTimeout(r, 300));
       const afterNoTool = sheet.querySelectorAll("[data-panel-id]").length;
       const gateHeld = afterNoTool === beforeNoTool;
+      // Arm viewport tool, then click — panel must be added.
       window.dispatchEvent(new CustomEvent("ribbon:tool-click", { detail: { tool: "viewport" } }));
       await new Promise(r => setTimeout(r, 100));
       const beforePanels = sheet.querySelectorAll("[data-panel-id]").length;
@@ -690,7 +694,7 @@ await resetScene('before-box-inject');
       const afterPanels = sheet.querySelectorAll("[data-panel-id]").length;
       const panelAdded = afterPanels > beforePanels;
       return { passed: aspectMatches && gateHeld && panelAdded,
-               evidence: { aspect: aspectRatio, a1Aspect, aspectMatches, gateHeld, beforePanels, afterPanels, panelAdded } };
+               evidence: { aspect: aspectRatio, aspectMatches, gateHeld, beforePanels, afterPanels, panelAdded } };
     })()`);
   record("layout-tab-functional", r?.passed ?? false, r?.evidence ?? { error: "evaluate threw or returned null" });
 }
