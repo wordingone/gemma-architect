@@ -420,6 +420,12 @@ const doneTurns   = turnResults.filter(r => r.outcome === "generate-done").lengt
 const arcInvClean = arcInvalidTransitions.length === 0;
 const bufMgrClean = turn1BufferManagerErrors === 0;
 
+// #1482: aggregate dispatch metrics — must be declared before summary box and passed gate.
+const totalDispatches   = turnResults.reduce((s, r) => s + (r.dispatchCount ?? 0), 0);
+const turnsWithDispatch = turnResults.filter(r => (r.dispatchCount ?? 0) > 0).length;
+const turn1DispatchCount = turnResults[0]?.dispatchCount ?? 0;
+const turn1GoalState     = turnResults[0]?.goalState ?? "absent";
+
 console.log(`\n┌──────────────────────────────────────────────────────┐`);
 console.log(`│  Phase J verify — ${ts().slice(0,19)}               │`);
 console.log(`├──────────────────────────────────────────────────────┤`);
@@ -455,12 +461,6 @@ console.log(verdict.padEnd(54) + "  │");
 console.log(`└──────────────────────────────────────────────────────┘`);
 
 // ── Write receipt ──────────────────────────────────────────────────────────────
-
-// #1482: aggregate dispatch metrics across all turns.
-const totalDispatches  = turnResults.reduce((s, r) => s + (r.dispatchCount ?? 0), 0);
-const turnsWithDispatch = turnResults.filter(r => (r.dispatchCount ?? 0) > 0).length;
-const turn1DispatchCount = turnResults[0]?.dispatchCount ?? 0;
-const turn1GoalState     = turnResults[0]?.goalState ?? "absent";
 
 const receipt = {
   sha,
