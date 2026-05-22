@@ -351,7 +351,10 @@ function initWorkerIfNeeded(): Worker {
         // but WebGPU reports DeviceRemovedReason=S_OK so no JS device-lost event fires.
         // Detected via OrtRun error text. Recycle worker; next turn gets a fresh worker
         // without engaging the fatal fallback path.
-        const _isD3D12Oom = /OrtRun|buffer_manager|CreateCommittedResource/i.test(_errMsg);
+        // #688: WASM SIMD unaligned access — WASM heap fragmentation after 2+ turns causes
+        // turn N input_ids tensor to land at non-16B-aligned address → SIMD trap.
+        // Fresh worker resets WASM heap. Same recycle path as D3D12 OOM.
+        const _isD3D12Oom = /OrtRun|buffer_manager|CreateCommittedResource|unaligned|wasm trap/i.test(_errMsg);
         if (_isD3D12Oom && _inferenceWorker) {
           // §B-device-destroy (#1313): destroy D3D12 buffers before worker terminate.
           // Worker is still alive after OrtRun error — send destroy-device so it can

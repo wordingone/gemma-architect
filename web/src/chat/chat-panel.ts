@@ -632,11 +632,34 @@ export class ChatPanel {
       // #980: goal-mode default — always auto-execute, no plan-pending UI.
       await this._executeAndPush(resp, _turnStart);
     } catch (e) {
-      this._removeThinking(thinking);
-      // §C-recycle-silent (#1394): D3D12-OOM recycle is a background recovery path.
-      // Badge already shows ⟳ via agentmodel:worker-recycled; no chat bubble needed.
+      // §C-recycle-silent (#1394): D3D12-OOM / WASM-heap recycle — keep thinking visible,
+      // wait for fresh worker, then auto-retry the same prompt. (#688)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((e as any)?.isD3D12Recycle) { return; }
+      if ((e as any)?.isD3D12Recycle) {
+        await new Promise<void>(res =>
+          window.addEventListener("agentmodel:boot-complete", res as EventListener, { once: true })
+        );
+        try {
+          const _s2 = this._skills.length > 0 ? findSkillsForPrompt(this._skills, text) : this._skills;
+          const resp2 = await runAgentTurn({
+            prompt: text,
+            history: this._history.slice(0, -1),
+            skills: _s2,
+            skillsTotal: this._skills.length,
+            maxNewTokens: estimateMaxTokens(text),
+            userImage,
+          });
+          this._removeThinking(thinking);
+          await this._executeAndPush(resp2, _turnStart);
+        } catch (retryErr) {
+          this._removeThinking(thinking);
+          const _msg2 = (retryErr as Error).message ?? String(retryErr);
+          this._pushMsg({ role: "assistant", content: "", error: _msg2 });
+          (window as unknown as _GemmaW).__gemmaSession.errorCount++;
+        }
+        return;
+      }
+      this._removeThinking(thinking);
       const err = e as Error;
       const isGpuFatal = err.message.includes("GPU memory exhausted");
       // agentmodel:fatal listener already pushed the bubble synchronously before this catch
