@@ -38,6 +38,10 @@ let _firstLoadingReceived = false;
 let _stalledShown = false;
 let _stallCount = 0;   // incremented each time _showStalled fires; exposed as window.__boot_stall_count
 
+// Storage quota state — set at boot-complete via navigator.storage.estimate()
+let _quotaEl: HTMLDivElement | null = null;
+let _storageWarnActive = false;
+
 // Download trace — in-memory log of all agentmodel:* events for STALLED diagnostics.
 type TraceEntry = { t: number; event: string; bytes?: number; total?: number; phase?: string };
 const _trace: TraceEntry[] = [];
@@ -175,7 +179,16 @@ function _wireEvents(): void {
     _traceEvent('boot-complete');
     // returning-user path installs its own boot-complete listener with READY_HOLD_MS delay;
     // calling _onDone() here would bypass that hold and fade the overlay immediately.
-    if (!_isReturningUser) _onDone();
+    void (async () => {
+      await _checkStorageQuota();
+      if (!_isReturningUser) {
+        if (_storageWarnActive) {
+          // Give user time to read the storage warning before the overlay fades.
+          await new Promise<void>(r => setTimeout(r, 3_000));
+        }
+        _onDone();
+      }
+    })();
   }, { once: true });
   window.addEventListener('agentmodel:error', (ev: Event) => {
     _traceEvent('error');
@@ -223,6 +236,32 @@ function _updateProgress(): void {
       _etaEl.textContent = '';
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Storage quota observer (#1363)
+
+async function _checkStorageQuota(): Promise<void> {
+  if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return;
+  try {
+    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+    const ratio = quota > 0 ? usage / quota : 0;
+    const usageGB = (usage / 1e9).toFixed(2);
+    const quotaGB = (quota / 1e9).toFixed(2);
+    const pct = Math.round(ratio * 100);
+    console.info(`[gemma-cad] storage: ${usageGB} GB / ${quotaGB} GB (${pct}%)`);
+    (window as unknown as Record<string, unknown>).__storageQuota = { usage, quota, ratio };
+    if (_quotaEl) {
+      if (ratio >= 0.80) {
+        _storageWarnActive = true;
+        _quotaEl.textContent = `⚠ Storage ${pct}% full (${usageGB} GB / ${quotaGB} GB) — consider clearing app data`;
+        Object.assign(_quotaEl.style, { display: 'block', color: '#ff9900' });
+      } else if (ratio > 0) {
+        _quotaEl.textContent = `Storage: ${usageGB} GB / ${quotaGB} GB (${pct}%)`;
+        Object.assign(_quotaEl.style, { display: 'block', color: '#333' });
+      }
+    }
+  } catch { /* non-fatal — estimate can be unavailable in some contexts */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -497,6 +536,18 @@ function _buildOverlay(): void {
   });
   _statusEl = statusEl;
   progress.appendChild(statusEl);
+
+  // Storage quota line — hidden until estimate completes at boot-complete
+  const quotaEl = document.createElement('div');
+  Object.assign(quotaEl.style, {
+    display: 'none',
+    fontSize: 'clamp(8px, 0.75vw, 10px)',
+    letterSpacing: '0.04em',
+    color: '#333',
+    marginTop: 'clamp(1px, 0.2vh, 4px)',
+  });
+  _quotaEl = quotaEl;
+  progress.appendChild(quotaEl);
 
   overlay.appendChild(progress);
 }
