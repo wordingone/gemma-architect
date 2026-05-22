@@ -309,6 +309,21 @@ if (bootComplete) {
     const preConsoleErrorIdx = consoleErrors.length;
     const preArcInvalidCount = arcInvalidTransitions.length;
 
+    // §#1531: Force prompt mode before each turn — Storage.clearDataForOrigin does NOT clear
+    // localStorage, so gemma-cad:console-mode-v1="console" persists across cold-cache resets
+    // and across page reloads triggered by D3D12_OOM. Click mode-pill if currently in console mode.
+    const _modeCheck = await evaluate(`(function() {
+      localStorage.setItem('gemma-cad:console-mode-v1', 'prompt');
+      const pill = document.querySelector('.mode-pill');
+      if (!pill) return 'no-pill';
+      if (pill.getAttribute('data-mode') === 'console') { pill.click(); return 'switched'; }
+      return 'ok';
+    })()`);
+    if (_modeCheck === 'switched') {
+      console.log(`  [mode-force] was console → switched to prompt`);
+      await delay(500);
+    }
+
     // Type prompt into chat input and submit
     const sent = await evaluate(`(function() {
       const inp = document.querySelector('.chat-input, textarea[name="prompt"], [data-role="chat-input"]');
