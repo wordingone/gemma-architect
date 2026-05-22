@@ -5,8 +5,6 @@ skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) popu
 demo-cluster-flow  # #670  new surface — allow-fail until first green run confirms timing
 # --- hackathon sprint regressions (#1268) — gate suspended 2026-05-15..2026-05-19 ---
 # Archie queue (individual issues filed):
-copy-array-side-effects-stair  # #1236  stair array creates only 1 copy instead of N
-copy-array-side-effects-door  # #1237  door array creates 0 copies
 wall-slab-cross-level-trim  # #1240  TypeError: THREE.Box3 undefined at runtime
 # Tracked regressions — individual issues filed (fix via Archie queue):
 open-project-round-trip  # #1333  file save/load round-trip broken
