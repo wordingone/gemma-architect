@@ -139,6 +139,10 @@ const _generateCallbacks = new Map<string, {
   resolve: (r: WorkerGenResult) => void;
   reject: (e: Error) => void;
 }>();
+// §#1472: per-token activity watchdog reset — set by runAgentTurn, called on each
+// generate-progress heartbeat (every 50 tokens). Lets long responses complete without
+// the 60s watchdog firing. The watchdog only fires if NO tokens arrive for 60s.
+let _activeWatchdogReset: (() => void) | null = null;
 
 // ── Model-worker recycle (#1303) ─────────────────────────────────────────────
 // Terminate + reinitialize the inference worker every N turns to release
@@ -306,6 +310,7 @@ function initWorkerIfNeeded(): Worker {
         }));
         break;
       case "generate-progress":
+        _activeWatchdogReset?.(); // §#1472: reset per-token watchdog (50-token heartbeat)
         window.dispatchEvent(new CustomEvent("agentmodel:generate-progress", {
           detail: { turnId: msg.turnId, tokens_generated: msg.tokens_generated },
         }));
@@ -1123,12 +1128,16 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   let result: WorkerGenResult;
   try {
     result = await new Promise<WorkerGenResult>((resolve, reject) => {
-      // §B-watchdog (#1313): if generate produces no output for 60s, force-terminate the
-      // worker and reject with a retryable error. Bounds the D3D12 silent-hang failure to
-      // 60s instead of 603s. Device is destroyed before terminate to release D3D12 buffers.
+      // §B-watchdog (#1313): force-terminate if no token output for 60s. Bounds D3D12
+      // silent-hang failure to 60s. Device is destroyed before terminate to release buffers.
+      // §#1472: watchdog now resets on each generate-progress heartbeat (every 50 tokens)
+      // via _activeWatchdogReset — fires only on true stall (no tokens for 60s), not on
+      // long responses. Root cause of +60s bufMgr OOM: watchdog was firing mid-generation
+      // because "Design a house" generates 600+ tokens (120s at 5 tps) > 60s deadline.
       const _WATCHDOG_MS = 60_000;
-      let _watchdogTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      const _runWatchdog = () => {
         _watchdogTimer = null;
+        _activeWatchdogReset = null;
         _generateCallbacks.delete(turnId);
         const _stalled = _inferenceWorker;
         _inferenceWorker = null;
@@ -1151,13 +1160,21 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
             initWorkerIfNeeded();
           }, 400);
         }
-        console.warn("[agent-harness] worker-stall: generate exceeded 60s, worker recycled");
+        console.warn("[agent-harness] worker-stall: no token output for 60s, worker recycled");
         reject(new Error("Response timed out — the model is reloading. The input will re-enable when it's ready."));
-      }, _WATCHDOG_MS);
+      };
+      let _watchdogTimer: ReturnType<typeof setTimeout> | null = setTimeout(_runWatchdog, _WATCHDOG_MS);
+      // §#1472: register module-level reset fn so generate-progress handler can reset timer.
+      _activeWatchdogReset = () => {
+        if (_watchdogTimer) {
+          clearTimeout(_watchdogTimer);
+          _watchdogTimer = setTimeout(_runWatchdog, _WATCHDOG_MS);
+        }
+      };
 
       _generateCallbacks.set(turnId, {
-        resolve: (r) => { if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } resolve(r); },
-        reject:  (e) => { if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } reject(e); },
+        resolve: (r) => { _activeWatchdogReset = null; if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } resolve(r); },
+        reject:  (e) => { _activeWatchdogReset = null; if (_watchdogTimer) { clearTimeout(_watchdogTimer); _watchdogTimer = null; } reject(e); },
       });
       // §C-stale-cb (#1371): if worker never responds within 5s of callback registration,
       // log a diagnostic. Distinct from the 60s watchdog (which recycles) — this fires
