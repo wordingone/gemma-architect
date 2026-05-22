@@ -304,7 +304,12 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           | { queue?: { onSubmittedWorkDone?: () => Promise<void> } }
           | undefined;
         if (_wgpuDev?.queue?.onSubmittedWorkDone) {
+          console.log("[#1463] warmup-flush fired");
           await _wgpuDev.queue.onSubmittedWorkDone().catch(() => {/* non-fatal */});
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const _b = tfEnv.backends as any;
+          console.log("[#1463] warmup-flush skipped — webgpu device unavailable", { hasBackends: !!_b, hasOnnx: !!_b?.onnx, hasWebgpu: !!_b?.onnx?.webgpu });
         }
       }
     } catch (e) {
@@ -421,7 +426,12 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           | { queue?: { onSubmittedWorkDone?: () => Promise<void> } }
           | undefined;
         if (_wgpuDev2?.queue?.onSubmittedWorkDone) {
+          console.log("[#1463] post-drafter-flush fired");
           await _wgpuDev2.queue.onSubmittedWorkDone().catch(() => {/* non-fatal */});
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const _b2 = tfEnv.backends as any;
+          console.log("[#1463] post-drafter-flush skipped — webgpu device unavailable", { hasBackends: !!_b2, hasOnnx: !!_b2?.onnx, hasWebgpu: !!_b2?.onnx?.webgpu });
         }
       }
     } catch { /* non-fatal — flush is best-effort */ }
