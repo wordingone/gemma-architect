@@ -1094,6 +1094,19 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // Worker owns: from_pretrained, WebGPU probe, warmup, drafter load, tokenization,
   // generate, decode. Main thread never blocks during model load or inference.
   await recycleModelWorkerIfNeeded(); // #1303: release ONNX WebGPU buffer pool every N turns
+  // §#1506: planned recycle sets state→recovering and bootComplete=false. The new worker
+  // loads async; dispatching GENERATE_REQUESTED before boot-complete reaches a null _model
+  // in the worker → "model not loaded". Spawn early and gate here until the worker is ready.
+  if (_arc.state === "recovering") {
+    initWorkerIfNeeded(); // start model load now so it runs in parallel with this await
+    await new Promise<void>((resolve, reject) => {
+      let onBoot: EventListener, onFatal: EventListener;
+      onBoot = () => { window.removeEventListener("agentmodel:fatal", onFatal); resolve(); };
+      onFatal = () => { window.removeEventListener("agentmodel:boot-complete", onBoot); reject(new Error("GPU fatal during model recycle")); };
+      window.addEventListener("agentmodel:boot-complete", onBoot, { once: true });
+      window.addEventListener("agentmodel:fatal", onFatal, { once: true });
+    });
+  }
   const worker = initWorkerIfNeeded();
 
   // Get imageUrl for vision turns (worker loads RawImage internally — no transfer needed).

@@ -633,8 +633,8 @@ export class ChatPanel {
       } finally {
         window.removeEventListener("agentmodel:generate-progress", onGenerateProgress);
         window.removeEventListener("agentmodel:generate-warning", onGenerateWarning);
+        agentRing?.remove(); // §#1507: must be in finally — skipped on exception if placed after
       }
-      agentRing?.remove();
 
       this._removeThinking(thinking);
       this._updatePerfStrip();
