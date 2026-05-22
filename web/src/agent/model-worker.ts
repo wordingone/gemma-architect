@@ -488,7 +488,7 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
 
   const safeMaxNewTokens = Math.min(maxNewTokens, WEBGPU_CONTEXT_LIMIT - inputLength);
   if (safeMaxNewTokens <= 0) {
-    post({ type: "generate-error", turnId, error: `input too long: ${inputLength} tokens` });
+    post({ type: "generate-error", turnId, error: `Your conversation is too long for the model to process. Starting a new conversation will allow shorter inputs. (prompt: ${inputLength} tok, limit: ${WEBGPU_CONTEXT_LIMIT})` });
     return;
   }
   // Warn when context saturation severely reduces output budget — produces empty plans with no error.
@@ -496,7 +496,7 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
     post({
       type: "generate-warning",
       turnId,
-      message: `context saturated: prompt ${inputLength} tok, budget clamped ${maxNewTokens}→${safeMaxNewTokens} tok (limit ${WEBGPU_CONTEXT_LIMIT})`,
+      message: `Conversation is getting long — the model's reply budget has been reduced to ${safeMaxNewTokens} tokens. Starting a new conversation may improve response quality.`,
     });
   }
 

@@ -550,7 +550,7 @@ export class ChatPanel {
 
       const onGenerateWarning = (e: Event): void => {
         const detail = (e as CustomEvent<{ message: string }>).detail;
-        this._pushMsg({ role: "assistant", content: `[warn] ${detail.message}` });
+        this._pushMsg({ role: "assistant", content: detail.message });
       };
       window.addEventListener("agentmodel:generate-warning", onGenerateWarning);
 
