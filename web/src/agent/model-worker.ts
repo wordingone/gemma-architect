@@ -208,6 +208,27 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     }
   };
 
+  // §C-cache-put-fallback (#1490): belt-and-suspenders for cache.put() UnknownError.
+  // The quota probe above handles incognito / low-quota devices, but Chrome can also
+  // reject cache.put() internally (UnknownError) even at HIGH quota (10+ GB free).
+  // Monkey-patch Cache.prototype.put for the duration of model loading so that ANY
+  // cache.put() rejection disables browser caching mid-load and resolves without
+  // rethrowing, allowing the shard to proceed in-memory without hanging.
+  type CachePutFn = (request: RequestInfo | URL, response: Response) => Promise<void>;
+  const _origCachePut: CachePutFn | null =
+    typeof Cache !== "undefined" && typeof Cache.prototype.put === "function"
+      ? (Cache.prototype.put as CachePutFn)
+      : null;
+  if (_origCachePut) {
+    Cache.prototype.put = function(request: RequestInfo | URL, response: Response): Promise<void> {
+      return (_origCachePut.call(this, request, response) as Promise<void>).catch((err: unknown) => {
+        console.warn("[model-worker] cache.put() rejected — disabling browser cache:", err);
+        tfEnv.useBrowserCache = false;
+        // Resolve (not reject): shard stays in memory, download continues
+      });
+    };
+  }
+
   const backends: Array<{ device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string }> = [
     { device: "webgpu", dtype: "q4f16", label: "GPU" },
     { device: "auto",   dtype: "q4",    label: "CPU" },
@@ -268,6 +289,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       return;
     }
   }
+
+  // Restore original Cache.prototype.put — monkey-patch only covers model init.
+  if (_origCachePut) Cache.prototype.put = _origCachePut as typeof Cache.prototype.put;
 
   if (!_model) {
     post({ type: "error", error: "No backend available for model load." });
