@@ -296,6 +296,15 @@ function initWorkerIfNeeded(): Worker {
       case "ready":
         // workerReady already set by MODEL_READY dispatch — no additional state mutation needed
         break;
+      case "context-budget":
+        window.dispatchEvent(new CustomEvent("agentmodel:context-budget", {
+          detail: {
+            inputLength: msg.inputLength as number,
+            limit: msg.limit as number,
+            ratio: (msg.inputLength as number) / (msg.limit as number),
+          },
+        }));
+        break;
       case "generate-progress":
         window.dispatchEvent(new CustomEvent("agentmodel:generate-progress", {
           detail: { turnId: msg.turnId, tokens_generated: msg.tokens_generated },
@@ -1074,7 +1083,8 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   // Plain-text messages: worker splices image into last user message if imageUrl is set.
   // §C (#990): build once, reuse length for telemetry — avoids redundant 7K-char rebuild.
   const MAX_HISTORY_MSGS = 20;
-  let trimmedHistory = (req.history ?? []).slice(-MAX_HISTORY_MSGS);
+  const _historyIn = req.history ?? [];
+  let trimmedHistory = _historyIn.slice(-MAX_HISTORY_MSGS);
   // Char-based safety trim: ~40K chars ≈ 10K tokens, leaves 6K headroom for sys+image+prompt
   // within the 16384-token WEBGPU_CONTEXT_LIMIT. Drop oldest user+assistant pairs together.
   const HISTORY_CHAR_BUDGET = 40_000;
@@ -1088,6 +1098,12 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
                 + (typeof trimmedHistory[1].content === "string" ? trimmedHistory[1].content.length : 0);
       trimmedHistory = trimmedHistory.slice(2);
     }
+  }
+  // §C-budget (#1439): notify UI when harness-level compaction actually drops turns.
+  if (trimmedHistory.length < _historyIn.length) {
+    window.dispatchEvent(new CustomEvent("agentmodel:compact", {
+      detail: { preTurns: _historyIn.length, postTurns: trimmedHistory.length },
+    }));
   }
   const _sysPrompt = buildWebGPUSystemPrompt(req.skills);
   const messages = [

@@ -20,7 +20,7 @@ import { createGoal, getCachedGoal, updateGoalTokens } from "../agent/goal-state
 import type { Goal } from "../agent/goal-state";
 
 type Message = {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
   dispatches?: AgentDispatch[];
   error?: string;
@@ -193,6 +193,7 @@ export class ChatPanel {
   private _continuationSuppressed = false;
   private _fatalBubbleShown = false;
   private _watchdogTimeoutPending = false;
+  private _contextChipEl!: HTMLDivElement;
 
   constructor(private _root: HTMLElement) {
     this._build();
@@ -220,6 +221,7 @@ export class ChatPanel {
       <div class="chat-starters"></div>
       <div class="chat-perf-strip" style="display:none"></div>
       <div class="chat-image-preview" style="display:none"></div>
+      <div class="chat-context-chip" style="display:none"></div>
       <div class="chat-compose">
         <button class="chat-attach-btn" type="button" title="Attach sketch image (or paste / drop)">⊕</button>
         <textarea class="chat-input"
@@ -234,6 +236,7 @@ export class ChatPanel {
     this._startersEl = this._root.querySelector(".chat-starters")!;
     this._perfStripEl = this._root.querySelector(".chat-perf-strip")!;
     this._previewEl = this._root.querySelector(".chat-image-preview")!;
+    this._contextChipEl = this._root.querySelector<HTMLDivElement>(".chat-context-chip")!;
     this._inputEl   = this._root.querySelector<HTMLTextAreaElement>(".chat-input")!;
     this._sendBtn   = this._root.querySelector<HTMLButtonElement>(".chat-send-btn")!;
     this._fileInputEl = this._root.querySelector<HTMLInputElement>(".chat-file-input")!;
@@ -354,6 +357,27 @@ export class ChatPanel {
       if (this._watchdogTimeoutPending) {
         this._watchdogTimeoutPending = false;
         this._pushMsg({ role: "assistant", content: "Model reloaded — ready to try again." });
+      }
+    });
+
+    // §C-budget (#1439): harness-level compact — show system bubble when turns are dropped.
+    window.addEventListener("agentmodel:compact", (e) => {
+      const { preTurns, postTurns } = (e as CustomEvent<{ preTurns: number; postTurns: number }>).detail;
+      this._pushMsg({
+        role: "system",
+        content: `✻ Context compacted (${preTurns}→${postTurns} turns retained)`,
+      });
+    });
+
+    // §C-budget (#1439): context-budget chip — surface ≥85% saturation in input area.
+    window.addEventListener("agentmodel:context-budget", (e) => {
+      const { inputLength, limit, ratio } = (e as CustomEvent<{ inputLength: number; limit: number; ratio: number }>).detail;
+      if (ratio >= 0.85) {
+        const pct = Math.round(ratio * 100);
+        this._contextChipEl.textContent = `⚠ Context ${pct}% full (${inputLength}/${limit} tok) — start a new conversation for best results`;
+        this._contextChipEl.style.display = "";
+      } else {
+        this._contextChipEl.style.display = "none";
       }
     });
 
@@ -787,6 +811,16 @@ export class ChatPanel {
     this._messages.push(msg);
     const item = document.createElement("div");
     item.className = `chat-msg chat-msg-${msg.role}`;
+
+    if (msg.role === "system") {
+      const sysSpan = document.createElement("span");
+      sysSpan.className = "chat-msg-system";
+      sysSpan.textContent = msg.content;
+      item.appendChild(sysSpan);
+      this._listEl.appendChild(item);
+      this._listEl.scrollTop = this._listEl.scrollHeight;
+      return;
+    }
 
     if (msg.error) {
       const errSpan = document.createElement("span");

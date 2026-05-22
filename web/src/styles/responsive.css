@@ -491,6 +491,23 @@
   opacity: 0.85;
 }
 .chat-refresh-btn:hover { opacity: 1; }
+.chat-msg-system {
+  display: block;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--ink-dim);
+  padding: 2px 8px;
+  opacity: 0.75;
+  text-align: center;
+}
+.chat-context-chip {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--amber, #e5c07b);
+  padding: 3px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--panel, #1a1a1a);
+}
 .chat-dispatch-pills {
   display: flex;
   flex-wrap: wrap;

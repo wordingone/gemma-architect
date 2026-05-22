@@ -504,6 +504,8 @@ async function handleGenerate(data: Record<string, unknown>): Promise<void> {
     : await proc(chatText, imageList.length > 0 ? imageList : null);
   const tProc = performance.now();
   const inputLength: number = inputs.input_ids?.dims?.[1] ?? 0;
+  // §C-budget (#1439): emit token budget ratio so main thread can show a chip when context is near-full.
+  post({ type: "context-budget", inputLength, limit: WEBGPU_CONTEXT_LIMIT });
 
   const safeMaxNewTokens = Math.min(maxNewTokens, WEBGPU_CONTEXT_LIMIT - inputLength);
   if (safeMaxNewTokens <= 0) {

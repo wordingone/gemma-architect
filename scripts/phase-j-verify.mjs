@@ -124,6 +124,7 @@ await cdp("Page.enable");
 const consoleErrors = [];
 const arcInvalidTransitions = [];
 const bufferManagerErrors = [];
+const compactEvents = [];
 
 eventHandlers.push(evt => {
   // Runtime.consoleAPICalled
@@ -153,6 +154,13 @@ eventHandlers.push(evt => {
       bufferManagerErrors.push(entry.text.slice(0, 200));
     }
   }
+});
+
+// ── Inject compact-event collector (#1439) ────────────────────────────────────
+// Runs on every new document so the listener survives cold-cache reload.
+
+await cdp("Page.addScriptToEvaluateOnNewDocument", {
+  source: `window.__compact_events=[];window.addEventListener('agentmodel:compact',function(e){window.__compact_events.push({ts:Date.now(),preTurns:e.detail.preTurns,postTurns:e.detail.postTurns});});`,
 });
 
 // ── Reload tab (unless --no-reload) ───────────────────────────────────────────
@@ -326,6 +334,14 @@ const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : 
 console.log(verdict.padEnd(54) + "  │");
 console.log(`└──────────────────────────────────────────────────────┘`);
 
+// ── Collect compact events from page (#1439) ──────────────────────────────────
+
+const pageCompactEvents = await evaluate("window.__compact_events ?? []") ?? [];
+if (pageCompactEvents.length > 0) {
+  compactEvents.push(...pageCompactEvents);
+  console.log(`  compact_events: ${pageCompactEvents.length} compaction(s) recorded`);
+}
+
 // ── Write receipt ──────────────────────────────────────────────────────────────
 
 const receipt = {
@@ -344,6 +360,7 @@ const receipt = {
   clean_turns: cleanTurns,
   total_turns: DEMO_PROMPTS.length,
   total_ms: totalMs,
+  compact_events: compactEvents,
   passed,
 };
 writeFileSync(outFile, JSON.stringify(receipt, null, 2));
