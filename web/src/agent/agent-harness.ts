@@ -1136,7 +1136,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
           }, 400);
         }
         console.warn("[agent-harness] worker-stall: generate exceeded 60s, worker recycled");
-        reject(new Error("Response timed out — the model is reloading. Try again in about 30 seconds."));
+        reject(new Error("Response timed out — the model is reloading. The input will re-enable when it's ready."));
       }, _WATCHDOG_MS);
 
       _generateCallbacks.set(turnId, {

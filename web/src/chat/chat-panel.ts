@@ -192,6 +192,7 @@ export class ChatPanel {
   private _continuationRunning = false;
   private _continuationSuppressed = false;
   private _fatalBubbleShown = false;
+  private _watchdogTimeoutPending = false;
 
   constructor(private _root: HTMLElement) {
     this._build();
@@ -340,6 +341,21 @@ export class ChatPanel {
         });
       }
     }, { once: true });
+
+    // §C-watchdog-ready (#1429): track watchdog-triggered recycles so the subsequent
+    // boot-complete can surface a "Model reloaded" followup — input re-enables silently,
+    // and without a visible signal the user doesn't know when to retry.
+    window.addEventListener("agentmodel:worker-recycled", (e) => {
+      if ((e as CustomEvent<{ reason?: string }>).detail?.reason === "generate-stall-watchdog") {
+        this._watchdogTimeoutPending = true;
+      }
+    });
+    window.addEventListener("agentmodel:boot-complete", () => {
+      if (this._watchdogTimeoutPending) {
+        this._watchdogTimeoutPending = false;
+        this._pushMsg({ role: "assistant", content: "Model reloaded — ready to try again." });
+      }
+    });
 
     // Attach button → file picker
     const attachBtn = this._root.querySelector<HTMLButtonElement>(".chat-attach-btn")!;
@@ -610,7 +626,10 @@ export class ChatPanel {
       // #1428: model-load-failed errors (WebGPU unsupported or other fatal load) also warrant
       // a reload button — the model is in an unrecoverable state; refresh is the only fix.
       const isModelLoadFailed = err.message.startsWith("Model failed to load");
-      const needsReload = isGpuFatal || isModelLoadFailed;
+      // #1429: watchdog timeout — model is reloading but reload button offered as default
+      // recovery per Leo (retry surface is non-trivial; page reload is safest escape).
+      const isTimeout = err.message.startsWith("Response timed out");
+      const needsReload = isGpuFatal || isModelLoadFailed || isTimeout;
       this._pushMsg({ role: "assistant", content: "", error: err.message, ...(needsReload ? { recovery: "reload" } : {}) });
       // QW-3: track inference/dispatch errors for external monitoring.
       (window as unknown as _GemmaW).__gemmaSession.errorCount++;
