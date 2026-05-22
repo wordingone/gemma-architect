@@ -4631,57 +4631,79 @@ await resetScene('before-box-inject');
   await evaluate(`(window.__testMode = true, true)`); // restore testMode
 }
 
-// ── S107 — parametric stair: step count from click distance (#956) ─────────────
-// Dispatch SdStair with start=[0,0] end=[4,0] (4m run). At default tread 0.28m
-// that gives round(4/0.28)=14 steps. Assert stepCount >= 2, consistent riser,
-// consistent tread, and that step geometry width matches the stair's totalRun.
+// ── S107 — parametric stair: distance-derived + explicit-param count (#956/#1332) ─
+// Sub-test A: 4m run, default tread → round(4/0.28)=14 steps.
+// Sub-test B: explicit count=15 riser=180mm tread=250mm → nRisers=15,
+//             totalRise=2700mm, totalRun=3750mm (Leo acceptance #1332).
 {
   await evaluate(`(window.__testMode = false, true)`);
 
   const s107 = await evaluate(`(async function() {
-    // Clear previous stairs to isolate
-    const before = [];
-    window.__viewer.scene.traverse(o => { if (o.userData && o.userData.creator === 'stair') before.push(o); });
+    function collectNewGroups(before) {
+      const groups = [];
+      window.__viewer.scene.traverse(o => {
+        if (o.userData && o.userData.creator === 'stair' && o.isGroup && !before.includes(o)) groups.push(o);
+      });
+      return groups;
+    }
+    function checkFlight(grp) {
+      const steps = [];
+      grp.traverse(o => { if (o.isMesh && o.userData && o.userData.ifcClass === 'IfcStairFlight') steps.push(o); });
+      if (steps.length === 0) return 'no IfcStairFlight mesh found';
+      return null;
+    }
 
-    window.__dispatch && window.__dispatch('SdStair', { start: { x: 10, y: 10 }, end: { x: 14, y: 10 } });
+    // ── Sub-test A: distance-derived (4m run, default tread ≈ 0.28m → 14 steps) ──
+    const beforeA = [];
+    window.__viewer.scene.traverse(o => { if (o.userData && o.userData.creator === 'stair') beforeA.push(o); });
+    window.__dispatch('SdStair', { start: { x: 10, y: 10 }, end: { x: 14, y: 10 } });
     await new Promise(r => setTimeout(r, 500));
 
-    // Collect the new stair group
-    const groups = [];
-    window.__viewer.scene.traverse(o => {
-      if (o.userData && o.userData.creator === 'stair' && o.isGroup && !before.includes(o)) {
-        groups.push(o);
-      }
-    });
-    if (groups.length === 0) return { passed: false, evidence: { reason: 'no stair group added' } };
-    const grp = groups[groups.length - 1];
+    const groupsA = collectNewGroups(beforeA);
+    if (groupsA.length === 0) return { passed: false, evidence: { sub: 'A', reason: 'no stair group added' } };
+    const grpA = groupsA[groupsA.length - 1];
+    const flightErrA = checkFlight(grpA);
+    if (flightErrA) return { passed: false, evidence: { sub: 'A', reason: flightErrA } };
 
-    // Collect flight meshes (1 per flight in the new solid-flight impl; N in the old per-step impl).
-    const steps = [];
-    grp.traverse(o => {
-      if (o.isMesh && o.userData && o.userData.ifcClass === 'IfcStairFlight') steps.push(o);
-    });
-    // Require at least 1 IfcStairFlight mesh; actual step count is in stairParams.nRisers.
-    if (steps.length === 0) return { passed: false, evidence: { reason: 'no IfcStairFlight mesh found' } };
+    const spA = grpA.userData.stairParams;
+    if (!spA || typeof spA.nRisers !== 'number') return { passed: false, evidence: { sub: 'A', reason: 'stairParams missing', spA } };
+    const expectedA = Math.max(2, Math.round(4.0 / 0.28));
+    const aOk = spA.nRisers >= 2 &&
+                Math.abs(spA.nRisers - expectedA) <= 1 &&
+                spA.actualRiser > 0.1 && spA.actualRiser < 0.25 &&
+                spA.actualTread > 0.2 && spA.actualTread < 0.4;
+    if (!aOk) return { passed: false, evidence: { sub: 'A', nRisers: spA.nRisers, expectedA, actualRiser: spA.actualRiser, actualTread: spA.actualTread } };
 
-    // Verify consistent riser heights: each step's box height = (stepIndex+1)*riser
-    // so height ratio between consecutive steps should equal 1 + 1/stepIndex
-    // Simpler: check that userData.stairParams.actualRiser is consistent
-    const sp = grp.userData.stairParams;
-    const hasParams = sp && typeof sp.nRisers === 'number' && typeof sp.actualRiser === 'number' && typeof sp.actualTread === 'number';
-    if (!hasParams) return { passed: false, evidence: { reason: 'stairParams missing from group userData', sp } };
+    // ── Sub-test B: explicit parametric — riser=0.18 tread=0.25 count=15 ──
+    // Expected: nRisers=15, totalRise=2.70m, totalRun=3.75m
+    const beforeB = [];
+    window.__viewer.scene.traverse(o => { if (o.userData && o.userData.creator === 'stair') beforeB.push(o); });
+    window.__dispatch('SdStair', { start: { x: 20, y: 10 }, end: { x: 23.75, y: 10 }, count: 15, riser: 0.18, tread: 0.25 });
+    await new Promise(r => setTimeout(r, 500));
 
-    const riserOk = sp.actualRiser > 0.1 && sp.actualRiser < 0.25; // reasonable riser
-    const treadOk = sp.actualTread > 0.2 && sp.actualTread < 0.4;  // reasonable tread
-    const countOk = sp.nRisers >= 2;
+    const groupsB = collectNewGroups(beforeB);
+    if (groupsB.length === 0) return { passed: false, evidence: { sub: 'B', reason: 'no stair group added' } };
+    const grpB = groupsB[groupsB.length - 1];
+    const flightErrB = checkFlight(grpB);
+    if (flightErrB) return { passed: false, evidence: { sub: 'B', reason: flightErrB } };
 
-    // Step count should be round(4 / DEFAULT_STAIR_TREAD) ≈ 14
-    const expectedSteps = Math.max(2, Math.round(4.0 / 0.28));
-    const countMatch = Math.abs(sp.nRisers - expectedSteps) <= 1; // ±1 for rounding
+    const spB = grpB.userData.stairParams;
+    if (!spB || typeof spB.nRisers !== 'number') return { passed: false, evidence: { sub: 'B', reason: 'stairParams missing', spB } };
+    const risersOk  = spB.nRisers === 15;
+    const riserOk   = Math.abs(spB.actualRiser - 0.18) < 0.005;
+    const treadOk   = Math.abs(spB.actualTread - 0.25) < 0.005;
+    const riseOk    = Math.abs(spB.totalRise - 2.70) < 0.02;
+    const runOk     = Math.abs(spB.nRisers * spB.actualTread - 3.75) < 0.02;
+    const bOk = risersOk && riserOk && treadOk && riseOk && runOk;
 
     return {
-      passed: riserOk && treadOk && countOk && countMatch,
-      evidence: { nRisers: sp.nRisers, expectedSteps, actualRiser: sp.actualRiser, actualTread: sp.actualTread, riserOk, treadOk, countOk, countMatch, meshStepCount: steps.length }
+      passed: bOk,
+      evidence: {
+        sub: 'B',
+        nRisers: spB.nRisers, actualRiser: spB.actualRiser, actualTread: spB.actualTread,
+        totalRise: spB.totalRise, computedRun: spB.nRisers * spB.actualTread,
+        risersOk, riserOk, treadOk, riseOk, runOk
+      }
     };
   })()`);
 
