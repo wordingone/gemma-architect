@@ -607,7 +607,11 @@ export class ChatPanel {
         return;
       }
       if (isGpuFatal) this._fatalBubbleShown = true;
-      this._pushMsg({ role: "assistant", content: "", error: err.message, ...(isGpuFatal ? { recovery: "reload" } : {}) });
+      // #1428: model-load-failed errors (WebGPU unsupported or other fatal load) also warrant
+      // a reload button — the model is in an unrecoverable state; refresh is the only fix.
+      const isModelLoadFailed = err.message.startsWith("Model failed to load");
+      const needsReload = isGpuFatal || isModelLoadFailed;
+      this._pushMsg({ role: "assistant", content: "", error: err.message, ...(needsReload ? { recovery: "reload" } : {}) });
       // QW-3: track inference/dispatch errors for external monitoring.
       (window as unknown as _GemmaW).__gemmaSession.errorCount++;
     } finally {
