@@ -2186,6 +2186,7 @@ export class Viewer {
     this.relocate.active = false;
     for (const g of this.gizmos) g.detach();
     this.updateRelocateBadge();
+    clearSelected();
   }
 
   setMesh(mesh: MeshIn, bounds: Bounds): void {
