@@ -363,6 +363,14 @@ export function chamferEdge(
  * The caller must replace the old mesh in the scene and history.
  */
 export function filletMesh(mesh: THREE.Mesh, radius: number): THREE.Mesh {
+  const creator = mesh.userData.creator as string | undefined;
+  const isBoxLike = !creator || creator === "rect" || creator === "extrude";
+  if (!isBoxLike) {
+    const err = mesh.clone();
+    err.userData._chamferError = `all-edge fillet only supports box/rect profiles; '${creator}' shape requires selecting a specific edge (use edgeId)`;
+    return err;
+  }
+
   mesh.geometry.computeBoundingBox();
   const bb = mesh.geometry.boundingBox;
   if (!bb) return mesh;

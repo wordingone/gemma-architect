@@ -1309,6 +1309,8 @@ export function initCreateMode(viewer: Viewer): void {
       const hit = opRaycastObject(viewer, ev.clientX, ev.clientY, extrudeHover, true);
       if (opPhase.kind === "bool_b") {
         opSetHover(hit && hit.obj !== opPhase.objA ? hit.obj : null);
+      } else if (opPhase.kind === "bool_op") {
+        opSetHover(null); // preserve selection highlights on objA (blue) and objB (orange)
       } else if (opPhase.kind === "extrude_select") {
         opSetHover(hit ? hit.obj : null);
         opUpdateSelectHoverPreview(viewer, hit ? hit.obj : null);

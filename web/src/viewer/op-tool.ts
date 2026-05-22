@@ -1020,13 +1020,13 @@ export function opUpdateSelectHoverPreview(viewer: Viewer, profile: THREE.Object
       const mat = c.material as THREE.MeshStandardMaterial;
       c.material = new THREE.MeshStandardMaterial({
         color: (mat as THREE.MeshStandardMaterial).color?.clone() ?? new THREE.Color(0x44aaff),
-        transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide,
       });
       mat.dispose();
     }
     if (c instanceof THREE.Line) {
       (c.material as THREE.LineBasicMaterial).transparent = true;
-      (c.material as THREE.LineBasicMaterial).opacity = 0.3;
+      (c.material as THREE.LineBasicMaterial).opacity = 0.5;
     }
   });
   mesh.traverse((c) => { c.renderOrder = 48; c.userData.noSnap = true; });

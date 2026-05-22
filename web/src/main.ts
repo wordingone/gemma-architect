@@ -595,6 +595,9 @@ registerHandler("SdFillet", (args) => {
     }
   } else {
     filleted = filletMesh(obj, radius);
+    if (filleted.userData._chamferError) {
+      return { error: `SdFillet — ${filleted.userData._chamferError as string}` };
+    }
   }
   viewer.getScene().remove(obj); // audit-undo-ok: tracked by pushReplaceAction below
   viewer.addMesh(filleted, "brep", { noHistory: true });
@@ -751,8 +754,9 @@ registerHandler("SdExtrude", (args) => {
   }
 
   // Build THREE.Shape from profile points
-  const pts: [number, number][] = resolvedProfile
-    ?? (Array.isArray(rawProfile) && rawProfile.length >= 3 ? (rawProfile as [number, number][]) : [[0, 0], [1, 0], [1, 1], [0, 1]]);
+  const pts: [number, number][] | null = resolvedProfile
+    ?? (Array.isArray(rawProfile) && rawProfile.length >= 3 ? (rawProfile as [number, number][]) : null);
+  if (!pts) return { error: "SdExtrude — provide object_id referencing a sketch profile, or a profile array of [x,y] pairs (min 3 points); no profile resolved" };
   const shape = new THREE.Shape();
   shape.moveTo(pts[0][0], pts[0][1]);
   for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);

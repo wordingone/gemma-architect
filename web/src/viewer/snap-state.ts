@@ -174,6 +174,7 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   // One shared raycaster for: (a) surface-hit fallback position, (b) face vertex
   // snap (section 1c below). Running it once avoids duplicate scene traversals.
   let _hitFacePts: THREE.Vector3[] = [];
+  let _hitFaceHasExplicitSnap = false; // true when hit object has userData.endpoints (use section 1a only)
   {
     const _occCanvas = viewer.getCanvas();
     const _occRect = _occCanvas.getBoundingClientRect();
@@ -196,6 +197,7 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
       const h = _occHits[0];
       if (h.face) {
         const m = h.object as THREE.Mesh;
+        _hitFaceHasExplicitSnap = !!(m.userData as { endpoints?: unknown }).endpoints;
         const pa = m.geometry.getAttribute("position") as THREE.BufferAttribute;
         const mw = m.matrixWorld;
         _hitFacePts = [h.face.a, h.face.b, h.face.c].map(
@@ -266,7 +268,11 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   }
 
   // ── 1c. Face-vertex snap from raycast hit (before edge snap) ─────────────────
-  if (snap.vertexSnapOn && _hitFacePts.length > 0) {
+  // Skipped for objects with userData.endpoints: those vertices are already covered
+  // by section 1a with curated snap points. Running 1c on tessellation vertices of
+  // objects that have explicit endpoints produces phantom snap points at triangle
+  // midpoints the user did not place.
+  if (snap.vertexSnapOn && _hitFacePts.length > 0 && !_hitFaceHasExplicitSnap) {
     let candidate: THREE.Vector3 | null = null;
     let candidateD = VERTEX_SNAP_PX;
     for (const fv of _hitFacePts) {
