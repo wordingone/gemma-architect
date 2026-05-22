@@ -590,6 +590,7 @@ DIMENSION RULES — extract ALL numeric values BEFORE generating geometry. Never
 - Footprint polygon: [[0,0],[W,0],[W,D],[0,D]] where W=width, D=depth.
 - Multi-story: one IfcLevel per floor, elevation = floor_index × floor_height. Default floor heights: 3.0m office/residential, 4.5m industrial/bay.
 - SdSpace must include a descriptive name= param: name="lobby", name="apparatus bay 1", etc.
+- UNITS: values in the prompt are authoritative. "12m" means exactly 12 metres — never apply imperial-to-metric conversion when the prompt uses metric. "12ft" means 12 feet. Emit the number exactly as specified in the active unit system.
 `.trim();
 
 const BUILDING_DEFAULTS = `
@@ -606,6 +607,7 @@ BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apa
 - SdExport: always end with format=ifc, target=scene.
 - Room sizes (net internal): bedroom 9-15m², living 18-25m², kitchen 8-12m², bathroom 4-6m².
 - Floor heights: residential 3.0m, office 3.5m, industrial/bay 4.5m.
+- ATTACHED STRUCTURES ("attached to the south/north/east/west wall", "garage on the side", "extension"): the new structure's footprint EXTENDS FROM the shared wall face outward. Never collapse profile endpoints — p1 must differ from p2 on every SdWall. Example: main house south wall at y=0, 5m×4m garage "attached to south wall" → garage footprint occupies y=-4 to y=0; walls: south [[0,-4],[5,-4]], east [[5,-4],[5,0]], west [[0,-4],[0,0]] (3 new walls; the house south wall is the shared face).
 `.trim();
 
 // Handler auto-behaviors: concise principles so the agent knows what NOT to compute.
