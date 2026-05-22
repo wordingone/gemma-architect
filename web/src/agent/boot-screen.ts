@@ -42,6 +42,7 @@ let _bootPhase: _BootPhase = 'download';
 let _phaseEnteredAt = 0;
 let _drafterLoadedBytes = 0;
 let _drafterTotalBytes = 0;
+let _lastDrafterBytesMs = 0; // wall-clock ms of last drafter bytes event; 0 = none yet
 
 // DOM refs
 let _overlay: HTMLDivElement | null = null;
@@ -198,7 +199,7 @@ function _wireEvents(): void {
     }>).detail ?? {};
     // Track drafter bytes separately for phase-based progress (#1425).
     if ((d.total ?? 0) > 0) _drafterTotalBytes = d.total!;
-    if ((d.bytes ?? 0) > 0) _drafterLoadedBytes = d.bytes!;
+    if ((d.bytes ?? 0) > 0) { _drafterLoadedBytes = d.bytes!; _lastDrafterBytesMs = Date.now(); }
     if (d.throughputBytesPerSec) _throughput = d.throughputBytesPerSec;
     _traceEvent('drafter:loading', { bytes: d.bytes, total: d.total });
     _advanceToPhase('drafter'); // first drafter event → advance phase
@@ -263,8 +264,20 @@ function _updateProgress(): void {
   const [phaseStart, phaseEnd] = _PHASE_RANGE[_bootPhase];
   if (_bootPhase === 'download') {
     pct = _totalBytes > 0 ? Math.min((_loadedBytes / _totalBytes) * 70, phaseEnd - 1) : 0;
-  } else if (_bootPhase === 'drafter' && _drafterTotalBytes > 0) {
-    pct = Math.min(phaseStart + (_drafterLoadedBytes / _drafterTotalBytes) * (phaseEnd - phaseStart), phaseEnd - 1);
+  } else if (_bootPhase === 'drafter') {
+    // Bytes-based floor: advances to where download got.
+    const bytesPct = _drafterTotalBytes > 0
+      ? Math.min(phaseStart + (_drafterLoadedBytes / _drafterTotalBytes) * (phaseEnd - phaseStart), phaseEnd - 1)
+      : phaseStart;
+    const stallMs = _lastDrafterBytesMs > 0 ? Date.now() - _lastDrafterBytesMs : 0;
+    if (stallMs > 2000) {
+      // ORT shader compilation: no bytes for >2s — advance by time from stall moment (#1443).
+      // Allow reaching phaseEnd (95%) so bar keeps moving during the 60s ORT compile window.
+      const stallSecs = (stallMs - 2000) / 1000;
+      pct = Math.min(bytesPct + stallSecs * (_PHASE_RATE['drafter'] ?? 0.10), phaseEnd);
+    } else {
+      pct = bytesPct;
+    }
   } else {
     // Time-based: advance slowly within phase, never reaching ceiling (next phase event does that).
     const elapsed = (performance.now() - _phaseEnteredAt) / 1000;
