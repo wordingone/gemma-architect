@@ -287,8 +287,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       const inputs: any = await proc(chatText, null);
       const tokCount: number = inputs.input_ids?.dims?.[1] ?? 0;
       if (tokCount < WEBGPU_CONTEXT_LIMIT - 64) {
+        // §#1420: 30s timeout — same pattern as post-drafter probe (#1417). Warmup is
+        // best-effort; timeout lets boot continue if WebGPU decode stalls on first call.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (_model as any).generate({ ...inputs, max_new_tokens: 8, do_sample: false });
+        await Promise.race([
+          (_model as any).generate({ ...inputs, max_new_tokens: 8, do_sample: false }),
+          new Promise<void>(r => setTimeout(r, 30_000)),
+        ]);
       }
     } catch (e) {
       console.warn("[model-worker] warmup probe failed:", (e as Error).message ?? e);
@@ -305,25 +310,39 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       post({ type: "progress", phase: "drafter", progress: 0, bytes: 0, total: 0, throughputBytesPerSec: 0 });
       let _drafterLastBytes = 0;
       let _drafterLastTs = Date.now();
-      const drafterBuf = await fetchDrafterCached(drafterUrl, drafterCacheKey, (loaded, total) => {
-        const now = Date.now();
-        const dtMs = now - _drafterLastTs;
-        const throughputBytesPerSec = dtMs >= 50 ? Math.round((loaded - _drafterLastBytes) / (dtMs / 1000)) : 0;
-        _drafterLastBytes = loaded;
-        _drafterLastTs = now;
-        post({
-          type: "progress",
-          phase: "drafter",
-          progress: total > 0 ? (loaded / total) * 100 : -1,
-          bytes: loaded,
-          total,
-          throughputBytesPerSec,
-        });
-      });
-      _drafterSession = await ort.InferenceSession.create(drafterBuf, {
-        executionProviders: ["webgpu", "wasm"],
-        preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
-      });
+      // §#1420: 10-min fetch cap — drafter is ~300MB; 10 min allows for slow CDN.
+      // Reject path falls through to catch → drafter-error (non-fatal, standard backend covers).
+      const drafterBuf = await Promise.race([
+        fetchDrafterCached(drafterUrl, drafterCacheKey, (loaded, total) => {
+          const now = Date.now();
+          const dtMs = now - _drafterLastTs;
+          const throughputBytesPerSec = dtMs >= 50 ? Math.round((loaded - _drafterLastBytes) / (dtMs / 1000)) : 0;
+          _drafterLastBytes = loaded;
+          _drafterLastTs = now;
+          post({
+            type: "progress",
+            phase: "drafter",
+            progress: total > 0 ? (loaded / total) * 100 : -1,
+            bytes: loaded,
+            total,
+            throughputBytesPerSec,
+          });
+        }),
+        new Promise<ArrayBuffer>((_, reject) =>
+          setTimeout(() => reject(new Error("drafter-fetch-timeout-600s")), 600_000)
+        ),
+      ]);
+      // §#1420: 60s ORT-init cap — WebGPU shader compilation can deadlock indefinitely.
+      // If it times out, reject falls to catch → drafter-error, standard backend takes over.
+      _drafterSession = await Promise.race([
+        ort.InferenceSession.create(drafterBuf, {
+          executionProviders: ["webgpu", "wasm"],
+          preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
+        }),
+        new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error("drafter-ort-timeout-60s")), 60_000)
+        ),
+      ]);
       _bootDrafterDone = true;
       post({ type: "drafter-ready" });
     } catch (e) {
