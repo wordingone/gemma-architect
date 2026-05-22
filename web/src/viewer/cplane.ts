@@ -90,6 +90,13 @@ const CANONICAL_KIND: Record<string, CPlaneKind> = {
   IfcDoor:     "host-derived",
   IfcWindow:   "host-derived",
   IfcOpening:  "host-derived",
+  // SD canonical names — handlers call resolveCPlane("Sd*") not "Ifc*"
+  SdWall:      "world",
+  SdSlab:      "world",
+  SdColumn:    "world",
+  SdDoor:      "host-derived",
+  SdWindow:    "host-derived",
+  SdOpening:   "host-derived",
   // SD primitives / agnostic geometry — view-derived (W-3 completes)
   SdBox:       "view-derived",
   SdSphere:    "view-derived",
