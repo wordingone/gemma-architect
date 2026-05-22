@@ -706,20 +706,47 @@ export function buildStairOnCurve(
     _ctrlArcLens.push(arcLens[ctrlSampleIdx]);
   }
   const _landingStepIndices = new Set<number>();
-  for (let k = 1; k < ctrlPts.length - 1; k++) {
-    const stepIdx = Math.round(_ctrlArcLens[k] / actualT);
-    _landingStepIndices.add(Math.min(stepIdx, nRisers - 1));
-    const pos = sampleAt(_ctrlArcLens[k]);
-    const zLanding = stepIdx * riser;
-    // Parametric landing aligned to incoming and outgoing curve tangents.
-    const prevPos = sampleAt(Math.max(0, _ctrlArcLens[k] - actualT * 0.5));
-    const nextPos = sampleAt(Math.min(totalArcLen, _ctrlArcLens[k] + actualT * 0.5));
+
+  const _placeLanding = (stepIdx: number, arcLen: number) => {
+    const clamped = Math.min(stepIdx, nRisers - 1);
+    if (_landingStepIndices.has(clamped)) return;
+    _landingStepIndices.add(clamped);
+    const pos = sampleAt(arcLen);
+    const zLanding = clamped * riser;
+    const prevPos = sampleAt(Math.max(0, arcLen - actualT * 0.5));
+    const nextPos = sampleAt(Math.min(totalArcLen, arcLen + actualT * 0.5));
     const d1Len = Math.sqrt((pos.x - prevPos.x) ** 2 + (pos.y - prevPos.y) ** 2) || 1;
     const d2Len = Math.sqrt((nextPos.x - pos.x) ** 2 + (nextPos.y - pos.y) ** 2) || 1;
     const d1n = { x: (pos.x - prevPos.x) / d1Len, y: (pos.y - prevPos.y) / d1Len };
     const d2n = { x: (nextPos.x - pos.x) / d2Len, y: (nextPos.y - pos.y) / d2Len };
-    const ldg = _makeLandingMesh(pos, d1n, d2n, stairW, landingT, zLanding, stairId);
-    group.add(ldg);
+    group.add(_makeLandingMesh(pos, d1n, d2n, stairW, landingT, zLanding, stairId));
+  };
+
+  // Ctrl-point landings.
+  for (let k = 1; k < ctrlPts.length - 1; k++) {
+    const stepIdx = Math.round(_ctrlArcLens[k] / actualT);
+    _placeLanding(stepIdx, _ctrlArcLens[k]);
+  }
+
+  // IBC 2018 §1011.5.2 — max vertical rise per flight = 144 in (3.66 m, rounded).
+  // Insert intermediate landings wherever cumulative rise between existing landings exceeds limit.
+  // Epsilon in ceil prevents spurious split at the exact boundary (e.g. 3.66m / 3.66 = 1.0 → ceil = 1 → 0 landings).
+  const IBC_MAX_RISE = 3.66;
+  const _boundaries = [0, ...[..._landingStepIndices].sort((a, b) => a - b), nRisers];
+  for (let si = 0; si < _boundaries.length - 1; si++) {
+    const segStart = _boundaries[si];
+    const segEnd   = _boundaries[si + 1];
+    const segRise  = (segEnd - segStart) * riser;
+    if (segRise <= IBC_MAX_RISE) continue;
+    const nInter = Math.ceil(segRise / IBC_MAX_RISE - 1e-9) - 1;
+    if (nInter <= 0) continue;
+    const stepsPerSub = (segEnd - segStart) / (nInter + 1);
+    for (let li = 1; li <= nInter; li++) {
+      const insertAt = Math.round(segStart + li * stepsPerSub);
+      if (insertAt > segStart && insertAt < segEnd) {
+        _placeLanding(insertAt, insertAt * actualT);
+      }
+    }
   }
 
   // Each step is a single-riser box at its correct height (not cumulative).
