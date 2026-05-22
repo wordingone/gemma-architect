@@ -252,7 +252,8 @@ export class ChatPanel {
       }
     });
 
-    // A6 (#980): continuation loop — fires on every agent:turn-complete while goal is active.
+    // A6 (#980): continuation safety net — fires on agent:turn-complete while goal is active.
+    // #1485 revert (Axis E): single-turn dispatch; continuation only for initial zero-dispatch.
     window.addEventListener("agent:turn-complete", (e) => {
       const detail = (e as CustomEvent<{ verbs: string[] }>).detail;
       const goal = getCachedGoal();
@@ -269,9 +270,8 @@ export class ChatPanel {
           // Continuation turn produced no dispatches — model has nothing more to do.
           this._continuationSuppressed = true;
         }
-        return;
       }
-      void this._runContinuation(goal);
+      // Non-zero dispatch turns: single-turn model handles all steps; no loop needed.
     });
 
     window.addEventListener("debug:telemetry-toggle", () => {
