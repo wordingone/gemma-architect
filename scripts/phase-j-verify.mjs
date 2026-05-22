@@ -266,6 +266,8 @@ if (bootComplete) {
     let outcome = "timeout";
     let workerRecycled = false;
     const turnDeadline = Date.now() + TURN_TIMEOUT_MS;
+    // §#1461: snapshot recycleCount BEFORE this turn to detect per-turn recycles.
+    const initialRecycleCount = await evaluate("window.__arc?.recycleCount ?? 0");
 
     while (Date.now() < turnDeadline) {
       await delay(3000);
@@ -289,9 +291,10 @@ if (bootComplete) {
       }
     }
 
-    // Check if worker was recycled (by comparing recycleCount before/after)
+    // §#1461: compare per-turn delta, not cumulative count.
+    // Prior bug: `if (finalRecycleCount > 0)` treated all post-recycle turns as recycled.
     const finalRecycleCount = await evaluate("window.__arc?.recycleCount ?? 0");
-    if (finalRecycleCount > 0) workerRecycled = true;
+    if (finalRecycleCount > initialRecycleCount) workerRecycled = true;
 
     const turnBufferErrors = bufferManagerErrors.length - preErrorCount;
     if (i === 0) turn1BufferManagerErrors = turnBufferErrors;

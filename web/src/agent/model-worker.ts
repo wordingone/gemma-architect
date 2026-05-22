@@ -335,15 +335,19 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           setTimeout(() => reject(new Error("drafter-fetch-timeout-600s")), 600_000)
         ),
       ]);
-      // §#1420: 60s ORT-init cap — WebGPU shader compilation can deadlock indefinitely.
-      // If it times out, reject falls to catch → WASM retry (avoids GPU conflict on inference).
+      // §#1460: WASM-only for drafter ORT init — eliminates GPU queue contention on turn 1.
+      // WebGPU path (#1420/#1454) consistently timed out at 60s, leaving an abandoned
+      // shader-compilation job that clashed with main-model OrtRun. Promise.race cancels
+      // the wait but not the work; the background GPU ops persisted through turn 1.
+      // Using WASM from the start avoids all GPU contention and matches the actual outcome
+      // (model always ended up on WASM anyway via the #1454 fallback).
       _drafterSession = await Promise.race([
         ort.InferenceSession.create(drafterBuf, {
-          executionProviders: ["webgpu", "wasm"],
+          executionProviders: ["wasm"],
           preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
         }),
         new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error("drafter-ort-timeout-60s")), 60_000)
+          setTimeout(() => reject(new Error("drafter-wasm-timeout-120s")), 120_000)
         ),
       ]);
       _bootDrafterDone = true;
@@ -351,27 +355,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     } catch (e) {
       _bootDrafterDone = true;
       const errMsg = (e as Error).message ?? "";
-      if (errMsg === "drafter-ort-timeout-60s" && (drafterBuf as ArrayBuffer)?.byteLength > 0) {
-        // §#1454: WebGPU shader compilation deadlocked. The abandoned ORT init still holds
-        // the GPU queue, causing OrtRun failures on the main model during inference.
-        // Retry with WASM-only — CPU execution avoids the GPU device conflict entirely.
-        try {
-          _drafterSession = await Promise.race([
-            ort.InferenceSession.create(drafterBuf as ArrayBuffer, {
-              executionProviders: ["wasm"],
-              preferredOutputLocation: { logits: "cpu", proj_state: "cpu" },
-            }),
-            new Promise<any>((_, reject) =>
-              setTimeout(() => reject(new Error("drafter-wasm-timeout-120s")), 120_000)
-            ),
-          ]);
-          post({ type: "drafter-ready" });
-        } catch (wasmErr) {
-          post({ type: "drafter-error", error: `gpu-deadlock+wasm-failed: ${(wasmErr as Error).message?.slice(0, 80)}` });
-        }
-      } else {
-        post({ type: "drafter-error", error: errMsg.slice(0, 120) });
-      }
+      post({ type: "drafter-error", error: errMsg.slice(0, 120) });
     }
   } else {
     // No drafter URL — drafter phase is skipped.
