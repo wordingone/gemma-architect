@@ -684,56 +684,37 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
-// FEW_SHOT_WEBGPU — on-device WebGPU path (#1482). Shows multi-turn batched dispatch so
-// the model learns to: (1) emit compact plan + 3-5 dispatches in the initial goal turn
-// (stays within 384-tok initial cap), (2) emit 5-10 dispatches per continuation turn,
-// (3) emit update_goal when done, (4) respond in plain prose for scene queries.
-const FEW_SHOT_WEBGPU = `
-Examples — compact plan then batched tool_call dispatch, function names EXACTLY:
+const WEBGPU_HOUSE_FEW_SHOT = `
+Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan> block):
 
-User: draw a 5m wall, 0.2m thick, 2.8m tall
-Assistant:
-<plan>1. SdWall — profile=[[0,0],[5,0]], thickness=0.2, height=2.8</plan>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
-
-User: Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.
-Assistant: 26ft × 20ft, pitched roof, 2 floors. Dispatching in batches.
-<plan>L1+L2 levels → slab/walls/door/windows/stair (L1) → slab/walls/windows/roof (L2).</plan>
-<tool_call>{"name":"SdLevel","arguments":{"name":"Level 1","elevation":0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdLevel","arguments":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/0"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
-
-User: Continue working toward the goal: "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.". Dispatch the next batch of building elements (5-10 tool_calls maximum per turn). Call update_goal({"status":"complete"}) when fully done.
-Assistant:
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdDoor","arguments":{"position":[13,0,0],"width":3.0,"height":7.0,"sillH":0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdStair","arguments":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0},"metadata":{"source":"agent"}}</tool_call>
-
-User: Continue working toward the goal: "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.". Dispatch the next batch of building elements (5-10 tool_calls maximum per turn). Call update_goal({"status":"complete"}) when fully done.
-Assistant:
-<tool_call>{"name":"setActiveLevel","arguments":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"update_goal","arguments":{"status":"complete"},"metadata":{"source":"agent"}}</tool_call>
-
-User: What's currently in the scene?
-Assistant: A two-story residential house, 26 by 20 feet. Ground floor: perimeter slab, 4 walls, south entry door, 4 windows (south, east, north, west), interior staircase at the northeast corner. Upper floor: slab, 4 perimeter walls, 4 windows matching the floor below. A pitched 30-degree roof caps the assembly.
+User: build a two-story residential house, 26 feet wide by 20 feet deep
+Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows on L1; 4 windows on L2; stair at NE corner.
+<tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":9.0,"extent":26}}</tool_call>
+<tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26}}</tool_call>
+<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
+<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdDoor","parameters":{"position":[5,0,0],"width":3.0,"height":7.0,"sillH":0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"}}</tool_call>
+<tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30}}</tool_call>
+<tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
+<tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
@@ -756,15 +737,14 @@ export function buildSystemPrompt(skills?: Skill[]): string {
   ].filter(Boolean).join("\n\n");
 }
 
-// On-device WebGPU system prompt. Uses full FEW_SHOT_EXAMPLES (#999):
-// ONNX model (onnx-community/gemma-4-E4B-it-ONNX) has RoPE caches at [131072, 128/256]
-// and config max_position_embeddings=131072 — not baked at 2048. The earlier SafeInt
-// overflow was from pre-#992 WEBGPU_CONTEXT_LIMIT=2048 in model-worker.ts (now 16384).
+// On-device WebGPU system prompt. TRIAGE: uses WEBGPU_HOUSE_FEW_SHOT (one example,
+// ~450 tok) instead of full FEW_SHOT_EXAMPLES (~1375 tok) to stay under the 2048-position
+// ONNX bake limit (SafeInt overflow at safeint.h:17 confirmed 2026-05-18). Real fix: #998.
 export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
   const dict = getDictionary();
   const implemented = new Set(listHandlers());
-  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.name)) : dict;
-  const verbNames = available.map((e) => e.name).join(", ");
+  const available = implemented.size > 0 ? dict.filter((e) => implemented.has(e.canonical_name)) : dict;
+  const verbNames = available.map((e) => e.canonical_name).join(", ");
   const verbList = verbNames.length > 0
     ? `Available verbs (use ONLY these exact names): ${verbNames}`
     : "No verbs currently available. Do not emit function calls.";
@@ -776,16 +756,12 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
 
   return [
     "You are Gemma, a parametric CAD assistant. Be direct — no preamble.",
-    // #1482: PLAN THEN DISPATCH in batches so each turn stays within the 384-token initial cap.
-    // Continuation turns (prompted by the goal-loop) dispatch 5-10 tool_calls each.
-    "PLAN THEN DISPATCH: emit a compact <plan> block (1-3 lines), then <tool_call> blocks in batches. Initial goal turn: 3-5 tool_calls max. Continuation turns: 5-10 tool_calls each. When all steps are dispatched, emit <tool_call>{\"name\":\"update_goal\",\"arguments\":{\"status\":\"complete\"},\"metadata\":{\"source\":\"agent\"}}</tool_call>. NEVER emit a plan-only turn — always follow with at least one tool_call. Level names always 'Level 1', 'Level 2', 'Level 3'.",
-    "AMBIGUITY: infer defaults, state ONE assumption inline, execute. Do NOT ask questions.",
+    "DISPATCH DIRECTLY: emit <tool_call> blocks immediately — no <plan> block. State ONE assumption on one line if needed, then emit tool calls. Level names are always 'Level 1', 'Level 2', 'Level 3' — never 'Ground', 'Floor 2', or custom names.",
+    "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
-    "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building.",
-    "SCENE QUERY RESPONSE: when asked to describe the scene — respond PLAIN TEXT ONLY. No <plan> or <tool_call>. Describe what you see: shapes, materials, arrangement. One natural prose paragraph.",
-    FEW_SHOT_WEBGPU,
+    "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
+    WEBGPU_HOUSE_FEW_SHOT,
     verbList,
-    summariseCanvasSkills(),
   ].filter(Boolean).join("\n\n");
 }
 
@@ -1008,7 +984,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
   const t0 = Date.now();
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ⟳`);
 
-  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 384 });
+  const stream = sb.generate({ messages, maxNewTokens: req.maxNewTokens ?? 1024 });
   // Drain the token stream (satisfies AC: tokens stream back via postMessage inside worker)
   for await (const _tok of stream) { /* tokens flow via postMessage internally */ }
 
@@ -1051,7 +1027,7 @@ async function runWasmBackendTurn(req: AgentRequest): Promise<AgentResponse> {
 
   const json = await wasmChatCompletion({
     messages,
-    max_tokens:  req.maxNewTokens ?? 384,
+    max_tokens:  req.maxNewTokens ?? 1024,
     temperature: 0.1,
   });
 
@@ -1242,7 +1218,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         messages,
         imageUrl,
         videoUrls,     // §#693 — defined when VITE_VIDEO_INPUT + req.frames
-        maxNewTokens:  req.maxNewTokens ?? 384,
+        maxNewTokens:  req.maxNewTokens ?? 1024,
         eosId:         1, // Gemma 4 EOS; worker also reads model.config as fallback
         draftK:        MTP_DRAFT_N,
         useMtp,
