@@ -304,6 +304,16 @@ if (bootComplete) {
   }
 }
 
+// ── Collect compact events from page (#1439) ─────────────────────────────────
+// §#1455: Must run BEFORE ws.close(). The socket is still open here; collecting
+// after ws.close() sends a CDP command through a closing socket and the pending
+// promise never resolves (no rejection path → infinite hang).
+
+const pageCompactEvents = await evaluate("window.__compact_events ?? []", 5_000) ?? [];
+if (pageCompactEvents.length > 0) {
+  compactEvents.push(...pageCompactEvents);
+}
+
 ws.close();
 
 // ── Summary ────────────────────────────────────────────────────────────────────
@@ -322,6 +332,9 @@ console.log(`│  ARC inv-trans : ${String(arcInvalidTransitions.length === 0 ? 
 console.log(`│  bufMgr turn-1 : ${String(bufMgrClean ? "CLEAN" : `${turn1BufferManagerErrors} errors`).padEnd(35)}│`);
 console.log(`│  GENERATE_DONE : ${String(`${cleanTurns}/${DEMO_PROMPTS.length} turns`).padEnd(35)}│`);
 console.log(`│  total time    : ${String(`${Math.round(totalMs/1000)}s`).padEnd(35)}│`);
+if (compactEvents.length > 0) {
+  console.log(`│  compact_events: ${String(`${compactEvents.length} compaction(s)`).padEnd(35)}│`);
+}
 console.log(`├──────────────────────────────────────────────────────┤`);
 for (const r of turnResults) {
   const icon = r.outcome === "generate-done" && !r.workerRecycled ? "✓" : "✗";
@@ -333,14 +346,6 @@ console.log(`├─────────────────────�
 const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : "FAIL"}`;
 console.log(verdict.padEnd(54) + "  │");
 console.log(`└──────────────────────────────────────────────────────┘`);
-
-// ── Collect compact events from page (#1439) ──────────────────────────────────
-
-const pageCompactEvents = await evaluate("window.__compact_events ?? []") ?? [];
-if (pageCompactEvents.length > 0) {
-  compactEvents.push(...pageCompactEvents);
-  console.log(`  compact_events: ${pageCompactEvents.length} compaction(s) recorded`);
-}
 
 // ── Write receipt ──────────────────────────────────────────────────────────────
 
