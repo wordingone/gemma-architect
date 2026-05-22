@@ -36,7 +36,7 @@ const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retr
 // Turn 2: scene-query (tests NL-only response path — no dispatches expected).
 // Turns 3-5: continuation goals.
 const STARTER_PROMPTS = [
-  "Build a two-story residential house, 8m wide by 6m deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
+  "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
   "What's currently in the scene?",
   "Add a single-car garage attached to the south wall, 5m wide by 4m deep.",
   "What's currently in the scene?",
