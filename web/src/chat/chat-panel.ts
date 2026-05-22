@@ -717,15 +717,28 @@ export class ChatPanel {
     const fired: string[] = [];
     const errors: string[] = [];
     const isImperial = getState("unitSystem") === "imperial";
+    // #1487: dispatch ledger — per-dispatch diagnostic for Phase J receipt.
+    const w = window as unknown as Record<string, unknown>;
+    if (!Array.isArray(w.__dispatchLedger)) w.__dispatchLedger = [];
+    const ledger = w.__dispatchLedger as unknown[];
     // QW-1: read pre-dispatch hooks once per batch (fault-isolated — hook errors are silenced).
     const preHooks = (window as unknown as _GemmaW).__gemma_dispatch_hooks.pre.slice();
     for (const d of resp.dispatches) {
       // QW-1: call each registered pre-dispatch hook before invoking the command.
       for (const hook of preHooks) { try { hook(d); } catch { /* silenced */ } }
+      const sceneChildrenBefore = (window as unknown as { __viewer?: { scene?: { children?: unknown[] } } }).__viewer?.scene?.children?.length ?? -1;
+      const effectiveArgs = isImperial ? imperialArgsToMetric(d.arguments) : d.arguments;
       const out = await invokeCommand({
         command: d.name,
-        parameters: isImperial ? imperialArgsToMetric(d.arguments) : d.arguments,
+        parameters: effectiveArgs,
         metadata: { source: "agent" },
+      });
+      const sceneChildrenAfter = (window as unknown as { __viewer?: { scene?: { children?: unknown[] } } }).__viewer?.scene?.children?.length ?? -1;
+      ledger.push({
+        verb: d.name, args: effectiveArgs,
+        status: out.status, error: (out as Record<string, unknown>).error ?? null,
+        sceneChildrenBefore, sceneChildrenAfter,
+        sceneChildrenDelta: sceneChildrenAfter - sceneChildrenBefore,
       });
       const cls = classifyDispatchResult(d.name, out);
       fired.push(cls.fired);

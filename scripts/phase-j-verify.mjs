@@ -373,6 +373,11 @@ if (bootComplete) {
     const dispatchCount = dispatchVerbs.length;
     const goalState     = phaseTurnData.goalState ?? "absent";
     const isNlResponse  = dispatchCount === 0 && outcome === "generate-done";
+    // #1487: capture per-dispatch ledger from source instrumentation (verb+args+status+sceneChildrenDelta).
+    const turnLedger = await evaluate(
+      "(function(){var l=window.__dispatchLedger;window.__dispatchLedger=[];return Array.isArray(l)?l:[];})()",
+      5000
+    ).catch(() => []) ?? [];
     // Reset for next turn.
     await evaluate("window.__phase_j_current={dispatchVerbs:[],goalState:'absent'}", 2000).catch(() => null);
 
@@ -394,6 +399,7 @@ if (bootComplete) {
       goalState,
       nlResponse: isNlResponse,
       durationMs,
+      dispatchLedger: turnLedger,
     };
     if (fatalErrorMsg !== undefined) turnEntry.fatalErrorMsg = fatalErrorMsg;
     turnResults.push(turnEntry);
