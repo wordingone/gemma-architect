@@ -174,13 +174,14 @@ await cdp("Page.addScriptToEvaluateOnNewDocument", {
 //   _runDispatches executing between the two CDP round-trips → always returned [].
 //   Fix: drain __dispatchLedger inside the same event handler, atomic with dispatchVerbs capture.
 await cdp("Page.addScriptToEvaluateOnNewDocument", {
-  source: `window.__phase_j_turns=[];window.__phase_j_current={dispatchVerbs:[],goalState:'absent',dispatchLedger:[]};
+  source: `window.__phase_j_turns=[];window.__phase_j_current={dispatchVerbs:[],goalState:'absent',dispatchLedger:[],sceneChildrenAfter:null};
 window.__phase_j_turn_done=0;
 window.addEventListener('agent:turn-complete',function(e){
   var v=e.detail&&e.detail.verbs?e.detail.verbs:[];
   window.__phase_j_current.dispatchVerbs=v;
   var l=window.__dispatchLedger;window.__dispatchLedger=[];
   window.__phase_j_current.dispatchLedger=Array.isArray(l)?l:[];
+  window.__phase_j_current.sceneChildrenAfter=window.__viewer&&window.__viewer.scene?window.__viewer.scene.children.length:null;
   window.__phase_j_turn_done++;
 });
 window.addEventListener('goal:changed',function(e){
@@ -303,6 +304,11 @@ if (bootComplete) {
     const preErrorCount = bufferManagerErrors.length;
     console.log(`\n[+${Date.now()-startMs}ms] Turn ${i+1}/${DEMO_PROMPTS.length}: "${prompt}"`);
 
+    // §#1504: snapshot scene children count + error indices BEFORE turn (for per-turn fields)
+    const sceneChildrenBefore = await evaluate("window.__viewer?.scene?.children?.length ?? null", 5000);
+    const preConsoleErrorIdx = consoleErrors.length;
+    const preArcInvalidCount = arcInvalidTransitions.length;
+
     // Type prompt into chat input and submit
     const sent = await evaluate(`(function() {
       const inp = document.querySelector('.chat-input, textarea[name="prompt"], [data-role="chat-input"]');
@@ -389,8 +395,19 @@ if (bootComplete) {
     // #1491 gap-1: ledger was captured synchronously in agent:turn-complete handler; read it from phaseTurnData.
     //   Previous separate CDP drain evaluate had a timing race and always returned [].
     const turnLedger = Array.isArray(phaseTurnData.dispatchLedger) ? phaseTurnData.dispatchLedger : [];
+    // §#1504: scene children count at turn-end (captured inside agent:turn-complete handler, atomic)
+    const sceneChildrenAfter = phaseTurnData.sceneChildrenAfter ?? null;
     // Reset for next turn.
-    await evaluate("window.__phase_j_current={dispatchVerbs:[],goalState:'absent',dispatchLedger:[]}", 2000).catch(() => null);
+    await evaluate("window.__phase_j_current={dispatchVerbs:[],goalState:'absent',dispatchLedger:[],sceneChildrenAfter:null}", 2000).catch(() => null);
+
+    // §#1504: per-turn flags — aggregate detected failure signals into named strings
+    const turnConsoleSlice  = consoleErrors.slice(preConsoleErrorIdx);
+    const turnArcInvalids   = arcInvalidTransitions.slice(preArcInvalidCount);
+    const flags = [];
+    if (workerRecycled) flags.push("WORKER_RECYCLED");
+    if (turnBufferErrors > 0) flags.push("BUFFER_MGR_RACE");
+    if (outcome === "fatal-error") flags.push("MODEL_STALL");
+    if (turnConsoleSlice.some(e => /D3D12_OOM|gpu\s*fatal/i.test(e.text)) || turnArcInvalids.some(t => t.includes("D3D12_OOM"))) flags.push("D3D12_OOM");
 
     const durationMs = Date.now() - turnMs0;
     const fatalErrorMsg = outcome === "fatal-error" ? (turnResults._lastFatalMsg ?? null) : undefined;
@@ -408,12 +425,28 @@ if (bootComplete) {
       dispatchCount,
       dispatchVerbs,
       goalState,
-      nlResponse: isNlResponse,
+      isNlResponse,
       durationMs,
       dispatchLedger: turnLedger,
+      sceneChildrenBefore: sceneChildrenBefore ?? null,
+      sceneChildrenAfter,
+      flags,
     };
     if (fatalErrorMsg !== undefined) turnEntry.fatalErrorMsg = fatalErrorMsg;
     turnResults.push(turnEntry);
+  }
+}
+
+// §#1504: cumulative-growth assertion — scene.children must not shrink between turns
+// (detects SdClearScene or any reset that fabricates empty state; verifies #1499 fix is holding)
+let cumulativeGrowthOk = true;
+const cumulativeGrowthViolations = [];
+for (let gi = 0; gi < turnResults.length - 1; gi++) {
+  const afterCount  = turnResults[gi].sceneChildrenAfter;
+  const beforeCount = turnResults[gi + 1].sceneChildrenBefore;
+  if (afterCount !== null && beforeCount !== null && beforeCount !== afterCount) {
+    cumulativeGrowthOk = false;
+    cumulativeGrowthViolations.push({ turn: gi, sceneChildrenAfter: afterCount, nextTurnBefore: beforeCount, delta: beforeCount - afterCount });
   }
 }
 
@@ -465,19 +498,33 @@ for (const r of turnResults) {
 // #1482/#1477: dispatch gate — turn 1 must dispatch tool_calls (not plan-only);
 // turn 2 (scene-query) must produce NL-only response (no dispatch).
 const turn1DispatchOk = turn1DispatchCount >= 3;
-const turn2NlOk       = turnResults[1]?.nlResponse === true;
+const turn2NlOk       = turnResults[1]?.isNlResponse === true;
 const passed = bootComplete && arcInvClean && bufMgrClean
   && cleanTurns >= Math.ceil(PROMPT_N * 0.6)
   && turn1DispatchOk
-  && turn2NlOk;
+  && turn2NlOk
+  && cumulativeGrowthOk;  // §#1504
 console.log(`├──────────────────────────────────────────────────────┤`);
 console.log(`│  turn1 dispatch: ${String(turn1DispatchOk ? `${turn1DispatchCount} dispatches ✓` : `${turn1DispatchCount} dispatches ✗ (need ≥3)`).padEnd(35)}│`);
-console.log(`│  turn2 NL-only : ${String(turn2NlOk ? "true ✓" : `${turnResults[1]?.nlResponse} ✗`).padEnd(35)}│`);
+console.log(`│  turn2 NL-only : ${String(turn2NlOk ? "true ✓" : `${turnResults[1]?.isNlResponse} ✗`).padEnd(35)}│`);
+console.log(`│  cumul-growth  : ${String(cumulativeGrowthOk ? "OK ✓" : `VIOLATED (${cumulativeGrowthViolations.length})`).padEnd(35)}│`);
 const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : "FAIL"}`;
 console.log(verdict.padEnd(54) + "  │");
 console.log(`└──────────────────────────────────────────────────────┘`);
 
 // ── Write receipt ──────────────────────────────────────────────────────────────
+
+// §#1504: failureBreakdown populated only on FAIL — exposes mechanism without narrative
+const failureBreakdown = passed ? null : {
+  boot_complete: bootComplete,
+  arc_invalid_clean: arcInvClean,
+  buffer_mgr_turn1_clean: bufMgrClean,
+  clean_turns_ok: cleanTurns >= Math.ceil(PROMPT_N * 0.6),
+  turn1_dispatch_ok: turn1DispatchOk,
+  turn2_nl_ok: turn2NlOk,
+  cumulative_growth_ok: cumulativeGrowthOk,
+  cumulative_growth_violations: cumulativeGrowthViolations,
+};
 
 const receipt = {
   sha,
@@ -501,7 +548,11 @@ const receipt = {
   done_turns: doneTurns,
   total_turns: DEMO_PROMPTS.length,
   total_ms: totalMs,
+  total_time_ms: totalMs,  // §#1504 alias — consistent with per-turn durationMs naming
   compact_events: compactEvents,
+  cumulative_growth_ok: cumulativeGrowthOk,             // §#1504
+  cumulative_growth_violations: cumulativeGrowthViolations, // §#1504
+  failure_breakdown: failureBreakdown,                  // §#1504 — null on PASS, populated on FAIL
   passed,
 };
 writeFileSync(outFile, JSON.stringify(receipt, null, 2));
