@@ -6498,6 +6498,101 @@ await resetScene('before-box-inject');
   await evaluate(`(window.__testMode = true, true)`);
 }
 
+// ── Surface: window-void-single (#1518 regression-net) ────────────────────────
+// SdWall + SdWindow → host wall becomes Group (not Mesh) → ≥2 child Box meshes
+// → cutHistory.length === 1. Regression-net for PR #1519 (void-cut) + PR #1524 (addVoidToWallObject).
+{
+  await resetScene('window-void-single');
+
+  // Place a 6m wall along X, centered at origin.
+  await evaluate(`(function() {
+    const d = window.__dispatch;
+    if (d) d('SdWall', { start: [-3, 0], end: [3, 0] });
+  })()`);
+  await delay(300);
+
+  const wallUuid1 = await evaluate(`(function() {
+    const v = window.__viewer;
+    const w = Array.from(v.scene.children).reverse().find(c =>
+      c.userData?.creator === 'SdWall' || c.userData?.creator === 'wall' || c.userData?.ifcClass === 'IfcWall'
+    );
+    if (w) window.__gemmaTest.wallUuid1 = w.uuid;
+    return w?.uuid ?? null;
+  })()`);
+
+  if (!wallUuid1) {
+    record('window-void-single', false, { reason: 'no wall in scene after SdWall dispatch' });
+  } else {
+    // Place one window at wall center (x=0, y=0).
+    await evaluate(`(function() {
+      window.__dispatch('SdWindow', { position: [0, 0], hostUuid: '${wallUuid1}' });
+    })()`);
+    await delay(300);
+
+    const r1 = await evaluate(`(function() {
+      const v = window.__viewer;
+      const wall = v.scene.getObjectByProperty('uuid', '${wallUuid1}');
+      const isGroup   = !!(wall && wall.type === 'Group');
+      const childCount = isGroup ? wall.children.filter(c => c.isMesh || c.isGroup).length : 0;
+      const history   = wall?.userData?.cutHistory;
+      const histLen   = Array.isArray(history) ? history.length : -1;
+      return { isGroup, childCount, histLen, wallType: wall?.type ?? 'absent' };
+    })()`);
+    record('window-void-single', !!(r1?.isGroup && r1?.childCount >= 2 && r1?.histLen === 1),
+      r1 ?? { reason: 'evaluate returned null' });
+  }
+}
+
+// ── Surface: window-void-compound (#1520 regression-net) ──────────────────────
+// SdWall + 2×SdWindow → Group retains BOTH voids → ≥3 child Box meshes
+// → cutHistory.length === 2. Regression-net for PR #1524 (compound-void preservation).
+{
+  await resetScene('window-void-compound');
+
+  await evaluate(`(function() {
+    const d = window.__dispatch;
+    if (d) d('SdWall', { start: [-3, 0], end: [3, 0] });
+  })()`);
+  await delay(300);
+
+  const wallUuid2 = await evaluate(`(function() {
+    const v = window.__viewer;
+    const w = Array.from(v.scene.children).reverse().find(c =>
+      c.userData?.creator === 'SdWall' || c.userData?.creator === 'wall' || c.userData?.ifcClass === 'IfcWall'
+    );
+    if (w) window.__gemmaTest.wallUuid2 = w.uuid;
+    return w?.uuid ?? null;
+  })()`);
+
+  if (!wallUuid2) {
+    record('window-void-compound', false, { reason: 'no wall in scene after SdWall dispatch' });
+  } else {
+    // First window at center (x=0).
+    await evaluate(`(function() {
+      window.__dispatch('SdWindow', { position: [0, 0], hostUuid: '${wallUuid2}' });
+    })()`);
+    await delay(300);
+
+    // Second window offset to x=-2 (non-overlapping with first).
+    await evaluate(`(function() {
+      window.__dispatch('SdWindow', { position: [-2, 0], hostUuid: '${wallUuid2}' });
+    })()`);
+    await delay(300);
+
+    const r2 = await evaluate(`(function() {
+      const v = window.__viewer;
+      const wall = v.scene.getObjectByProperty('uuid', '${wallUuid2}');
+      const isGroup    = !!(wall && wall.type === 'Group');
+      const childCount = isGroup ? wall.children.filter(c => c.isMesh || c.isGroup).length : 0;
+      const history    = wall?.userData?.cutHistory;
+      const histLen    = Array.isArray(history) ? history.length : -1;
+      return { isGroup, childCount, histLen, wallType: wall?.type ?? 'absent' };
+    })()`);
+    record('window-void-compound', !!(r2?.isGroup && r2?.childCount >= 3 && r2?.histLen === 2),
+      r2 ?? { reason: 'evaluate returned null' });
+  }
+}
+
 } finally {
   await cleanup();
 }
