@@ -813,8 +813,8 @@ export function buildRoof(
   const cy = (a.y + b.y) / 2;
 
   const roofType = params.type ?? "pitched";
-  // FZK-Haus reference: ~31.4° pitch, 0.5m overhang per side (#1161).
-  const pitchDeg = Math.max(5, Math.min(70, params.pitchDeg ?? 31));
+  // FZK-Haus reference: 30° pitch (IFCPLANEANGLEMEASURE(30.) Dach-1/Dach-2 #59605/#59805), 0.5m overhang per side.
+  const pitchDeg = Math.max(5, Math.min(70, params.pitchDeg ?? 30));
   const overhang = params.overhang ?? 0.5;
 
   const pitchRad = (pitchDeg * Math.PI) / 180;
@@ -1027,24 +1027,32 @@ export function buildRoof(
     // Position at rH − 0.06 (half beam height) so the beam top aligns with
     // the inner sheathing face; putting it at rH + 0.06 placed it above
     // the panels (#1136 / #1161).
+    // FZK First (ridge): 80mm × 160mm cross-section (IFC #40532 BoundingBox).
     const ridgeBeam = landscape
-      ? member(ridgeLenHalf * 2, 0.10, 0.12, frameMat.clone())
-      : member(0.10, ridgeLenHalf * 2, 0.12, frameMat.clone());
-    ridgeBeam.position.set(0, 0, rH - 0.06);
+      ? member(ridgeLenHalf * 2, 0.08, 0.16, frameMat.clone())
+      : member(0.08, ridgeLenHalf * 2, 0.16, frameMat.clone());
+    ridgeBeam.position.set(0, 0, rH - 0.08);
+    ridgeBeam.userData.ifcClass = "IfcBeam";
+    ridgeBeam.userData.name = "First";
     ridgeBeam.visible = params.showStructure !== false;
     group.add(ridgeBeam);
 
-    // Wall plates (at wall-top line, just inside the eaves)
+    // Eave purlins (Pfette) — FZK Pfette-1-1 and Pfette-2-1: 80mm × 160mm, at wall-plate level.
+    // IFC: Höhenangabe 3.36m = eave 3.2m + 0.16m beam height; cross-section 80×160mm (#40497/#37663).
     const wallPlateLen = ridgeLenHalf * 2;
     const wp1 = landscape
-      ? member(wallPlateLen, 0.10, 0.10, frameMat.clone())
-      : member(0.10, wallPlateLen, 0.10, frameMat.clone());
-    wp1.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, 0.05);
+      ? member(wallPlateLen, 0.08, 0.16, frameMat.clone())
+      : member(0.08, wallPlateLen, 0.16, frameMat.clone());
+    wp1.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, 0.08);
+    wp1.userData.ifcClass = "IfcBeam";
+    wp1.userData.name = "Pfette";
     wp1.visible = params.showStructure !== false;
     group.add(wp1);
     const wp2 = wp1.clone();
     (wp2.material as THREE.Material) = (wp1.material as THREE.Material).clone();
-    wp2.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, 0.05);
+    wp2.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, 0.08);
+    wp2.userData.ifcClass = "IfcBeam";
+    wp2.userData.name = "Pfette";
     wp2.visible = params.showStructure !== false;
     group.add(wp2);
 

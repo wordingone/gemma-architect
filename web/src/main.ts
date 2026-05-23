@@ -1170,7 +1170,7 @@ registerHandler("SdRoof", (args) => {
     flat: "flat", mansard: "flat", combination: "flat",
   };
   const roofType: RoofParams["type"] = typeMap[rawType] ?? "pitched";
-  const pitchDeg = (args.pitchDeg as number | undefined) ?? (args.pitchAngleDeg as number | undefined) ?? 31;
+  const pitchDeg = (args.pitchDeg as number | undefined) ?? (args.pitchAngleDeg as number | undefined) ?? 30;
   const overhang = (args.overhang as number | undefined) ?? 0.5;
   const thickness = (args.thickness as number | undefined) ?? 0.15;
 
