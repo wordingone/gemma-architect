@@ -3644,6 +3644,17 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     openExportDrawer();
   }
 });
+// Warn before reload/close if user has dispatch-created geometry (no auto-save).
+// Skips IFC-loaded content — those lack userData.creator and survive a reload via re-open.
+window.addEventListener("beforeunload", (e: BeforeUnloadEvent) => {
+  const hasUserContent = viewer
+    .getScene()
+    .children.some((c) => c.userData?.creator && c.userData.creator !== "IfcLevel");
+  if (hasUserContent) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
 setStatus("Loading OpenCascade WebAssembly...", "info");
 runBtn.disabled = true;
 refreshExportButtons(true);
