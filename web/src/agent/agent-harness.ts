@@ -591,6 +591,7 @@ DIMENSION RULES — extract ALL numeric values BEFORE generating geometry. Never
 - Multi-story: one IfcLevel per floor, elevation = floor_index × floor_height. Default floor heights: 3.0m office/residential, 4.5m industrial/bay.
 - SdSpace must include a descriptive name= param: name="lobby", name="apparatus bay 1", etc.
 - UNITS: values in the prompt are authoritative. "12m" means exactly 12 metres — never apply imperial-to-metric conversion when the prompt uses metric. "12ft" means 12 feet. Emit the number exactly as specified in the active unit system.
+- CONTINUATION UNIT RULE: In a continuation turn (adding to an existing scene), metric values pass through DIRECTLY — do NOT convert. "12m" → 12.0. "1m tall" → height=1.0. Only explicit feet/inch literals receive ft→m conversion. The parent structure's unit syntax does not affect new additions stated in metres.
 `.trim();
 
 const BUILDING_DEFAULTS = `
@@ -607,7 +608,8 @@ BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apa
 - SdExport: always end with format=ifc, target=scene.
 - Room sizes (net internal): bedroom 9-15m², living 18-25m², kitchen 8-12m², bathroom 4-6m².
 - Floor heights: residential 3.0m, office 3.5m, industrial/bay 4.5m.
-- ATTACHED STRUCTURES ("attached to the south/north/east/west wall", "garage on the side", "extension"): the new structure's footprint EXTENDS FROM the shared wall face outward. Never collapse profile endpoints — p1 must differ from p2 on every SdWall. Example: main house south wall at y=0, 5m×4m garage "attached to south wall" → garage footprint occupies y=-4 to y=0; walls: south [[0,-4],[5,-4]], east [[5,-4],[5,0]], west [[0,-4],[0,0]] (3 new walls; the house south wall is the shared face).
+- ATTACHED STRUCTURES ("attached to the south/north/east/west wall", "garage on the side", "extension"): the new structure's footprint EXTENDS FROM the shared wall face outward. Never collapse profile endpoints — p1 must differ from p2 on every SdWall.
+- EXTENSION RULE (algorithm for every attached structure): (1) Read the shared-face wall endpoints W1, W2 from prior tool_calls in this conversation. (2) perpendicular direction = away from parent: if wall is along X axis (W1.y=W2.y), perp=[0,-1] for south or [0,+1] for north; if along Y axis (W1.x=W2.x), perp=[-1,0] for west or [+1,0] for east. (3) Far-face: F1=[W1[0]+perp[0]*depth, W1[1]+perp[1]*depth], F2=[W2[0]+perp[0]*depth, W2[1]+perp[1]*depth]. (4) Emit three walls: far [F1,F2], side-A [W1,F1], side-B [W2,F2]. INVARIANT: every emitted wall has p1≠p2 (dist≥0.5m). NEVER submit [W,W] — same coordinate for both endpoints.
 `.trim();
 
 // Handler auto-behaviors: concise principles so the agent knows what NOT to compute.
@@ -685,18 +687,27 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
 
-User: add a single-car garage attached to the south wall, 5m wide by 4m deep
-Assistant: South wall is the shared face at y=0. Garage extends SOUTH → y=-4. Three new walls with distinct p1 and p2 — no collapsed endpoints. House south wall is NOT re-emitted.
+User: add a garage attached to the south wall, 5m wide by 3m deep (parent house south wall runs from [0,0] to [5,0])
+Assistant: W1=[0,0] W2=[5,0] (south wall, along X). Perp=[0,-1] (extends south). F1=[0,-3] F2=[5,-3]. Far wall [F1,F2]; side-west [W1,F1]; side-east [W2,F2]. All p1≠p2. House south wall NOT re-emitted.
 <plan>
-1. SdWall — garage south, profile=[[0,-4],[5,-4]], thickness=0.2, height=2.4
-2. SdWall — garage east, profile=[[5,-4],[5,0]], thickness=0.2, height=2.4
-3. SdWall — garage west, profile=[[0,-4],[0,0]], thickness=0.2, height=2.4
-4. SdSlab — garage floor, profile=[[0,-4],[5,-4],[5,0],[0,0]], thickness=0.15
+1. SdWall — garage south (far), profile=[[0,-3],[5,-3]], thickness=0.2, height=2.4
+2. SdWall — garage west side, profile=[[0,-3],[0,0]], thickness=0.2, height=2.4
+3. SdWall — garage east side, profile=[[5,-3],[5,0]], thickness=0.2, height=2.4
 </plan>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,-4],[5,-4]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[5,-4],[5,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWall","arguments":{"profile":[[0,-4],[0,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,-4],[5,-4],[5,0],[0,0]],"thickness":0.15},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,-3],[5,-3]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,-3],[0,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[5,-3],[5,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+
+User: add a storage annex attached to the east wall, 5m deep (parent east wall runs from [6,-4] to [6,4])
+Assistant: W1=[6,4] W2=[6,-4] (east wall, along Y). Perp=[+1,0] (extends east). F1=[11,4] F2=[11,-4]. Far wall [F1,F2]; side-north [W1,F1]; side-south [W2,F2]. All p1≠p2.
+<plan>
+1. SdWall — annex east (far), profile=[[11,4],[11,-4]], thickness=0.2, height=3.0
+2. SdWall — annex north side, profile=[[6,4],[11,4]], thickness=0.2, height=3.0
+3. SdWall — annex south side, profile=[[6,-4],[11,-4]], thickness=0.2, height=3.0
+</plan>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[11,4],[11,-4]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[6,4],[11,4]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[6,-4],[11,-4]],"thickness":0.2,"height":3.0},"metadata":{"source":"agent"}}</tool_call>
 
 User: add a garden wall along the north boundary, 12m long and 1m tall
 Assistant: Boundary/garden walls are a SINGLE linear SdWall — not a closed polygon, not a new level. Height 1m = 1.0 (metric literal; never convert to feet).
