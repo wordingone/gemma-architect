@@ -206,4 +206,66 @@ describe("SdRoof FZK invariant gate (#1675)", () => {
       expect(Math.abs(sz.x - target.invariants.rafters.geom_x)).toBeLessThan(TOL);
     }
   });
+
+  // ── §C — no standalone gable mesh (sub-fix 3) ────────────────────────────────
+  // Wall auto-trim provides the gable face; buildRoof emits no separate IfcRoof child.
+
+  test("gable: no standalone IfcRoof mesh in group children", () => {
+    const gableMeshes = byClass(group, "IfcRoof");
+    expect(gableMeshes.length).toBe(target.invariants.gable.standalone_mesh_count);
+  });
+
+  // ── §D — IfcCovering fascia + soffit codified (sub-fix 4) ────────────────────
+  // 4 pieces retained for eave closure: 2 fascia boards + 2 soffits.
+
+  test("fascia: count = 2 IfcCovering at eave edges", () => {
+    const coverings = byClass(group, "IfcCovering");
+    // Fascia: geom_y = 0.03 (30mm board)
+    const fascia = coverings.filter((c) => {
+      const sz = localGeomSize(c);
+      return Math.abs(sz.y - target.invariants.fascia.geom_y) < TOL;
+    });
+    expect(fascia.length).toBe(target.invariants.fascia.count);
+  });
+
+  test("fascia: geometry X = ridgeLen (13.0m)", () => {
+    const coverings = byClass(group, "IfcCovering");
+    const fascia = coverings.filter((c) => {
+      const sz = localGeomSize(c);
+      return Math.abs(sz.y - target.invariants.fascia.geom_y) < TOL;
+    });
+    for (const f of fascia) {
+      const sz = localGeomSize(f);
+      expect(Math.abs(sz.x - target.invariants.fascia.geom_x)).toBeLessThan(TOL);
+    }
+  });
+
+  test("soffit: count = 2 IfcCovering under eave overhang", () => {
+    const coverings = byClass(group, "IfcCovering");
+    // Soffit: geom_z = 0.02 (20mm panel)
+    const soffit = coverings.filter((c) => {
+      const sz = localGeomSize(c);
+      return Math.abs(sz.z - target.invariants.soffit.geom_z) < TOL;
+    });
+    expect(soffit.length).toBe(target.invariants.soffit.count);
+  });
+
+  test("soffit: geometry Y = overhang (0.5m)", () => {
+    const coverings = byClass(group, "IfcCovering");
+    const soffit = coverings.filter((c) => {
+      const sz = localGeomSize(c);
+      return Math.abs(sz.z - target.invariants.soffit.geom_z) < TOL;
+    });
+    for (const s of soffit) {
+      const sz = localGeomSize(s);
+      expect(Math.abs(sz.y - target.invariants.soffit.geom_y)).toBeLessThan(TOL);
+    }
+  });
+
+  test("IfcCovering total = 4 (2 fascia + 2 soffit)", () => {
+    const coverings = byClass(group, "IfcCovering");
+    expect(coverings.length).toBe(
+      target.invariants.fascia.count + target.invariants.soffit.count,
+    );
+  });
 });

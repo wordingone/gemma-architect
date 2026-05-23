@@ -75,10 +75,11 @@ From IFC quantities (verified, not estimated):
 | Overhang | 0.5m default | 0.5m | ✓ |
 | Fascia/soffit | `IfcCovering` × 4 | none in FZK dump | △ extra; visual benefit outweighs IFC purity |
 
-### Remaining gaps vs FZK (decided — no code change)
+### Remaining gaps vs FZK (all decided — no further code change)
 
-- **§B — Pfette enclosure** (**Scope A — keep at eave edge**): FZK Pfette sits inside Dach slab Y-volume (mid-slope), but placing them there makes them invisible (inside solid slab geometry). Decision: keep at eave edge (`pfetteInset=0`) for viewport visibility. IFC-accuracy at mid-slope deferred until #1675 fixture gate defines canonical containment assertion. Tracked in #1671.
-- **§D — IfcCovering strips** (**keep — visual quality over IFC purity**): 4 fascia/soffit IfcCovering pieces not in FZK dump, but they provide clean eave/gable closure in the viewport. Removing them would leave raw slope-edge geometry visible at the eave. Decision: retain until #1675 fixture gate either codifies them as canonical or explicitly excludes them.
+- **§B — Pfette enclosure** (**Scope A — keep at eave edge**): FZK Pfette sits inside Dach slab Y-volume (mid-slope), but placing them there makes them invisible (inside solid slab geometry). **Final decision (PR #1676):** keep at eave edge (`pfetteInset=0`) for viewport visibility. Pinned in invariant gate (PR #1689): `position_y_abs=5.5, position_z=0.08`.
+- **§C — Gable face** (**wall auto-trim + slab side face — no standalone mesh**): PR #1661 removed the zero-width IfcRoof triangle pair. Wall auto-trim (PR #916/#1165) provides the correct gable triangle on the short-end walls; the slab BoxGeometry side face provides natural closure. Pinned in invariant gate (PR #1689): `gable.standalone_mesh_count=0`.
+- **§D — IfcCovering strips** (**keep — codified as canonical**): 4 fascia/soffit IfcCovering pieces (2 fascia boards + 2 soffits) not in FZK dump. Retained for eave closure and clean viewport geometry. **Final decision (PR #1676, confirmed PR #1690):** retain as canonical. Pinned in invariant gate (PR #1689): `fascia.count=2`, `soffit.count=2`.
 - **§E — Sparren count**: 23/slope vs FZK 21/slope. Minor; not blocking. No change.
 
 ---
@@ -93,8 +94,11 @@ All items from the original §5 have shipped:
 | Ridge beam 80×160mm cross-section | #1610 | ✓ merged |
 | Wall plates 80×160mm + `IfcBeam` class | #1641 | ✓ merged |
 | Slope deck promoted to `IfcSlab` "Dach" 150mm | #1641 | ✓ merged |
-| Slope deck thickness 150mm → 200mm (FZK match) | #1639-E | ✓ this PR |
-| Redundant gable triangle pair removed | #1653 | ✓ merged |
+| Slope deck thickness 150mm → 200mm (FZK match) | #1639-E / #1670 | ✓ merged |
+| Redundant gable triangle pair removed | #1653 / #1661 | ✓ merged |
+| §B + §D design decisions documented | #1676 | ✓ merged |
+| FZK 12×10m per-element invariant gate (27 tests) | #1675 / #1689 | ✓ merged |
+| §C gable + §D IfcCovering codified in gate; doc final | #1639 sub-fixes 3-5 | ✓ this PR |
 
 ---
 

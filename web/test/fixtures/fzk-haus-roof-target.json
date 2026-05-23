@@ -65,6 +65,30 @@
       "slab_normal_dot": 0.5,
       "angle_between_normals_deg": 60,
       "interior_dihedral_deg": 120
+    },
+    "fascia": {
+      "count": 2,
+      "ifcClass": "IfcCovering",
+      "geom_x": 13.0,
+      "geom_y": 0.03,
+      "geom_z": 0.15,
+      "position_y_abs": 5.5,
+      "position_z": -0.075,
+      "_note": "§D: retained for eave closure; 2 fascia boards at both eave edges (sub-fix 4)"
+    },
+    "soffit": {
+      "count": 2,
+      "ifcClass": "IfcCovering",
+      "geom_x": 13.0,
+      "geom_y": 0.5,
+      "geom_z": 0.02,
+      "position_y_abs": 5.25,
+      "position_z": -0.01,
+      "_note": "§D: retained for eave closure; overhang=0.5m soffit depth (sub-fix 4)"
+    },
+    "gable": {
+      "standalone_mesh_count": 0,
+      "_note": "§C: no standalone gable mesh; gable face = wall auto-trim boundary + slab side face (sub-fix 3)"
     }
   }
 }
