@@ -182,9 +182,9 @@ Mining flow unchanged from Spike B: walk IFC representation tree → extract sim
 
 Every prompt in v2 satisfies:
 
-1. **Architectural framing.** No "make a 5×3 rectangle and extrude it 2 units" — that's a CAD-power-user prompt. v2 prompts say "build a wall 5m long, 0.2m thick, 2.5m tall" — that's the equity-track non-CAD-user voice.
+1. **Architectural framing.** No "make a 5×3 rectangle and extrude it 2 units" — that's a CAD-power-user prompt. v2 prompts say "build a wall 16 feet long, 8 inches thick, 8 feet tall" — that's the equity-track non-CAD-user voice.
 2. **Explicit dimensions in prompt.** Every spatial claim (length, thickness, height, radius, count) named numerically. No "build a small wall."
-3. **Physical units (m).** "meters" / "m" / "cm" — never bare numbers.
+3. **Physical units (ft/in — imperial, per 2026-05-23 directive).** "feet" / "ft" / "inches" / "in" — never bare numbers. See `feedback_test_prompts_imperial_units_only_2026_05_23.md`.
 4. **Imperative voice ≥ 60% of rows.** "Build / Create / Make / Place / Construct …".
 5. **No leading whitespace, no trailing punctuation drift.** Prompts are clean single-sentence.
 

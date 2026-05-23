@@ -1,110 +1,64 @@
-#!/usr/bin/env node
-/**
- * lint-test-prompts.mjs — Imperial-prompt lint gate.
- *
- * Scans staged files for metric dimension strings inside user-input contexts
- * (STARTER_PROMPTS arrays, cdp.chat() calls, runIteration string args, etc.).
- * Internal numeric assertions in metres are fine; only user-facing prompt
- * strings must be imperial per the 2026-05-23 user directive.
- *
- * Exit 0 = clean. Exit 1 = violations found (blocks commit).
- */
+#!/usr/bin/env bun
+// lint-test-prompts.mjs — guard against metric dimension strings in user-facing inputs.
+// Rule (2026-05-23): any string submitted to chat-input, runMultiAgent, agent.ask,
+// __runIteration, or input.value MUST use imperial units only.
+// Exit 0 = clean; exit 1 = violations found.
+// Exempt: comment-only lines (// ...) and lines without string literal delimiters.
 
-import { execSync } from "child_process";
 import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-// Metric dimension patterns that are banned in user-input string contexts.
-// Matches things like "5m wall", "6m wide", "10m long", "4m deep", "1.5m tall"
-const METRIC_PATTERN = /\b\d+(\.\d+)?\s*m\s+(wall|wide|deep|long|tall|high|slab|floor|column|room|building|house|office|span|beam|rafter|roof|door|window|stair)/gi;
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, "..");
 
-// Files + contexts to scan — only files likely to contain test prompts.
-const PROMPT_FILE_PATTERNS = [
-  /scripts\/gemma-verify.*\.mjs$/,
-  /scripts\/phase-j-verify\.mjs$/,
-  /scripts\/.*rehearsal.*\.mjs$/,
-  /scripts\/.*loop.*\.ts$/,
-  /scripts\/.*architect.*\.ts$/,
-  /web\/test\/coordination\.test\.ts$/,
-  /web\/test\/agent-instance\.test\.ts$/,
+// Code files that submit user-facing prompt strings to chat-input or agent.ask.
+// (dataset/v2-spec.md is documentation — not code that submits to chat-input.)
+const SCAN_TARGETS = [
+  "scripts/gemma-verify-raw.mjs",
+  "scripts/mtp-ab-tg.mjs",
+  "scripts/haiku-rehearsal.mjs",
+  "scripts/closed-loop-cad.ts",
+  "scripts/dev-as-architect.ts",
+  "web/test/coordination.test.ts",
+  "web/test/agent-instance.test.ts",
 ];
 
-function getStagedFiles() {
-  try {
-    const out = execSync("git diff --cached --name-only --diff-filter=ACMR", {
-      encoding: "utf8",
-    });
-    return out.trim().split("\n").filter(Boolean);
-  } catch {
-    return [];
-  }
-}
+// Match: digit(s) + optional decimal + 'm' not followed by a word char.
+// Catches "5m", "0.2m", "2.5m" but not "metric", "method", "meters".
+const METRIC_RE = /\b\d+(?:\.\d+)?m(?!\w)/;
 
-function isPromptFile(path) {
-  return PROMPT_FILE_PATTERNS.some((re) => re.test(path));
-}
+let total = 0;
 
-// Extract string literals from source that are in user-input contexts.
-// Heuristic: look for strings adjacent to STARTER_PROMPTS, runIteration,
-// cdp chat, input.value =, or similar markers.
-const CONTEXT_MARKERS =
-  /STARTER_PROMPTS|runIteration|cdp(?:\.|\s+)chat|input\.value\s*=|\.chat\s*\(|chat\s*subcommand|prompt:\s*['"`]/;
-
-function findViolations(filePath, source) {
-  const lines = source.split("\n");
-  const violations = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    // Check if this line or the surrounding context is a prompt context
-    const window = lines.slice(Math.max(0, i - 3), i + 4).join("\n");
-    if (!CONTEXT_MARKERS.test(window)) continue;
-
-    // Look for metric strings inside string literals on this line
-    const strMatches = line.match(/(['"`])[^'"`;]*\1/g) || [];
-    for (const str of strMatches) {
-      const m = str.match(METRIC_PATTERN);
-      if (m) {
-        violations.push({
-          file: filePath,
-          line: i + 1,
-          text: line.trim().slice(0, 120),
-          match: m[0],
-        });
-      }
-    }
-  }
-  return violations;
-}
-
-const staged = getStagedFiles();
-const promptFiles = staged.filter(isPromptFile);
-
-let allViolations = [];
-
-for (const f of promptFiles) {
+for (const rel of SCAN_TARGETS) {
+  const abs = join(ROOT, rel);
   let src;
   try {
-    src = readFileSync(f, "utf8");
+    src = readFileSync(abs, "utf-8");
   } catch {
+    console.warn(`SKIP: ${rel} — not found`);
     continue;
   }
-  const v = findViolations(f, src);
-  allViolations = allViolations.concat(v);
+
+  const lines = src.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const trimmed = raw.trimStart();
+    // Skip comment-only lines
+    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+    // Strip inline comments, then check for string delimiters
+    const stripped = raw.replace(/\/\/.*$/, "").replace(/\/\*.*?\*\//g, "");
+    if (!/["'`]/.test(stripped)) continue;
+    if (!METRIC_RE.test(stripped)) continue;
+    console.error(`FAIL  ${rel}:${i + 1}  ${raw.trim()}`);
+    total++;
+  }
 }
 
-if (allViolations.length === 0) {
+if (total === 0) {
+  console.log("lint:prompts OK — no metric strings in user-facing inputs");
   process.exit(0);
+} else {
+  console.error(`\nlint:prompts FAIL — ${total} metric string(s). Convert to imperial (feet/inches).`);
+  process.exit(1);
 }
-
-console.error("\n❌ Imperial-prompt lint: metric dimension strings found in test prompt contexts.\n");
-console.error(
-  "Rule: user-input strings submitted via chat/CDP must use imperial units.\n"
-);
-for (const v of allViolations) {
-  console.error(`  ${v.file}:${v.line}  [${v.match}]`);
-  console.error(`    ${v.text}`);
-}
-console.error(
-  "\nConvert to imperial (ft/in) or move the metric value to an internal assertion (not a prompt string).\n"
-);
-process.exit(1);

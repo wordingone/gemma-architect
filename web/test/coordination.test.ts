@@ -19,8 +19,8 @@ const createAgent = makeAgentInstanceFactory(mockRunner);
 describe("runMultiAgent — #406 step 2 coordination", () => {
   test("AC1: module exports runMultiAgent, AgentProposal shape", async () => {
     const a = createAgent("agent-A");
-    const result: CoordinatedResult = await runMultiAgent("build a 5m wall", [a]);
-    expect(result.prompt).toBe("build a 5m wall");
+    const result: CoordinatedResult = await runMultiAgent("build a 16-foot wall", [a]);
+    expect(result.prompt).toBe("build a 16-foot wall");
     expect(Array.isArray(result.proposals)).toBe(true);
     const p: AgentProposal = result.proposals[0];
     expect(typeof p.agentName).toBe("string");
@@ -31,7 +31,7 @@ describe("runMultiAgent — #406 step 2 coordination", () => {
   test("AC2: 2-instance concurrent run — both proposals present and non-empty agentName", async () => {
     const a = createAgent("agent-A");
     const b = createAgent("agent-B");
-    const result = await runMultiAgent("build a 5m wall", [a, b]);
+    const result = await runMultiAgent("build a 16-foot wall", [a, b]);
 
     expect(result.proposals).toHaveLength(2);
     expect(result.proposals[0].agentName).toBe("agent-A");
@@ -48,15 +48,15 @@ describe("runMultiAgent — #406 step 2 coordination", () => {
     const a = createAgent("agent-A");
     const b = createAgent("agent-B");
 
-    await runMultiAgent("build a 5m wall", [a, b]);
+    await runMultiAgent("build a 16-foot wall", [a, b]);
 
     // Each agent has exactly its own 2 turns (user + assistant)
     expect(a.history).toHaveLength(2);
     expect(b.history).toHaveLength(2);
 
     // Each agent's history contains only its own prompt (same prompt here — check no bleed via index)
-    expect(a.history[0]).toEqual({ role: "user", content: "build a 5m wall" });
-    expect(b.history[0]).toEqual({ role: "user", content: "build a 5m wall" });
+    expect(a.history[0]).toEqual({ role: "user", content: "build a 16-foot wall" });
+    expect(b.history[0]).toEqual({ role: "user", content: "build a 16-foot wall" });
 
     // Histories are distinct array references
     expect(a.history).not.toBe(b.history);
