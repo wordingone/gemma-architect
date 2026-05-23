@@ -11,6 +11,7 @@ import { invokeCommand } from "../commands/command-session";
 import type { Skill, SkillStep } from "../agent/skills-loader";
 import { findSkillsForPrompt } from "../agent/skills-loader";
 import { lastTurn } from "../agent/telemetry";
+import { emitError as _emitTelemetryError } from "../agent/telemetry-remote";
 import { buildDispatchSummary } from "./chat-dispatch-summary";
 import { classifyDispatchResult } from "./chat-dispatch-routing";
 import { buildContextAugmentation } from "../agent/agent-context-augmentor";
@@ -671,6 +672,8 @@ export class ChatPanel {
       this._pushMsg({ role: "assistant", content: "", error: err.message, ...(needsReload ? { recovery: "reload" } : {}) });
       // QW-3: track inference/dispatch errors for external monitoring.
       (window as unknown as _GemmaW).__gemmaSession.errorCount++;
+      // §#1628: report to Sentry (PII-scrubbed in emitError).
+      _emitTelemetryError(err.message, { isGpuFatal, isModelLoadFailed, isTimeout });
     } finally {
       this._sendBtn.disabled = false;
       this._sendBtn.textContent = "SEND";

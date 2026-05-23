@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.0.0",
+    "@sentry/browser": "^10.53.1",
     "jspdf": "^4.2.1",
     "replicad": "^0.20.0",
     "replicad-opencascadejs": "^0.20.0",

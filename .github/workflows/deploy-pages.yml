@@ -24,6 +24,8 @@ jobs:
           bun-version: latest
       - run: bun install
       - run: bun run web:build
+        env:
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist

@@ -34,6 +34,13 @@ import { VIDEO_INPUT_ENABLED, buildVideoDataUrls } from "./video-input";
 import { AgentRuntimeController } from "./agent-runtime-controller";
 const _arc = new AgentRuntimeController();
 
+// §#1628: Sentry telemetry — init at module load; active in PROD when VITE_SENTRY_DSN is set.
+initTelemetry();
+
+// Boot telemetry state — accumulated across phase_timing messages; emitted on boot-complete.
+let _telBootLoadSource = "unknown";
+let _telWorkerBootMs = 0; // set when initWorkerIfNeeded creates the worker
+
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
 
@@ -51,6 +58,14 @@ import { snapshotAsText } from "../scene/scene-kg";
 import { captureViewport } from "./viewport-capture";
 import type { Skill } from "./skills-loader";
 import { recordTurn } from "./telemetry";
+import {
+  initTelemetry,
+  emitBootFingerprint,
+  emitBootComplete,
+  emitDispatchTurn,
+  emitRecycle,
+  type AdapterFingerprint,
+} from "./telemetry-remote.js";
 
 export type AgentDispatch = {
   name: string;
@@ -179,6 +194,7 @@ async function recycleModelWorkerIfNeeded(): Promise<void> {
     detail: { recycleCount: _arc.recycleCount },
   }));
   _arc.dispatch({ type: "WORKER_RECYCLED", recycleCount: _arc.recycleCount, reason: "planned" }); // → recovering
+  emitRecycle(_arc.recycleCount, "planned"); // §#1628
 }
 
 // CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#811).
@@ -233,6 +249,8 @@ function initWorkerIfNeeded(): Worker {
     new URL("./model-worker.ts", import.meta.url),
     { type: "module" },
   );
+  _telWorkerBootMs = Date.now(); // §#1628: epoch for boot_complete elapsed_ms
+  _telBootLoadSource = "unknown"; // reset per worker spawn
   // §P0-ARC: signal boot start only from quiescent states; recovering path skips BOOT_REQUESTED
   // (it goes directly from recovering → ready via MODEL_READY + BOOT_COMPLETE from new worker).
   if (_arc.state === "idle" || _arc.state === "ready" || _arc.state === "failed") {
@@ -293,9 +311,22 @@ function initWorkerIfNeeded(): Worker {
         window.dispatchEvent(new CustomEvent("agentmodel:drafter:error", { detail: msg.error }));
         activateStandardBackend(); // spawn dedicated standard-path worker (#929)
         break;
+      case "phase_timing": {
+        // §#1628: accumulate boot telemetry state from worker diagnostic messages.
+        const _ptPhase = msg.phase as string;
+        if (_ptPhase === "from_pretrained_start" && msg.load_source) {
+          _telBootLoadSource = msg.load_source as string;
+        }
+        if (_ptPhase === "adapter_fingerprint" && msg.adapter_info) {
+          emitBootFingerprint(msg.adapter_info as AdapterFingerprint);
+        }
+        break;
+      }
       case "boot-complete":
         _arc.dispatch({ type: "BOOT_COMPLETE" }); // #1036 — sets bootComplete, clears nextInitNoWarmup
         window.dispatchEvent(new CustomEvent("agentmodel:boot-complete"));
+        // §#1628: emit boot_complete telemetry with elapsed time + load source.
+        emitBootComplete(_telWorkerBootMs > 0 ? Date.now() - _telWorkerBootMs : 0, _telBootLoadSource);
         break;
       case "ready":
         // workerReady already set by MODEL_READY dispatch — no additional state mutation needed
@@ -367,6 +398,7 @@ function initWorkerIfNeeded(): Worker {
           window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
             detail: { recycleCount: _arc.recycleCount, reason: "d3d12-oom" },
           }));
+          emitRecycle(_arc.recycleCount, "d3d12-oom"); // §#1628
           // §C-recycle-limit (#1381): 2+ GPU resets → page-level WGPU adapter irrecoverably
           // corrupted. Auto-respawn produces "function signature mismatch" because the new
           // worker's ONNX WASM imports fail against the torn adapter's device table.
@@ -1318,6 +1350,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   });
 
   const { dispatches, text } = parseDispatches(afterPlan);
+  emitDispatchTurn(dispatches.length, prefillMs + decodeMs); // §#1628: 10% sample
   return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
 }
 
