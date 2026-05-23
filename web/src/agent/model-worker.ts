@@ -135,6 +135,8 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // noWarmup: set by recycle path. GPU device+compiled shaders persist across worker
   // terminate/recreate; skip sanity probe and warmup to avoid ~120s re-compilation.
   const noWarmup = (data.noWarmup as boolean | undefined) === true;
+  // §#1637 Path 2: forceWasm=true → skip WebGPU adapter entirely, load with WASM EP only.
+  const forceWasm = (data.forceWasm as boolean | undefined) === true;
   // §C-warmup-context (#1362): representative system prompt passed from main thread.
   // Used to exercise ~1000-token KV cache allocations during the warmup probe so the
   // GPU buffer pools are pre-sized before the first real inference call.
@@ -333,7 +335,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   let _preAcquiredGpuDevice: any = null;
   try {
     const nav = (globalThis as unknown as { navigator?: Navigator }).navigator;
-    if (nav?.gpu) {
+    if (nav?.gpu && !forceWasm) {  // §#1637: forceWasm=true skips WebGPU acquisition entirely
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const adapter = await (nav.gpu as any).requestAdapter({ powerPreference: "high-performance" })
         .catch(() => null);
@@ -398,9 +400,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 
   post({ type: "phase_timing", phase: "from_pretrained_start", elapsed_ms: Date.now() - _workerStartMs });
   for (const { device, dtype, label } of backends) {
-    // §#1501: if WebGPU device acquisition failed at the top, skip webgpu backend entirely
-    // and proceed directly to the CPU fallback — avoids a load attempt that ORT would also fail.
-    if (device === "webgpu" && !_preAcquiredGpuDevice) continue;
+    // §#1501: if WebGPU device acquisition failed at the top, skip webgpu backend entirely.
+    // §#1637: forceWasm=true also skips WebGPU — user chose WASM EP fallback path.
+    if (device === "webgpu" && (!_preAcquiredGpuDevice || forceWasm)) continue;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let model: Awaited<ReturnType<typeof Gemma4ForConditionalGeneration.from_pretrained>>;

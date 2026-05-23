@@ -38,7 +38,7 @@ import { getCreateSequence } from "../tools/index";
 import { setDoorVariant, setWindowVariant } from "../tools/openings";
 import { prefetchModel, MODEL_ID, setClusterCatalog, setCanvasSkillCatalog } from "../agent/agent-harness";
 import { checkConsentAndLoad } from "../agent/model-consent";
-import { initBootScreen } from "../agent/boot-screen";
+import { initBootScreen, getCapabilityGatePromise, isCadOnlyMode } from "../agent/boot-screen";
 import { listSavedSkills, deleteSkill, listClusters, saveCluster, deleteCluster, listCanvasClusters, type SavedSkill, type SkillStep, type SkillCluster, type SkillClusterStep } from "../skills/skill-store";
 import { STARTER_LIBRARY } from "../skills/starter-library";
 import type { Skill } from "../agent/skills-loader";
@@ -1987,6 +1987,16 @@ function demoIdToIndex(id: string): string | null {
 function buildPromptTabBody(promptPane: HTMLElement | null): HTMLElement {
   const wrap = el("div", "tab-body prompt-tab create-tab");
 
+  // §#1637 Tier 4: cad-only mode — don't mount ChatPanel; show AI-disabled notice.
+  if (isCadOnlyMode()) {
+    wrap.innerHTML = `
+      <div class="ai-disabled-notice">
+        <p>AI features are disabled. Reload the page and choose a different option from the boot screen to enable them.</p>
+        <button class="ai-disabled-reload-btn" type="button" onclick="window.location.reload()">Reload &amp; change settings</button>
+      </div>`;
+    return wrap;
+  }
+
   let mode = loadConsoleMode();
 
   const header = el("div", "ai-header");
@@ -2907,10 +2917,20 @@ function buildDock(
     history: buildHistoryTabBody(),
   };
 
+  const cadOnly = isCadOnlyMode();
   for (const t of DOCK_TABS) {
     const tab = el("div", "dock-tab", { "data-tab": t.id });
     tab.innerHTML = `${iconSVG(t.icon, 11)} ${t.label}`;
-    tab.addEventListener("click", () => activate(t.id));
+    if (t.id === "prompt" && cadOnly) {
+      // §#1637 Tier 4: CREATE tab disabled — user chose CAD-only on capability modal.
+      tab.classList.add("dock-tab--disabled");
+      tab.setAttribute("aria-disabled", "true");
+      tab.setAttribute("title", "AI features unavailable. Reload and choose another option to enable.");
+      tab.style.pointerEvents = "none";
+      tab.style.opacity = "0.35";
+    } else {
+      tab.addEventListener("click", () => activate(t.id));
+    }
     tabsHost.appendChild(tab);
   }
 
@@ -2933,12 +2953,16 @@ function buildDock(
     bodyHost.innerHTML = "";
     if (panes[id]) bodyHost.appendChild(panes[id]);
     if (id === "prompt") {
-      const remoteUrl = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
-      if (remoteUrl) {
-        prefetchModel();
-      } else {
-        checkConsentAndLoad(MODEL_ID, () => prefetchModel());
-      }
+      // §#1637: gate model loading on capability choice; cad-only path skips AI entirely.
+      void getCapabilityGatePromise().then((path) => {
+        if (path === "cad-only" || path === "flags") return;
+        const remoteUrl = (import.meta.env as Record<string, string>).VITE_GEMMA_AGENT_URL ?? "";
+        if (remoteUrl) {
+          prefetchModel();
+        } else {
+          checkConsentAndLoad(MODEL_ID, () => prefetchModel());
+        }
+      });
     }
   }
   activate("prompt");

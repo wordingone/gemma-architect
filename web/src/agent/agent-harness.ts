@@ -58,6 +58,7 @@ import { snapshotAsText } from "../scene/scene-kg";
 import { captureViewport } from "./viewport-capture";
 import type { Skill } from "./skills-loader";
 import { recordTurn } from "./telemetry";
+import { isWasmFallbackMode } from "./boot-screen";
 import {
   initTelemetry,
   emitBootFingerprint,
@@ -468,6 +469,8 @@ function initWorkerIfNeeded(): Worker {
     drafterUrl:       DRAFTER_ONNX_URL,
     drafterCacheKey:  DRAFTER_CACHE_KEY,
     noWarmup:         _noWarmup,
+    // §#1637 Path 2: forceWasm=true when user chose WASM EP fallback at boot modal.
+    forceWasm:        isWasmFallbackMode(),
     // §C-warmup-context (#1362): pass representative system prompt so warmup probe
     // exercises ~1000-token KV cache buffers matching real inference context size.
     // Without this the probe uses ~6 tokens, leaving large GPU buffers unexercised

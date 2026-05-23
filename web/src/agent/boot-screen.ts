@@ -2,6 +2,9 @@
 // Blocks all underlying UI interaction until agentmodel:boot-complete fires.
 // Supersedes loading-anim.ts chrome-edge overlay.
 
+export { getCapabilityGatePromise, isCadOnlyMode, isWasmFallbackMode, wasCapabilityModalShown, resolvedBootPath } from "./boot-capability-gate";
+import { initCapabilityGate } from "./boot-capability-gate";
+
 const LOOP_MS = 6_000;          // one travel-head cycle
 const FADE_MS = 200;             // fade-out duration on completion
 const READY_HOLD_MS = 1_200;     // returning-user: hold READY pulse before fade
@@ -81,6 +84,9 @@ export function initBootScreen(): void {
   if (_initialized) return;
   _initialized = true;
   _buildOverlay();
+  // §#1637: capability gate runs after overlay is mounted; modal injects into document.body
+  // at z-index:9999 (same layer as overlay), visible before model loading starts.
+  initCapabilityGate(document.body);
   _wireEvents();
   _startTime = performance.now();
   _tick();

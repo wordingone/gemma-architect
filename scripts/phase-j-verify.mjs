@@ -28,7 +28,8 @@ const NO_RELOAD   = process.argv.includes("--no-reload");
 // Cold-cache: clear HTTP disk cache + cookies + Cache API + IndexedDB before reload.
 // Model re-downloads (~2.5GB) — expect 15-20min boot. boot_ms < 150000 → receipt INVALID.
 const COLD_CACHE  = !process.argv.includes("--warm") && !NO_RELOAD;
-const T1_ONLY     = process.argv.includes("--t1-only");
+const T1_ONLY     = process.argv.includes("--t1-only") || process.argv.includes("--cold-cache-wasm-cohort");
+const WASM_COHORT = process.argv.includes("--cold-cache-wasm-cohort"); // §#1637 Path 2 test
 const PROMPT_N    = Number(process.argv.find(a => a.startsWith("--prompts="))?.split("=")[1] ?? 5);
 const BOOT_TIMEOUT_MS  = COLD_CACHE ? 65 * 60 * 1000 : 10 * 60 * 1000;  // 65 min cold, 10 min warm
 const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retry
@@ -60,7 +61,7 @@ const outFile   = `${STATE_DIR}/phase-j-verify-${sha}-${timestamp}.json`;
 console.log(`\n── Phase J verify  sha=${sha}  ${ts()} ──`);
 console.log(`   Pages: ${PAGES_URL}`);
 console.log(`   Prompts: ${PROMPT_N}  boot-timeout: ${BOOT_TIMEOUT_MS/60000}m  turn-timeout: ${TURN_TIMEOUT_MS/60000}m`);
-console.log(`   Mode: ${COLD_CACHE ? "COLD-CACHE (HTTP+cookies+Storage — gate default)" : NO_RELOAD ? "NO-RELOAD (warm — INVALID as gate test)" : "WARM (--warm — INVALID as gate test)"}${T1_ONLY ? "  [t1-only: camera staging after T1]" : ""}`);
+console.log(`   Mode: ${WASM_COHORT ? "WASM-COHORT (cold-cache + igpu-mock + Path-2 click)" : COLD_CACHE ? "COLD-CACHE (HTTP+cookies+Storage — gate default)" : NO_RELOAD ? "NO-RELOAD (warm — INVALID as gate test)" : "WARM (--warm — INVALID as gate test)"}${T1_ONLY && !WASM_COHORT ? "  [t1-only]" : ""}`);
 
 // ── CDP connection ─────────────────────────────────────────────────────────────
 
@@ -211,6 +212,42 @@ window.addEventListener('goal:changed',function(e){
 });`,
 });
 
+// §#1637 wasm-cohort: mock requestAdapter as igpu to trigger boot-capability modal on first boot.
+// Only applied when ?gpu=wasm is absent (first boot). After Path 2 click the page reloads with
+// ?gpu=wasm → isGpuWasmForced()=true → gate resolves immediately → no adapter call at all.
+if (WASM_COHORT) {
+  await cdp("Page.addScriptToEvaluateOnNewDocument", {
+    source: `(function(){
+      if (new URLSearchParams(location.search).has('gpu')) return;
+      if (typeof navigator === 'undefined' || !navigator.gpu) return;
+      var origGpu = navigator.gpu;
+      try {
+        Object.defineProperty(navigator, 'gpu', {
+          configurable: true, enumerable: true,
+          get: function() {
+            return {
+              requestAdapter: function() {
+                return Promise.resolve({
+                  info: { vendor: 'intel', architecture: 'gen-12', description: 'Intel Gen12 (harness-igpu-mock)' },
+                  isFallbackAdapter: false,
+                  features: { has: function() { return false; } },
+                  limits: {},
+                });
+              },
+              getPreferredCanvasFormat: origGpu.getPreferredCanvasFormat ? origGpu.getPreferredCanvasFormat.bind(origGpu) : function() { return 'bgra8unorm'; },
+            };
+          }
+        });
+      } catch(e) { console.warn('[wasm-cohort] GPU mock failed:', e.message); }
+    })();`,
+  });
+  console.log(`   [wasm-cohort] GPU adapter mock injected (igpu simulation for first boot)`);
+  if (!COLD_CACHE) {
+    console.error("ERROR: --cold-cache-wasm-cohort requires cold-cache mode (omit --warm and --no-reload)");
+    process.exit(1);
+  }
+}
+
 // ── Reload tab (unless --no-reload) ───────────────────────────────────────────
 
 const startMs = Date.now();
@@ -294,6 +331,93 @@ if (!NO_RELOAD) {
     // NOT cold-cache (Cache API survives). Use --cold for the gate-recording run.
     await cdp("Page.reload", { ignoreCache: false });
     await delay(3000);
+  }
+}
+
+// §#1637 wasm-cohort: detect modal on first boot, click Path 2, handle second boot.
+const _wasmCohort = { modalShown: false, choice: null, navUrl: null };
+if (WASM_COHORT && !NO_RELOAD) {
+  console.log(`\n[wasm-cohort] Waiting for boot-capability modal (.bcg-modal)...`);
+  const modalDeadline = Date.now() + 60_000;
+  let _modalFound = false;
+  while (Date.now() < modalDeadline) {
+    const hasModal = await evaluate(`document.querySelector('.bcg-modal') !== null`);
+    if (hasModal === true) { _modalFound = true; break; }
+    await delay(1000);
+  }
+  if (!_modalFound) {
+    console.error(`[wasm-cohort] FAIL-FAST: .bcg-modal not found within 60s — GPU mock may have failed or adapter classified as dgpu.`);
+    process.exit(1);
+  }
+  _wasmCohort.modalShown = true;
+  console.log(`[+${Date.now()-startMs}ms] [wasm-cohort] Modal confirmed. CDP-clicking [data-path="wasm-fallback"]...`);
+
+  const _btnRectRaw = await evaluate(
+    `JSON.stringify(document.querySelector('[data-path="wasm-fallback"]')?.getBoundingClientRect()?.toJSON() ?? null)`,
+  );
+  const _btnRect = typeof _btnRectRaw === 'string' ? JSON.parse(_btnRectRaw) : _btnRectRaw;
+  if (!_btnRect) {
+    console.error(`[wasm-cohort] FAIL-FAST: [data-path="wasm-fallback"] button not found in modal`);
+    process.exit(1);
+  }
+  const _bx = Math.round(_btnRect.left + _btnRect.width / 2);
+  const _by = Math.round(_btnRect.top + _btnRect.height / 2);
+
+  // Arm navigation listener BEFORE the click
+  let _navResolve;
+  const _navPromise = new Promise(res => { _navResolve = res; });
+  const _navHandler = evt => {
+    if (evt.method === 'Page.frameNavigated' && evt.params?.frame?.parentId == null) {
+      _navResolve(evt.params.frame.url ?? '');
+    }
+  };
+  eventHandlers.push(_navHandler);
+
+  await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: _bx, y: _by, button: "none" });
+  await delay(50);
+  await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: _bx, y: _by, button: "left", clickCount: 1, buttons: 1 });
+  await delay(50);
+  await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: _bx, y: _by, button: "left", clickCount: 1 });
+
+  const _navUrl = await Promise.race([_navPromise, delay(15_000).then(() => '')]);
+  const _navIdx = eventHandlers.indexOf(_navHandler);
+  if (_navIdx >= 0) eventHandlers.splice(_navIdx, 1);
+
+  if (!_navUrl || !_navUrl.includes('gpu=wasm')) {
+    console.error(`[wasm-cohort] FAIL-FAST: expected navigation to ?gpu=wasm, got: '${_navUrl}'`);
+    process.exit(1);
+  }
+  _wasmCohort.choice = 'wasm-fallback';
+  _wasmCohort.navUrl = _navUrl;
+  console.log(`[+${Date.now()-startMs}ms] [wasm-cohort] Navigation to ${_navUrl} confirmed. WASM EP boot starting...`);
+
+  // Handle consent overlay on second boot (localStorage was cleared in cold-cache step)
+  await delay(3000);
+  const _consentDeadline2 = Date.now() + 20_000;
+  while (Date.now() < _consentDeadline2) {
+    const _vis = await evaluate(`document.querySelector('#model-consent-overlay #consent-approve') !== null`);
+    if (_vis === true) {
+      const _crj = await evaluate(
+        `JSON.stringify(document.querySelector('#model-consent-overlay #consent-approve').getBoundingClientRect().toJSON())`,
+      );
+      const _cr = typeof _crj === 'string' ? JSON.parse(_crj) : _crj;
+      const _cx = Math.round(_cr.left + _cr.width / 2);
+      const _cy = Math.round(_cr.top + _cr.height / 2);
+      await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: _cx, y: _cy, button: "none" });
+      await delay(50);
+      await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: _cx, y: _cy, button: "left", clickCount: 1, buttons: 1 });
+      await delay(50);
+      await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: _cx, y: _cy, button: "left", clickCount: 1 });
+      await delay(500);
+      const _sv = await evaluate(`document.querySelector('#model-consent-overlay') !== null`);
+      if (!_sv) {
+        consentAutoClicked = true;
+        harnessTimings.consent_clicked_ms = Date.now() - startMs;
+        console.log(`[+${Date.now()-startMs}ms] [wasm-cohort] Consent dismissed on WASM EP boot`);
+        break;
+      }
+    }
+    await delay(1000);
   }
 }
 
@@ -752,8 +876,19 @@ const receipt = {
       ? (workerPhaseTiming.warmup_end_ms - workerPhaseTiming.from_pretrained_start_ms) <= bootMs
       : null,
   passed,
+  // §#1637 wasm-cohort fields (null when not in wasm-cohort mode)
+  wasm_cohort: WASM_COHORT ? {
+    boot_capability_modal_shown: _wasmCohort.modalShown,
+    boot_capability_modal_choice: _wasmCohort.choice,
+    boot_tier: _wasmCohort.choice === 'wasm-fallback' ? 'tier_1' : _wasmCohort.choice === 'cad-only' ? 'tier_4' : null,
+    wasm_ep_boot_url: _wasmCohort.navUrl,
+    wasm_ep_backend_active: _wasmCohort.choice === 'wasm-fallback' && bootComplete,
+    t1_wasm_dispatch_count: turn1DispatchCount,
+    // Pass: modal shown + Path 2 chosen + WASM EP boot complete + T1 dispatches ≥ 1
+    wasm_cohort_passed: _wasmCohort.modalShown && _wasmCohort.choice === 'wasm-fallback' && bootComplete && turn1DispatchCount >= 1,
+  } : null,
 };
 writeFileSync(outFile, JSON.stringify(receipt, null, 2));
 console.log(`\nReceipt: ${outFile}`);
 
-process.exit(passed ? 0 : 1);
+process.exit(WASM_COHORT ? (receipt.wasm_cohort?.wasm_cohort_passed ? 0 : 1) : (passed ? 0 : 1));
