@@ -820,7 +820,7 @@ registerHandler("SdWall", (args) => {
   // §#1555: reject degenerate walls below minimum span (corner-filler zero-length bug).
   const dxCheck = b.x - a.x, dyCheck = b.y - a.y;
   const wallLenCheck = Math.sqrt(dxCheck * dxCheck + dyCheck * dyCheck);
-  if (wallLenCheck < 0.5) return { skipped: "wall too short", length: wallLenCheck };
+  if (wallLenCheck < 0.5) throw new Error(`degenerate-wall: p1=${JSON.stringify([a.x,a.y])} p2=${JSON.stringify([b.x,b.y])} dist=${wallLenCheck.toFixed(3)} — endpoints must differ by ≥0.5m; for attached structures offset the new footprint from the shared wall face`);
   const topProfile = (args.topProfile as string | undefined) ?? "level";
   const eaveH = (args.eaveHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
   const ridgeH = (args.ridgeHeight as number | undefined) ?? 1.5;

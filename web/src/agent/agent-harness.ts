@@ -684,6 +684,26 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
+
+User: add a single-car garage attached to the south wall, 5m wide by 4m deep
+Assistant: South wall is the shared face at y=0. Garage extends SOUTH → y=-4. Three new walls with distinct p1 and p2 — no collapsed endpoints. House south wall is NOT re-emitted.
+<plan>
+1. SdWall — garage south, profile=[[0,-4],[5,-4]], thickness=0.2, height=2.4
+2. SdWall — garage east, profile=[[5,-4],[5,0]], thickness=0.2, height=2.4
+3. SdWall — garage west, profile=[[0,-4],[0,0]], thickness=0.2, height=2.4
+4. SdSlab — garage floor, profile=[[0,-4],[5,-4],[5,0],[0,0]], thickness=0.15
+</plan>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,-4],[5,-4]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[5,-4],[5,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,-4],[0,0]],"thickness":0.2,"height":2.4},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdSlab","arguments":{"profile":[[0,-4],[5,-4],[5,0],[0,0]],"thickness":0.15},"metadata":{"source":"agent"}}</tool_call>
+
+User: add a garden wall along the north boundary, 12m long and 1m tall
+Assistant: Boundary/garden walls are a SINGLE linear SdWall — not a closed polygon, not a new level. Height 1m = 1.0 (metric literal; never convert to feet).
+<plan>
+1. SdWall — north boundary, profile=[[0,22],[12,22]], thickness=0.2, height=1.0
+</plan>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[0,22],[12,22]],"thickness":0.2,"height":1.0},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 const WEBGPU_HOUSE_FEW_SHOT = `
