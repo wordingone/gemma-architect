@@ -97,7 +97,6 @@ function _buildModal(
 
     modal.innerHTML = `
       <div class="bcg-inner">
-        <div class="bcg-icon">⚡</div>
         <h2 class="bcg-title">Set up GPU for AI</h2>
         <p class="bcg-device">${_deviceCopy(cl, label)}</p>
 
