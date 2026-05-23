@@ -365,10 +365,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         // KV pool based on max_new_tokens (lazy-allocates per decode step instead). 2048 added
         // ~20s boot overhead with zero diagnostic value; reverting to minimize boot noise.
         //
-        // §#1587: cold-cache Chrome path loads model in-memory (cache.put rejected →
-        // useBrowserCache=false fallback). In-memory model has higher GPU buffer pressure;
-        // 8 tokens insufficient to pre-allocate decode buffer pool for first 1024-token
-        // inference. Cold-cache path uses 64 tokens (~12s extra); warm-cache stays at 8.
+        // §#1587: NOT the same issue as #1469. #1469 targeted +60s OOM (pool pre-sizing).
+        // #1587 targets `buffer_manager.cc:553` race (wgpuBufferMapAsync fires before buffer
+        // mapping resolves — a different mechanism). The lever here is running MORE DECODE
+        // STEPS during the safe warmup window, forcing lazy buffer-lifecycle allocations to
+        // settle before the first real inference. cold-cache Chrome path loads model in-memory
+        // (cache.put rejected → useBrowserCache=false fallback) → higher GPU buffer pressure
+        // → 8 steps insufficient. Cold-cache uses 64 steps (~12s extra); warm-cache stays at 8.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await Promise.race([
           (_model as any).generate({ ...inputs, max_new_tokens: _coldCacheBoot ? 64 : 8, do_sample: false }),
