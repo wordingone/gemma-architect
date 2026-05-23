@@ -147,6 +147,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   if (isReturning) {
     post({ type: "returning-user" });
   }
+  // §#1630-B: flag for OPFS warm-load returning-user signal (checkReturningUser only checks
+  // Cache API; OPFS warm loads need a separate signal so the progress bar doesn't stay at 0%).
+  let _opfsReturningUserPosted = isReturning;
 
   // Emit manifest with estimated total bytes so the overlay can show aggregate %.
   // E4B: model ONNX q4f16 ≈ 2.5 GB + embed_tokens ≈ 2.0 GB + drafter ≈ 158 MB + tokenizer ≈ 5 MB.
@@ -262,6 +265,13 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
             const file = await fh.getFile();
             const buf = await file.arrayBuffer();
             _modelLoadSource = "opfs-cache";
+            // §#1630-B: first OPFS cache hit — post returning-user so boot-screen snaps
+            // progress bar to READY. checkReturningUser() only probed Cache API; this is the
+            // OPFS-warm-load equivalent of that signal. The overlay stays until boot-complete.
+            if (!_opfsReturningUserPosted) {
+              _opfsReturningUserPosted = true;
+              post({ type: "returning-user" });
+            }
             return new Response(buf, {
               headers: { "Content-Type": "application/octet-stream", "Content-Length": String(buf.byteLength) },
             });

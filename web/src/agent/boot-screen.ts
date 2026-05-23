@@ -103,8 +103,10 @@ function _showStalled(): void {
   _stallCount++;
   (window as unknown as Record<string, unknown>).__boot_stall_count = _stallCount;
   if (!_statusEl) return;
-  Object.assign(_statusEl.style, { color: '#ff9900', display: 'block' });
-  _statusEl.textContent = 'DOWNLOAD STALLED — check your connection and refresh';
+  // §#1630-A: replace alarming "DOWNLOAD STALLED" with honest copy — stall detector
+  // fires on slow CDN / iGPU bandwidth; the message was misleading for normal slow boots.
+  Object.assign(_statusEl.style, { color: '#9a9a9a', display: 'block' });
+  _statusEl.textContent = 'Loading… this may take a few minutes on first visit';
 
   // Trace persisted silently — forensic if we can access the device, never user-facing.
   try {
