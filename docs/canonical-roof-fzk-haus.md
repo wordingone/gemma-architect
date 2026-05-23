@@ -75,11 +75,11 @@ From IFC quantities (verified, not estimated):
 | Overhang | 0.5m default | 0.5m | ✓ |
 | Fascia/soffit | `IfcCovering` × 4 | none in FZK dump | △ extra; visual benefit outweighs IFC purity |
 
-### Remaining gaps vs FZK (deferred)
+### Remaining gaps vs FZK (decided — no code change)
 
-- **§B — Pfette enclosure**: FZK Pfette sits inside Dach slab Y-volume (mid-slope). Ours is at eave edge for visibility (#1650 interim fix). IFC enclosure relationship deferred to #1639 §B pass; design decision tracked in #1671 (IFC accuracy vs visibility trade-off).
-- **§D — IfcCovering strips**: 4 fascia/soffit pieces not in FZK. Removal pending visual-quality decision.
-- **§E — Sparren count**: 23/slope vs FZK 21/slope. Minor; not blocking.
+- **§B — Pfette enclosure** (**Scope A — keep at eave edge**): FZK Pfette sits inside Dach slab Y-volume (mid-slope), but placing them there makes them invisible (inside solid slab geometry). Decision: keep at eave edge (`pfetteInset=0`) for viewport visibility. IFC-accuracy at mid-slope deferred until #1675 fixture gate defines canonical containment assertion. Tracked in #1671.
+- **§D — IfcCovering strips** (**keep — visual quality over IFC purity**): 4 fascia/soffit IfcCovering pieces not in FZK dump, but they provide clean eave/gable closure in the viewport. Removing them would leave raw slope-edge geometry visible at the eave. Decision: retain until #1675 fixture gate either codifies them as canonical or explicitly excludes them.
+- **§E — Sparren count**: 23/slope vs FZK 21/slope. Minor; not blocking. No change.
 
 ---
 
