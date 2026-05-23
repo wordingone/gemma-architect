@@ -30,33 +30,33 @@ describe("AgentInstance — gemma-verify S128", () => {
     const a = createAgentInstance("agent-A");
     const b = createAgentInstance("agent-B");
 
-    await a.ask("draw a 5m wall");
-    await b.ask("draw a 3m wall");
+    await a.ask("draw a 16-foot wall");
+    await b.ask("draw a 10-foot wall");
 
     const aContents = a.history.map((t) => t.content);
     const bContents = b.history.map((t) => t.content);
 
     // A's history contains only its own prompt
-    expect(aContents).toContain("draw a 5m wall");
-    expect(aContents).not.toContain("draw a 3m wall");
+    expect(aContents).toContain("draw a 16-foot wall");
+    expect(aContents).not.toContain("draw a 10-foot wall");
 
     // B's history contains only its own prompt
-    expect(bContents).toContain("draw a 3m wall");
-    expect(bContents).not.toContain("draw a 5m wall");
+    expect(bContents).toContain("draw a 10-foot wall");
+    expect(bContents).not.toContain("draw a 16-foot wall");
 
     // Each has exactly one user + one assistant turn
     expect(a.history.length).toBe(2);
     expect(b.history.length).toBe(2);
-    expect(a.history[0]).toEqual({ role: "user", content: "draw a 5m wall" });
-    expect(b.history[0]).toEqual({ role: "user", content: "draw a 3m wall" });
+    expect(a.history[0]).toEqual({ role: "user", content: "draw a 16-foot wall" });
+    expect(b.history[0]).toEqual({ role: "user", content: "draw a 10-foot wall" });
   });
 
   test("reset() clears only the target instance", async () => {
     const a = createAgentInstance("agent-A");
     const b = createAgentInstance("agent-B");
 
-    await a.ask("draw a 5m wall");
-    await b.ask("draw a 3m wall");
+    await a.ask("draw a 16-foot wall");
+    await b.ask("draw a 10-foot wall");
 
     a.reset();
 

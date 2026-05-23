@@ -364,7 +364,7 @@ async function main() {
     "You build 3D buildings via tool calls. Each turn = exactly ONE tool call.",
     "Reasoning should be terse — name the next tool + args; don't deliberate over alternatives.",
     "Stages: (1) make_box for floor, (2) make_box for each wall (translate to position after), (3) make_box for partition + columns, (4) for door/window: make wall, make smaller opening box at the right position, cut to subtract, (5) fuse everything into one solid, (6) submit.",
-    "Convention: make_box is centered at origin; translate AFTER to position. For a 12x0.2x2.8 wall at the south edge of an 8m-deep floor, translate by (0, -3.9, 1.5) to put it at y=-3.9 with center z at 1.5 (base above the 0.2m floor slab).",
+    "Convention: make_box is centered at origin; translate AFTER to position. For a 40-foot-long, 8-inch-thick, 9-foot-tall wall at the south edge of a 26-foot-deep floor, translate by (0, -3.9, 1.5) to put it at y=-3.9 with center z at 1.5 (base above the 8-inch floor slab).",
     "When in doubt: just make the next part. The bbox feedback in the tool result tells you if it's correct.",
   ].join(" ");
 

@@ -1758,7 +1758,7 @@ await resetScene('before-box-inject');
     (() => {
       const fnExists = typeof window.__runIteration === 'function';
       if (!fnExists) return { passed: false, evidence: { reason: '__runIteration not registered' } };
-      const result = window.__runIteration(null, null, 'draw a 5m wall', []);
+      const result = window.__runIteration(null, null, 'draw a 16-foot wall', []);
       const isPromise = result != null && typeof result.then === 'function';
       if (!isPromise) return { passed: false, evidence: { reason: 'did not return a Promise', type: typeof result } };
       result.catch(() => {});
@@ -2029,7 +2029,7 @@ await resetScene('before-box-inject');
 
 // ── Surface 41: tier0-llama-server-dispatch (#389) ───────────────────────────
 // Asserts that the remote inference path (VITE_GEMMA_AGENT_URL = :8088) produces
-// at least one IfcWall dispatch verb when given "draw a 5m wall". Exercises the
+// at least one IfcWall dispatch verb when given "draw a 16-foot wall". Exercises the
 // full chat-panel → runRemoteAgentTurn → llama-server → parseDispatches chain.
 // Skips if __runIteration is not present or REMOTE_URL is unset.
 {
@@ -2043,7 +2043,7 @@ await resetScene('before-box-inject');
       return { passed: true, evidence: { skipped: true, reason: 'REMOTE badge not shown — VITE_GEMMA_AGENT_URL not configured; soft-skip until inference endpoint is live', badge } };
     }
     try {
-      const result = await window.__runIteration(null, null, 'draw a 5m wall', []);
+      const result = await window.__runIteration(null, null, 'draw a 16-foot wall', []);
       const dispatches = result?.dispatches ?? [];
       const verb = dispatches[0]?.verb ?? null;
       const passed = dispatches.length > 0;
@@ -3952,7 +3952,7 @@ await resetScene('before-box-inject');
 // ── S75: on-device-agent-response ────────────────────────────────────────────
 // Verifies the on-device Gemma model responds to a chat prompt with ≥1 dispatch verb.
 // Self-test (Part A): calibrates growth-detector via __dispatch before running real test.
-// Real test (Part B): submits "draw a 5m wall", waits ≤60s for agent:turn-complete.
+// Real test (Part B): submits "draw a 16-foot wall", waits ≤60s for agent:turn-complete.
 {
   await resetScene('s75-pre');
 
@@ -4028,7 +4028,7 @@ await resetScene('before-box-inject');
       });
 
       // B5: Submit prompt via Enter key on .chat-input
-      input.value = 'draw a 5m wall';
+      input.value = 'draw a 16-foot wall';
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));

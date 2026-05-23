@@ -4,7 +4,7 @@
 // Two arms × two scenarios:
 //   Arm ON  (E4B default): MTP active via E4B drafter
 //   Arm OFF (E4B + ?mtp=off): drafter short-circuited, standard generate
-//   Scenario 1 (build):  "Build a 5m wall..." — text-only, no VISUAL_RE
+//   Scenario 1 (build):  "Build a 16-foot wall..." — text-only, no VISUAL_RE
 //   Scenario 2 (visual): "What's currently in the scene?" — triggers VISUAL_RE → auto-capture
 //
 // Acceptance (#751 gate from mail #8347):
@@ -33,7 +33,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE_URL = process.env.APP_URL ?? DEV_URL;
 // Scenario 1: text-only build prompt — does NOT match VISUAL_RE in chat-panel.ts.
 // /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i
-const PROMPT_TEXT   = "Build a 5m wall at the origin, then add a 5x5 floor slab beneath it.";
+const PROMPT_TEXT   = "Build a 16-foot wall at the origin, then add a 16' × 16' floor slab beneath it.";
 // Scenario 2: canonical perception prompt per `feedback_test_scenarios_must_match_user_facing_use_case`.
 // Matches VISUAL_RE ("what"/"currently"/"scene") → auto-capture + multimodal.
 // Per #793 gate removal: MTP must fire on visual turns too (mtp_on:true in ON arm).

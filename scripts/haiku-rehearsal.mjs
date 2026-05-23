@@ -193,7 +193,7 @@ const shotE = await captureScreenshot("E-agent-build-export");
 recordStep(
   "agent-build-and-export",
   shotE,
-  "A 5m wall appears in scene. IFC file offered for download (browser download bar visible or status bar shows IFC export success).",
+  "A 16-foot wall appears in scene. IFC file offered for download (browser download bar visible or status bar shows IFC export success).",
   "PENDING_HAIKU",
   "Automated: IfcWall + SdExport dispatched",
   []
