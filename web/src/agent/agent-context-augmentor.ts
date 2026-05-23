@@ -29,6 +29,41 @@ function extractParentWalls(): WallEntry[] {
     }));
 }
 
+// Filter to only the walls on the named face. Reduces injection from O(all walls) to O(1 face).
+// Prevents T3 timeout: 8-wall pairM injection was ~686 tokens; 1-wall compact is ~50 tokens.
+function filterWallsByFace(walls: WallEntry[], face: string): WallEntry[] {
+  if (walls.length === 0) return walls;
+  const allPts = walls.flatMap((w) => [w.profile[0], w.profile[1]]);
+  let extreme: number;
+  let getVal: (p: [number, number]) => number;
+  switch (face) {
+    case "south":
+      extreme = Math.min(...allPts.map(([, y]) => y));
+      getVal = ([, y]) => y;
+      break;
+    case "north":
+      extreme = Math.max(...allPts.map(([, y]) => y));
+      getVal = ([, y]) => y;
+      break;
+    case "west":
+      extreme = Math.min(...allPts.map(([x]) => x));
+      getVal = ([x]) => x;
+      break;
+    case "east":
+      extreme = Math.max(...allPts.map(([x]) => x));
+      getVal = ([x]) => x;
+      break;
+    default:
+      return walls;
+  }
+  const tol = 0.15; // 15cm tolerance for floating-point wall placement
+  return walls.filter(
+    (w) =>
+      Math.abs(getVal(w.profile[0]) - extreme) < tol &&
+      Math.abs(getVal(w.profile[1]) - extreme) < tol,
+  );
+}
+
 type PromptSemantic =
   | { kind: "attached_structure"; face: string }
   | { kind: "standalone_metric"; metricLiterals: string[] }
@@ -51,24 +86,14 @@ function detectSemantic(prompt: string): PromptSemantic {
   return { kind: "none" };
 }
 
-function pairM(v: number): string {
-  if (v === 0) return "0";
-  const wrong = (v * 0.3048).toFixed(4);
-  return `${v.toFixed(4)}m(METRES;NOT_${wrong})`;
-}
-
+// Compact format: plain coordinates + paired height. Coordinates are plain metres (header carries
+// the anti-conversion warning). Height uses pairing because height scalars were the primary
+// ft→m victim in T3 (#1576 confirmed: 2.7432m correct after pairing, was 0.835m before).
 function formatWallLine(wall: WallEntry): string {
   const [[x1, y1], [x2, y2]] = wall.profile;
-  const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-  const lenM = len.toFixed(4);
-  const lenWrong = (len * 0.3048).toFixed(4);
   const hM = wall.height.toFixed(4);
   const hWrong = (wall.height * 0.3048).toFixed(4);
-  return (
-    `  profile=[[${pairM(x1)},${pairM(y1)}],[${pairM(x2)},${pairM(y2)}]]` +
-    ` length=${lenM}m (METRES; NOT ${lenWrong} which would be the ft→m conversion of ${lenM}ft)` +
-    ` height=${hM}m (METRES; NOT ${hWrong} which would be the ft→m conversion of ${hM}ft)`
-  );
+  return `  [[${x1.toFixed(4)},${y1.toFixed(4)}],[${x2.toFixed(4)},${y2.toFixed(4)}]] h=${hM}m(METRES;NOT_${hWrong})`;
 }
 
 /**
@@ -89,16 +114,19 @@ export function buildContextAugmentation(
   const semantic = detectSemantic(prompt);
 
   if (semantic.kind === "attached_structure") {
-    const walls = extractParentWalls();
-    if (walls.length === 0) return null;
+    const allWalls = extractParentWalls();
+    if (allWalls.length === 0) return null;
+    const faceWalls = filterWallsByFace(allWalls, semantic.face);
+    // Fall back to first 4 walls if face-filter yields nothing (unknown coordinate origin).
+    const walls = faceWalls.length > 0 ? faceWalls : allWalls.slice(0, 4);
     const wallLines = walls.map(formatWallLine).join("\n");
     return (
-      `[CONTEXT] Parent walls from prior dispatches (select the ${semantic.face} wall by position):\n` +
+      `[CONTEXT] ${semantic.face.toUpperCase()} face wall(s) — ALL COORDINATES IN METRES. Do NOT multiply by 0.3048:\n` +
       `${wallLines}\n` +
-      `Apply EXTENSION RULE from BUILDING_DEFAULTS: identify W1=[profile[0]] W2=[profile[1]] of the ` +
-      `${semantic.face} wall, compute perpendicular direction away from parent, derive ` +
-      `F1=[W1+perp*depth] F2=[W2+perp*depth], emit three walls: far [F1,F2], side-A [W1,F1], side-B [W2,F2]. ` +
-      `INVARIANT: every wall must have p1 ≠ p2 (dist ≥ 0.5m). Do NOT re-emit the shared parent wall.\n`
+      `Apply EXTENSION RULE: W1=profile[0], W2=profile[1], compute perpendicular outward direction, ` +
+      `depth from user prompt in metres, F1=[W1+perp*depth], F2=[W2+perp*depth]. ` +
+      `Emit three SdWall calls: far [F1,F2], side-A [W1,F1], side-B [W2,F2]. ` +
+      `Every wall: p1 ≠ p2 (dist ≥ 0.5m). Do NOT re-emit the shared parent wall.\n`
     );
   }
 
