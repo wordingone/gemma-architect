@@ -793,6 +793,12 @@ const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : 
 console.log(verdict.padEnd(54) + "  │");
 console.log(`└──────────────────────────────────────────────────────┘`);
 
+// ── Sub-C: scene persistence fields (§#1644) ──────────────────────────────────
+// scene_persist_warning_present: beforeunload hook registered (Sub-A gate)
+// scene_restore_offered_on_boot: restore prompt shown after boot (Sub-B, cold-cache=false if no prior scene)
+const sceneBeforeunloadHooked = await evaluate("!!window.__sceneBeforeunloadHooked").catch(() => null);
+const restorePromptShown = await evaluate("!!(document.getElementById('restore-prompt') && !document.getElementById('restore-prompt').hidden)").catch(() => null);
+
 // ── Write receipt ──────────────────────────────────────────────────────────────
 
 // §#1504: failureBreakdown populated only on FAIL — exposes mechanism without narrative
@@ -879,6 +885,9 @@ const receipt = {
       ? (workerPhaseTiming.warmup_end_ms - workerPhaseTiming.from_pretrained_start_ms) <= bootMs
       : null,
   passed,
+  // §#1644-C: scene persistence fields
+  scene_persist_warning_present: sceneBeforeunloadHooked ?? null,
+  scene_restore_offered_on_boot: restorePromptShown ?? null,
   // §#1637: populated before ws.close() — see bootCapabilityModalShown variable above.
   boot_capability_modal_shown: bootCapabilityModalShown,
   // §#1637 wasm-cohort fields (null when not in wasm-cohort mode)

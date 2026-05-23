@@ -3699,6 +3699,7 @@ async function initSceneRestore(): Promise<void> {
 
 // Warn before reload/close if user has dispatch-created geometry (no auto-save).
 // Skips IFC-loaded content — those lack userData.creator and survive a reload via re-open.
+(window as unknown as Record<string, unknown>).__sceneBeforeunloadHooked = true;
 window.addEventListener("beforeunload", (e: BeforeUnloadEvent) => {
   const hasUserContent = viewer
     .getScene()
