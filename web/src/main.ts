@@ -817,6 +817,10 @@ registerHandler("SdWall", (args) => {
     a = { x: 0, y: 0 };
     b = { x: wallLen, y: 0 };
   }
+  // §#1555: reject degenerate walls below minimum span (corner-filler zero-length bug).
+  const dxCheck = b.x - a.x, dyCheck = b.y - a.y;
+  const wallLenCheck = Math.sqrt(dxCheck * dxCheck + dyCheck * dyCheck);
+  if (wallLenCheck < 0.5) return { skipped: "wall too short", length: wallLenCheck };
   const topProfile = (args.topProfile as string | undefined) ?? "level";
   const eaveH = (args.eaveHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
   const ridgeH = (args.ridgeHeight as number | undefined) ?? 1.5;
@@ -824,10 +828,14 @@ registerHandler("SdWall", (args) => {
   const activeLvl = levelStore.getActive();
   const allLevels = levelStore.all().sort((x, y) => x.elevation - y.elevation);
   const nextLvl = allLevels.find(l => l.elevation > activeLvl.elevation + 0.01);
+  const MIN_WALL_HEIGHT = 0.5;
   const baseH = explicitH ?? DEFAULT_WALL_HEIGHT;
-  const effectiveH = nextLvl
-    ? Math.min(baseH, nextLvl.elevation - activeLvl.elevation - DEFAULT_SLAB_THICKNESS)
-    : baseH;
+  const effectiveH = Math.max(
+    MIN_WALL_HEIGHT,
+    nextLvl
+      ? Math.min(baseH, nextLvl.elevation - activeLvl.elevation - DEFAULT_SLAB_THICKNESS)
+      : baseH,
+  );
   const { mesh, chain } = topProfile === "pitched"
     ? buildWallPitchedTop(a, b, eaveH, ridgeH)
     : buildWall(a, b, effectiveH);
