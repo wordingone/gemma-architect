@@ -1038,17 +1038,16 @@ export function buildRoof(
     group.add(ridgeBeam);
 
     // Pfette (eave purlins) — FZK Pfette-1-1 and Pfette-2-1: 80mm × 160mm cross-section.
-    // Positioned 0.5m inside the Dach slab from the eave edge so they sit enclosed
-    // within the slab volume (matches FZK relationship: Pfette Y ⊂ Dach Y range, #1639).
+    // Positioned at eave edge (bottom of slope deck) for visibility. IFC inset-vs-eave
+    // scope tracked in #1658.
     const wallPlateLen = ridgeLenHalf * 2;
-    const pfetteInset = 0.5; // m from eave edge; slab spans from eave to ridge
-    const pfetteZ = pfetteInset * Math.tan(pitchRad) + 0.08; // height at inset point
+    const pfetteZ = 0.08; // member center 80mm above eave
     const wp1 = landscape
       ? member(wallPlateLen, 0.08, 0.16, frameMat.clone())
       : member(0.08, wallPlateLen, 0.16, frameMat.clone());
     wp1.position.set(
-      landscape ? 0 : -(spanHalf - pfetteInset),
-      landscape ? -(spanHalf - pfetteInset) : 0,
+      landscape ? 0 : -spanHalf,
+      landscape ? -spanHalf : 0,
       pfetteZ,
     );
     wp1.userData.ifcClass = "IfcBeam";
@@ -1058,8 +1057,8 @@ export function buildRoof(
     const wp2 = wp1.clone();
     (wp2.material as THREE.Material) = (wp1.material as THREE.Material).clone();
     wp2.position.set(
-      landscape ? 0 : (spanHalf - pfetteInset),
-      landscape ? (spanHalf - pfetteInset) : 0,
+      landscape ? 0 : spanHalf,
+      landscape ? spanHalf : 0,
       pfetteZ,
     );
     wp2.userData.ifcClass = "IfcBeam";
