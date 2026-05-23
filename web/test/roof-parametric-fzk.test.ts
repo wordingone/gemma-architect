@@ -1,5 +1,6 @@
-// #1640 — Programmatic gate: SdRoof pitched builder IfcSlab "Dach" bbox.
-// Verifies that the 150mm slope deck has slope-like world dimensions (not flat board).
+// #1640 — Smoke-precheck: SdRoof pitched builder IfcSlab "Dach" bbox range checks.
+// DOWNGRADED to smoke-precheck per #1675 AC4: uses 12×6m footprint (not FZK 12×10m) and
+// loose range assertions. Exact per-element invariants live in roof-fzk-invariant.test.ts.
 // Reference: FZK-Haus CDP dump 2026-05-23 (fixtures/fzk-roof-reference.json).
 import { describe, test, expect } from "bun:test";
 import * as THREE from "three";

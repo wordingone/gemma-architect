@@ -1,0 +1,70 @@
+{
+  "_source": "Derived from buildRoof math — FZK KIT Haus footprint 12×10m, 30° pitch, 0.5m overhang",
+  "_note": "All quantities in group-local space (group.position = footprint centre; z=0 = eave level). Tolerance for float comparisons: 1e-3 unless noted.",
+  "params": {
+    "p0": { "x": -6, "y": -5 },
+    "p1": { "x": 6, "y": 5 },
+    "pitchDeg": 30,
+    "overhang": 0.5,
+    "footprint_w": 12,
+    "footprint_d": 10
+  },
+  "derived": {
+    "hw": 6.5,
+    "hd": 5.5,
+    "landscape": true,
+    "spanHalf": 5.5,
+    "ridgeLenHalf": 6.5,
+    "rH": 3.1754264805429413,
+    "rafterLen": 6.350852961085883,
+    "nRaftersPerSlope": 21,
+    "sheathThick": 0.20
+  },
+  "invariants": {
+    "slabs": {
+      "count": 2,
+      "ifcClass": "IfcSlab",
+      "name": "Dach",
+      "geom_x": 13.0,
+      "geom_y": 6.350852961085883,
+      "geom_z": 0.20,
+      "rotation_x_abs_rad": 0.5235987755982988,
+      "position_y_abs": 2.75,
+      "position_z": 1.5877132402714706
+    },
+    "ridgeBeam": {
+      "count": 1,
+      "ifcClass": "IfcBeam",
+      "name": "First",
+      "geom_x": 13.0,
+      "geom_y": 0.08,
+      "geom_z": 0.16,
+      "position_x": 0,
+      "position_y": 0,
+      "position_z": 3.0954264805429412
+    },
+    "pfette": {
+      "count": 2,
+      "ifcClass": "IfcBeam",
+      "name": "Pfette",
+      "geom_x": 13.0,
+      "geom_y": 0.08,
+      "geom_z": 0.16,
+      "position_y_abs": 5.5,
+      "position_z": 0.08
+    },
+    "rafters": {
+      "totalCount": 42,
+      "perSlopeCount": 21,
+      "ifcClass": "IfcMember",
+      "geom_x": 0.08,
+      "geom_y": 0.15,
+      "geom_z": 6.350852961085883
+    },
+    "dihedral": {
+      "slab_normal_dot": 0.5,
+      "angle_between_normals_deg": 60,
+      "interior_dihedral_deg": 120
+    }
+  }
+}
