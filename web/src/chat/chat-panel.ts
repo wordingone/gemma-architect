@@ -13,6 +13,7 @@ import { findSkillsForPrompt } from "../agent/skills-loader";
 import { lastTurn } from "../agent/telemetry";
 import { buildDispatchSummary } from "./chat-dispatch-summary";
 import { classifyDispatchResult } from "./chat-dispatch-routing";
+import { buildContextAugmentation } from "../agent/agent-context-augmentor";
 import { setPickerHint } from "../viewer/picker-hint";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { getState, subscribe } from "../app-state";
@@ -620,11 +621,18 @@ export class ChatPanel {
       };
       window.addEventListener("agentmodel:generate-warning", onGenerateWarning);
 
+      // #1568: inject deterministic geometry context for continuation turns.
+      // Puts parent-wall coords + metric-literal hints in the most-attended position
+      // (prefix to current user prompt) so they beat T1's KV-cache anchoring.
+      const priorHistory = this._history.slice(0, -1);
+      const contextAug = buildContextAugmentation(text, priorHistory);
+      const effectivePrompt = contextAug ? `${contextAug}\n${text}` : text;
+
       let resp: Awaited<ReturnType<typeof runAgentTurn>>;
       try {
         resp = await runAgentTurn({
-          prompt: text,
-          history: this._history.slice(0, -1),
+          prompt: effectivePrompt,
+          history: priorHistory,
           skills: skillsToPass,
           skillsTotal: this._skills.length,
           maxNewTokens: 2048,
