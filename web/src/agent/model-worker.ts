@@ -367,7 +367,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         });
       }
       const processor = await AutoProcessor.from_pretrained(modelId);
-      post({ type: "phase_timing", phase: "from_pretrained_end", elapsed_ms: Date.now() - _workerStartMs });
+      post({ type: "phase_timing", phase: "from_pretrained_end", elapsed_ms: Date.now() - _workerStartMs, downloaded_bytes: _cumulativeBytes });
 
       // WebGPU sanity probe — same as main-thread path (#128/#133).
       // Skipped on recycle (noWarmup): GPU device is persistent, shaders already compiled.
