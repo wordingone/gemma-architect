@@ -1338,7 +1338,7 @@ registerHandler("SdRoof", (args) => {
       shape.lineTo(-len / 2, wallEaveH);
       shape.closePath();
       const pitchedGeom = new THREE.ExtrudeGeometry(shape, { depth: wt, bevelEnabled: false });
-      pitchedGeom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+      pitchedGeom.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2));
       pitchedGeom.translate(0, wt / 2, 0);
 
       // Capture old geometry BEFORE swap so undo can restore it.

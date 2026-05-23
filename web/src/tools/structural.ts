@@ -202,8 +202,8 @@ export function buildWallPitchedTop(
 
   const geom = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false });
   // ExtrudeGeometry: shape in XY, extrudes +Z by t.
-  // Rotate -90° around X so that old Y (height) → new Z (up), old Z (t) → new -Y.
-  geom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
+  // Rotate +90° around X so that old Y (height) → new +Z (up), old Z (t) → new -Y.
+  geom.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2));
   // Center Y so wall face is at y = ±t/2 (same convention as BoxGeometry wall).
   geom.translate(0, t / 2, 0);
 

@@ -6874,6 +6874,37 @@ await resetScene('before-box-inject');
   await resetScene('post-S141');
 }
 
+// ── S142 — gable-trim-z-origin (#1566): SdRoof gable trim mesh Z > 0 (not below slab) ────────────
+{
+  const r142 = await evaluate(`(async () => {
+    try {
+      // Build a simple gable roof over a standard room footprint.
+      const before = __app_state.scene.children.length;
+      dispatchSync('SdRoof', { type: 'gable', footprint: [[-5,-4],[5,4]], pitchDeg: 30, overhang: 0.5 });
+      const after = __app_state.scene.children.length;
+      if (after <= before) return { passed: false, evidence: { reason: 'SdRoof added no objects' } };
+
+      // Find gable-trim meshes: walls with userData.topProfile === 'pitched'.
+      let gableCount = 0, allAboveGround = true, minZ = Infinity;
+      __app_state.scene.traverse(obj => {
+        if (obj.isMesh && obj.userData.topProfile === 'pitched') {
+          gableCount++;
+          // Check bounding box — all vertices should be at Z >= -0.01 (allow tiny float error).
+          const bbox = new THREE.Box3().setFromObject(obj);
+          if (bbox.min.z < -0.01) { allAboveGround = false; }
+          if (bbox.min.z < minZ) minZ = bbox.min.z;
+        }
+      });
+      const passed = gableCount >= 2 && allAboveGround;
+      return { passed, evidence: { gableCount, allAboveGround, minZ } };
+    } catch (e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('gable-trim-z-origin', !!(r142?.passed), r142 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S142');
+}
+
 } finally {
   await cleanup();
 }
