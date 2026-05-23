@@ -291,6 +291,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
             data = merged.buffer;
           } else {
             data = await response.arrayBuffer();
+            _cumulativeBytes += data.byteLength;
           }
           try {
             if (!_opfsFirstWriteFired) {
