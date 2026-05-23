@@ -711,6 +711,9 @@ if (pageCompactEvents.length > 0) {
   compactEvents.push(...pageCompactEvents);
 }
 
+// §#1637: must run before ws.close(). Gate: boot_capability_modal_shown must be false for dgpu users.
+const bootCapabilityModalShown = await evaluate(`document.querySelector('.bcg-modal') !== null`).catch(() => null);
+
 // #1608: T1-only mode — position camera at SE 3/4 for /visual-check capture
 if (T1_ONLY) {
   console.log(`[+${Date.now()-startMs}ms] t1-only: positioning camera at SE 3/4 for /visual-check...`);
@@ -876,6 +879,8 @@ const receipt = {
       ? (workerPhaseTiming.warmup_end_ms - workerPhaseTiming.from_pretrained_start_ms) <= bootMs
       : null,
   passed,
+  // §#1637: populated before ws.close() — see bootCapabilityModalShown variable above.
+  boot_capability_modal_shown: bootCapabilityModalShown,
   // §#1637 wasm-cohort fields (null when not in wasm-cohort mode)
   wasm_cohort: WASM_COHORT ? {
     boot_capability_modal_shown: _wasmCohort.modalShown,

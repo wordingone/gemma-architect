@@ -329,12 +329,14 @@ export function initCapabilityGate(overlayContainer: HTMLElement): void {
 
   _gatePromise = (async (): Promise<UserPath> => {
     const { classification, deviceLabel } = await detectAdapterClass();
-    if (classification === "dgpu") {
+    // §#1637-Leo: unknown defaults to dgpu-path (no modal). False-negative (slower inference
+    // for one user) is much cheaper than false-positive (blocking a healthy user).
+    if (classification === "dgpu" || classification === "unknown") {
       _resolvedPath = "dgpu-proceed";
       resolvedBootPath = "dgpu-proceed";
       return "dgpu-proceed";
     }
-    // Show modal
+    // Show modal for igpu / software / no-webgpu
     _injectStyles();
     _modalShown = true;
     wasCapabilityModalShown = true;
