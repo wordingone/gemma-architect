@@ -197,12 +197,21 @@ window.addEventListener('goal:changed',function(e){
 // ── Reload tab (unless --no-reload) ───────────────────────────────────────────
 
 const startMs = Date.now();
+let consentAutoClicked = false;
 if (!NO_RELOAD) {
   if (COLD_CACHE) {
     // True cold-cache: clear HTTP disk cache + cookies + Cache API + IndexedDB + SW.
     // Model must re-download from CDN (~2.5GB) — expect 15-20min boot window.
     // boot_ms < 150000 → model loaded from cache; receipt is INVALID as a gate test.
     console.log(`\n[+${0}ms] Clearing HTTP cache + cookies + Storage for true cold-cache...`);
+    // Pre-grant persistent-storage to prevent browser-native permission popup after consent
+    // click (navigator.storage.persist() in model-consent.ts:onApprove). Native popups are
+    // not in the DOM and cannot be clicked via CDP — must be pre-granted before navigation.
+    await cdp("Browser.setPermission", {
+      permission: { name: "persistent-storage" },
+      setting: "granted",
+      origin: "https://wordingone.github.io",
+    }).catch(() => null); // not fatal — older CDP versions may not support it
     await cdp("Network.clearBrowserCache", {});
     await cdp("Network.clearBrowserCookies", {});
     await cdp("Storage.clearDataForOrigin", {
@@ -213,6 +222,29 @@ if (!NO_RELOAD) {
     console.log(`[+${Date.now()-startMs}ms] Storage cleared. Navigating to Pages...`);
     await cdp("Page.navigate", { url: PAGES_URL });
     await delay(3000);
+    // Cold-cache clears localStorage → #model-consent-overlay appears on first load.
+    // Auto-click #consent-approve so the harness can proceed without user interaction.
+    // Real users on Pages always see this dialog; harness just clicks through it.
+    console.log(`[+${Date.now()-startMs}ms] Checking for consent overlay...`);
+    let consentAutoClicked = false;
+    const consentDeadline = Date.now() + 15_000;
+    while (Date.now() < consentDeadline) {
+      const visible = await evaluate(
+        `document.querySelector('#model-consent-overlay #consent-approve') !== null`,
+      );
+      if (visible === true) {
+        await evaluate(
+          `document.querySelector('#model-consent-overlay #consent-approve').click(); "clicked"`,
+        );
+        consentAutoClicked = true;
+        console.log(`[+${Date.now()-startMs}ms] Consent overlay dismissed (auto-clicked #consent-approve)`);
+        break;
+      }
+      await delay(1000);
+    }
+    if (!consentAutoClicked) {
+      console.log(`[+${Date.now()-startMs}ms] No consent overlay detected (cache may not have been fully cleared — check boot_ms)`);
+    }
   } else {
     console.log(`\n[+${0}ms] Reloading Pages tab (soft — preserves Cache API model weights)...`);
     // Soft reload: new JS bundles from CDN; OPFS/HTTP cache model weights survive.
@@ -567,6 +599,7 @@ const receipt = {
   timestamp: ts(),
   pages_url: PAGES_URL,
   cold_cache: COLD_CACHE,
+  consent_auto_clicked: COLD_CACHE ? consentAutoClicked : null,
   boot_complete: bootComplete,
   boot_arc_state: bootArcState,
   boot_ms: bootMs,
