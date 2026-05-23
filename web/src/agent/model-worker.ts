@@ -364,9 +364,14 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         // confirmed max_new_tokens has no effect on +60s OOM — ORT does not pre-allocate
         // KV pool based on max_new_tokens (lazy-allocates per decode step instead). 2048 added
         // ~20s boot overhead with zero diagnostic value; reverting to minimize boot noise.
+        //
+        // §#1587: cold-cache Chrome path loads model in-memory (cache.put rejected →
+        // useBrowserCache=false fallback). In-memory model has higher GPU buffer pressure;
+        // 8 tokens insufficient to pre-allocate decode buffer pool for first 1024-token
+        // inference. Cold-cache path uses 64 tokens (~12s extra); warm-cache stays at 8.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await Promise.race([
-          (_model as any).generate({ ...inputs, max_new_tokens: 8, do_sample: false }),
+          (_model as any).generate({ ...inputs, max_new_tokens: _coldCacheBoot ? 64 : 8, do_sample: false }),
           new Promise<void>(r => setTimeout(r, 30_000)),
         ]);
         // §#1463: flush GPU command queue after warmup generate so all pending D3D12
@@ -497,8 +502,10 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         // §#1416: Promise.race with 30s timeout — generate() can hang indefinitely on
         // cold-cache if drafter ORT WebGPU shader compilation still holds the GPU queue.
         // The probe is best-effort; timeout ensures checkBootComplete() always runs.
+        // §#1587: second-pass deeper probe on cold-cache — same rationale as main warmup
+        // increase above. 64 tokens exercises the buffer pool to cover first real inference.
         await Promise.race([
-          (_model as any).generate({ ..._syncIn, max_new_tokens: 1, do_sample: false }),
+          (_model as any).generate({ ..._syncIn, max_new_tokens: _coldCacheBoot ? 64 : 1, do_sample: false }),
           new Promise<void>(r => setTimeout(r, 30_000)),
         ]);
         // §#1463: same GPU queue flush as main warmup probe — ensures post-drafter
