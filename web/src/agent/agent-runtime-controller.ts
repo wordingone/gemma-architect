@@ -58,6 +58,7 @@ const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], Run
     MODEL_READY:        "recovering",
     BOOT_COMPLETE:      "ready",
     FATAL_ERROR:        "failed",
+    PREFILL_DONE:       "recovering", // warmup PREFILL_DONE from dying worker — stay in recovering (#1581-S3)
     // Post-planned-recycle: first turn submitted before new worker finishes booting.
     GENERATE_REQUESTED: "generating",
   },
