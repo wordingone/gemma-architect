@@ -197,6 +197,9 @@ export class ChatPanel {
   private _fatalBubbleShown = false;
   private _modelDeadBubbleShown = false;
   private _watchdogTimeoutPending = false;
+  // §#1666-AC3: true during worker-recycle window (worker-recycled → boot-complete).
+  // Promoted from constructor local so _send() can guard the finally re-enable path.
+  private _recyclePending = false;
   private _contextChipEl!: HTMLDivElement;
 
   constructor(private _root: HTMLElement) {
@@ -293,6 +296,7 @@ export class ChatPanel {
         chip.dataset.promptChip = "1";
         chip.textContent = resolveStr(s.label);
         chip.addEventListener("click", () => {
+          if (this._recyclePending) return; // §#1666-AC3: block chip during recycle window
           this._inputEl.value = resolveStr(s.prompt);
           this._inputEl.focus();
           void this._send();
@@ -321,9 +325,8 @@ export class ChatPanel {
     // Skip if a send is already in flight (sendBtn already disabled with "…" text — let the
     // in-progress send finish or fail by its own path).
     const _savedPlaceholder = this._inputEl.placeholder;
-    let _recyclePending = false;
     window.addEventListener("agentmodel:worker-recycled", () => {
-      _recyclePending = true;
+      this._recyclePending = true;
       this._inputEl.disabled = true;
       this._inputEl.placeholder = "restarting model…";
       // Don't clobber an in-progress send (text "…"). Only override when idle ("SEND").
@@ -333,8 +336,8 @@ export class ChatPanel {
       }
     });
     window.addEventListener("agentmodel:boot-complete", () => {
-      if (!_recyclePending) return;
-      _recyclePending = false;
+      if (!this._recyclePending) return;
+      this._recyclePending = false;
       this._inputEl.disabled = false;
       this._inputEl.placeholder = _savedPlaceholder;
       if (this._sendBtn.textContent === "WAIT") {
@@ -706,7 +709,8 @@ export class ChatPanel {
       // §#1628: report to Sentry (PII-scrubbed in emitError).
       _emitTelemetryError(err.message, { isGpuFatal, isModelLoadFailed, isTimeout });
     } finally {
-      if (!this._modelDeadBubbleShown) {
+      // §#1666-AC3: do not re-enable during recycle window — boot-complete handler owns that.
+      if (!this._modelDeadBubbleShown && !this._recyclePending) {
         this._sendBtn.disabled = false;
         this._sendBtn.textContent = "SEND";
       }
