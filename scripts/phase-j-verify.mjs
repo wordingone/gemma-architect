@@ -208,7 +208,12 @@ window.addEventListener('agent:turn-complete',function(e){
   window.__phase_j_turn_done++;
 });
 window.addEventListener('goal:changed',function(e){
-  window.__phase_j_current.goalState=e.detail&&e.detail.status?e.detail.status:'unknown';
+  var g=e.detail;
+  window.__phase_j_current.goalState=g&&g.status?g.status:'unknown';
+  if(g){window.__goal_tokens_used=g.tokensUsed||0;window.__goal_token_budget=g.tokenBudget||null;}
+  if(g&&g.status==='budget_limited'&&window.__budget_exceeded_at_turn==null){
+    window.__budget_exceeded_at_turn=(window.__phase_j_turns.length||0)+1;
+  }
 });`,
 });
 
@@ -755,6 +760,13 @@ if (pageCompactEvents.length > 0) {
 // §#1637: must run before ws.close(). Gate: boot_capability_modal_shown must be false for dgpu users.
 const bootCapabilityModalShown = await evaluate(`document.querySelector('.bcg-modal') !== null`).catch(() => null);
 
+// §#1667: read final goal token state before ws.close().
+const _budgetRaw = await evaluate(`JSON.stringify({exceeded_at_turn:window.__budget_exceeded_at_turn??null,tokens_used:window.__goal_tokens_used??0,token_budget:window.__goal_token_budget??null})`).catch(() => null);
+const _budget = (() => { try { return _budgetRaw ? JSON.parse(_budgetRaw) : null; } catch { return null; } })();
+const budgetExceededAtTurn = _budget?.exceeded_at_turn ?? null;
+const finalTokensUsed      = _budget?.tokens_used ?? 0;
+const finalTokenBudget     = _budget?.token_budget ?? null;
+
 // §#1638: collect progress poll data (wasm-cohort second boot only).
 // Computes monotonicity of the bar during warm-cache OPFS boot.
 let _progressPollData = null;
@@ -947,6 +959,10 @@ const receipt = {
   // §#1666-NEVER: unreachable-path counter — always 0 post-AC3 (throw removed in PR #1673).
   // Non-zero here means the _recyclePending recycle-window guard failed.
   model_not_loaded_violations: 0,
+  // §#1667: token budget state — null when no budget was set for this session.
+  budget_exceeded_at_turn: budgetExceededAtTurn,
+  final_tokens_used: finalTokensUsed,
+  final_token_budget: finalTokenBudget,
   // §#1637 wasm-cohort fields (null when not in wasm-cohort mode)
   wasm_cohort: WASM_COHORT ? (() => {
     // §#1638: compute progress bar monotonicity from poller series

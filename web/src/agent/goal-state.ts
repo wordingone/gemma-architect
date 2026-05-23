@@ -79,6 +79,10 @@ export async function createGoal(objective: string, tokenBudget?: number): Promi
 }
 
 // Atomically increment token usage. Transitions active → budget_limited when exhausted.
+// §#1667: budget_limited is a SOFT cap — auto-continuation in chat-panel.ts stops
+// (agent:turn-complete handler guards on goal.status === "active"), but manual sends
+// are still allowed. Context may be near-full. User sees "Past budget" banner + system
+// message advising to clear chat or continue manually.
 export async function updateGoalTokens(tokensIn: number, tokensOut: number): Promise<Goal | null> {
   const goal = await getGoal();
   if (!goal || goal.status !== "active") return goal;

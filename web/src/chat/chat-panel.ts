@@ -256,6 +256,13 @@ export class ChatPanel {
         this._pushMsg({ role: "assistant", content: `Goal achieved. ${goal.objective}. Final usage: ${goal.tokensUsed} tok.` });
         this._continuationSuppressed = true;
       }
+      // §#1667: budget_limited — auto-continuation stopped; surface actionable message.
+      if (goal?.status === "budget_limited") {
+        this._pushMsg({
+          role: "system",
+          content: "Token budget exceeded — auto-continuation paused. You can send another message (context may truncate) or clear the chat to start fresh.",
+        });
+      }
     });
 
     // A6 (#980): continuation safety net — fires on agent:turn-complete while goal is active.
@@ -839,7 +846,9 @@ export class ChatPanel {
     const budgetText = goal.tokenBudget != null
       ? ` — ${goal.tokensUsed} / ${goal.tokenBudget} tok`
       : ` — ${goal.tokensUsed} tok`;
-    this._goalBannerEl.textContent = `Goal: ${goal.objective.slice(0, 60)}${goal.objective.length > 60 ? "…" : ""}${budgetText} — ${goal.status}`;
+    // §#1667: replace internal status name with user-facing label.
+    const statusLabel = goal.status === "budget_limited" ? "Past budget" : goal.status;
+    this._goalBannerEl.textContent = `Goal: ${goal.objective.slice(0, 60)}${goal.objective.length > 60 ? "…" : ""}${budgetText} — ${statusLabel}`;
     this._goalBannerEl.dataset.status = goal.status;
     this._goalBannerEl.style.display = "";
   }
