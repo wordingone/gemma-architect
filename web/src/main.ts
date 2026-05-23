@@ -2802,6 +2802,12 @@ document.addEventListener("viewer:isolate-changed", (e) => {
   cell.style.display = uuid ? "" : "none";
 });
 
+// #1600/#1601: surface sd:status events from non-main-ts modules (join-groups, cmdk).
+window.addEventListener("sd:status", (e) => {
+  const { msg, kind } = (e as CustomEvent<{ msg: string; kind: "ok" | "err" | "info" | "warn" | "" }>).detail;
+  setStatus(msg, kind);
+});
+
 // Navigation hotkeys — Blender-numpad keymap, with letter fallbacks for
 // keyboards without a numpad. Captured at window level but ignored if the
 // user is typing in any input/textarea/contenteditable.

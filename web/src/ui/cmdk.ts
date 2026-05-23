@@ -70,9 +70,15 @@ const ALL_CMDS: Cmd[] = [
           return;
         }
         for (const d of resp.dispatches) {
-          dispatch(d.name, d.arguments).catch((e) => console.warn("[agent dispatch]", e));
+          dispatch(d.name, d.arguments).catch((e) => {
+            console.warn("[agent dispatch]", e);
+            window.dispatchEvent(new CustomEvent("sd:status", { detail: { msg: `Agent dispatch failed: ${(e as Error).message ?? e}`, kind: "warn" } }));
+          });
         }
-      }).catch((e) => console.error("[agent]", e));
+      }).catch((e) => {
+        console.error("[agent]", e);
+        window.dispatchEvent(new CustomEvent("sd:status", { detail: { msg: "Agent error — see DevTools console", kind: "err" } }));
+      });
     },
   },
   { group: "MODEL",    icon: "wall",     label: "IfcWall — place wall",              kbd: "",   run: () => startPicker("IfcWall") },

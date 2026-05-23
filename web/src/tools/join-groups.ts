@@ -128,6 +128,7 @@ function _rebuildGroupDisplay(scene: THREE.Scene, groupId: string, primaryMat: T
     resultBrush = union;
   } catch (err) {
     console.warn("[join-groups] CSG union failed for group", groupId, err);
+    window.dispatchEvent(new CustomEvent("sd:status", { detail: { msg: "Boolean join failed — geometry unchanged", kind: "warn" } }));
     for (const m of members) m.visible = true;
     return;
   }
