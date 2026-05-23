@@ -129,78 +129,106 @@ After fix, `SdRoof({type:'gable', pitchDeg:30, footprint:[[-6,-5],[6,5]], overha
 
 ---
 
-## 8. EXACT-FZK Visual Gate — Assertion List for Next BASELINE Run
+## 8. EXACT-FZK Visual Gate — Sharpened V1–V5 Assertion Suite
 
-These assertions are for the `/visual-check` pass Leo runs after the next cold-cache BASELINE
-Phase J completes. Each item maps to a specific FZK-Haus IFC-verified parameter.
+These assertions are for the `/visual-check` pass Leo runs after cold-cache BASELINE Phase J
+completes. Each maps to an IFC-verified FZK-Haus parameter and is phrased as a yes/no question
+Haiku can answer from a canvas crop alone.
 
-**Canonical camera angle:** Top+perspective 3/4 view from south-east, showing the full roof
-and at least one gable end. Zoom to fit the roof group only.
-
-### V1 — Pitch geometry (30°)
-
-```
-/visual-check --current "The roof slope angle visually matches ~30°. The gable triangles
-on the short (east + west) ends of the building are visible and correctly angled.
-The ridge runs horizontally along the building's long axis (N-S oriented 12m span).
-No visible warping or asymmetry between the two slope panels."
-```
-
-**Pass criterion:** Both slope panels appear symmetric; gable ends form triangles (not rectangles);
-slope steepness is visibly moderate (~30°, not shallow <20° or steep >45°).
-
-### V2 — Ridge beam visible at apex (First)
-
-```
-/visual-check --current "A horizontal structural beam is visible at the roof apex (ridge line).
-The beam runs the full length of the building's long axis. It is visually distinct from
-the sheathing surface above it."
-```
-
-**Pass criterion:** Ridge beam visible as a distinct brown/timber element at the apex;
-spans the full E-W length (13m footprint); no gap or split at ridge center.
-
-### V3 — Eave purlins visible on both long sides (Pfette-1-1, Pfette-2-1)
-
-```
-/visual-check --current "Two horizontal structural beams (purlins / wall plates) are
-visible at the eave level — one on the south slope eave and one on the north slope eave.
-These should be visible at the same height as the top of the exterior walls where the
-roof begins."
-```
-
-**Pass criterion:** Two distinct horizontal members visible at eave level;
-one per long-side eave; same color/material as ridge beam.
-
-### V4 — Slope panel area congruence (Dach-1, Dach-2)
-
-```
-/visual-check --current "The two roof slope panels (south and north) fully cover the
-building's footprint with no visible gaps between ridge and eave or at gable ends.
-No geometry bleed through the sheathing surface. Panels appear to have uniform 
-thickness and texture."
-```
-
-**Pass criterion:** No black/void gaps on either slope; panels reach ridge cleanly;
-gable overhang is visible at the short ends.
-
-### V5 — Gable trim on OG walls
-
-```
-/visual-check --current "The two short-end (east and west) upper-floor (OG) walls
-are trimmed to follow the roof pitch at the top — they form a triangular gable profile,
-not a rectangular flat-top. The two long-side (north and south) OG walls have
-flat rectangular tops."
-```
-
-**Pass criterion:** E and W OG walls have angled tops matching roof slope;
-N and S OG walls are rectangular (flat top at eave height).
+**Canonical camera angle:** South-east 3/4 orbit, full roof visible, at least one gable end visible.
 
 ---
 
-### Reference FZK parameters (remind Haiku in /visual-check prompt)
+### Consolidated single-pass invocation
 
-Include these in the assertion prompt as ground-truth context:
+All five criteria run in ONE `/visual-check` call. Include the FZK reference block at the end.
+
+```
+/visual-check --current "Answer YES or NO for each of the following five checks on the
+rendered building scene. Return your answers as a JSON object plus evidence for any NO.
+
+V1 (pitch + gable): Are both roof slope panels symmetric, meeting at a continuous horizontal
+ridge, with solid triangular gable profiles visible at BOTH short ends of the building?
+
+V2 (ridge beam): Is there a distinct structural member (a beam, not just the ridge edge of
+the sheathing) visible at the roof apex, running the full length of the building?
+
+V3 (eave purlins): Are there two distinct horizontal structural members visible at eave level,
+one on each of the two long-side eaves (south and north)?
+
+V4 (slope coverage): Do both slope panels fully cover the building from ridge to eave with no
+black or void gaps on either slope surface?
+
+V5 (gable trim position): Are the triangular gable-end shapes located AT or ABOVE the base of
+the building walls — NOT below the building base or ground slab?
+
+FZK reference: pitch=30°, ridge 3.175m above eave, eave at 3.2m, ridge beam 80×160mm spanning
+13.0m, eave purlins 80×160mm at eave level, slope panels each 82.56m² (13.0×6.351m).
+
+Respond: {\"V1\": \"YES|NO\", \"V2\": \"YES|NO\", \"V3\": \"YES|NO\", \"V4\": \"YES|NO\",
+\"V5\": \"YES|NO\", \"evidence\": {\"V1\": \"...\", ...}}"
+```
+
+Pass = all five YES. Any NO triggers the failure→issue mapping below.
+
+---
+
+### V1 — Pitch geometry + gable profiles (30°)
+
+**Question:** Are both roof slope panels symmetric, meeting at a continuous horizontal ridge, with triangular gable profiles at both short sides?
+
+**CORRECT:** Two matched slope panels; gable ends are solid triangles (not rectangular); ridge is horizontal and centered; moderate slope steepness (~30° — ridge rise roughly equal to half-span).
+
+**DEFECTIVE:** Short-side walls appear rectangular (flat tops, no triangle); one slope taller/shorter than the other; or ridge is angled rather than horizontal.
+
+---
+
+### V2 — Ridge beam at apex (First, 80×160mm, 13.0m)
+
+**Question:** Is a distinct structural member visible at the roof apex — separate from the sheathing surface, running the full building length?
+
+**CORRECT:** A darker or distinctly colored horizontal bar at the ridge line, spanning the full E-W length, reading as a separate element from the sheathing panels.
+
+**DEFECTIVE:** Apex is a clean geometric fold with no separate element; or gap/split at ridge center; or beam terminates short of the gable ends.
+
+---
+
+### V3 — Eave purlins on both long sides (Pfette-1-1, Pfette-2-1, 80×160mm)
+
+**Question:** Are two distinct horizontal structural members visible at eave level, one on each long-side eave?
+
+**CORRECT:** Two horizontal bars where slope panels meet the tops of the long-side walls; same material/color as ridge beam; one on south eave, one on north eave.
+
+**DEFECTIVE:** Eave line is a sharp clean edge with no distinct element; or only one purlin visible; or eave is flush/invisible (no beam visible at wall–roof junction).
+
+---
+
+### V4 — Slope panel coverage (Dach-1, Dach-2, each 82.56m²)
+
+**Question:** Do both slope panels fully cover the building from ridge to eave with no black or void gaps?
+
+**CORRECT:** Both panels solid and uniformly textured; no black voids or dark triangular gaps anywhere on either slope; panels reach the gable ends cleanly.
+
+**DEFECTIVE:** Dark triangular voids between slope panels and gable ends; black gap along ridge line; or one panel clipped before reaching the eave.
+
+---
+
+### V5 — Gable trim position (Wand-Ext-OG east/west, userData.topProfile='pitched')
+
+**Question:** Are the triangular gable-end shapes AT or ABOVE the building base — NOT below the ground slab?
+
+**CORRECT:** Triangular gable shapes at the TOP of the gable-end walls, apex at ridge height, base at eave height. The triangles cap the rectangular lower walls, sealing the wall–roof junction above.
+
+**DEFECTIVE (known #1566 variant):** Triangular dark shapes visible BELOW the ground slab or at the bottom of the building. The gable trim Y-origin is shifted negative — triangles appear as dangling shadows beneath the building rather than capping the top.
+
+> Cross-ref: #1566 — [BUG] Gable trim positioned below ground slab (negative Y).
+> Observed in the wild on ef55795 warm-cache T1 build (2026-05-23).
+> Fix scope: `buildRoof` gable-trim Y-origin in `web/src/tools/structural.ts`; owner Eli.
+
+---
+
+### Reference FZK parameters
+
 ```
 FZK reference: pitch=30°, ridge at 3.175m above eave, eave at 3.2m,
 ridge beam 80×160mm cross-section spanning 13.0m, eave purlins 80×160mm at eave level,
@@ -213,8 +241,9 @@ south+north slope panels each 82.56m² (13.0m × 6.351m surface distance).
 
 | Failure | File issue | Root cause hypothesis |
 |---|---|---|
-| Slope angle visibly wrong (V1) | `#1553-v2`: pitch geometry regression | `buildRoof` pitchDeg override or SdRoof handler default reverted |
-| Ridge missing or split (V2) | `#1553-ridge`: ridge beam absent | `params.showStructure` false default or beam hidden |
-| Purlins missing at eave (V3) | `#1553-pfette`: eave purlins absent | wall-plate (`wp1/wp2`) visibility or removed in rebase |
-| Gap between slope panels (V4) | `#1553-gap`: sheathing geometry gap | rotation math regression in `sheathA/sheathB` |
-| Gable not trimmed (V5) | `#1549-v2`: gable trim regression | `userData.topProfile` check broken |
+| V1: asymmetric slopes or no gable triangles | New issue: pitch geometry regression | `buildRoof` pitchDeg override or SdRoof handler default reverted |
+| V2: ridge absent or split | New issue: ridge beam absent | `params.showStructure` false default or beam hidden by material |
+| V3: purlins missing at eave | New issue: eave purlins absent | wall-plate (`wp1/wp2`) visibility or removed in rebase |
+| V4: gap in slope panels | New issue: sheathing geometry gap | rotation math regression in `sheathA/sheathB` |
+| V5: gable trim below ground | #1566 (open) | `buildRoof` gable-trim Y-origin negative — owner Eli |
+| V5: gable trim absent | New issue: gable trim regression | `userData.topProfile` check broken (see PRs #1066, #1165) |
