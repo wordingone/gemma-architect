@@ -70,6 +70,11 @@ const pending = new Map();
 ws.onmessage = m => {
   const x = JSON.parse(m.data);
   if (x.id && pending.has(x.id)) { pending.get(x.id)(x); pending.delete(x.id); }
+  // Auto-accept all browser dialogs (beforeunload/alert/confirm/prompt) via CDP.
+  // Agents own all browser prompts — never ask user to click. (#1704 Leg A / #1708)
+  if (x.method === "Page.javascriptDialogOpening") {
+    send("Page.handleJavaScriptDialog", { accept: true });
+  }
 };
 await new Promise(r => ws.addEventListener("open", r));
 
@@ -86,6 +91,17 @@ await send("Page.enable");
 
 // Bring tab to front so WebGL renders real frames (background tabs throttle rAF/canvas).
 await send("Page.bringToFront");
+
+// ── Permission pre-grants (agents own all browser prompts — #1708 Leg A) ─────────
+// Pre-grant storage + download permissions for the target origin so no native Chrome
+// dialog blocks agent-driven runs. Page.setDownloadBehavior suppresses the "download
+// multiple files" prompt. Page.javascriptDialogOpening (wired above) handles
+// beforeunload/alert/confirm/prompt in real-time.
+const _origin = new URL(DEV_URL).origin;
+for (const name of ["durable-storage", "automatic-downloads", "background-sync", "notifications"]) {
+  await send("Browser.setPermission", { permission: { name }, setting: "granted", origin: _origin }).catch(() => {});
+}
+await send("Page.setDownloadBehavior", { behavior: "allow", downloadPath: `${STATE_DIR}/downloads` }).catch(() => {});
 
 async function evaluate(expression, returnByValue = true, timeoutMs = 60_000) {
   const sendProm = send("Runtime.evaluate", { expression, returnByValue, awaitPromise: true });
@@ -1758,7 +1774,7 @@ await resetScene('before-box-inject');
     (() => {
       const fnExists = typeof window.__runIteration === 'function';
       if (!fnExists) return { passed: false, evidence: { reason: '__runIteration not registered' } };
-      const result = window.__runIteration(null, null, 'draw a 5m wall', []);
+      const result = window.__runIteration(null, null, 'draw a 16ft wall', []);
       const isPromise = result != null && typeof result.then === 'function';
       if (!isPromise) return { passed: false, evidence: { reason: 'did not return a Promise', type: typeof result } };
       result.catch(() => {});
@@ -2029,7 +2045,7 @@ await resetScene('before-box-inject');
 
 // ── Surface 41: tier0-llama-server-dispatch (#389) ───────────────────────────
 // Asserts that the remote inference path (VITE_GEMMA_AGENT_URL = :8088) produces
-// at least one IfcWall dispatch verb when given "draw a 5m wall". Exercises the
+// at least one IfcWall dispatch verb when given "draw a 16ft wall". Exercises the
 // full chat-panel → runRemoteAgentTurn → llama-server → parseDispatches chain.
 // Skips if __runIteration is not present or REMOTE_URL is unset.
 {
@@ -2043,7 +2059,7 @@ await resetScene('before-box-inject');
       return { passed: true, evidence: { skipped: true, reason: 'REMOTE badge not shown — VITE_GEMMA_AGENT_URL not configured; soft-skip until inference endpoint is live', badge } };
     }
     try {
-      const result = await window.__runIteration(null, null, 'draw a 5m wall', []);
+      const result = await window.__runIteration(null, null, 'draw a 16ft wall', []);
       const dispatches = result?.dispatches ?? [];
       const verb = dispatches[0]?.verb ?? null;
       const passed = dispatches.length > 0;
@@ -3952,7 +3968,7 @@ await resetScene('before-box-inject');
 // ── S75: on-device-agent-response ────────────────────────────────────────────
 // Verifies the on-device Gemma model responds to a chat prompt with ≥1 dispatch verb.
 // Self-test (Part A): calibrates growth-detector via __dispatch before running real test.
-// Real test (Part B): submits "draw a 5m wall", waits ≤60s for agent:turn-complete.
+// Real test (Part B): submits "draw a 16ft wall", waits ≤60s for agent:turn-complete.
 {
   await resetScene('s75-pre');
 
@@ -4028,7 +4044,7 @@ await resetScene('before-box-inject');
       });
 
       // B5: Submit prompt via Enter key on .chat-input
-      input.value = 'draw a 5m wall';
+      input.value = 'draw a 16ft wall';
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
       input.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
