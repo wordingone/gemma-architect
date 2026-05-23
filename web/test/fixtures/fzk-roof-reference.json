@@ -1,0 +1,37 @@
+{
+  "_source": "CDP scene-tree dump 2026-05-23, port :9222, FZK-Haus model",
+  "_note": "World-space bbox of FZK IFCSLAB 'Dach' elements in Three.js coords (IFC Y→Z swap applied). FZK model is placed at absolute building position; our SdRoof tests exercise geometry from a local-origin Group.",
+  "fzk_ifcslab_dach": {
+    "count": 2,
+    "bbox_one_slab": {
+      "min": [-0.5, 2.91, -0.5],
+      "max": [12.5, 6.32, 5.0]
+    },
+    "size": [13.0, 3.406, 5.5],
+    "pitchDeg": 30,
+    "overhang_m": 0.5,
+    "ridge_direction": "X",
+    "ifcClass": "IFCSLAB",
+    "name": "Dach"
+  },
+  "fzk_ifcbeam_pfette": {
+    "count": 3,
+    "description": "Eave purlins enclosed within Dach slab volume: Pfette Y range ⊂ Dach Y range"
+  },
+  "sdRoof_expected": {
+    "_note": "Expected SdRoof IfcSlab dimensions for a 12×6m footprint, 30° pitch, 0.5m overhang — computed from buildRoof geometry, NOT from FZK absolute position",
+    "slab_count": 2,
+    "ifcClass": "IfcSlab",
+    "name": "Dach",
+    "local_bbox": {
+      "x": 13.0,
+      "y_rafterLen": 4.042,
+      "z_sheathThick": 0.15
+    },
+    "world_size_approx": {
+      "x": 13.0,
+      "y_horizontal_projection": 3.575,
+      "z_vertical_rise": 2.151
+    }
+  }
+}
