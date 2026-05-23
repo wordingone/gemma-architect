@@ -23,6 +23,7 @@ import { onElementCommitted, addVoidToWallObject } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
 import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./openings";
+import { STAIR_STEP_RISE, STAIR_STEP_DEPTH, STAIR_WIDTH } from "./dimensions";
 import { drawingLayerStore, SKETCH_KINDS } from "../geometry/drawing-layers";
 
 // ── Drawing layer assignment ──────────────────────────────────────────────────
@@ -374,22 +375,11 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   window:      { clicks: 1, handler: atTopOfLevel(([p]) => buildWindow(p), FZK_WINDOW_SILL) },
   column:      { clicks: 1, handler: atZ(([p]) => buildColumn(p)) },
   stair:           { clicks: 2,  handler: atZ(([a, b]) => {
-    const lvl = levelStore.get(getActiveLevelId());
-    const rise = lvl?.height ?? 3.0;
     const dx = b.x - a.x, dy = b.y - a.y;
-    const totalRun = Math.sqrt(dx * dx + dy * dy) || 0.2794;
-    // Run-derived count from IBC 11" tread; rise-derived count from IBC 7" max riser.
-    // Use whichever requires more steps — prevents oversized risers on short drags.
-    const runCount  = Math.max(2, Math.round(totalRun / 0.2794));
-    const riseCount = Math.max(2, Math.ceil(rise / 0.1778));
-    const count = Math.max(runCount, riseCount);
-    const riserHeight = rise / count;
-    // If rise-derived count dominates, extend endpoint so treads stay 11".
-    const neededRun = count * 0.2794;
-    const bEff = neededRun > totalRun
-      ? { x: a.x + dx * (neededRun / totalRun), y: a.y + dy * (neededRun / totalRun) }
-      : b;
-    const { group, chain } = buildStair(a, bEff, { count, riserHeight });
+    const totalRun = Math.sqrt(dx * dx + dy * dy) || STAIR_STEP_DEPTH;
+    // Run-derived count from fixed 11" tread — allows any count >= 1 (3-step porch stairs work).
+    const count = Math.max(1, Math.round(totalRun / STAIR_STEP_DEPTH));
+    const { group, chain } = buildStair(a, b, { count, riserHeight: STAIR_STEP_RISE, treadDepth: STAIR_STEP_DEPTH, width: STAIR_WIDTH });
     return { mesh: group, chain };
   }) },
   "stair-polyline": { clicks: -1, handler: atZ((pts) => { const lvl = levelStore.get(getActiveLevelId()); const rise = lvl?.height ?? 3.0; const { group, chain } = buildStairOnPolyline(pts, { rise }); return { mesh: group, chain }; }) },

@@ -284,6 +284,27 @@ function normalizeArgSynonyms(canonical: string, args: DispatchArgs): DispatchAr
 }
 
 // ============================================================
+// Dimension-args blocklist — agent cannot override element dimensions
+// ============================================================
+
+// Per user directive 2026-05-23: parametric BIM element sizes are fixed by asset.
+// Agent freedom = placement only. These args are rejected before the handler runs.
+const DIMENSION_ARGS_BLOCKLIST: Record<string, ReadonlySet<string>> = {
+  SdDoor:   new Set(["width", "height"]),
+  SdWindow: new Set(["width", "height"]),
+  SdStair:  new Set(["riser", "tread", "width", "count", "rise", "targetHeight", "landingDepth"]),
+};
+
+function checkDimBlocklist(canonical: string, args: DispatchArgs): string | null {
+  const blocked = DIMENSION_ARGS_BLOCKLIST[canonical];
+  if (!blocked) return null;
+  for (const key of Object.keys(args)) {
+    if (blocked.has(key)) return `extraneous dimension arg '${key}' — ${canonical} dimensions are fixed by asset`;
+  }
+  return null;
+}
+
+// ============================================================
 // Dispatch
 // ============================================================
 
@@ -308,6 +329,11 @@ export async function dispatch(
   }
 
   args = normalizeArgSynonyms(canonical, args);
+
+  const dimBlockErr = checkDimBlocklist(canonical, args);
+  if (dimBlockErr) {
+    return { ok: false, canonical, error: "ArgValidationError", detail: dimBlockErr };
+  }
 
   const missingChoice = findMissingEnumChoice(args, entry.args);
   if (missingChoice) {

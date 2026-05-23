@@ -1044,42 +1044,11 @@
         type: string
         description: "Stair plan shape."
         default: straight
-      count:
-        type: number
-        description: "Total number of risers (overrides targetHeight)."
-      rise:
-        type: number
-        description: "Total vertical rise in metres (used when count is absent)."
-        unit: m
-      width:
-        type: number
-        description: "Stair width perpendicular to run."
-        unit: m
-        default: 1
-      riser:
-        type: number
-        description: "\"Individual riser height (IBC R311.7.5.1: 7\\\").\","
-        unit: m
-        default: 0.1778
-      tread:
-        type: number
-        description: "\"Individual tread depth (IBC R311.7.5.2: 11\\\").\","
-        unit: m
-        default: 0.2794
-      landingDepth:
-        type: number
-        description: "Depth of intermediate landings (L and U only)."
-        unit: m
-        default: 1
-      targetHeight:
-        type: number
-        description: "Target floor-to-floor height (used when count is absent)."
-        unit: m
-        default: 3
       layer:
         type: string
         description: "Layer ID to override automatic creator-to-layer routing."
     required: []
+  strictDims: true
   topology_role: host
   kg_predicates: [containedIn, connectedTo]
   synonyms: [stair, stairs, steps, staircase, IfcStair]
@@ -1100,21 +1069,12 @@
         type: string
         enum: [interior, front, terrace]
         default: interior
-        description: "FZK-Haus preset — interior: 0.885×2.01m (Innentuer), front: 1.01×2.01m (Haustuer), terrace: 2.01×2.375m (Terrassentuer). Explicit width/height override preset."
-      width:
-        type: number
-        unit: m
-        default: 0.914
-        description: "[optional m] Explicit override; uses doorType preset when omitted."
-      height:
-        type: number
-        unit: m
-        default: 2.032
-        description: "[optional m] Explicit override; uses doorType preset when omitted."
+        description: "FZK-Haus preset — interior: 0.885×2.01m (Innentuer), front: 1.01×2.01m (Haustuer), terrace: 2.01×2.375m (Terrassentuer)."
       layer:
         type: string
         description: "Layer ID to override automatic creator-to-layer routing."
     required: []
+  strictDims: true
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [door, doorway, opening, IfcDoor]
@@ -1140,6 +1100,7 @@
         type: string
         description: "Layer ID to override automatic creator-to-layer routing."
     required: []
+  strictDims: true
   topology_role: hosted
   kg_predicates: [hosts, containedIn]
   synonyms: [window, IfcWindow]

@@ -9,6 +9,7 @@ import type { SnapVertex } from "../viewer/snap-state";
 import { initWallCorners } from "./wall-corners";
 import { levelStore } from "../geometry/levels";
 import { refLineStore } from "../geometry/ref-lines";
+import { STAIR_STEP_RISE as DEFAULT_STAIR_RISE, STAIR_STEP_DEPTH as DEFAULT_STAIR_TREAD, STAIR_WIDTH as DEFAULT_STAIR_WIDTH } from "./dimensions";
 
 // Module-level viewer reference (set during initCreateMode).
 let _viewer: Viewer | null = null;
@@ -20,9 +21,6 @@ const DEFAULT_WALL_THICKNESS = 0.2;
 export const DEFAULT_SLAB_THICKNESS = 0.1;   // IBC 4" residential floor (was 0.2 = 7.87")
 const DEFAULT_COLUMN_HEIGHT = 4;
 const DEFAULT_RECT_HEIGHT = 2.8;
-const DEFAULT_STAIR_RISE = 0.1778;    // IBC R311.7.5.1: 7" per user directive
-const DEFAULT_STAIR_TREAD = 0.2794;   // IBC R311.7.5.2: 11" per user directive
-const DEFAULT_STAIR_WIDTH = 1.0;
 const DEFAULT_EXTRUDE_HEIGHT = 2.5;
 const DEFAULT_BEAM_SIZE = 0.2;
 const DEFAULT_FOUNDATION_T = 0.5;
@@ -417,26 +415,27 @@ export function buildStair(
 
   // Parametric step count: derive from actual click distance for straight mode.
   // Explicit count or total-rise override the distance-based default.
+  // Min = 1 (porch/threshold steps are valid — Math.max(2,...) was too aggressive per #1680).
   let nRisers: number, actualRiser: number, actualTread: number;
   if (params?.count != null) {
-    nRisers = Math.max(2, params.count);
+    nRisers = Math.max(1, params.count);
     actualRiser = params?.riserHeight ?? DEFAULT_STAIR_RISE;
     actualTread = tread;
   } else if (params?.rise != null || params?.targetHeight != null) {
     // Rise-first (Revit-style): step count from total rise; tread fits the run for straight flights.
     const targetH = (params.rise ?? params.targetHeight)!;
-    nRisers = Math.max(2, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
+    nRisers = Math.max(1, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
     actualRiser = targetH / nRisers;
     actualTread = shape === "straight" && totalRun > tread ? totalRun / nRisers : tread;
   } else if (shape === "straight") {
     // Run-derived fallback: step count from distance; tread fits exactly.
-    nRisers = Math.max(2, Math.round(totalRun / tread));
+    nRisers = Math.max(1, Math.round(totalRun / tread));
     actualRiser = params?.riserHeight ?? DEFAULT_STAIR_RISE;
     actualTread = totalRun / nRisers;
   } else {
     // L / U: height-based default (one full storey).
     const targetH = DEFAULT_WALL_HEIGHT;
-    nRisers = Math.max(2, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
+    nRisers = Math.max(1, Math.ceil(targetH / (params?.riserHeight ?? DEFAULT_STAIR_RISE)));
     actualRiser = targetH / nRisers;
     actualTread = tread;
   }

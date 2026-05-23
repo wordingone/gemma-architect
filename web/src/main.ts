@@ -60,7 +60,8 @@ import { onElementCommitted, cutSlabVoidFromBoxMesh, addVoidToWallObject } from 
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, rebuildGroupWallHeight, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
-import { buildDoor, buildWindow, buildOpening, DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_DOOR_W, FZK_DOOR_H, FZK_FRONT_DOOR_W, FZK_FRONT_DOOR_H, FZK_TERRACE_DOOR_W, FZK_TERRACE_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL, FZK_OG_WINDOW_W, FZK_OG_WINDOW_H } from "./tools/openings";
+import { buildDoor, buildWindow, buildOpening } from "./tools/openings";
+import { DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_DOOR_W, FZK_DOOR_H, FZK_FRONT_DOOR_W, FZK_FRONT_DOOR_H, FZK_TERRACE_DOOR_W, FZK_TERRACE_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL, FZK_OG_WINDOW_W, FZK_OG_WINDOW_H, STAIR_STEP_RISE, STAIR_STEP_DEPTH, STAIR_WIDTH } from "./tools/dimensions";
 import { initSectionHandles } from "./viewer/section-handles";
 import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
@@ -989,15 +990,16 @@ registerHandler("SdStair", (args) => {
       b = { x: b.x + (bx - mx), y: b.y + (by - my) };
     }
   }
+  // Dimensions are fixed by asset — agent controls placement only (per #1678).
+  const activeLvl = levelStore.get(getActiveLevelId());
+  const lvlHeight = activeLvl?.height ?? 3.0;
+  const derivedCount = Math.max(1, Math.ceil(lvlHeight / STAIR_STEP_RISE));
   const stairParams: StairParams = {
     type:        (args.type  as StairParams["type"]  | undefined) ?? "straight",
-    count:       args.count       as number | undefined,
-    rise:        args.rise        as number | undefined,
-    width:       args.width       as number | undefined,
-    treadDepth:  args.tread       as number | undefined,
-    riserHeight: args.riser       as number | undefined,
-    targetHeight: args.targetHeight as number | undefined,
-    landingDepth: args.landingDepth as number | undefined,
+    count:       derivedCount,
+    width:       STAIR_WIDTH,
+    treadDepth:  STAIR_STEP_DEPTH,
+    riserHeight: STAIR_STEP_RISE,
   };
   const { group, chain, footprint } = buildStair(a, b, stairParams);
   const elev = getActiveLevelElevation();
@@ -1074,18 +1076,19 @@ registerHandler("SdDoor", (args) => {
   const doorType = (args.doorType as string | undefined);
   let doorW: number;
   let doorH: number;
+  // Dimensions are fixed by asset preset — width/height args are blocked at dispatch (#1678).
   if (doorType === "front") {
-    doorW = (args.width as number | undefined) ?? FZK_FRONT_DOOR_W;
-    doorH = (args.height as number | undefined) ?? FZK_FRONT_DOOR_H;
+    doorW = FZK_FRONT_DOOR_W;
+    doorH = FZK_FRONT_DOOR_H;
   } else if (doorType === "terrace") {
-    doorW = (args.width as number | undefined) ?? FZK_TERRACE_DOOR_W;
-    doorH = (args.height as number | undefined) ?? FZK_TERRACE_DOOR_H;
+    doorW = FZK_TERRACE_DOOR_W;
+    doorH = FZK_TERRACE_DOOR_H;
   } else if (doorType === "interior") {
-    doorW = (args.width as number | undefined) ?? FZK_DOOR_W;
-    doorH = (args.height as number | undefined) ?? FZK_DOOR_H;
+    doorW = FZK_DOOR_W;
+    doorH = FZK_DOOR_H;
   } else {
-    doorW = Math.min((args.width as number | undefined) ?? DEFAULT_DOOR_W, 1.83);  // IBC cap 6ft max
-    doorH = Math.min((args.height as number | undefined) ?? DEFAULT_DOOR_H, 2.44);  // IBC cap 8ft max
+    doorW = DEFAULT_DOOR_W;
+    doorH = DEFAULT_DOOR_H;
   }
   const { mesh, chain } = buildDoor(p, { w: doorW, h: doorH });
   mesh.position.z = elevation;
