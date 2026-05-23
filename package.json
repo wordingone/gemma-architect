@@ -6,6 +6,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "prepare": "git config core.hooksPath .husky",
     "spike-b": "bun scripts/spike-b-ifc-mining.ts",
     "extract-walls": "bun scripts/extract-walls.ts",
     "test": "bun test",

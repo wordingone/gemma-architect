@@ -1,0 +1,3 @@
+#!/bin/sh
+# Imperial-prompt lint gate — blocks commits with metric dimension strings in test inputs.
+bun scripts/lint-test-prompts.mjs || exit 1
