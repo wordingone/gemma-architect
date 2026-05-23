@@ -322,10 +322,11 @@ export function buildDoor(p: { x: number; y: number }, dims?: { w?: number; h?: 
   mesh.userData.kind    = "mesh";
   mesh.userData.creator = "door";
   mesh.userData.variant = _doorVariant;
+  mesh.userData.voidW   = w;
+  mesh.userData.voidH   = h;
   const hostId = getPendingHostId();
   if (hostId) mesh.userData.hostExpressID = hostId;
-  const vW = 0.9, vT = t, vH = 2.1;
-  const chain = `door: makeBox(${vW}, ${vT}, ${vH}) translate([${round(p.x)}, ${round(p.y)}, ${vH / 2}])`;
+  const chain = `door: makeBox(${w}, ${t}, ${h}) translate([${round(p.x)}, ${round(p.y)}, ${h / 2}])`;
   return { mesh, chain };
 }
 
@@ -352,6 +353,8 @@ export function buildWindow(p: { x: number; y: number }, dims?: { w?: number; h?
   mesh.userData.kind    = "mesh";
   mesh.userData.creator = "window";
   mesh.userData.variant = _windowVariant;
+  mesh.userData.voidW   = w;
+  mesh.userData.voidH   = h;
   const hostId = getPendingHostId();
   if (hostId) mesh.userData.hostExpressID = hostId;
   const chain = `window: makeBox(${w}, ${t}, ${h}) translate([${round(p.x)}, ${round(p.y)}, ${Math.round(sill)}])`;

@@ -224,7 +224,7 @@ describe("Phase 3 — create-mode click-to-place", () => {
     const seq = getCreateSequence();
     expect(seq.length).toBe(1);
     expect(seq[0]).toContain("door:");
-    expect(seq[0]).toContain("makeBox(0.9, 0.2, 2.1)");
+    expect(seq[0]).toContain("makeBox(0.914, 0.2, 2.032)");
   });
 
   test("Window tool: single click emits cut chain at sill height", async () => {

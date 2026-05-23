@@ -800,10 +800,10 @@ export function emitClickWorld(viewer: Viewer, world: { x: number; y: number; z?
           out.mesh.rotation.copy(_host.rotation);
 
           const _isWin = _creator === "window";
-          const _vW = _isWin ? FZK_WINDOW_W : FZK_DOOR_W;
-          const _vH = _isWin ? FZK_WINDOW_H : FZK_DOOR_H;
-          out.mesh.userData.voidW = _vW;
-          out.mesh.userData.voidH = _vH;
+          // Read actual dims from the builder (set in openings.ts); fall back to FZK
+          // constants only if missing so void size/position matches the visual mesh.
+          const _vW = (out.mesh.userData.voidW as number | undefined) ?? (_isWin ? FZK_WINDOW_W : FZK_DOOR_W);
+          const _vH = (out.mesh.userData.voidH as number | undefined) ?? (_isWin ? FZK_WINDOW_H : FZK_DOOR_H);
           const _vc = out.mesh.position.clone();
           _vc.z += _vH / 2;
           // addVoidToWallObject handles Mesh + Group; preserves all prior voids (#1520).
