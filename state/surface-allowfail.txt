@@ -6,3 +6,9 @@ demo-cluster-flow  # #670  new surface — allow-fail until first green run conf
 agent-verb-completeness  # #1527  requires on-device model (arc.state==='ready'); no model in CI
 on-device-agent-response  # #1581  true agent-path: sends to .chat-input, waits 60s for agent:turn-complete; no soft-skip; hard-fail without model
 fzk-haus-perception-rehearsal  # #1581  true agent-path: loads FZK IFC, sends perception prompt, waits 60s; no soft-skip; hard-fail without model
+su1-end-to-end-2storey-house  # #1572  agent-path: 3-turn design loop; all IFC dispatch counts 0 without model; CDP 30s limit exceeded
+agent-palette-parity          # #1572  agent-path: SdExtrude chip check requires agent turn; hard-fail without model
+agent-build-and-export        # #1572  agent-path: full NL build+export pipeline; hard-fail without model
+agent-skill-rotated-invocation # #1572  agent-path: dynamic-import skill invoke requires model; hard-fail without model
+agent-invoke-skill            # #1572  agent-path: SdInvokeSkill dispatch check requires model session
+goal-mode-smoke               # #1572  agent-path: completeOk requires model to emit goal-complete signal
