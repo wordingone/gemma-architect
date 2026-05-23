@@ -6797,9 +6797,8 @@ await resetScene('before-box-inject');
       // For the verify surface, check that walls without matching levelId are skipped
       // by the first pass. We do this by placing a window at L0 wall XY and checking
       // that l2Wall remains a Mesh (= 0 cuts).
-      const l2Center = new THREE.Box3().setFromObject(l2Wall).getCenter(new THREE.Vector3());
-      // Place a window at L0 XY (matching l0Wall XY, NOT l2Wall).
-      const l0Center = new THREE.Box3().setFromObject(l0Wall).getCenter(new THREE.Vector3());
+      // Compute L0 wall center from dispatch args (start=[0,0] end=[6,0]) — no THREE global needed.
+      const l0Center = { x: 3, y: 0 };
       __dispatchSync('SdWindow', { position: [l0Center.x, l0Center.y, 0] });
       await new Promise(r => setTimeout(r, 200));
 
@@ -6879,20 +6878,27 @@ await resetScene('before-box-inject');
   const r142 = await evaluate(`(async () => {
     try {
       // Build a simple gable roof over a standard room footprint.
-      const before = __app_state.scene.children.length;
-      dispatchSync('SdRoof', { type: 'gable', footprint: [[-5,-4],[5,4]], pitchDeg: 30, overhang: 0.5 });
-      const after = __app_state.scene.children.length;
+      const before = __viewer.scene.children.length;
+      __dispatchSync('SdRoof', { type: 'gable', footprint: [[-5,-4],[5,4]], pitchDeg: 30, overhang: 0.5 });
+      const after = __viewer.scene.children.length;
       if (after <= before) return { passed: false, evidence: { reason: 'SdRoof added no objects' } };
 
       // Find gable-trim meshes: walls with userData.topProfile === 'pitched'.
       let gableCount = 0, allAboveGround = true, minZ = Infinity;
-      __app_state.scene.traverse(obj => {
+      __viewer.scene.traverse(obj => {
         if (obj.isMesh && obj.userData.topProfile === 'pitched') {
           gableCount++;
-          // Check bounding box — all vertices should be at Z >= -0.01 (allow tiny float error).
-          const bbox = new THREE.Box3().setFromObject(obj);
-          if (bbox.min.z < -0.01) { allAboveGround = false; }
-          if (bbox.min.z < minZ) minZ = bbox.min.z;
+          // Check world-space Z without THREE global: iterate position attribute + matrixWorld.
+          // matrixWorld (column-major): worldZ = me[2]*lx + me[6]*ly + me[10]*lz + me[14]
+          const posAttr = obj.geometry?.getAttribute('position');
+          if (posAttr) {
+            const me = obj.matrixWorld.elements;
+            for (let i = 0; i < posAttr.count; i++) {
+              const wz = me[2]*posAttr.getX(i) + me[6]*posAttr.getY(i) + me[10]*posAttr.getZ(i) + me[14];
+              if (wz < -0.01) allAboveGround = false;
+              if (wz < minZ) minZ = wz;
+            }
+          }
         }
       });
       const passed = gableCount >= 2 && allAboveGround;
