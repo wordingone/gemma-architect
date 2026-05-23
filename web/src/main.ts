@@ -3694,16 +3694,33 @@ function _hasUserContent(): boolean {
 let _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 // true when a dispatch has occurred but IDB save hasn't completed yet.
 let _idbDirty = false;
+// Diagnostic: expose IDB save state + last error for DevTools inspection.
+const _idbDiag: { dirty: boolean; lastSaveOk: boolean; lastErr: string | null; saveCount: number; failCount: number } =
+  { dirty: false, lastSaveOk: false, lastErr: null, saveCount: 0, failCount: 0 };
+(window as unknown as Record<string, unknown>).__idbDiag = _idbDiag;
+function _setDirty(v: boolean, reason: string): void {
+  _idbDirty = v;
+  _idbDiag.dirty = v;
+  console.debug(`[idb] dirty=${v} (${reason})`);
+}
 function _triggerAutoSave(): void {
-  _idbDirty = true;
+  _setDirty(true, "post-dispatch");
   if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(async () => {
     try {
       const data = viewer.exportScene();
       if (data.length > 0) await sceneStoreSave(data);
       else await sceneStoreClear();
-      _idbDirty = false;
-    } catch { /* quota or IDB error — non-fatal; _idbDirty stays true */ }
+      _idbDiag.saveCount++;
+      _idbDiag.lastSaveOk = true;
+      _idbDiag.lastErr = null;
+      _setDirty(false, "autosave-ok");
+    } catch (err) {
+      _idbDiag.failCount++;
+      _idbDiag.lastSaveOk = false;
+      _idbDiag.lastErr = String(err);
+      console.warn("[idb] autosave failed — _idbDirty stays true:", err);
+    }
   }, 2000);
 }
 
@@ -3711,7 +3728,17 @@ registerPostDispatch(() => { _triggerAutoSave(); });
 
 setInterval(async () => {
   if (_hasUserContent()) {
-    try { await sceneStoreSave(viewer.exportScene()); _idbDirty = false; } catch {}
+    try {
+      await sceneStoreSave(viewer.exportScene());
+      _idbDiag.saveCount++;
+      _idbDiag.lastSaveOk = true;
+      _idbDiag.lastErr = null;
+      _setDirty(false, "heartbeat-ok");
+    } catch (err) {
+      _idbDiag.failCount++;
+      _idbDiag.lastErr = String(err);
+      console.warn("[idb] heartbeat save failed:", err);
+    }
   }
 }, 60_000);
 
@@ -3745,7 +3772,9 @@ async function initSceneRestore(): Promise<void> {
 (window as unknown as Record<string, unknown>).__sceneBeforeunloadHooked = true;
 window.addEventListener("beforeunload", (e: BeforeUnloadEvent) => {
   if (navigator.webdriver === true) return;
-  if (_idbDirty && _hasUserContent()) {
+  const hasContent = _hasUserContent();
+  console.debug(`[beforeunload] dirty=${_idbDirty} hasContent=${hasContent} diag=`, JSON.stringify(_idbDiag));
+  if (_idbDirty && hasContent) {
     e.preventDefault();
     e.returnValue = "";
   }

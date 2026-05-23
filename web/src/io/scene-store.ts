@@ -20,9 +20,10 @@ export async function sceneStoreSave(data: unknown): Promise<void> {
   await new Promise<void>((res, rej) => {
     const tx = db.transaction(STORE, "readwrite");
     const req = tx.objectStore(STORE).put(data, KEY);
-    req.onsuccess = () => res();
     req.onerror = () => rej(req.error);
-    tx.oncomplete = () => db.close();
+    tx.oncomplete = () => { db.close(); res(); };
+    tx.onerror = () => { db.close(); rej(tx.error); };
+    tx.onabort = () => { db.close(); rej(new Error("IDB transaction aborted")); };
   });
 }
 
