@@ -825,15 +825,17 @@ registerHandler("SdWall", (args) => {
   const eaveH = (args.eaveHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
   const ridgeH = (args.ridgeHeight as number | undefined) ?? 1.5;
   const explicitH = (args.height as number | undefined);
-  // §#1569: reject suspiciously-small explicit height — likely ft→m unit bleed on metric literal.
-  // Silent clamp to 0.5 would produce status="success" with wrong height, masking the error.
-  // Throw so the model sees "check unit conversion" in next-turn context and can self-correct.
-  if (explicitH !== undefined && explicitH < 0.5) throw new Error(`height=${explicitH.toFixed(3)}m below minimum 0.5m — check unit conversion; metric literals ("1m") pass through as 1.0, never apply ft→m to metre values`);
+  // §#1569/#1558: clamp suspiciously-small explicit height to GARDEN_WALL_MIN_H (1.2m).
+  // 0.3m signals a ft→m unit bleed (1ft ≈ 0.30m) — most common in boundary/garden wall context.
+  // Clamp silently so the scene gets a sensible outdoor wall without a chat error stopping the build.
+  const GARDEN_WALL_MIN_H = 1.2;
+  const _clampedExplicitH = (explicitH !== undefined && explicitH < GARDEN_WALL_MIN_H)
+    ? GARDEN_WALL_MIN_H : explicitH;
   const activeLvl = levelStore.getActive();
   const allLevels = levelStore.all().sort((x, y) => x.elevation - y.elevation);
   const nextLvl = allLevels.find(l => l.elevation > activeLvl.elevation + 0.01);
   const MIN_WALL_HEIGHT = 0.5;
-  const baseH = explicitH ?? DEFAULT_WALL_HEIGHT;
+  const baseH = _clampedExplicitH ?? DEFAULT_WALL_HEIGHT;
   const effectiveH = Math.max(
     MIN_WALL_HEIGHT,
     nextLvl
