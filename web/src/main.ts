@@ -3680,21 +3680,27 @@ function _hasUserContent(): boolean {
 }
 
 let _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+// true when a dispatch has occurred but IDB save hasn't completed yet.
+let _idbDirty = false;
 function _triggerAutoSave(): void {
+  _idbDirty = true;
   if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(async () => {
     try {
       const data = viewer.exportScene();
       if (data.length > 0) await sceneStoreSave(data);
       else await sceneStoreClear();
-    } catch { /* quota or IDB error — non-fatal */ }
+      _idbDirty = false;
+    } catch { /* quota or IDB error — non-fatal; _idbDirty stays true */ }
   }, 2000);
 }
 
 registerPostDispatch(() => { _triggerAutoSave(); });
 
-setInterval(() => {
-  if (_hasUserContent()) sceneStoreSave(viewer.exportScene()).catch(() => {});
+setInterval(async () => {
+  if (_hasUserContent()) {
+    try { await sceneStoreSave(viewer.exportScene()); _idbDirty = false; } catch {}
+  }
 }, 60_000);
 
 async function initSceneRestore(): Promise<void> {
@@ -3720,14 +3726,11 @@ async function initSceneRestore(): Promise<void> {
   } catch { /* IDB unavailable — non-fatal */ }
 }
 
-// Warn before reload/close if user has dispatch-created geometry (no auto-save).
+// Warn before reload/close only when IDB save hasn't flushed yet (_idbDirty).
 // Skips IFC-loaded content — those lack userData.creator and survive a reload via re-open.
 (window as unknown as Record<string, unknown>).__sceneBeforeunloadHooked = true;
 window.addEventListener("beforeunload", (e: BeforeUnloadEvent) => {
-  const hasUserContent = viewer
-    .getScene()
-    .children.some((c) => c.userData?.creator && c.userData.creator !== "IfcLevel");
-  if (hasUserContent) {
+  if (_idbDirty && _hasUserContent()) {
     e.preventDefault();
     e.returnValue = "";
   }
