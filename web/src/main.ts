@@ -422,7 +422,10 @@ registerHandler("SdRotate", (args) => {
 });
 
 registerHandler("SdCopy", (args) => {
-  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  const byTarget = (args.target as string | undefined)
+    ? (viewer.getScene().getObjectByProperty("uuid", args.target as string) ?? null)
+    : null;
+  const sel = byTarget ?? getSelected()?.transformTarget ?? viewer.getActiveObject();
   if (!sel) return { copied: false, reason: "no selection" };
   const x = (args.x as number | undefined)
     ?? (Array.isArray(args.vector) ? (args.vector as number[])[0] : undefined) ?? 0;
@@ -439,7 +442,10 @@ registerHandler("SdCopy", (args) => {
 });
 
 registerHandler("SdArrayLinear", (args) => {
-  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  const byTarget = (args.target as string | undefined)
+    ? (viewer.getScene().getObjectByProperty("uuid", args.target as string) ?? null)
+    : null;
+  const sel = byTarget ?? getSelected()?.transformTarget ?? viewer.getActiveObject();
   if (!sel) return { created: false, reason: "no selection" };
   const count = Math.max(1, Math.round((args.count as number | undefined) ?? 3));
   const dx = (args.dx as number | undefined) ?? 1;
@@ -458,7 +464,10 @@ registerHandler("SdArrayLinear", (args) => {
 });
 
 registerHandler("SdArrayGrid", (args) => {
-  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  const byTarget = (args.target as string | undefined)
+    ? (viewer.getScene().getObjectByProperty("uuid", args.target as string) ?? null)
+    : null;
+  const sel = byTarget ?? getSelected()?.transformTarget ?? viewer.getActiveObject();
   if (!sel) return { created: false, reason: "no selection" };
   const rows = Math.max(1, Math.round((args.rows as number | undefined) ?? 3));
   const cols = Math.max(1, Math.round((args.cols as number | undefined) ?? 3));
@@ -480,7 +489,10 @@ registerHandler("SdArrayGrid", (args) => {
 });
 
 registerHandler("SdArrayPolar", (args) => {
-  const sel = getSelected()?.transformTarget ?? viewer.getActiveObject();
+  const byTarget = (args.target as string | undefined)
+    ? (viewer.getScene().getObjectByProperty("uuid", args.target as string) ?? null)
+    : null;
+  const sel = byTarget ?? getSelected()?.transformTarget ?? viewer.getActiveObject();
   if (!sel) return { created: false, reason: "no selection" };
   const count = Math.max(2, Math.round((args.count as number | undefined) ?? 6));
   const cx = (args.cx as number | undefined) ?? 0;
