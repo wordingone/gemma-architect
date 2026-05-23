@@ -183,7 +183,7 @@ await cdp("Page.addScriptToEvaluateOnNewDocument", {
 // Patches Worker constructor before any page scripts run; captures elapsed_ms from each
 // phase into window.__bootPhaseTiming keyed by phase name.
 await cdp("Page.addScriptToEvaluateOnNewDocument", {
-  source: `window.__bootPhaseTiming={};(function(){var O=self.Worker;function P(){var args=Array.prototype.slice.call(arguments);var w=new(Function.prototype.bind.apply(O,[null].concat(args)))();w.addEventListener('message',function(e){if(e&&e.data&&e.data.type==='phase_timing'){window.__bootPhaseTiming[e.data.phase+'_ms']=e.data.elapsed_ms;if(e.data.downloaded_bytes!=null){window.__bootPhaseTiming[e.data.phase+'_bytes']=e.data.downloaded_bytes;}}});return w;}P.prototype=O.prototype;Object.setPrototypeOf(P,O);self.Worker=P;})();`,
+  source: `window.__bootPhaseTiming={};(function(){var O=self.Worker;function P(){var args=Array.prototype.slice.call(arguments);var w=new(Function.prototype.bind.apply(O,[null].concat(args)))();w.addEventListener('message',function(e){if(e&&e.data&&e.data.type==='phase_timing'){window.__bootPhaseTiming[e.data.phase+'_ms']=e.data.elapsed_ms;if(e.data.downloaded_bytes!=null){window.__bootPhaseTiming[e.data.phase+'_bytes']=e.data.downloaded_bytes;}if(e.data.load_source!=null){window.__bootPhaseTiming[e.data.phase+'_load_source']=e.data.load_source;}}});return w;}P.prototype=O.prototype;Object.setPrototypeOf(P,O);self.Worker=P;})();`,
 });
 
 // #1482: capture per-turn dispatch counts + goal state for receipt schema extensions.
@@ -729,6 +729,7 @@ const receipt = {
     worker_from_pretrained_start_ms: workerPhaseTiming.from_pretrained_start_ms ?? null,
     worker_from_pretrained_end_ms: workerPhaseTiming.from_pretrained_end_ms ?? null,
     worker_model_download_bytes: workerPhaseTiming.from_pretrained_end_bytes ?? null,
+    worker_model_load_source: workerPhaseTiming.from_pretrained_end_load_source ?? null,
     worker_opfs_first_write_ms: workerPhaseTiming.opfs_first_write_ms ?? null,
     worker_model_ready_ms: workerPhaseTiming.model_ready_ms ?? null,
     worker_warmup_start_ms: workerPhaseTiming.warmup_start_ms ?? null,
