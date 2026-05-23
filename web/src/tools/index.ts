@@ -1592,6 +1592,33 @@ export function initCreateMode(viewer: Viewer): void {
         return;
       }
     }
+    // Ctrl+Z during in-progress draw/op: cancel the active state first, don't
+    // undo the last placed object. Matches Rhino/Blender cancel-before-undo convention.
+    if ((ev.ctrlKey || ev.metaKey) && !ev.shiftKey && (ev.key === "z" || ev.key === "Z")) {
+      if (_ptPhase) {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        ptCancel(viewer);
+        return;
+      }
+      if (getOpPhase()) {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        opCancel(viewer);
+        return;
+      }
+      if (_pending.length > 0) {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        clearTemporary(viewer);
+        clearSmartTrack(viewer);
+        hideCursorDot();
+        setPickerHint(null);
+        _pending = [];
+        dispatchSync("setActiveTool", { toolId: "select" });
+        return;
+      }
+    }
     if (ev.key === "Escape") {
       if (_ptPhase) { ptCancel(viewer); return; }
       if (getOpPhase()) { opCancel(viewer); return; }

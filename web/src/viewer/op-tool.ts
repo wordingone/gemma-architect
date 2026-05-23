@@ -201,6 +201,17 @@ function _applyBoolHighlight(obj: THREE.Object3D, hex: number): void {
     lm.color.setHex(hex);
     return;
   }
+  // For Groups (e.g. wall with void cuts), apply highlight to first Mesh child.
+  if (obj instanceof THREE.Group) {
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh && !(child.userData._boolHighlightDone as boolean)) {
+        child.userData._boolHighlightDone = true;
+        _applyBoolHighlight(child, hex);
+      }
+    });
+    obj.userData._boolGroupHighlighted = true;
+    return;
+  }
   const m = obj as THREE.Mesh;
   const mats = Array.isArray(m.material) ? m.material : (m.material ? [m.material] : []);
   const idx = mats.findIndex((mt) => !!(mt as THREE.MeshStandardMaterial).emissive);
@@ -216,6 +227,7 @@ function _applyBoolHighlight(obj: THREE.Object3D, hex: number): void {
   }
   m.userData._savedEmissive = orig.emissive.getHex();
   m.userData._savedMaterial = orig;
+  delete m.userData._boolHighlightDone;
 }
 
 function _restoreBoolHighlight(obj: THREE.Object3D): void {
@@ -224,6 +236,16 @@ function _restoreBoolHighlight(obj: THREE.Object3D): void {
     if (obj.userData._savedLineColor !== undefined) {
       (obj.material as THREE.LineBasicMaterial).color.setHex(obj.userData._savedLineColor as number);
       delete obj.userData._savedLineColor;
+    }
+    return;
+  }
+  // Restore Group children
+  if (obj instanceof THREE.Group) {
+    if (obj.userData._boolGroupHighlighted) {
+      obj.traverse((child) => {
+        if (child instanceof THREE.Mesh) _restoreBoolHighlight(child);
+      });
+      delete obj.userData._boolGroupHighlighted;
     }
     return;
   }
@@ -685,8 +707,25 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
 
   if (creator === "line" || creator === "polyline") {
     const pts: THREE.Vector3[] = (profile.userData.controlPoints as THREE.Vector3[] | undefined) ?? [];
+    const isClosed = !!(profile.userData.isClosed as boolean | undefined);
+    profile.updateMatrixWorld();
     const worldPts = pts.map((p) => p.clone().applyMatrix4(profile.matrixWorld));
     if (worldPts.length >= 2) {
+      if (isClosed && worldPts.length >= 3) {
+        // Closed polyline → solid extrusion (same as polygon)
+        const shape = new THREE.Shape();
+        shape.moveTo(worldPts[0].x, worldPts[0].y);
+        for (let i = 1; i < worldPts.length; i++) shape.lineTo(worldPts[i].x, worldPts[i].y);
+        shape.closePath();
+        const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        const mat = new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.55, metalness: 0.05 });
+        const mesh = new THREE.Mesh(geom, mat);
+        const polPts = worldPts.map((v) => ({ x: v.x, y: v.y }));
+        mesh.userData.endpoints = snapEndpointsFromProfile(polPts, h);
+        mesh.userData.edgePairs = snapEdgePairsFromProfile(polPts, h);
+        return mesh;
+      }
+      // Open line/polyline → ribbon surface
       const verts: number[] = [];
       const idxs: number[] = [];
       worldPts.forEach((p, i) => {
