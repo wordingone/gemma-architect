@@ -292,7 +292,7 @@ function normalizeArgSynonyms(canonical: string, args: DispatchArgs): DispatchAr
 const DIMENSION_ARGS_BLOCKLIST: Record<string, ReadonlySet<string>> = {
   SdDoor:   new Set(["width", "height"]),
   SdWindow: new Set(["width", "height"]),
-  SdStair:  new Set(["riser", "tread", "width", "count", "rise", "targetHeight", "landingDepth"]),
+  SdStair:  new Set(["riser", "tread", "riserHeight", "treadDepth", "width", "count", "rise", "targetHeight", "landingDepth"]),
 };
 
 function checkDimBlocklist(canonical: string, args: DispatchArgs): string | null {

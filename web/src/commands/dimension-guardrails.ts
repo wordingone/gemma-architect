@@ -137,6 +137,19 @@ export function checkDimensionGuardrails(
         checkRange(args, "height", { min: 0.3, max: 2.4 })
       );
     }
+    case "SdStair": {
+      // §#1655: reject descending or zero-rise stair — level_to must be above level_from.
+      const lf = args.level_from as Record<string, unknown> | undefined;
+      const lt = args.level_to   as Record<string, unknown> | undefined;
+      if (lf && lt) {
+        const elevFrom = typeof lf.elevation === "number" ? lf.elevation : null;
+        const elevTo   = typeof lt.elevation === "number" ? lt.elevation : null;
+        if (elevFrom !== null && elevTo !== null && elevTo <= elevFrom) {
+          return `SdStair level_to.elevation (${elevTo}m) must exceed level_from.elevation (${elevFrom}m) — cannot build a zero-rise or descending stair`;
+        }
+      }
+      return null;
+    }
     default:
       return null;
   }
