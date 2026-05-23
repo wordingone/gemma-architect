@@ -59,51 +59,42 @@ From IFC quantities (verified, not estimated):
 
 ---
 
-## 4. Current `buildRoof` Gap Analysis
+## 4. `buildRoof` Gap Analysis — Current State (master, 2026-05-23)
 
-`buildRoof` pitched branch: `web/src/tools/structural.ts:1005–1147`
+`buildRoof` pitched branch: `web/src/tools/structural.ts:1005–1170`
 
 | Parameter | Current builder | FZK reference | Status |
 |---|---|---|---|
-| Default pitchDeg | **31°** (`params.pitchDeg ?? 31` at line 817) | **30°** | ❌ WRONG — 1° error |
-| Comment at line 816 | "~31.4° pitch" | Actually 30° | ❌ stale comment |
-| Ridge beam dimensions | `ridgeLenHalf×2, 0.10, 0.12` (100mm×120mm) | 80mm×160mm | ❌ wrong cross-section |
-| Ridge beam position | `rH − 0.06` (inside sheathing) | apex | ✓ structurally correct |
-| Wall plates (wp1, wp2) | `0.10, 0.10` cross-section at spanHalf | Pfette: 80mm×160mm at eave | ❌ wrong section; structurally ~correct position |
-| Wall plate ifcClass | none set | IfcBeam (Pfette) | ❌ missing |
-| Rafters | 80mm×150mm, 0.65m spacing | Sparren (IfcMember), not in beam catalog | ✓ functionally present |
-| Sheathing panels | 25mm BoxGeometry | Dach slab 200mm | ❌ too thin (display only, not structural) |
+| Default pitchDeg | 30° | 30° | ✓ fixed (PRs #1592/#1610) |
+| Ridge beam dimensions | 80mm × 160mm | 80mm × 160mm | ✓ fixed (PR #1610) |
+| Ridge beam position | apex | apex | ✓ |
+| Eave purlins (Pfette) | 80mm×160mm at eave edge, `IfcBeam` | 80mm×160mm at eave level, `IfcBeam` | ✓ class + section correct; position at eave (not FZK mid-slope — deferred to #1639 §B) |
+| Rafters | `IfcMember`, 80mm×150mm, ~0.65m spacing | `IfcMember` Sparren, 21/slope | ✓ class correct; count differs slightly |
+| Slope deck slab | 200mm `IfcSlab` "Dach" × 2 | 200mm `IfcSlab` "Dach" × 2 | ✓ thickness + class match FZK (#1639-E) |
+| Gable triangles | none (removed PR #1653) | none (wall auto-trim provides face) | ✓ |
 | Overhang | 0.5m default | 0.5m | ✓ |
-| Eave purlin vs wall plate | wall plates only | Pfette-1-1/2-1 at eave | ❌ no separate Pfette entity |
+| Fascia/soffit | `IfcCovering` × 4 | none in FZK dump | △ extra; visual benefit outweighs IFC purity |
 
-### Summary of required changes
+### Remaining gaps vs FZK (deferred)
 
-1. **Fix default pitch: 31 → 30** at `structural.ts:817`
-2. **Fix stale comment** at line 816
-3. **Correct ridge beam cross-section**: `0.10, 0.12` → `0.08, 0.16`
-4. **Correct wall plate cross-section**: `0.10, 0.10` → `0.08, 0.16`
-5. **Add ifcClass on wall plates**: `wp1.userData.ifcClass = "IfcBeam"` (Pfette equivalent)
-6. **SdRoof handler default pitchDeg**: `main.ts:1173` — currently `?? 31`, fix to `?? 30`
+- **§B — Pfette enclosure**: FZK Pfette sits inside Dach slab Y-volume (mid-slope). Ours is at eave edge for visibility (#1650 interim fix). IFC enclosure relationship deferred to #1639 §B pass; gated on #1658 design decision.
+- **§D — IfcCovering strips**: 4 fascia/soffit pieces not in FZK. Removal pending visual-quality decision.
+- **§E — Sparren count**: 23/slope vs FZK 21/slope. Minor; not blocking.
 
 ---
 
-## 5. Code Paths to Update
+## 5. Completed Code Changes (as of master 2026-05-23)
 
-### `web/src/tools/structural.ts`
+All items from the original §5 have shipped:
 
-| Line | Change |
-|---|---|
-| 816 | Update comment: remove "~31.4°", replace with "30° from IFCPLANEANGLEMEASURE(30.) on Dach-1/Dach-2" |
-| 817 | `params.pitchDeg ?? 31` → `params.pitchDeg ?? 30` |
-| 1031 | ridgeBeam second arg `0.10` → `0.08` |
-| 1031 | ridgeBeam third arg `0.12` → `0.16` |
-| 1039–1047 | wall plate member args `0.10, 0.10` → `0.08, 0.16`; add `wp1.userData.ifcClass = "IfcBeam"` and `wp2.userData.ifcClass = "IfcBeam"` |
-
-### `web/src/main.ts`
-
-| Line | Change |
-|---|---|
-| 1173 | `?? (args.pitchAngleDeg as number | undefined) ?? 31` → `?? 30` |
+| Item | PR | Status |
+|---|---|---|
+| `pitchDeg ?? 31` → `?? 30` (structural.ts + main.ts) | #1592/#1610 | ✓ merged |
+| Ridge beam 80×160mm cross-section | #1610 | ✓ merged |
+| Wall plates 80×160mm + `IfcBeam` class | #1641 | ✓ merged |
+| Slope deck promoted to `IfcSlab` "Dach" 150mm | #1641 | ✓ merged |
+| Slope deck thickness 150mm → 200mm (FZK match) | #1639-E | ✓ this PR |
+| Redundant gable triangle pair removed | #1653 | ✓ merged |
 
 ---
 

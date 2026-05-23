@@ -153,8 +153,8 @@ describe("SdRoof parametric gate — IfcSlab 'Dach' geometry (#1640)", () => {
       slab.geometry.computeBoundingBox();
       const local = slab.geometry.boundingBox!;
       const localZ = local.max.z - local.min.z;
-      // 150mm structural slab, not 25mm sheathing
-      expect(localZ).toBeCloseTo(0.15, 3);
+      // 200mm structural slab — matches FZK Dach-1/Dach-2 IFC thickness (#1639-E)
+      expect(localZ).toBeCloseTo(0.20, 3);
     }
   });
 });

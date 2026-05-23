@@ -1101,11 +1101,11 @@ export function buildRoof(
     group.add(soffitB);
 
     // Rafters — two slopes
-    // Interior-side offset: slope deck (IfcSlab "Dach", 150mm) sits on top of rafter (150mm deep).
+    // Interior-side offset: slope deck (IfcSlab "Dach", 200mm) sits on top of rafter (150mm deep).
     // Rafter center must be inward from slab center by sheathThick/2 + rafterD/2
     // along the slope's interior normal: (sin(pitch), -cos(pitch)) in (span, Z) axes.
-    const sheathThick = 0.15; // 150mm structural slope deck (IfcSlab "Dach"); was 25mm IfcCovering sheathing (#1639)
-    const rafterInset = sheathThick / 2 + rafterD / 2; // 0.0875m
+    const sheathThick = 0.20; // 200mm — matches FZK Dach-1/Dach-2 IFC slab thickness (#1639-E)
+    const rafterInset = sheathThick / 2 + rafterD / 2; // 0.175m
     for (let i = 0; i < nRafters; i++) {
       const axialPos = -ridgeLenHalf + i * (ridgeLenHalf * 2 / (nRafters - 1));
 
