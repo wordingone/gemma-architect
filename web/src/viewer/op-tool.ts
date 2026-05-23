@@ -1845,7 +1845,7 @@ export function opStartTool(viewer: Viewer, tool: string): void {
     });
     ptPrompt("Boundary Select — choose input method above  [Enter=Draw Polygon]");
   } else if (tool === "copy") {
-    const sel = ptGetTarget();
+    const sel = ptGetTarget() ?? viewer.getTargetObject();
     if (sel) {
       const ctr = new THREE.Vector3(); new THREE.Box3().setFromObject(sel).getCenter(ctr);
       _opPhase = { kind: "copy_place", source: sel, srcPt: ctr };
@@ -1856,7 +1856,7 @@ export function opStartTool(viewer: Viewer, tool: string): void {
       ptPrompt("Copy — click an object to copy");
     }
   } else if (tool === "array") {
-    const sel = ptGetTarget();
+    const sel = ptGetTarget() ?? viewer.getTargetObject();
     if (sel) {
       _opPhaseStartArray(sel);
     } else {
