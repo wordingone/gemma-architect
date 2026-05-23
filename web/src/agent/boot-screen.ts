@@ -537,7 +537,7 @@ function _buildOverlay(): void {
 
   // First-visit hint (hides once progress starts or on returning user)
   const hintEl = document.createElement('div');
-  hintEl.textContent = 'Loading neural model (~2 GB) — first visit only';
+  hintEl.textContent = 'Loading neural model (~5 GB) — first visit only';
   Object.assign(hintEl.style, {
     color: '#383838',
     fontSize: 'clamp(9px, 1.0vw, 13px)',

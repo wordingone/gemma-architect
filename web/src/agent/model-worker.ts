@@ -285,7 +285,8 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           try { await modelCacheDir.getFileHandle(filename); return; } catch { /* not cached yet */ }
           const total = parseInt(response.headers.get("content-length") ?? "0", 10);
           let data: ArrayBuffer;
-          if (progress_callback && response.body && total > 0) {
+          if (response.body) {
+            // §#1636: stream always so progress events fire even without progress_callback.
             const reader = response.body.getReader();
             const chunks: Uint8Array[] = [];
             let loaded = 0;
@@ -295,7 +296,10 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
               chunks.push(value!);
               loaded += value!.byteLength;
               _cumulativeBytes += value!.byteLength;
-              progress_callback({ progress: (loaded / total) * 100, loaded, total });
+              post({ type: "progress", phase: "model", file: filename, bytes: _cumulativeBytes, total: ESTIMATED_MODEL_BYTES, throughputBytesPerSec: calcThroughput(_cumulativeBytes) });
+              if (progress_callback && total > 0) {
+                progress_callback({ progress: (loaded / total) * 100, loaded, total });
+              }
             }
             const merged = new Uint8Array(loaded);
             let off = 0;
