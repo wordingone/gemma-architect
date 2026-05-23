@@ -313,6 +313,16 @@ if (bootComplete) {
     const preConsoleErrorIdx = consoleErrors.length;
     const preArcInvalidCount = arcInvalidTransitions.length;
 
+    // §Option C (Leo mail #10199): fail-fast at T1 if stale scene detected.
+    // sceneBefore>0 on T1 means a prior Phase J run left GPU-resident geometry.
+    // This causes D3D12_OOM cascade → model produces NL-only, making the receipt invalid.
+    // Fix: run without --no-reload. The harness reload (default) clears the GPU context.
+    if (i === 0 && sceneChildrenBefore !== null && sceneChildrenBefore > 0) {
+      console.error(`\nFAIL-FAST: T1 sceneChildrenBefore=${sceneChildrenBefore} (expected 0).`);
+      console.error(`Stale GPU scene from prior run. Re-run without --no-reload to reset.`);
+      process.exit(1);
+    }
+
     // §#1531: Force prompt mode before each turn — Storage.clearDataForOrigin does NOT clear
     // localStorage, so gemma-cad:console-mode-v1="console" persists across cold-cache resets
     // and across page reloads triggered by D3D12_OOM. Click mode-pill if currently in console mode.
