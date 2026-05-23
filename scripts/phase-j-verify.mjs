@@ -250,7 +250,6 @@ if (!NO_RELOAD) {
     // Auto-click #consent-approve so the harness can proceed without user interaction.
     // Real users on Pages always see this dialog; harness just clicks through it.
     console.log(`[+${Date.now()-startMs}ms] Checking for consent overlay...`);
-    let consentAutoClicked = false;
     const consentDeadline = Date.now() + 15_000;
     while (Date.now() < consentDeadline) {
       const visible = await evaluate(
