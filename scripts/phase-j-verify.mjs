@@ -233,8 +233,10 @@ if (!NO_RELOAD) {
         `document.querySelector('#model-consent-overlay #consent-approve') !== null`,
       );
       if (visible === true) {
+        // Use MouseEvent dispatch (not .click()) — CDP Runtime.evaluate context
+        // doesn't deliver .click() to addEventListener handlers reliably. See #1580.
         await evaluate(
-          `document.querySelector('#model-consent-overlay #consent-approve').click(); "clicked"`,
+          `document.querySelector('#model-consent-overlay #consent-approve').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); "clicked"`,
         );
         consentAutoClicked = true;
         console.log(`[+${Date.now()-startMs}ms] Consent overlay dismissed (auto-clicked #consent-approve)`);
