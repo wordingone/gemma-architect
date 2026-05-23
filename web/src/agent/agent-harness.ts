@@ -41,6 +41,11 @@ initTelemetry();
 let _telBootLoadSource = "unknown";
 let _telWorkerBootMs = 0; // set when initWorkerIfNeeded creates the worker
 
+// §#1659: dev-tool — accumulate raw model output per turn for Phase J sidecar.
+let _rawOutIdx = 0;
+type _RawOutputEntry = { turnId: number; ts: string; raw: string };
+(window as unknown as { __agentRawOutputs?: _RawOutputEntry[] }).__agentRawOutputs ??= [];
+
 // ── Cluster catalog (populated by workbench after each save/delete) ──────────
 let _clusterCatalog: { name: string; steps: number }[] = [];
 
@@ -1019,6 +1024,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
       mtp_on: false,
       path: "remote",
     });
+    (window as unknown as { __agentRawOutputs: _RawOutputEntry[] }).__agentRawOutputs.push({ turnId: ++_rawOutIdx, ts: new Date().toISOString(), raw: content.slice(0, 102400) }); // §#1659 AC5: 100KB cap
     const { dispatches, text } = parseDispatches(content);
     return { dispatches, text: text || content, raw: compJson };
   }
@@ -1042,6 +1048,7 @@ async function runRemoteAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     mtp_on: json._mtp_enabled ?? false,
     path: "remote",
   });
+  (window as unknown as { __agentRawOutputs: _RawOutputEntry[] }).__agentRawOutputs.push({ turnId: ++_rawOutIdx, ts: new Date().toISOString(), raw: content.slice(0, 102400) }); // §#1659 AC5
   const { dispatches, text } = parseDispatches(content);
   return { dispatches, text: text || content, raw: json };
 }
@@ -1078,6 +1085,7 @@ async function runStandardBackendTurn(req: AgentRequest): Promise<AgentResponse>
     plan = inner.trim();
     return "";
   });
+  (window as unknown as { __agentRawOutputs: _RawOutputEntry[] }).__agentRawOutputs.push({ turnId: ++_rawOutIdx, ts: new Date().toISOString(), raw: responseText.slice(0, 102400) }); // §#1659 AC5
   const { dispatches, text } = parseDispatches(afterPlan);
   return { dispatches, text: text.trim() || responseText, plan, raw: undefined };
 }
@@ -1131,6 +1139,7 @@ async function runWasmBackendTurn(req: AgentRequest): Promise<AgentResponse> {
     path:                 "wasm",
   });
 
+  (window as unknown as { __agentRawOutputs: _RawOutputEntry[] }).__agentRawOutputs.push({ turnId: ++_rawOutIdx, ts: new Date().toISOString(), raw: content.slice(0, 102400) }); // §#1659 AC5
   const { dispatches, text } = parseDispatches(content);
   return { dispatches, text: text || content, raw: json };
 }
@@ -1357,6 +1366,7 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     return "";
   });
 
+  (window as unknown as { __agentRawOutputs: _RawOutputEntry[] }).__agentRawOutputs.push({ turnId: ++_rawOutIdx, ts: new Date().toISOString(), raw: responseText.slice(0, 102400) }); // §#1659 AC5
   const { dispatches, text } = parseDispatches(afterPlan);
   emitDispatchTurn(dispatches.length, prefillMs + decodeMs); // §#1628: 10% sample
   return { dispatches, text: text.trim() || responseText, plan, raw: undefined };

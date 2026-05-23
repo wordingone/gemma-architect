@@ -767,6 +767,11 @@ const budgetExceededAtTurn = _budget?.exceeded_at_turn ?? null;
 const finalTokensUsed      = _budget?.tokens_used ?? 0;
 const finalTokenBudget     = _budget?.token_budget ?? null;
 
+// §#1659: read raw model outputs for sidecar (all 5 parseDispatches call sites push here).
+const _rawOutputsJson = await evaluate(`JSON.stringify(window.__agentRawOutputs ?? [])`).catch(() => null);
+let _rawOutputs = [];
+try { if (_rawOutputsJson) _rawOutputs = JSON.parse(_rawOutputsJson); } catch { _rawOutputs = []; }
+
 // §#1638: collect progress poll data (wasm-cohort second boot only).
 // Computes monotonicity of the bar during warm-cache OPFS boot.
 let _progressPollData = null;
@@ -991,6 +996,19 @@ const receipt = {
     };
   })() : null,
 };
+// §#1659: write raw-output sidecar alongside receipt.
+let sidecarFile = null;
+if (_rawOutputs.length > 0) {
+  sidecarFile = outFile.replace('.json', '.raw-output.md');
+  const lines = [`# Phase J Raw Output Sidecar\n\nsha: ${sha}  ts: ${new Date().toISOString()}\n`];
+  for (const entry of _rawOutputs) {
+    lines.push(`## Turn ${entry.turnId} (${entry.ts})\n\n\`\`\`\n${entry.raw}\n\`\`\`\n`);
+  }
+  writeFileSync(sidecarFile, lines.join('\n'));
+  console.log(`Sidecar: ${sidecarFile}`);
+}
+receipt.raw_output_sidecar = sidecarFile ? sidecarFile.replace(STATE_DIR + '/', '') : null;
+
 writeFileSync(outFile, JSON.stringify(receipt, null, 2));
 console.log(`\nReceipt: ${outFile}`);
 
