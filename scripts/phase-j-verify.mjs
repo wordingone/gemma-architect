@@ -23,13 +23,14 @@ import { CDP_PORT, CDP_BASE } from "./ports.mjs";
 const PAGES_URL   = "https://wordingone.github.io/gemma-architect/";
 const STATE_DIR   = `${process.cwd()}/state`;
 const NO_RELOAD   = process.argv.includes("--no-reload");
-// --cold: clear Cache API + IndexedDB before reload (true cold-cache per leo 02:10Z mail).
-// Satisfies feedback_no_localhost_testing + standing cold-cache gate directive.
-// Model re-downloads (~2.5GB) — run once per PR cycle, not every iteration.
-const COLD_CACHE  = process.argv.includes("--cold") && !NO_RELOAD;
+// Cold-cache is now DEFAULT (user directive 2026-05-23: "every test cold-cache").
+// Pass --warm to skip cache-clearing (for local iteration only; NOT valid as a gate test).
+// Cold-cache: clear HTTP disk cache + cookies + Cache API + IndexedDB before reload.
+// Model re-downloads (~2.5GB) — expect 15-20min boot. boot_ms < 150000 → receipt INVALID.
+const COLD_CACHE  = !process.argv.includes("--warm") && !NO_RELOAD;
 const PROMPT_N    = Number(process.argv.find(a => a.startsWith("--prompts="))?.split("=")[1] ?? 5);
-const BOOT_TIMEOUT_MS  = COLD_CACHE ? 65 * 60 * 1000 : 10 * 60 * 1000;  // 65 min cold (local override — 2.5GB re-download), 10 min warm
-const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retry (90s recovery + 226s generation)
+const BOOT_TIMEOUT_MS  = COLD_CACHE ? 65 * 60 * 1000 : 10 * 60 * 1000;  // 65 min cold, 10 min warm
+const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retry
 
 // #1476/#1482: use STARTER_PROMPTS sequence per user directive 2026-05-21.
 // Turn 1: full architectural goal (tests goal-mode + multi-turn dispatch).
@@ -58,7 +59,7 @@ const outFile   = `${STATE_DIR}/phase-j-verify-${sha}-${timestamp}.json`;
 console.log(`\n── Phase J verify  sha=${sha}  ${ts()} ──`);
 console.log(`   Pages: ${PAGES_URL}`);
 console.log(`   Prompts: ${PROMPT_N}  boot-timeout: ${BOOT_TIMEOUT_MS/60000}m  turn-timeout: ${TURN_TIMEOUT_MS/60000}m`);
-console.log(`   Mode: ${COLD_CACHE ? "COLD-CACHE (Storage.clearDataForOrigin)" : NO_RELOAD ? "NO-RELOAD (warm)" : "SOFT-RELOAD (warm)"}`);
+console.log(`   Mode: ${COLD_CACHE ? "COLD-CACHE (HTTP+cookies+Storage — gate default)" : NO_RELOAD ? "NO-RELOAD (warm — INVALID as gate test)" : "WARM (--warm — INVALID as gate test)"}`);
 
 // ── CDP connection ─────────────────────────────────────────────────────────────
 
@@ -198,13 +199,15 @@ window.addEventListener('goal:changed',function(e){
 const startMs = Date.now();
 if (!NO_RELOAD) {
   if (COLD_CACHE) {
-    // True cold-cache: clear Cache API (transformers.js model weights), IndexedDB,
-    // service workers. This is what leo's run-pages-comprehensive.mjs does (~line 140).
+    // True cold-cache: clear HTTP disk cache + cookies + Cache API + IndexedDB + SW.
     // Model must re-download from CDN (~2.5GB) — expect 15-20min boot window.
-    console.log(`\n[+${0}ms] Clearing Cache API + IndexedDB for true cold-cache...`);
+    // boot_ms < 150000 → model loaded from cache; receipt is INVALID as a gate test.
+    console.log(`\n[+${0}ms] Clearing HTTP cache + cookies + Storage for true cold-cache...`);
+    await cdp("Network.clearBrowserCache", {});
+    await cdp("Network.clearBrowserCookies", {});
     await cdp("Storage.clearDataForOrigin", {
       origin: "https://wordingone.github.io",
-      storageTypes: "cache_storage,indexeddb,service_workers,websql,file_systems",
+      storageTypes: "cache_storage,indexeddb,service_workers,websql,file_systems,local_storage,shader_cache",
     });
     await delay(2000);
     console.log(`[+${Date.now()-startMs}ms] Storage cleared. Navigating to Pages...`);
@@ -257,6 +260,10 @@ if (!bootComplete) {
 }
 
 const bootMs = Date.now() - startMs;
+if (COLD_CACHE && bootMs < 150_000) {
+  console.error(`\nFAIL-FAST: boot_ms=${bootMs} < 150000 — model loaded from cache (cold-cache clear was ineffective). Re-run after full cold-cache clear.`);
+  process.exit(1);
+}
 console.log(`\n[+${bootMs}ms] Boot complete: ${bootComplete ? "YES" : "NO"}  arcState=${bootArcState}`);
 console.log(`   ARC invalid-transitions during boot: ${arcInvalidTransitions.length}`);
 if (arcInvalidTransitions.length) {
@@ -319,7 +326,7 @@ if (bootComplete) {
     // Fix: run without --no-reload. The harness reload (default) clears the GPU context.
     if (i === 0 && sceneChildrenBefore !== null && sceneChildrenBefore > 0) {
       console.error(`\nFAIL-FAST: T1 sceneChildrenBefore=${sceneChildrenBefore} (expected 0).`);
-      console.error(`Stale GPU scene from prior run. Re-run without --no-reload to reset.`);
+      console.error(`Stale GPU scene from prior run. Re-run with cold-cache (default) to reset.`);
       process.exit(1);
     }
 
