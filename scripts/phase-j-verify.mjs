@@ -179,8 +179,12 @@ window.__phase_j_turn_done=0;
 window.addEventListener('agent:turn-complete',function(e){
   var v=e.detail&&e.detail.verbs?e.detail.verbs:[];
   window.__phase_j_current.dispatchVerbs=v;
-  var l=window.__dispatchLedger;window.__dispatchLedger=[];
-  window.__phase_j_current.dispatchLedger=Array.isArray(l)?l:[];
+  // #1574: use offset-based capture — DO NOT reset __dispatchLedger.
+  // agent-context-augmentor.ts reads window.__dispatchLedger as the accumulating production
+  // source-of-truth for parent wall coordinates. Resetting it between turns meant the augmentor
+  // always found an empty ledger at injection time (H-FIRE-B). Fix: slice new entries by offset.
+  var all=window.__dispatchLedger||[];var prev=window.__phase_j_prev_len||0;var l=all.slice(prev);window.__phase_j_prev_len=all.length;
+  window.__phase_j_current.dispatchLedger=l;
   window.__phase_j_current.sceneChildrenAfter=window.__viewer&&window.__viewer.scene?window.__viewer.scene.children.length:null;
   window.__phase_j_turn_done++;
 });
