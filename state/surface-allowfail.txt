@@ -2,7 +2,6 @@ snap-cursor-vertex  # #484  camera-fit timing race: midpoint vs endpoint snap no
 demo-prompt-design-house  # #494  NL agent verb output nondeterministic: model sometimes omits IfcLevel/IfcSlab
 chat-plan-foldable  # #538  cascade from S54/S56 model latency timeouts; testMode fixes direct timeout but not UI-state contamination
 skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) populating scene; S54 skips on model latency timeout
-demo-cluster-flow  # #670  new surface — allow-fail until first green run confirms timing
 agent-verb-completeness  # #1527  requires on-device model (arc.state==='ready'); no model in CI
 on-device-agent-response  # #1581  true agent-path: sends to .chat-input, waits 60s for agent:turn-complete; no soft-skip; hard-fail without model
 fzk-haus-perception-rehearsal  # #1581  true agent-path: loads FZK IFC, sends perception prompt, waits 60s; no soft-skip; hard-fail without model
@@ -12,3 +11,9 @@ agent-build-and-export        # #1572  agent-path: full NL build+export pipeline
 agent-skill-rotated-invocation # #1572  agent-path: dynamic-import skill invoke requires model; hard-fail without model
 agent-invoke-skill            # #1572  agent-path: SdInvokeSkill dispatch check requires model session
 goal-mode-smoke               # #1572  agent-path: completeOk requires model to emit goal-complete signal
+ifc-import-renders            # #1572-stale  S13: file-input DataTransfer inject no longer triggers viewer:ifc-loaded after worker-based IFC refactor
+ifc-render-determinism        # #1572-stale  S14: cascade from ifc-import-renders; IFC load event never fires → 60s timeout guaranteed
+ifc-picker-activation         # #1572-stale  S30: cmdk IfcWall+Enter now activates creation tool, not entity picker; .picker-prompt.visible never set
+starter-library               # #1572-stale  S67: import('/src/skills/starter-clusters.ts') — TS source dynamic import fails on bundled deployments; needs Vite dev server
+two-story-house-chip          # #1572-stale  S70: .chat-starter-chip "Two-story house" chip removed per #471 PAUSED; chipLabels: []
+gable-trim-undo-roundtrip     # #1572-stale  S76: SdWall({x,y,length,direction}) — stale API; current schema uses profile/start/end; walls never placed
