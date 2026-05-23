@@ -1043,40 +1043,12 @@ registerHandler("SdDoor", (args) => {
   let hostObjDoor: THREE.Object3D | undefined = hostUuidDoor
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidDoor) ?? undefined
     : undefined;
-  // §#1516,#1546: auto-find nearest wall within 3 m when hostUuid absent.
-  // 2-pass: prefer walls on active level first (multi-storey buildings share XY wall centers).
-  if (!hostObjDoor) {
-    const posArr = args.position as number[] | undefined;
-    const doorXY = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, 0);
-    const activeLvlIdDoor = getActiveLevelId();
-    let minDist = 3;
-    viewer.forEachSceneChild((child) => {
-      const c = child.userData?.creator;
-      if (c !== "SdWall" && c !== "wall") return;
-      if (child.userData?.levelId !== activeLvlIdDoor) return;
-      const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
-      const dist = doorXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
-      if (dist < minDist) { minDist = dist; hostObjDoor = child; }
-    });
-    if (!hostObjDoor) {
-      minDist = 3;
-      viewer.forEachSceneChild((child) => {
-        const c = child.userData?.creator;
-        if (c !== "SdWall" && c !== "wall") return;
-        const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
-        const dist = doorXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
-        if (dist < minDist) { minDist = dist; hostObjDoor = child; }
-      });
-    }
-  }
-  const cplane = resolveCPlane("SdDoor", args as Record<string, unknown>, viewer, hostObjDoor);
-  const pos = args.position as number[] | undefined;
+  // Dimensions fixed by asset preset (#1678) — computed early so wall-find can use
+  // the door's expected world Z for 3-D distance (#1665).
   const elevation = getActiveLevelElevation();
-  const rawP = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
   const doorType = (args.doorType as string | undefined);
   let doorW: number;
   let doorH: number;
-  // Dimensions are fixed by asset preset — width/height args are blocked at dispatch (#1678).
   if (doorType === "front") {
     doorW = FZK_FRONT_DOOR_W;
     doorH = FZK_FRONT_DOOR_H;
@@ -1090,6 +1062,36 @@ registerHandler("SdDoor", (args) => {
     doorW = DEFAULT_DOOR_W;
     doorH = DEFAULT_DOOR_H;
   }
+  // §#1516,#1546,#1665: auto-find nearest wall within 3 m when hostUuid absent.
+  // 3-D distance from the door's expected world center selects the correct floor's
+  // wall even when levelId is absent (IFC walls). 2-pass: active level first.
+  if (!hostObjDoor) {
+    const posArr = args.position as number[] | undefined;
+    const doorRef = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, elevation + doorH / 2);
+    const activeLvlIdDoor = getActiveLevelId();
+    let minDist = 3;
+    viewer.forEachSceneChild((child) => {
+      const c = child.userData?.creator;
+      if (c !== "SdWall" && c !== "wall") return;
+      if (child.userData?.levelId !== activeLvlIdDoor) return;
+      const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
+      const dist = doorRef.distanceTo(wallCenter);
+      if (dist < minDist) { minDist = dist; hostObjDoor = child; }
+    });
+    if (!hostObjDoor) {
+      minDist = 3;
+      viewer.forEachSceneChild((child) => {
+        const c = child.userData?.creator;
+        if (c !== "SdWall" && c !== "wall") return;
+        const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
+        const dist = doorRef.distanceTo(wallCenter);
+        if (dist < minDist) { minDist = dist; hostObjDoor = child; }
+      });
+    }
+  }
+  const cplane = resolveCPlane("SdDoor", args as Record<string, unknown>, viewer, hostObjDoor);
+  const pos = args.position as number[] | undefined;
+  const rawP = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
   // §#1679: single placement rect — project click onto wall centerline (lc.y=0)
   // so mesh position and void center share the identical world XY origin.
   let p = rawP;
@@ -1137,11 +1139,20 @@ registerHandler("SdWindow", (args) => {
   let hostObjWin: THREE.Object3D | undefined = hostUuidWin
     ? viewer.getScene().getObjectByProperty("uuid", hostUuidWin) ?? undefined
     : undefined;
-  // §#1545: 2-pass auto-find nearest wall within 3 m when hostUuid absent.
-  // Pass 1 filters by active level to avoid XY-tie bug in multi-storey buildings.
+  // Dimensions fixed by asset preset (#1678) — computed early so wall-find can use
+  // the window's expected world Z for 3-D distance (#1665).
+  const elevation = getActiveLevelElevation();
+  const winType = (args.windowType as string | undefined);
+  const isOG = winType === "og";
+  const winW    = isOG ? FZK_OG_WINDOW_W : FZK_WINDOW_W;
+  const winH    = isOG ? FZK_OG_WINDOW_H : FZK_WINDOW_H;
+  const winSill = FZK_WINDOW_SILL;
+  // §#1545,#1665: auto-find nearest wall within 3 m when hostUuid absent.
+  // 3-D distance from the window's expected world center selects the correct floor's
+  // wall even when levelId is absent (IFC walls). 2-pass: active level first.
   if (!hostObjWin) {
     const posArr = args.position as number[] | undefined;
-    const winXY = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, 0);
+    const winRef = new THREE.Vector3(posArr?.[0] ?? 0, posArr?.[1] ?? 0, elevation + winSill + winH / 2);
     const activeLvlIdWin = getActiveLevelId();
     let minDist = 3;
     viewer.forEachSceneChild((child) => {
@@ -1149,7 +1160,7 @@ registerHandler("SdWindow", (args) => {
       if (c !== "SdWall" && c !== "wall") return;
       if (child.userData?.levelId !== activeLvlIdWin) return;
       const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
-      const dist = winXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
+      const dist = winRef.distanceTo(wallCenter);
       if (dist < minDist) { minDist = dist; hostObjWin = child; }
     });
     if (!hostObjWin) {
@@ -1158,20 +1169,14 @@ registerHandler("SdWindow", (args) => {
         const c = child.userData?.creator;
         if (c !== "SdWall" && c !== "wall") return;
         const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
-        const dist = winXY.distanceTo(new THREE.Vector3(wallCenter.x, wallCenter.y, 0));
+        const dist = winRef.distanceTo(wallCenter);
         if (dist < minDist) { minDist = dist; hostObjWin = child; }
       });
     }
   }
   const cplane = resolveCPlane("SdWindow", args as Record<string, unknown>, viewer, hostObjWin);
   const pos = args.position as number[] | undefined;
-  const elevation = getActiveLevelElevation();
   const rawP = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
-  const winType = (args.windowType as string | undefined);
-  const isOG = winType === "og";
-  const winW    = isOG ? FZK_OG_WINDOW_W : FZK_WINDOW_W;
-  const winH    = isOG ? FZK_OG_WINDOW_H : FZK_WINDOW_H;
-  const winSill = FZK_WINDOW_SILL;
   // §#1679: single placement rect — project click onto wall centerline (lc.y=0)
   // so mesh position and void center share the identical world XY origin.
   let p = rawP;
