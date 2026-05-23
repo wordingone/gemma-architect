@@ -1037,20 +1037,31 @@ export function buildRoof(
     ridgeBeam.visible = params.showStructure !== false;
     group.add(ridgeBeam);
 
-    // Eave purlins (Pfette) — FZK Pfette-1-1 and Pfette-2-1: 80mm × 160mm, at wall-plate level.
-    // IFC: Höhenangabe 3.36m = eave 3.2m + 0.16m beam height; cross-section 80×160mm (#40497/#37663).
+    // Pfette (eave purlins) — FZK Pfette-1-1 and Pfette-2-1: 80mm × 160mm cross-section.
+    // Positioned 0.5m inside the Dach slab from the eave edge so they sit enclosed
+    // within the slab volume (matches FZK relationship: Pfette Y ⊂ Dach Y range, #1639).
     const wallPlateLen = ridgeLenHalf * 2;
+    const pfetteInset = 0.5; // m from eave edge; slab spans from eave to ridge
+    const pfetteZ = pfetteInset * Math.tan(pitchRad) + 0.08; // height at inset point
     const wp1 = landscape
       ? member(wallPlateLen, 0.08, 0.16, frameMat.clone())
       : member(0.08, wallPlateLen, 0.16, frameMat.clone());
-    wp1.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, 0.08);
+    wp1.position.set(
+      landscape ? 0 : -(spanHalf - pfetteInset),
+      landscape ? -(spanHalf - pfetteInset) : 0,
+      pfetteZ,
+    );
     wp1.userData.ifcClass = "IfcBeam";
     wp1.userData.name = "Pfette";
     wp1.visible = params.showStructure !== false;
     group.add(wp1);
     const wp2 = wp1.clone();
     (wp2.material as THREE.Material) = (wp1.material as THREE.Material).clone();
-    wp2.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, 0.08);
+    wp2.position.set(
+      landscape ? 0 : (spanHalf - pfetteInset),
+      landscape ? (spanHalf - pfetteInset) : 0,
+      pfetteZ,
+    );
     wp2.userData.ifcClass = "IfcBeam";
     wp2.userData.name = "Pfette";
     wp2.visible = params.showStructure !== false;
@@ -1091,10 +1102,10 @@ export function buildRoof(
     group.add(soffitB);
 
     // Rafters — two slopes
-    // Interior-side offset: sheathing (25mm) sits on top of rafter (150mm deep).
-    // Rafter center must be inward from sheathing center by sheathThick/2 + rafterD/2
+    // Interior-side offset: slope deck (IfcSlab "Dach", 150mm) sits on top of rafter (150mm deep).
+    // Rafter center must be inward from slab center by sheathThick/2 + rafterD/2
     // along the slope's interior normal: (sin(pitch), -cos(pitch)) in (span, Z) axes.
-    const sheathThick = 0.025;
+    const sheathThick = 0.15; // 150mm structural slope deck (IfcSlab "Dach"); was 25mm IfcCovering sheathing (#1639)
     const rafterInset = sheathThick / 2 + rafterD / 2; // 0.0875m
     for (let i = 0; i < nRafters; i++) {
       const axialPos = -ridgeLenHalf + i * (ridgeLenHalf * 2 / (nRafters - 1));
@@ -1124,14 +1135,16 @@ export function buildRoof(
       group.add(rfB);
     }
 
-    // Sheathing: local Y aligns with slope direction → rotation = pitchRad (not slopeRx).
+    // Slope deck panels (IfcSlab "Dach") — FZK reference: 2× IFCSLAB enclosing Pfette + Sparren (#1639).
+    // local Y aligns with slope direction → rotation = pitchRad (not slopeRx).
     // slopeRx (π/2+pitch) is correct for rafters (local Z = length) but wrong for
-    // sheathing (local Y = slope length). With rotation.x = pitchRad, local Y →
+    // the slab (local Y = slope length). With rotation.x = pitchRad, local Y →
     // (0, cos(pitch), sin(pitch)) = slope direction; eave/ridge endpoints verified.
     const sheathA = landscape
-      ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, rafterLen, 0.025), sheathMat.clone())
-      : new THREE.Mesh(new THREE.BoxGeometry(rafterLen, ridgeLenHalf * 2, 0.025), sheathMat.clone());
-    sheathA.userData.ifcClass = "IfcCovering";
+      ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, rafterLen, sheathThick), sheathMat.clone())
+      : new THREE.Mesh(new THREE.BoxGeometry(rafterLen, ridgeLenHalf * 2, sheathThick), sheathMat.clone());
+    sheathA.userData.ifcClass = "IfcSlab";
+    sheathA.userData.name = "Dach";
     if (landscape) {
       sheathA.rotation.x = pitchRad;
       sheathA.position.set(0, -spanHalf / 2, rH / 2);
@@ -1143,6 +1156,7 @@ export function buildRoof(
 
     const sheathB = sheathA.clone();
     (sheathB.material as THREE.Material) = (sheathA.material as THREE.Material).clone();
+    sheathB.userData.name = "Dach";
     if (landscape) {
       sheathB.rotation.x = -pitchRad;
       sheathB.position.set(0, spanHalf / 2, rH / 2);
