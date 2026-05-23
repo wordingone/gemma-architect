@@ -349,7 +349,10 @@ registerHandler("SdExport", (args) => {
   if (!fmt) return { error: "format required (ifc|ifc4|glb|gltf|obj|stl|3dm|dwg|step|svg|dxf|pdf|usdz)" };
   // Skip real download in test mode to prevent file pollution in Downloads.
   if ((window as unknown as { __testMode?: boolean }).__testMode) return { ok: true, format: fmt, testMode: true };
-  handleExport(fmt).catch((e) => console.warn("[SdExport]", e));
+  handleExport(fmt).catch((e) => {
+    console.warn("[SdExport]", e);
+    setStatus(`Export failed: ${String((e as Error)?.message ?? e)}`, "warn");
+  });
   return { ok: true, format: fmt };
 });
 
