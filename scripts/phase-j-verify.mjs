@@ -257,20 +257,36 @@ if (!NO_RELOAD) {
         `document.querySelector('#model-consent-overlay #consent-approve') !== null`,
       );
       if (visible === true) {
-        // Use MouseEvent dispatch (not .click()) — CDP Runtime.evaluate context
-        // doesn't deliver .click() to addEventListener handlers reliably. See #1580.
-        await evaluate(
-          `document.querySelector('#model-consent-overlay #consent-approve').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); "clicked"`,
+        // #1603: dispatchEvent(MouseEvent) from Runtime.evaluate does NOT reliably trigger
+        // addEventListener('click') — overlay stays in DOM, onApprove() never called.
+        // Fix: use CDP Input.dispatchMouseEvent at button coordinates (isTrusted=true,
+        // goes through full browser event pipeline, not JS dispatch).
+        const rectJson = await evaluate(
+          `JSON.stringify(document.querySelector('#model-consent-overlay #consent-approve').getBoundingClientRect().toJSON())`,
         );
-        consentAutoClicked = true;
-        harnessTimings.consent_clicked_ms = Date.now() - startMs;
-        console.log(`[+${Date.now()-startMs}ms] Consent overlay dismissed (auto-clicked #consent-approve)`);
-        break;
+        const rect = typeof rectJson === "string" ? JSON.parse(rectJson) : rectJson;
+        const cx = Math.round(rect.left + rect.width / 2);
+        const cy = Math.round(rect.top + rect.height / 2);
+        await cdp("Input.dispatchMouseEvent", { type: "mouseMoved", x: cx, y: cy, button: "none" });
+        await delay(50);
+        await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: cx, y: cy, button: "left", clickCount: 1, buttons: 1 });
+        await delay(50);
+        await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: cx, y: cy, button: "left", clickCount: 1 });
+        await delay(500);
+        // Verify overlay was actually dismissed — if still present, loop continues to retry.
+        const stillVisible = await evaluate(`document.querySelector('#model-consent-overlay') !== null`);
+        if (!stillVisible) {
+          consentAutoClicked = true;
+          harnessTimings.consent_clicked_ms = Date.now() - startMs;
+          console.log(`[+${Date.now()-startMs}ms] Consent overlay dismissed (CDP Input.dispatchMouseEvent at ${cx},${cy})`);
+          break;
+        }
+        console.log(`[+${Date.now()-startMs}ms] WARN: overlay persists after click at (${cx},${cy}) — retrying`);
       }
       await delay(1000);
     }
     if (!consentAutoClicked) {
-      console.log(`[+${Date.now()-startMs}ms] No consent overlay detected (cache may not have been fully cleared — check boot_ms)`);
+      console.log(`[+${Date.now()-startMs}ms] WARN: consent overlay not dismissed — model boot will fail (check #1603)`);
     }
   } else {
     console.log(`\n[+${0}ms] Reloading Pages tab (soft — preserves Cache API model weights)...`);
