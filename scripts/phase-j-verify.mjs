@@ -421,6 +421,33 @@ if (WASM_COHORT && !NO_RELOAD) {
   }
 }
 
+// ── §#1638: inject progress poller for wasm-cohort second boot ────────────────
+// Polls #boot-progress-bar aria-valuenow at 1Hz and collects label transitions.
+// Retrieved after boot-complete; used to compute progress_bar_monotonic receipt field.
+if (WASM_COHORT) {
+  await evaluate(`
+    window.__progressPoll = { series: [], labels: [] };
+    (function startPoll() {
+      const tick = () => {
+        const bar = document.getElementById('boot-progress-bar');
+        if (bar) {
+          const v = parseInt(bar.getAttribute('aria-valuenow') || '0', 10);
+          window.__progressPoll.series.push(v);
+        }
+        const lbl = document.querySelector('#boot-status-label, .__status-lbl');
+        if (lbl && lbl.textContent) {
+          const t = lbl.textContent.trim();
+          const last = window.__progressPoll.labels[window.__progressPoll.labels.length - 1];
+          if (t && t !== last) window.__progressPoll.labels.push(t);
+        }
+      };
+      tick(); // immediate first sample
+      window.__progressPollInterval = setInterval(tick, 1000);
+    })();
+  `).catch(() => null);
+  console.log(`[+${Date.now()-startMs}ms] [wasm-cohort] Progress poller armed`);
+}
+
 // ── Wait for model ready ───────────────────────────────────────────────────────
 
 console.log(`[+${Date.now()-startMs}ms] Waiting for model ready (window.__arc.state==='ready')...`);
@@ -714,6 +741,17 @@ if (pageCompactEvents.length > 0) {
 // §#1637: must run before ws.close(). Gate: boot_capability_modal_shown must be false for dgpu users.
 const bootCapabilityModalShown = await evaluate(`document.querySelector('.bcg-modal') !== null`).catch(() => null);
 
+// §#1638: collect progress poll data (wasm-cohort second boot only).
+// Computes monotonicity of the bar during warm-cache OPFS boot.
+let _progressPollData = null;
+if (WASM_COHORT) {
+  await evaluate(`if (window.__progressPollInterval) { clearInterval(window.__progressPollInterval); window.__progressPollInterval = null; }`).catch(() => null);
+  const _rawPoll = await evaluate(`JSON.stringify(window.__progressPoll ?? null)`).catch(() => null);
+  if (_rawPoll && typeof _rawPoll === 'string') {
+    try { _progressPollData = JSON.parse(_rawPoll); } catch { _progressPollData = null; }
+  }
+}
+
 // #1608: T1-only mode — position camera at SE 3/4 for /visual-check capture
 if (T1_ONLY) {
   console.log(`[+${Date.now()-startMs}ms] t1-only: positioning camera at SE 3/4 for /visual-check...`);
@@ -882,16 +920,32 @@ const receipt = {
   // §#1637: populated before ws.close() — see bootCapabilityModalShown variable above.
   boot_capability_modal_shown: bootCapabilityModalShown,
   // §#1637 wasm-cohort fields (null when not in wasm-cohort mode)
-  wasm_cohort: WASM_COHORT ? {
-    boot_capability_modal_shown: _wasmCohort.modalShown,
-    boot_capability_modal_choice: _wasmCohort.choice,
-    boot_tier: _wasmCohort.choice === 'wasm-fallback' ? 'tier_1' : _wasmCohort.choice === 'cad-only' ? 'tier_4' : null,
-    wasm_ep_boot_url: _wasmCohort.navUrl,
-    wasm_ep_backend_active: _wasmCohort.choice === 'wasm-fallback' && bootComplete,
-    t1_wasm_dispatch_count: turn1DispatchCount,
-    // Pass: modal shown + Path 2 chosen + WASM EP boot complete + T1 dispatches ≥ 1
-    wasm_cohort_passed: _wasmCohort.modalShown && _wasmCohort.choice === 'wasm-fallback' && bootComplete && turn1DispatchCount >= 1,
-  } : null,
+  wasm_cohort: WASM_COHORT ? (() => {
+    // §#1638: compute progress bar monotonicity from poller series
+    const _series = _progressPollData?.series ?? [];
+    let _pbMonotonic = _series.length > 0;
+    let _pbMaxThenDecreased = null;
+    for (let _si = 1; _si < _series.length; _si++) {
+      if (_series[_si] < _series[_si - 1]) {
+        _pbMonotonic = false;
+        _pbMaxThenDecreased = _pbMaxThenDecreased === null ? _series[_si - 1] : Math.max(_pbMaxThenDecreased, _series[_si - 1]);
+      }
+    }
+    return {
+      boot_capability_modal_shown: _wasmCohort.modalShown,
+      boot_capability_modal_choice: _wasmCohort.choice,
+      boot_tier: _wasmCohort.choice === 'wasm-fallback' ? 'tier_1' : _wasmCohort.choice === 'cad-only' ? 'tier_4' : null,
+      wasm_ep_boot_url: _wasmCohort.navUrl,
+      wasm_ep_backend_active: _wasmCohort.choice === 'wasm-fallback' && bootComplete,
+      t1_wasm_dispatch_count: turn1DispatchCount,
+      // §#1638: progress bar monotonicity fields (warm-cache OPFS second boot)
+      progress_bar_monotonic: _series.length > 0 ? _pbMonotonic : null,
+      progress_bar_max_pct_observed_then_decreased: _pbMaxThenDecreased,
+      boot_state_label_sequence_observed: _progressPollData?.labels ?? null,
+      // Pass: modal shown + Path 2 chosen + WASM EP boot complete + T1 dispatches ≥ 1
+      wasm_cohort_passed: _wasmCohort.modalShown && _wasmCohort.choice === 'wasm-fallback' && bootComplete && turn1DispatchCount >= 1,
+    };
+  })() : null,
 };
 writeFileSync(outFile, JSON.stringify(receipt, null, 2));
 console.log(`\nReceipt: ${outFile}`);

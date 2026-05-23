@@ -65,6 +65,9 @@ let _watchdogId: ReturnType<typeof setTimeout> | null = null;
 let _firstLoadingReceived = false;
 let _stalledShown = false;
 let _stallCount = 0;   // incremented each time _showStalled fires; exposed as window.__boot_stall_count
+// §#1638: monotonic guard — progress bar value never decreases.
+// Prevents model_init/warmup events from resetting the bar after returning-user or opfs-warm-start.
+let _lastRenderedPct = 0;
 
 // Storage quota state — set at boot-complete via navigator.storage.estimate()
 let _quotaEl: HTMLDivElement | null = null;
@@ -220,6 +223,18 @@ function _wireEvents(): void {
     _updateProgress();
   });
 
+  // §#1638: OPFS warm-load started — advance bar to 50% floor without READY snap.
+  // model_init/warmup events continue normally from 50%+ (monotonic guard holds the floor).
+  window.addEventListener('agentmodel:opfs-warm-start', () => {
+    _traceEvent('opfs-warm-start');
+    _lastRenderedPct = 50;
+    if (_pctEl) _pctEl.textContent = '50%';
+    if (_barFill) {
+      _barFill.style.width = '50%';
+      _barFill.setAttribute('aria-valuenow', '50');
+    }
+    if (_hintEl) _hintEl.style.opacity = '0';
+  }, { once: true });
   window.addEventListener('agentmodel:returning-user', () => {
     _traceEvent('returning-user');
     _onReturningUser();
@@ -265,6 +280,8 @@ function _tick(): void {
 
 function _updateProgress(): void {
   if (_done || !_pctEl) return;
+  // §#1638: returning-user snapped to 100%/READY; model_init/warmup events must not override.
+  if (_isReturningUser) return;
 
   // Phase-based progress (#1425): each boot phase maps to a sub-range of 0-100%.
   // Within each phase, progress is bytes-based (download, drafter) or time-based (rest).
@@ -293,8 +310,14 @@ function _updateProgress(): void {
     pct = Math.min(phaseStart + elapsed * rate, phaseEnd - 1);
   }
 
+  // §#1638: monotonic guard — clamp to observed maximum so opfs-warm-start 50% floor holds.
+  pct = Math.max(pct, _lastRenderedPct);
+  _lastRenderedPct = pct;
   _pctEl.textContent = pct > 0 ? `${Math.round(pct)}%` : '';
-  if (_barFill) _barFill.style.width = `${pct}%`;
+  if (_barFill) {
+    _barFill.style.width = `${pct}%`;
+    _barFill.setAttribute('aria-valuenow', String(Math.round(pct)));
+  }
 
   // Hide first-visit hint once loading starts
   if (pct > 0 && _hintEl) _hintEl.style.opacity = '0';
@@ -558,6 +581,12 @@ function _buildOverlay(): void {
     overflow: 'hidden',
   });
   const barFill = document.createElement('div');
+  // §#1638: id + aria-valuenow for harness progress polling (phase-j-verify.mjs --cold-cache-wasm-cohort)
+  barFill.id = 'boot-progress-bar';
+  barFill.setAttribute('role', 'progressbar');
+  barFill.setAttribute('aria-valuenow', '0');
+  barFill.setAttribute('aria-valuemin', '0');
+  barFill.setAttribute('aria-valuemax', '100');
   Object.assign(barFill.style, {
     height: '100%',
     background: '#4ca6ff',
@@ -610,7 +639,9 @@ function _buildOverlay(): void {
   progress.appendChild(etaEl);
 
   // Status line (hidden by default; shown on READY or ERROR)
+  // §#1638: id for progress poller label tracking (phase-j-verify.mjs wasm-cohort)
   const statusEl = document.createElement('div');
+  statusEl.id = 'boot-status-label';
   Object.assign(statusEl.style, {
     display: 'none',
     fontSize: 'clamp(10px, 1.0vw, 14px)',

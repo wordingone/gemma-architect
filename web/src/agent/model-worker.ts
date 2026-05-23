@@ -9,7 +9,8 @@
 //   {type:"abort", turnId}
 //
 // Protocol (worker → main):
-//   {type:"returning-user"}                  // cached weights detected before download
+//   {type:"returning-user"}                  // cached weights detected in Cache API before download
+//   {type:"opfs-warm-start"}                  // §#1638: OPFS cache hit — advance bar to 50%, no READY snap
 //   {type:"manifest",    totalBytesExpected}  // total expected bytes across all files
 //   {type:"progress",    phase, file, bytes, total, throughputBytesPerSec, progress?}
 //   {type:"model-ready", device}
@@ -267,12 +268,12 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
             const file = await fh.getFile();
             const buf = await file.arrayBuffer();
             _modelLoadSource = "opfs-cache";
-            // §#1630-B: first OPFS cache hit — post returning-user so boot-screen snaps
-            // progress bar to READY. checkReturningUser() only probed Cache API; this is the
-            // OPFS-warm-load equivalent of that signal. The overlay stays until boot-complete.
+            // §#1638: first OPFS cache hit — advance bar to 50% floor without READY snap.
+            // posting "returning-user" here raced with model_init/warmup events (bar 100% → reset).
+            // boot-screen's monotonic guard holds 50% as floor; actual phases continue from there.
             if (!_opfsReturningUserPosted) {
               _opfsReturningUserPosted = true;
-              post({ type: "returning-user" });
+              post({ type: "opfs-warm-start" });
             }
             return new Response(buf, {
               headers: { "Content-Type": "application/octet-stream", "Content-Length": String(buf.byteLength) },
