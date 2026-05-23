@@ -1165,9 +1165,9 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
         : `Model failed to load — ${_arc.modelLoadError}. Try refreshing or check the browser console for details.`
     );
   }
-  if (!_arc.bootComplete) {
-    throw new Error("Model is still loading — please wait a moment and try again.");
-  }
+  // §#1666-NEVER: !bootComplete guard removed — structurally unreachable post-boot.
+  // _recyclePending class-field in chat-panel.ts blocks chip/send during recycle window;
+  // boot-complete handler is sole authority to clear. See PR #1673.
 
   // ── On-device path via Web Worker (#936) ─────────────────────────────────
   // Worker owns: from_pretrained, WebGPU probe, warmup, drafter load, tokenization,

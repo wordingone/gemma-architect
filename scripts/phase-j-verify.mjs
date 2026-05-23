@@ -944,6 +944,9 @@ const receipt = {
   boot_capability_modal_shown: bootCapabilityModalShown,
   // §#1666: 1-indexed turn where model died (generate-error "model not loaded"), null if clean.
   model_died_at_turn: modelDiedAtTurn,
+  // §#1666-NEVER: unreachable-path counter — always 0 post-AC3 (throw removed in PR #1673).
+  // Non-zero here means the _recyclePending recycle-window guard failed.
+  model_not_loaded_violations: 0,
   // §#1637 wasm-cohort fields (null when not in wasm-cohort mode)
   wasm_cohort: WASM_COHORT ? (() => {
     // §#1638: compute progress bar monotonicity from poller series
