@@ -77,7 +77,7 @@ From IFC quantities (verified, not estimated):
 
 ### Remaining gaps vs FZK (deferred)
 
-- **§B — Pfette enclosure**: FZK Pfette sits inside Dach slab Y-volume (mid-slope). Ours is at eave edge for visibility (#1650 interim fix). IFC enclosure relationship deferred to #1639 §B pass; gated on #1658 design decision.
+- **§B — Pfette enclosure**: FZK Pfette sits inside Dach slab Y-volume (mid-slope). Ours is at eave edge for visibility (#1650 interim fix). IFC enclosure relationship deferred to #1639 §B pass; design decision tracked in #1671 (IFC accuracy vs visibility trade-off).
 - **§D — IfcCovering strips**: 4 fascia/soffit pieces not in FZK. Removal pending visual-quality decision.
 - **§E — Sparren count**: 23/slope vs FZK 21/slope. Minor; not blocking.
 
