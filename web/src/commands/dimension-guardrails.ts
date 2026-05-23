@@ -74,23 +74,39 @@ export function checkFtToMBleed(
   promptLiteral: string,
 ): string | null {
   if (canonical !== "SdWall") return null;
+  const literals = extractMetricLiterals(promptLiteral);
+
+  // Length guard: profile endpoint-to-endpoint distance
   const profile = args.profile as [number, number][] | undefined;
-  if (!Array.isArray(profile) || profile.length < 2) return null;
-
-  const len = wallProfileLength(profile);
-  if (len === null) return null;
-
-  // Suspicious range: 0.3 m (= 1 ft) to 4.6 m (≈ 15 ft)
-  if (len < 0.3 || len > 4.6) return null;
-
-  for (const n of extractMetricLiterals(promptLiteral)) {
-    const expectedIfFt = n * FT_TO_M;
-    const relErr = Math.abs(expectedIfFt - len) / Math.max(expectedIfFt, 0.001);
-    if (relErr < 0.05) {
-      const feetVal = Math.round(len / FT_TO_M);
-      return `Wall length ${len.toFixed(2)}m looks like ${feetVal} feet converted to metres. Re-emit using metric dimensions.`;
+  if (Array.isArray(profile) && profile.length >= 2) {
+    const len = wallProfileLength(profile);
+    // Suspicious range: 0.3 m (= 1 ft) to 4.6 m (≈ 15 ft)
+    if (len !== null && len >= 0.3 && len <= 4.6) {
+      for (const n of literals) {
+        const expectedIfFt = n * FT_TO_M;
+        const relErr = Math.abs(expectedIfFt - len) / Math.max(expectedIfFt, 0.001);
+        if (relErr < 0.05) {
+          const feetVal = Math.round(len / FT_TO_M);
+          return `Wall length ${len.toFixed(2)}m looks like ${feetVal} feet converted to metres. Re-emit using metric dimensions.`;
+        }
+      }
     }
   }
+
+  // Height guard: args.height (number, in metres)
+  // Suspicious range: 0.3 m (= 1 ft) to 3.7 m (≈ 12 ft) — covers typical residential storeys
+  const height = typeof args.height === "number" ? args.height : null;
+  if (height !== null && height >= 0.3 && height <= 3.7) {
+    for (const n of literals) {
+      const expectedIfFt = n * FT_TO_M;
+      const relErr = Math.abs(expectedIfFt - height) / Math.max(expectedIfFt, 0.001);
+      if (relErr < 0.05) {
+        const feetVal = Math.round(height / FT_TO_M);
+        return `Wall height ${height.toFixed(2)}m looks like ${feetVal} feet converted to metres. Re-emit using metric dimensions.`;
+      }
+    }
+  }
+
   return null;
 }
 
