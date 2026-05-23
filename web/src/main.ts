@@ -66,7 +66,8 @@ import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "./history";
 import { csgUnion, csgDifference, csgIntersection, filletMesh, chamferEdge, getUniqueEdges } from "./viewer/csg";
-import { registerHandler, dispatch, dispatchSync, installDefaultHandlers, registerRuntimeAlias } from "./commands/dispatch";
+import { registerHandler, dispatch, dispatchSync, installDefaultHandlers, registerRuntimeAlias, registerPostDispatch } from "./commands/dispatch";
+import { sceneStoreSave, sceneStoreLoad, sceneStoreClear } from "./io/scene-store";
 import { registerGoalHandlers } from "./agent/goal-handlers";
 import { listClusters, getClusterByName, listCanvasClusters, type SkillClusterStep } from "./skills/skill-store";
 import { STARTER_LIBRARY } from "./skills/starter-library";
@@ -2924,6 +2925,7 @@ function spawnWorker(): void {
       setStatus("OpenCascade ready.", "info");
       pendingRuns.forEach((fn) => fn());
       pendingRuns.length = 0;
+      initSceneRestore();
       return;
     }
 
@@ -3644,6 +3646,57 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     openExportDrawer();
   }
 });
+// ── IDB auto-save + restore-last-session prompt ──────────────────────────
+// Saves dispatch-created geometry to IndexedDB after each successful dispatch
+// (debounced 2s) and every 60s as a heartbeat. On boot (after OCCT ready),
+// if IDB has a prior scene and the current scene is empty, offers restore.
+function _hasUserContent(): boolean {
+  return viewer
+    .getScene()
+    .children.some((c) => (c as any).userData?.creator && (c as any).userData.creator !== "IfcLevel");
+}
+
+let _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function _triggerAutoSave(): void {
+  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async () => {
+    try {
+      const data = viewer.exportScene();
+      if (data.length > 0) await sceneStoreSave(data);
+      else await sceneStoreClear();
+    } catch { /* quota or IDB error — non-fatal */ }
+  }, 2000);
+}
+
+registerPostDispatch(() => { _triggerAutoSave(); });
+
+setInterval(() => {
+  if (_hasUserContent()) sceneStoreSave(viewer.exportScene()).catch(() => {});
+}, 60_000);
+
+async function initSceneRestore(): Promise<void> {
+  try {
+    const saved = await sceneStoreLoad();
+    if (!saved || !Array.isArray(saved) || saved.length === 0) return;
+    if (_hasUserContent()) return; // scene already populated — skip restore offer
+    const prompt = document.getElementById("restore-prompt") as HTMLElement | null;
+    if (!prompt) return;
+    prompt.hidden = false;
+    document.getElementById("restore-btn")?.addEventListener("click", async () => {
+      prompt.hidden = true;
+      try {
+        viewer.importScene(saved as Parameters<typeof viewer.importScene>[0]);
+        await sceneStoreClear();
+        setStatus("Session restored.", "ok");
+      } catch { setStatus("Restore failed.", "err"); }
+    }, { once: true });
+    document.getElementById("restore-discard-btn")?.addEventListener("click", async () => {
+      prompt.hidden = true;
+      await sceneStoreClear().catch(() => {});
+    }, { once: true });
+  } catch { /* IDB unavailable — non-fatal */ }
+}
+
 // Warn before reload/close if user has dispatch-created geometry (no auto-save).
 // Skips IFC-loaded content — those lack userData.creator and survive a reload via re-open.
 window.addEventListener("beforeunload", (e: BeforeUnloadEvent) => {
