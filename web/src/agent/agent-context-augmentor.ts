@@ -89,12 +89,17 @@ export function buildContextAugmentation(
   }
 
   if (semantic.kind === "standalone_metric") {
-    const literals = semantic.metricLiterals.join(", ");
+    const lines = semantic.metricLiterals.map((lit) => {
+      const num = parseFloat(lit);
+      const correct = num.toFixed(1);
+      const wrong = (num * 0.3048).toFixed(3);
+      return `  "${lit}" → use ${correct} (NOT ${wrong}, which is the ft→m conversion of ${num}ft)`;
+    });
     return (
-      `[CONTEXT] Metric literals detected in this prompt: ${literals}. ` +
-      `These are already in metres — pass through DIRECTLY as numeric values (e.g. "12m" → 12.0, "1m" → 1.0). ` +
-      `Do NOT apply ft→m (×0.3048) conversion. CONTINUATION UNIT RULE: only explicit "ft" or foot notation ` +
-      `receives ft→m conversion. Prior turns used feet-converted-to-metres; this turn's literals are metres.\n`
+      `USER METRIC LITERALS — DO NOT CONVERT:\n` +
+      `${lines.join("\n")}\n` +
+      `The user's "Xm" values are already in metres; pass them through as-is. ` +
+      `Do NOT apply ft→m (×0.3048) to any value in this prompt.\n`
     );
   }
 
