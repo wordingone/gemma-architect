@@ -1152,6 +1152,41 @@ export function buildRoof(
     }
     group.add(sheathB);
 
+    // Gable-end triangle infill — closes the short ends from ridge to wall-top.
+    // One triangle per end; DoubleSide so both interior/exterior faces are lit.
+    const gableEndMat = (sheathMat.clone() as THREE.MeshStandardMaterial);
+    gableEndMat.side = THREE.DoubleSide;
+
+    for (const sign of [-1, 1]) {
+      let verts: Float32Array;
+      if (landscape) {
+        // Gable ends at x = ±ridgeLenHalf; triangle lies in YZ-plane.
+        const x = sign * ridgeLenHalf;
+        verts = new Float32Array([
+          x, -spanHalf, 0,   // eave left
+          x,  spanHalf, 0,   // eave right
+          x,          0, rH, // apex (ridge end)
+        ]);
+      } else {
+        // Gable ends at y = ±ridgeLenHalf; triangle lies in XZ-plane.
+        const y = sign * ridgeLenHalf;
+        verts = new Float32Array([
+          -spanHalf, y, 0,   // eave left
+           spanHalf, y, 0,   // eave right
+                  0, y, rH, // apex (ridge end)
+        ]);
+      }
+      const gGeom = new THREE.BufferGeometry();
+      gGeom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+      // Winding CCW from outside face → correct normal direction per sign.
+      gGeom.setIndex(sign > 0 ? [0, 1, 2] : [0, 2, 1]);
+      gGeom.computeVertexNormals();
+      const gable = new THREE.Mesh(gGeom, gableEndMat.clone());
+      gable.userData.ifcClass = "IfcRoof";
+      gable.userData.name = "GableEnd";
+      group.add(gable);
+    }
+
   }
 
   const chain = `const roof = buildSectionRoof(${round(w)}, ${round(d)}, { type:"${roofType}", pitchDeg:${round(pitchDeg)}, overhang:${round(overhang)} }).translate([${round(cx)}, ${round(cy)}, 0]);`;
