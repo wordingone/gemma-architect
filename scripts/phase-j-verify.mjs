@@ -363,20 +363,18 @@ if (bootComplete) {
     const preConsoleErrorIdx = consoleErrors.length;
     const preArcInvalidCount = arcInvalidTransitions.length;
 
-    // §Option C (Leo mail #10199): fail-fast at T1 if stale scene detected.
-    // sceneBefore>0 on T1 means a prior Phase J run left GPU-resident geometry.
-    // This causes D3D12_OOM cascade → model produces NL-only, making the receipt invalid.
-    // Fix: run without --no-reload. The harness reload (default) clears the GPU context.
-    // Cold-cache mode exemption: page was just navigated — stale GPU is impossible.
-    // Non-zero sceneChildrenBefore in cold mode means app auto-loaded initial content; log but proceed.
-    if (i === 0 && sceneChildrenBefore !== null && sceneChildrenBefore > 0) {
-      if (COLD_CACHE) {
-        console.warn(`  ⚠ T1 sceneChildrenBefore=${sceneChildrenBefore} on cold boot — app auto-loaded initial content. Proceeding.`);
-      } else {
-        console.error(`\nFAIL-FAST: T1 sceneChildrenBefore=${sceneChildrenBefore} (expected 0).`);
-        console.error(`Stale GPU scene from prior run. Re-run with cold-cache (default) to reset.`);
-        process.exit(1);
-      }
+    // §Option C (Leo mail #10199): fail-fast at T1 if stale user content detected.
+    // Applies only in --no-reload mode (COLD_CACHE/warm both navigate/reload the page).
+    // Infrastructure baseline: ~13 children (lights, grid, axes, labels, gizmos, cplane).
+    // Stale user content: sceneChildrenBefore > 20 in no-reload mode means prior Phase J run
+    // left GPU-resident geometry, causing D3D12_OOM cascade → model produces NL-only.
+    if (i === 0 && NO_RELOAD && sceneChildrenBefore !== null && sceneChildrenBefore > 20) {
+      console.error(`\nFAIL-FAST: T1 sceneChildrenBefore=${sceneChildrenBefore} > infra baseline (~13).`);
+      console.error(`Stale user geometry from prior run in --no-reload mode. Re-run without --no-reload.`);
+      process.exit(1);
+    }
+    if (i === 0 && sceneChildrenBefore !== null) {
+      console.log(`  T1 scene baseline: ${sceneChildrenBefore} children (infra: lights+grid+axes+gizmos~13)`);
     }
 
     // §#1531: Force prompt mode before each turn — Storage.clearDataForOrigin does NOT clear
