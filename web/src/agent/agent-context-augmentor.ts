@@ -51,10 +51,24 @@ function detectSemantic(prompt: string): PromptSemantic {
   return { kind: "none" };
 }
 
+function pairM(v: number): string {
+  if (v === 0) return "0";
+  const wrong = (v * 0.3048).toFixed(4);
+  return `${v.toFixed(4)}m(METRES;NOT_${wrong})`;
+}
+
 function formatWallLine(wall: WallEntry): string {
   const [[x1, y1], [x2, y2]] = wall.profile;
-  const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2).toFixed(3);
-  return `  [[${x1},${y1}],[${x2},${y2}]] length=${len}m height=${wall.height.toFixed(2)}m`;
+  const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  const lenM = len.toFixed(4);
+  const lenWrong = (len * 0.3048).toFixed(4);
+  const hM = wall.height.toFixed(4);
+  const hWrong = (wall.height * 0.3048).toFixed(4);
+  return (
+    `  profile=[[${pairM(x1)},${pairM(y1)}],[${pairM(x2)},${pairM(y2)}]]` +
+    ` length=${lenM}m (METRES; NOT ${lenWrong} which would be the ft→m conversion of ${lenM}ft)` +
+    ` height=${hM}m (METRES; NOT ${hWrong} which would be the ft→m conversion of ${hM}ft)`
+  );
 }
 
 /**
