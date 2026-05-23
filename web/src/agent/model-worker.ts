@@ -328,6 +328,47 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       const adapter = await (nav.gpu as any).requestAdapter({ powerPreference: "high-performance" })
         .catch(() => null);
       if (adapter) {
+        // §#1627-A: adapter fingerprint — classify GPU class before device acquisition.
+        // Emits one console.log + one phase_timing on every load (cold + warm) so any
+        // user-shared console log carries the vendor/arch/classification discriminator
+        // needed to diagnose cross-device parity issues (#1497 root cause).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const _adInfo = (adapter as any).info ?? {};
+        const _adVendor = String(_adInfo.vendor ?? "").toLowerCase();
+        const _adArch   = String(_adInfo.architecture ?? "").toLowerCase();
+        const _adIsFallback = !!(adapter as any).isFallbackAdapter;
+        const _adMaxBufferMB = Math.round(
+          ((adapter as any).limits?.maxBufferSize ?? 0) / (1024 * 1024)
+        );
+        let _adClass: "dgpu" | "igpu" | "software" | "unknown";
+        if (_adIsFallback) {
+          _adClass = "software";
+        } else if (
+          _adVendor === "intel" &&
+          (_adArch.startsWith("gen-") || _adArch.includes("iris") || _adArch.includes("uhd") || _adArch.includes("xe-lp"))
+        ) {
+          _adClass = "igpu";
+        } else if (_adVendor === "amd" && (_adArch.includes("vega-igpu") || _adArch.includes("gfx10-igpu"))) {
+          _adClass = "igpu";
+        } else if (_adVendor === "apple") {
+          _adClass = "igpu"; // unified memory — iGPU class for memory-pressure purposes
+        } else if (_adVendor === "") {
+          _adClass = "unknown";
+        } else {
+          _adClass = "dgpu";
+        }
+        const _adFingerprint = {
+          vendor: (_adInfo.vendor as string | undefined) ?? null,
+          architecture: (_adInfo.architecture as string | undefined) ?? null,
+          device: ((_adInfo.description ?? _adInfo.device) as string | undefined) ?? null,
+          maxBufferMB: _adMaxBufferMB,
+          isFallback: _adIsFallback,
+          classification: _adClass,
+        };
+        console.log(
+          `[#1627] adapter vendor=${_adFingerprint.vendor ?? "?"} architecture=${_adFingerprint.architecture ?? "?"} device='${_adFingerprint.device ?? ""}' maxBuffer=${_adMaxBufferMB}MB isIntegrated=${_adClass === "igpu" || _adClass === "software"} classification=${_adClass}`
+        );
+        post({ type: "phase_timing", phase: "adapter_fingerprint", elapsed_ms: Date.now() - _workerStartMs, adapter_info: _adFingerprint });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         _preAcquiredGpuDevice = await (adapter as any).requestDevice().catch(() => null) as GPUDevice | null;
         if (_preAcquiredGpuDevice) {
