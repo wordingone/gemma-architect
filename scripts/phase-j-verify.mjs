@@ -41,9 +41,9 @@ const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retr
 const STARTER_PROMPTS = [
   "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
   "What's currently in the scene?",
-  "Add a single-car garage attached to the south wall, 5m wide by 4m deep.",
+  "Add a single-car garage attached to the south wall, 16 feet wide by 13 feet deep.",
   "What's currently in the scene?",
-  "Add a garden wall along the north boundary, 12m long and 1m tall.",
+  "Add a garden wall along the north boundary, 40 feet long and 3 feet tall.",
 ];
 const DEMO_PROMPTS = T1_ONLY ? [STARTER_PROMPTS[0]] : STARTER_PROMPTS.slice(0, PROMPT_N);
 

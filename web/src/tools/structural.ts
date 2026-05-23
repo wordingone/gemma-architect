@@ -1038,8 +1038,8 @@ export function buildRoof(
     group.add(ridgeBeam);
 
     // Pfette (eave purlins) — FZK Pfette-1-1 and Pfette-2-1: 80mm × 160mm cross-section.
-    // Positioned at eave edge (bottom of slope deck) for visibility. IFC inset-vs-eave
-    // scope tracked in #1658.
+    // Positioned at eave edge (bottom of slope deck) for visibility. FZK mid-slope
+    // enclosure relationship deferred to #1639 slope-deck slab work.
     const wallPlateLen = ridgeLenHalf * 2;
     const pfetteZ = 0.08; // member center 80mm above eave
     const wp1 = landscape
