@@ -749,6 +749,10 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows
 <tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
 <tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0}}</tool_call>
+
+User: add a garden wall along the north boundary, 12m long and 1m tall
+Assistant: 12m → 12.0 (metric literal; no ft→m conversion). Single linear SdWall.
+<tool_call>{"command":"SdWall","parameters":{"profile":[[0,22],[12,22]],"thickness":0.2,"height":1.0}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
@@ -793,6 +797,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "DISPATCH DIRECTLY: emit <tool_call> blocks immediately — no <plan> block. State ONE assumption on one line if needed, then emit tool calls. Level names are always 'Level 1', 'Level 2', 'Level 3' — never 'Ground', 'Floor 2', or custom names.",
     "AMBIGUITY: infer defaults, state ONE assumption, execute. Do NOT ask questions.",
     unitHint,
+    "UNITS: prompt-stated units are authoritative. '12m' → 12.0 always — never apply ft→m conversion when the prompt specifies 'm'. '12ft' → 3.66. Prompt unit overrides active unit system.",
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
     "SCENE QUERY RESPONSE: when asked to describe the scene, what you see, what is in the scene, or what the default scene looks like — respond with PLAIN TEXT ONLY. Do NOT emit <plan> or <tool_call> blocks. Describe what you see: shapes, materials, arrangement. One natural prose paragraph.",
     WEBGPU_HOUSE_FEW_SHOT,
