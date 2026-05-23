@@ -1072,7 +1072,7 @@ registerHandler("SdDoor", (args) => {
   const cplane = resolveCPlane("SdDoor", args as Record<string, unknown>, viewer, hostObjDoor);
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
-  const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
+  const rawP = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
   const doorType = (args.doorType as string | undefined);
   let doorW: number;
   let doorH: number;
@@ -1089,6 +1089,16 @@ registerHandler("SdDoor", (args) => {
   } else {
     doorW = DEFAULT_DOOR_W;
     doorH = DEFAULT_DOOR_H;
+  }
+  // §#1679: single placement rect — project click onto wall centerline (lc.y=0)
+  // so mesh position and void center share the identical world XY origin.
+  let p = rawP;
+  if (hostObjDoor) {
+    hostObjDoor.updateMatrixWorld(true);
+    const lc = hostObjDoor.worldToLocal(new THREE.Vector3(rawP.x, rawP.y, elevation + doorH / 2));
+    lc.y = 0;
+    const snapped = hostObjDoor.localToWorld(lc);
+    p = { x: snapped.x, y: snapped.y };
   }
   const { mesh, chain } = buildDoor(p, { w: doorW, h: doorH });
   mesh.position.z = elevation;
@@ -1108,8 +1118,7 @@ registerHandler("SdDoor", (args) => {
   let voidCut = false;
   beginTransaction("SdDoor");
   if (hostObjDoor) {
-    const voidCenter = mesh.position.clone();
-    voidCenter.z = elevation + doorH / 2;
+    const voidCenter = new THREE.Vector3(p.x, p.y, elevation + doorH / 2);
     const voidGroup = addVoidToWallObject(hostObjDoor, voidCenter, doorW, doorH);
     if (voidGroup) {
       pushReplaceAction(voidGroup, [hostObjDoor], "wall-void-cut");
@@ -1157,12 +1166,22 @@ registerHandler("SdWindow", (args) => {
   const cplane = resolveCPlane("SdWindow", args as Record<string, unknown>, viewer, hostObjWin);
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
-  const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
+  const rawP = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
   const winType = (args.windowType as string | undefined);
   const isOG = winType === "og";
   const winW    = isOG ? FZK_OG_WINDOW_W : FZK_WINDOW_W;
   const winH    = isOG ? FZK_OG_WINDOW_H : FZK_WINDOW_H;
   const winSill = FZK_WINDOW_SILL;
+  // §#1679: single placement rect — project click onto wall centerline (lc.y=0)
+  // so mesh position and void center share the identical world XY origin.
+  let p = rawP;
+  if (hostObjWin) {
+    hostObjWin.updateMatrixWorld(true);
+    const lc = hostObjWin.worldToLocal(new THREE.Vector3(rawP.x, rawP.y, elevation + winSill + winH / 2));
+    lc.y = 0;
+    const snapped = hostObjWin.localToWorld(lc);
+    p = { x: snapped.x, y: snapped.y };
+  }
   const { mesh, chain } = buildWindow(p, { w: winW, h: winH, sill: winSill });
   mesh.position.z = elevation + mesh.position.z;
   if (cplane.kind === "host-derived") {
@@ -1181,13 +1200,9 @@ registerHandler("SdWindow", (args) => {
   let voidCut = false;
   beginTransaction("SdWindow");
   if (hostObjWin) {
-    // §#1518: use addVoidToWallObject (handles Mesh + Group walls) instead of instanceof-only guard.
-    // Window mesh is positioned at sill height; voidCenter is mid-height of opening.
-    const voidCenter = new THREE.Vector3(
-      mesh.position.x,
-      mesh.position.y,
-      mesh.position.z + winH / 2,
-    );
+    // §#1518: addVoidToWallObject handles Mesh + Group walls.
+    // §#1679: voidCenter from same p as mesh position — single rect for mesh and void.
+    const voidCenter = new THREE.Vector3(p.x, p.y, elevation + winSill + winH / 2);
     const voidGroup = addVoidToWallObject(hostObjWin, voidCenter, winW, winH);
     if (voidGroup) {
       pushReplaceAction(voidGroup, [hostObjWin], "wall-void-cut");
