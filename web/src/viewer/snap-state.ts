@@ -237,7 +237,20 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
       const d = Math.hypot(sc.x - clientX, sc.y - clientY);
       if (d < bestD) { bestD = d; best = v; }
     }
-    if (best) return best;
+    if (best) {
+      // When cursor is over a mesh with explicit snap data (e.g. wall), face-geometry
+      // corners (at ±halfThickness) compete against the stored centerline endpoint.
+      // Face vertex wins only if strictly closer to cursor — fixes S106. (#1696)
+      if (_hitFaceHasExplicitSnap && _hitFacePts.length > 0) {
+        for (const fv of _hitFacePts) {
+          const sc = projectToScreen(viewer, fv.x, fv.y, fv.z);
+          if (!sc) continue;
+          const d = Math.hypot(sc.x - clientX, sc.y - clientY);
+          if (d < bestD) { bestD = d; best = { id: makeSnapId(fv.x, fv.y, fv.z), x: fv.x, y: fv.y, z: fv.z }; }
+        }
+      }
+      return best;
+    }
   }
 
   // ── 1b. Midpoint snap from stored endpoints ──────────────────────────────────
@@ -268,10 +281,8 @@ export function nearestSnapVertex(viewer: Viewer, clientX: number, clientY: numb
   }
 
   // ── 1c. Face-vertex snap from raycast hit (before edge snap) ─────────────────
-  // Skipped for objects with userData.endpoints: those vertices are already covered
-  // by section 1a with curated snap points. Running 1c on tessellation vertices of
-  // objects that have explicit endpoints produces phantom snap points at triangle
-  // midpoints the user did not place.
+  // Skipped for objects with userData.endpoints: those vertices are handled in
+  // section 1a (with face-vertex competition when cursor is over the surface).
   if (snap.vertexSnapOn && _hitFacePts.length > 0 && !_hitFaceHasExplicitSnap) {
     let candidate: THREE.Vector3 | null = null;
     let candidateD = VERTEX_SNAP_PX;
