@@ -645,10 +645,10 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 7. SdWall — north ground, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
 8. SdWall — west ground, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
 9. SdDoor — south entry, position=[13,0,0], width=3.0, height=7.0, sillH=0
-10. SdWindow — south, position=[5,0,0], width=3.0, height=4.0, sillH=3.0
-11. SdWindow — east, position=[26,10,0], width=3.0, height=4.0, sillH=3.0
-12. SdWindow — north, position=[13,20,0], width=3.0, height=4.0, sillH=3.0
-13. SdWindow — west, position=[0,10,0], width=3.0, height=4.0, sillH=3.0
+10. SdWindow — south, position=[5,0,0], windowType=eg
+11. SdWindow — east, position=[26,10,0], windowType=eg
+12. SdWindow — north, position=[13,20,0], windowType=eg
+13. SdWindow — west, position=[0,10,0], windowType=eg
 14. SdStair — NE corner, start=[23,16], end=[23,8], type=straight, riser=0.583, tread=0.917, width=3.0, targetHeight=9.0
 15. setActiveLevel — id=level/1
 16. SdSlab — upper, profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
@@ -656,10 +656,10 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 18. SdWall — east upper, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
 19. SdWall — north upper, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
 20. SdWall — west upper, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
-21. SdWindow — upper south, position=[5,0,0], width=3.0, height=4.0, sillH=3.0
-22. SdWindow — upper east, position=[26,10,0], width=3.0, height=4.0, sillH=3.0
-23. SdWindow — upper north, position=[13,20,0], width=3.0, height=4.0, sillH=3.0
-24. SdWindow — upper west, position=[0,10,0], width=3.0, height=4.0, sillH=3.0
+21. SdWindow — upper south, position=[5,0,0], windowType=og
+22. SdWindow — upper east, position=[26,10,0], windowType=og
+23. SdWindow — upper north, position=[13,20,0], windowType=og
+24. SdWindow — upper west, position=[0,10,0], windowType=og
 25. SdRoof — pitched, footprint=[[0,0],[26,0],[26,20],[0,20]], pitchDeg=30
 </plan>
 <tool_call>{"name":"SdLevel","arguments":{"name":"Level 1","elevation":0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
@@ -671,10 +671,10 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdDoor","arguments":{"position":[13,0,0],"width":3.0,"height":7.0,"sillH":0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdStair","arguments":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"setActiveLevel","arguments":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
@@ -682,10 +682,10 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"windowType":"og"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"windowType":"og"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"windowType":"og"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"windowType":"og"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdRoof","arguments":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30},"metadata":{"source":"agent"}}</tool_call>
 
 User: add a garage attached to the south wall, 5m wide by 3m deep (parent house south wall runs from [0,0] to [5,0])
@@ -732,20 +732,20 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows
 <tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdDoor","parameters":{"position":[5,0,0],"width":3.0,"height":7.0,"sillH":0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"windowType":"eg"}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"windowType":"eg"}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"windowType":"eg"}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"windowType":"eg"}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/1"}}</tool_call>
 <tool_call>{"command":"SdSlab","parameters":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
-<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"width":3.0,"height":4.0,"sillH":3.0}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"windowType":"og"}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"windowType":"og"}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[13,20,0],"windowType":"og"}}</tool_call>
+<tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"windowType":"og"}}</tool_call>
 <tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
 <tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0}}</tool_call>

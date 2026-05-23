@@ -1154,12 +1154,11 @@ registerHandler("SdWindow", (args) => {
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
   const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
-  // Resolve effective dims: windowType preset < explicit width/height/sillH args.
   const winType = (args.windowType as string | undefined);
   const isOG = winType === "og";
-  const winW    = (args.width  as number | undefined) ?? (isOG ? FZK_OG_WINDOW_W : FZK_WINDOW_W);
-  const winH    = (args.height as number | undefined) ?? (isOG ? FZK_OG_WINDOW_H : FZK_WINDOW_H);
-  const winSill = (args.sillH  as number | undefined) ?? FZK_WINDOW_SILL;
+  const winW    = isOG ? FZK_OG_WINDOW_W : FZK_WINDOW_W;
+  const winH    = isOG ? FZK_OG_WINDOW_H : FZK_WINDOW_H;
+  const winSill = FZK_WINDOW_SILL;
   const { mesh, chain } = buildWindow(p, { w: winW, h: winH, sill: winSill });
   mesh.position.z = elevation + mesh.position.z;
   if (cplane.kind === "host-derived") {
