@@ -579,9 +579,26 @@ export class ChatPanel {
 
       // Auto-clear scene for fresh design prompts — file-loaded IFC or prior geometry
       // pollutes the agent context and produces geometry on top of existing structure (#476).
-      // Skip clear when user is asking about the current scene (visual query).
+      // Skip clear when user is asking about the current scene (visual query) OR when the
+      // user already has geometry (iteration prompt — silent wipe would destroy their work, #1647).
       if (!isVisualQuery && DESIGN_RE.test(text)) {
-        await invokeCommand({ command: "SdClearScene", parameters: {} });
+        type V = { __viewer?: { scene?: { children?: { userData?: { creator?: string } }[] } } };
+        const hasUserContent = ((window as unknown as V).__viewer?.scene?.children ?? [])
+          .some((c) => c.userData?.creator && c.userData.creator !== "IfcLevel");
+        if (!hasUserContent) {
+          // Sub-C: log auto-clear to ledger so it's visible in Phase J receipts.
+          const w2 = window as unknown as Record<string, unknown>;
+          if (!Array.isArray(w2.__dispatchLedger)) w2.__dispatchLedger = [];
+          type Vsc = { __viewer?: { scene?: { children?: unknown[] } } };
+          const scBefore = (window as unknown as Vsc).__viewer?.scene?.children?.length ?? -1;
+          await invokeCommand({ command: "SdClearScene", parameters: {} });
+          const scAfter = (window as unknown as Vsc).__viewer?.scene?.children?.length ?? -1;
+          (w2.__dispatchLedger as unknown[]).push({
+            verb: "SdClearScene", args: {}, status: "success", error: null,
+            sceneChildrenBefore: scBefore, sceneChildrenAfter: scAfter,
+            sceneChildrenDelta: scAfter - scBefore, meta: "auto-clear",
+          });
+        }
       }
 
       const skillsToPass = matchedSkills.length > 0 ? matchedSkills : this._skills;
