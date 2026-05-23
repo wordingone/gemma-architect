@@ -4,3 +4,5 @@ chat-plan-foldable  # #538  cascade from S54/S56 model latency timeouts; testMod
 skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) populating scene; S54 skips on model latency timeout
 demo-cluster-flow  # #670  new surface — allow-fail until first green run confirms timing
 agent-verb-completeness  # #1527  requires on-device model (arc.state==='ready'); no model in CI
+on-device-agent-response  # #1581  true agent-path: sends to .chat-input, waits 60s for agent:turn-complete; no soft-skip; hard-fail without model
+fzk-haus-perception-rehearsal  # #1581  true agent-path: loads FZK IFC, sends perception prompt, waits 60s; no soft-skip; hard-fail without model
