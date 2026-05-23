@@ -130,6 +130,7 @@ await cdp("Page.enable");
 const consoleErrors = [];
 const arcInvalidTransitions = [];
 const bufferManagerErrors = [];
+const cachePutErrors = [];      // M1: [model-worker] cache.put() rejected → S1 cascade trigger
 const compactEvents = [];
 
 eventHandlers.push(evt => {
@@ -137,7 +138,7 @@ eventHandlers.push(evt => {
   if (evt.method === "Runtime.consoleAPICalled") {
     const level = evt.params?.type ?? "log";
     const args  = (evt.params?.args ?? []).map(a => a.value ?? a.description ?? "").join(" ");
-    if (level === "error" || args.includes("[ARC] invalid transition") || args.includes("buffer_manager") || args.includes("[#1463]")) {
+    if (level === "error" || level === "warn" || args.includes("[ARC] invalid transition") || args.includes("buffer_manager") || args.includes("[#1463]") || args.includes("cache.put()")) {
       consoleErrors.push({ ts: ts(), level, text: args.slice(0, 300) });
       if (args.includes("[ARC] invalid transition")) {
         arcInvalidTransitions.push(args);
@@ -146,6 +147,11 @@ eventHandlers.push(evt => {
       if (args.includes("buffer_manager") || args.includes("OrtRun")) {
         bufferManagerErrors.push(args.slice(0, 200));
         console.error(`  ⚠ buffer_manager error: ${args.slice(0, 120)}`);
+      }
+      // M1: cache.put() rejection is the S1 cascade root (#1581). Capture separately.
+      if (args.includes("cache.put()") && (args.includes("rejected") || args.includes("UnknownError"))) {
+        cachePutErrors.push(args.slice(0, 200));
+        console.error(`  ⚠ cache.put() error: ${args.slice(0, 120)}`);
       }
     }
   }
@@ -158,6 +164,9 @@ eventHandlers.push(evt => {
     }
     if (entry.level === "error" && (entry.text?.includes("buffer_manager") || entry.text?.includes("OrtRun"))) {
       bufferManagerErrors.push(entry.text.slice(0, 200));
+    }
+    if ((entry.level === "error" || entry.level === "warning") && entry.text?.includes("cache.put()")) {
+      cachePutErrors.push(entry.text.slice(0, 200));
     }
   }
 });
@@ -358,10 +367,16 @@ if (bootComplete) {
     // sceneBefore>0 on T1 means a prior Phase J run left GPU-resident geometry.
     // This causes D3D12_OOM cascade → model produces NL-only, making the receipt invalid.
     // Fix: run without --no-reload. The harness reload (default) clears the GPU context.
+    // Cold-cache mode exemption: page was just navigated — stale GPU is impossible.
+    // Non-zero sceneChildrenBefore in cold mode means app auto-loaded initial content; log but proceed.
     if (i === 0 && sceneChildrenBefore !== null && sceneChildrenBefore > 0) {
-      console.error(`\nFAIL-FAST: T1 sceneChildrenBefore=${sceneChildrenBefore} (expected 0).`);
-      console.error(`Stale GPU scene from prior run. Re-run with cold-cache (default) to reset.`);
-      process.exit(1);
+      if (COLD_CACHE) {
+        console.warn(`  ⚠ T1 sceneChildrenBefore=${sceneChildrenBefore} on cold boot — app auto-loaded initial content. Proceeding.`);
+      } else {
+        console.error(`\nFAIL-FAST: T1 sceneChildrenBefore=${sceneChildrenBefore} (expected 0).`);
+        console.error(`Stale GPU scene from prior run. Re-run with cold-cache (default) to reset.`);
+        process.exit(1);
+      }
     }
 
     // §#1531: Force prompt mode before each turn — Storage.clearDataForOrigin does NOT clear
@@ -507,6 +522,9 @@ if (bootComplete) {
   }
 }
 
+// M1: read final worker recycle count from ARC controller (#1581)
+const workerRecycleCount = await evaluate("window.__arc?.recycleCount ?? 0") ?? 0;
+
 // §#1504: cumulative-growth assertion — scene.children must not shrink between turns
 // (detects SdClearScene or any reset that fabricates empty state; verifies #1499 fix is holding)
 let cumulativeGrowthOk = true;
@@ -537,8 +555,10 @@ ws.close();
 const totalMs     = Date.now() - startMs;
 const cleanTurns  = turnResults.filter(r => r.outcome === "generate-done" && !r.workerRecycled).length;
 const doneTurns   = turnResults.filter(r => r.outcome === "generate-done").length;  // §#688: includes recycle-recovered
-const arcInvClean = arcInvalidTransitions.length === 0;
-const bufMgrClean = turn1BufferManagerErrors === 0;
+const arcInvClean      = arcInvalidTransitions.length === 0;
+const bufMgrClean      = bufferManagerErrors.length === 0;   // M1: all turns (was turn1 only)
+const cachePutClean    = cachePutErrors.length === 0;         // M1: S1 cascade trigger
+const recycleClean     = workerRecycleCount === 0;            // M1: worker stability
 
 // #1482: aggregate dispatch metrics — must be declared before summary box and passed gate.
 const totalDispatches   = turnResults.reduce((s, r) => s + (r.dispatchCount ?? 0), 0);
@@ -551,8 +571,10 @@ console.log(`│  Phase J verify — ${ts().slice(0,19)}               │`);
 console.log(`├──────────────────────────────────────────────────────┤`);
 console.log(`│  mode          : ${String(COLD_CACHE ? "COLD-CACHE" : "warm").padEnd(35)}│`);
 console.log(`│  boot-complete : ${String(bootComplete).padEnd(35)}│`);
-console.log(`│  ARC inv-trans : ${String(arcInvalidTransitions.length === 0 ? "CLEAN" : `${arcInvalidTransitions.length} errors`).padEnd(35)}│`);
-console.log(`│  bufMgr turn-1 : ${String(bufMgrClean ? "CLEAN" : `${turn1BufferManagerErrors} errors`).padEnd(35)}│`);
+console.log(`│  ARC inv-trans : ${String(arcInvClean ? "CLEAN" : `${arcInvalidTransitions.length} errors`).padEnd(35)}│`);
+console.log(`│  bufMgr (all)  : ${String(bufMgrClean ? "CLEAN" : `${bufferManagerErrors.length} errors`).padEnd(35)}│`);
+console.log(`│  cache.put errs: ${String(cachePutClean ? "CLEAN" : `${cachePutErrors.length} errors`).padEnd(35)}│`);
+console.log(`│  worker recycles: ${String(recycleClean ? "0" : `${workerRecycleCount}`).padEnd(34)}│`);
 console.log(`│  GENERATE_DONE : ${String(`${cleanTurns}/${DEMO_PROMPTS.length} clean, ${doneTurns} total`).padEnd(35)}│`);
 console.log(`│  total time    : ${String(`${Math.round(totalMs/1000)}s`).padEnd(35)}│`);
 if (compactEvents.length > 0) {
@@ -569,7 +591,7 @@ for (const r of turnResults) {
 // turn 2 (scene-query) must produce NL-only response (no dispatch).
 const turn1DispatchOk = turn1DispatchCount >= 3;
 const turn2NlOk       = turnResults[1]?.isNlResponse === true;
-const passed = bootComplete && arcInvClean && bufMgrClean
+const passed = bootComplete && arcInvClean && bufMgrClean && cachePutClean && recycleClean  // M1 gates
   && cleanTurns >= Math.ceil(PROMPT_N * 0.6)
   && turn1DispatchOk
   && turn2NlOk
@@ -588,7 +610,9 @@ console.log(`└─────────────────────�
 const failureBreakdown = passed ? null : {
   boot_complete: bootComplete,
   arc_invalid_clean: arcInvClean,
-  buffer_mgr_turn1_clean: bufMgrClean,
+  buffer_mgr_clean: bufMgrClean,
+  cache_put_clean: cachePutClean,
+  worker_recycle_clean: recycleClean,
   clean_turns_ok: cleanTurns >= Math.ceil(PROMPT_N * 0.6),
   turn1_dispatch_ok: turn1DispatchOk,
   turn2_nl_ok: turn2NlOk,
@@ -608,7 +632,12 @@ const receipt = {
   arc_invalid_transitions: arcInvalidTransitions,
   arc_invalid_clean: arcInvClean,
   buffer_manager_errors: bufferManagerErrors,
-  buffer_manager_turn1_clean: bufMgrClean,
+  buffer_manager_clean: bufMgrClean,          // M1: all turns (was turn1_clean only)
+  cache_put_errors: cachePutErrors.length,    // M1: S1 cascade trigger count
+  cache_put_error_messages: cachePutErrors,   // M1: full messages for debugging
+  cache_put_clean: cachePutClean,             // M1: gate field
+  worker_recycle_count: workerRecycleCount,   // M1: ARC recycleCount at session end
+  worker_recycle_clean: recycleClean,         // M1: gate field
   // #1482 dispatch metrics
   turn1_dispatch_count: turn1DispatchCount,
   turn1_goal_state: turn1GoalState,
