@@ -648,7 +648,7 @@ export class ChatPanel {
       this._updatePerfStrip();
 
       // #980: goal-mode default — always auto-execute, no plan-pending UI.
-      await this._executeAndPush(resp, _turnStart);
+      await this._executeAndPush(resp, _turnStart, text);
     } catch (e) {
       this._removeThinking(thinking);
       const err = e as Error;
@@ -721,7 +721,7 @@ export class ChatPanel {
     this._enforceHistoryBudget(); // §C-hist (#990)
   }
 
-  private async _runDispatches(resp: AgentResponse): Promise<{ summary: string; userSummary: string; fired: string[] }> {
+  private async _runDispatches(resp: AgentResponse, promptLiteral = ""): Promise<{ summary: string; userSummary: string; fired: string[] }> {
     const fired: string[] = [];
     const errors: string[] = [];
     const isImperial = getState("unitSystem") === "imperial";
@@ -739,7 +739,7 @@ export class ChatPanel {
       const out = await invokeCommand({
         command: d.name,
         parameters: effectiveArgs,
-        metadata: { source: "agent" },
+        metadata: { source: "agent", promptLiteral },
       });
       const sceneChildrenAfter = (window as unknown as { __viewer?: { scene?: { children?: unknown[] } } }).__viewer?.scene?.children?.length ?? -1;
       ledger.push({
@@ -768,8 +768,8 @@ export class ChatPanel {
     return { summary: agentSummary, userSummary, fired };
   }
 
-  private async _executeAndPush(resp: AgentResponse, turnStartMs?: number): Promise<void> {
-    const { summary, userSummary } = await this._runDispatches(resp);
+  private async _executeAndPush(resp: AgentResponse, turnStartMs?: number, promptLiteral = ""): Promise<void> {
+    const { summary, userSummary } = await this._runDispatches(resp, promptLiteral);
     this._pushMsg({ role: "assistant", content: userSummary, dispatches: resp.dispatches });
     this._history.push({ role: "assistant", content: summary });
     this._enforceHistoryBudget(); // §C-hist (#990)

@@ -1,5 +1,6 @@
 import { dispatch, resolveVerb, type DispatchResult } from "./dispatch";
 import { getEntry, type SdArg, type SpatialDictionaryEntry, type ChoiceOption } from "./dictionary";
+import { checkFtToMBleed } from "./dimension-guardrails";
 
 export type CommandSessionState =
   | "idle"
@@ -14,7 +15,7 @@ export type InvocationSource = "console" | "palette" | "agent" | "skill" | "comp
 export type CommandEnvelope = {
   command: string;
   parameters?: Record<string, unknown>;
-  metadata?: { source?: InvocationSource; sessionId?: string };
+  metadata?: { source?: InvocationSource; sessionId?: string; promptLiteral?: string };
 };
 
 export type SessionStatus = "running" | "needs_input" | "needs_choice" | "success" | "error";
@@ -249,7 +250,7 @@ export function parseToolEnvelope(raw: unknown): CommandEnvelope | null {
       ? (obj.arguments as Record<string, unknown>)
       : {};
   const metadata = obj.metadata && typeof obj.metadata === "object"
-    ? (obj.metadata as { source?: InvocationSource; sessionId?: string })
+    ? (obj.metadata as { source?: InvocationSource; sessionId?: string; promptLiteral?: string })
     : undefined;
   return { command, parameters, metadata };
 }
@@ -264,6 +265,13 @@ export async function startCommandSession(envelope: CommandEnvelope): Promise<Co
     return { status: "error", state: "idle", summary: `Unknown command entry: ${canonical}.` };
   }
   const args = normalizeArgs(entry, envelope.parameters ?? {});
+
+  // FT→M bleed guard: reject SdWall args that look like ft→m double-conversion.
+  const bleedErr = checkFtToMBleed(canonical, args, envelope.metadata?.promptLiteral ?? "");
+  if (bleedErr) {
+    return { status: "error", state: "idle", canonical, summary: bleedErr };
+  }
+
   const missing = missingArgs(entry, args);
   const source = envelope.metadata?.source ?? "compat";
   const session: ActiveSession = {
