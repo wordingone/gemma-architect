@@ -178,6 +178,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // resets to 0 for each new file, so Math.max() was wrong (#1365).
   const _fileBytes = new Map<string, number>();
   let _cumulativeBytes = 0;
+  let _modelLoadSource: "network" | "opfs-cache" = "network";
 
   const progressCb = (info: Record<string, unknown>) => {
     if (info.status === "downloading") {
@@ -260,6 +261,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
             const fh = await modelCacheDir.getFileHandle(_urlToOpfsName(url));
             const file = await fh.getFile();
             const buf = await file.arrayBuffer();
+            _modelLoadSource = "opfs-cache";
             return new Response(buf, {
               headers: { "Content-Type": "application/octet-stream", "Content-Length": String(buf.byteLength) },
             });
@@ -280,6 +282,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
               if (done) break;
               chunks.push(value!);
               loaded += value!.byteLength;
+              _cumulativeBytes += value!.byteLength;
               progress_callback({ progress: (loaded / total) * 100, loaded, total });
             }
             const merged = new Uint8Array(loaded);
@@ -367,7 +370,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         });
       }
       const processor = await AutoProcessor.from_pretrained(modelId);
-      post({ type: "phase_timing", phase: "from_pretrained_end", elapsed_ms: Date.now() - _workerStartMs, downloaded_bytes: _cumulativeBytes });
+      post({ type: "phase_timing", phase: "from_pretrained_end", elapsed_ms: Date.now() - _workerStartMs, downloaded_bytes: _cumulativeBytes, load_source: _modelLoadSource });
 
       // WebGPU sanity probe — same as main-thread path (#128/#133).
       // Skipped on recycle (noWarmup): GPU device is persistent, shaders already compiled.
