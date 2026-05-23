@@ -13,7 +13,7 @@ export const FZK_DOOR_W    = 0.885;
 export const FZK_DOOR_H    = 2.01;
 export const FZK_WINDOW_W  = 2.0;
 export const FZK_WINDOW_H  = 1.2;
-export const FZK_WINDOW_SILL = 0.9;
+export const FZK_WINDOW_SILL = 0.8;  // IFC Brüstungshöhe #23241/#67296
 
 // IBC / California residential defaults for new user-placed elements
 export const DEFAULT_DOOR_W   = 0.914;   // IBC R311.2: 36" exterior residential
