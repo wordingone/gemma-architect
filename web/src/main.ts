@@ -3740,8 +3740,11 @@ async function initSceneRestore(): Promise<void> {
 
 // Warn before reload/close only when IDB save hasn't flushed yet (_idbDirty).
 // Skips IFC-loaded content — those lack userData.creator and survive a reload via re-open.
+// CDP/Playwright sessions set navigator.webdriver=true; suppress there to avoid blocking
+// automated tests. Real user sessions never set this flag. (#1704 Leg B)
 (window as unknown as Record<string, unknown>).__sceneBeforeunloadHooked = true;
 window.addEventListener("beforeunload", (e: BeforeUnloadEvent) => {
+  if (navigator.webdriver === true) return;
   if (_idbDirty && _hasUserContent()) {
     e.preventDefault();
     e.returnValue = "";
