@@ -2531,7 +2531,7 @@ const _roofInspectorEl = ((): HTMLElement => {
 let _roofInspectorMeshUuid: string | null = null;
 
 function _showRoofInspector(mesh: THREE.Mesh): void {
-  const p: RoofParams = (mesh.userData.roofParams as RoofParams) ?? { type: "pitched", pitchDeg: 31, overhang: 0.5, thickness: 0.15 };
+  const p: RoofParams = (mesh.userData.roofParams as RoofParams) ?? { type: "pitched", pitchDeg: 30, overhang: 0.5, thickness: 0.15 };
   _roofInspectorMeshUuid = mesh.uuid;
 
   const mkSlider = (label: string, key: keyof RoofParams, minM: number, maxM: number, stepM: number, unit: string) => {
@@ -2550,7 +2550,7 @@ function _showRoofInspector(mesh: THREE.Mesh): void {
     lbl.textContent = label;
     const val = document.createElement("span");
     val.style.cssText = "min-width:32px;text-align:right;font-size:11px;";
-    const curM = (p[key] as number) ?? (key === "pitchDeg" ? 31 : key === "overhang" ? 0.5 : 0.15);
+    const curM = (p[key] as number) ?? (key === "pitchDeg" ? 30 : key === "overhang" ? 0.5 : 0.15);
     const cur = toDisp(curM);
     val.textContent = `${cur}${dispUnit}`;
     const inp = document.createElement("input");
