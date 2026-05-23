@@ -28,6 +28,7 @@ const NO_RELOAD   = process.argv.includes("--no-reload");
 // Cold-cache: clear HTTP disk cache + cookies + Cache API + IndexedDB before reload.
 // Model re-downloads (~2.5GB) — expect 15-20min boot. boot_ms < 150000 → receipt INVALID.
 const COLD_CACHE  = !process.argv.includes("--warm") && !NO_RELOAD;
+const T1_ONLY     = process.argv.includes("--t1-only");
 const PROMPT_N    = Number(process.argv.find(a => a.startsWith("--prompts="))?.split("=")[1] ?? 5);
 const BOOT_TIMEOUT_MS  = COLD_CACHE ? 65 * 60 * 1000 : 10 * 60 * 1000;  // 65 min cold, 10 min warm
 const TURN_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 min — covers recycle+auto-retry
@@ -43,7 +44,7 @@ const STARTER_PROMPTS = [
   "What's currently in the scene?",
   "Add a garden wall along the north boundary, 12m long and 1m tall.",
 ];
-const DEMO_PROMPTS = STARTER_PROMPTS.slice(0, PROMPT_N);
+const DEMO_PROMPTS = T1_ONLY ? [STARTER_PROMPTS[0]] : STARTER_PROMPTS.slice(0, PROMPT_N);
 
 function ts() { return new Date().toISOString(); }
 function getSHA() {
@@ -59,7 +60,7 @@ const outFile   = `${STATE_DIR}/phase-j-verify-${sha}-${timestamp}.json`;
 console.log(`\n── Phase J verify  sha=${sha}  ${ts()} ──`);
 console.log(`   Pages: ${PAGES_URL}`);
 console.log(`   Prompts: ${PROMPT_N}  boot-timeout: ${BOOT_TIMEOUT_MS/60000}m  turn-timeout: ${TURN_TIMEOUT_MS/60000}m`);
-console.log(`   Mode: ${COLD_CACHE ? "COLD-CACHE (HTTP+cookies+Storage — gate default)" : NO_RELOAD ? "NO-RELOAD (warm — INVALID as gate test)" : "WARM (--warm — INVALID as gate test)"}`);
+console.log(`   Mode: ${COLD_CACHE ? "COLD-CACHE (HTTP+cookies+Storage — gate default)" : NO_RELOAD ? "NO-RELOAD (warm — INVALID as gate test)" : "WARM (--warm — INVALID as gate test)"}${T1_ONLY ? "  [t1-only: camera staging after T1]" : ""}`);
 
 // ── CDP connection ─────────────────────────────────────────────────────────────
 
@@ -586,6 +587,25 @@ if (pageCompactEvents.length > 0) {
   compactEvents.push(...pageCompactEvents);
 }
 
+// #1608: T1-only mode — position camera at SE 3/4 for /visual-check capture
+if (T1_ONLY) {
+  console.log(`[+${Date.now()-startMs}ms] t1-only: positioning camera at SE 3/4 for /visual-check...`);
+  await evaluate(`
+    __viewer.frameAllVisible();
+    (() => {
+      const pp = __viewer.panes.find(p => p.view === 'persp');
+      if (!pp) return;
+      const tgt = pp.controls.target.clone();
+      const dist = __viewer.camera.position.distanceTo(tgt);
+      const dir = new THREE.Vector3(1, -1, 1.5).normalize();
+      __viewer.camera.position.set(tgt.x + dir.x*dist, tgt.y + dir.y*dist, tgt.z + dir.z*dist);
+      __viewer.camera.lookAt(tgt);
+      pp.controls.update();
+    })();
+  `);
+  console.log(`[+${Date.now()-startMs}ms] Camera at SE 3/4 — browser left open for Leo /visual-check`);
+}
+
 ws.close();
 
 // ── Summary ────────────────────────────────────────────────────────────────────
@@ -628,15 +648,19 @@ for (const r of turnResults) {
 // #1482/#1477: dispatch gate — turn 1 must dispatch tool_calls (not plan-only);
 // turn 2 (scene-query) must produce NL-only response (no dispatch).
 const turn1DispatchOk = turn1DispatchCount >= 3;
-const turn2NlOk       = turnResults[1]?.isNlResponse === true;
+const turn2NlOk       = T1_ONLY ? true : (turnResults[1]?.isNlResponse === true);
 const passed = bootComplete && arcInvClean && bufMgrClean && cachePutClean && recycleClean  // M1 gates
-  && cleanTurns >= Math.ceil(PROMPT_N * 0.6)
+  && cleanTurns >= Math.ceil(DEMO_PROMPTS.length * 0.6)
   && turn1DispatchOk
   && turn2NlOk
   && cumulativeGrowthOk;  // §#1504
 console.log(`├──────────────────────────────────────────────────────┤`);
 console.log(`│  turn1 dispatch: ${String(turn1DispatchOk ? `${turn1DispatchCount} dispatches ✓` : `${turn1DispatchCount} dispatches ✗ (need ≥3)`).padEnd(35)}│`);
-console.log(`│  turn2 NL-only : ${String(turn2NlOk ? "true ✓" : `${turnResults[1]?.isNlResponse} ✗`).padEnd(35)}│`);
+if (T1_ONLY) {
+  console.log(`│  turn2 NL-only : ${"skipped (t1-only)".padEnd(35)}│`);
+} else {
+  console.log(`│  turn2 NL-only : ${String(turn2NlOk ? "true ✓" : `${turnResults[1]?.isNlResponse} ✗`).padEnd(35)}│`);
+}
 console.log(`│  cumul-growth  : ${String(cumulativeGrowthOk ? "OK ✓" : `VIOLATED (${cumulativeGrowthViolations.length})`).padEnd(35)}│`);
 const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : "FAIL"}`;
 console.log(verdict.padEnd(54) + "  │");
@@ -663,6 +687,7 @@ const receipt = {
   timestamp: ts(),
   pages_url: PAGES_URL,
   cold_cache: COLD_CACHE,
+  t1_only: T1_ONLY,
   consent_auto_clicked: COLD_CACHE ? consentAutoClicked : null,
   boot_complete: bootComplete,
   boot_arc_state: bootArcState,
