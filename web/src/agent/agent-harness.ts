@@ -608,7 +608,6 @@ BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apa
 - SdExport: always end with format=ifc, target=scene.
 - Room sizes (net internal): bedroom 9-15m², living 18-25m², kitchen 8-12m², bathroom 4-6m².
 - Floor heights: residential 3.0m, office 3.5m, industrial/bay 4.5m.
-- SdWall (boundary/garden/fence): height 1.2m minimum; 1.2m–1.8m typical. 0.3m signals a ft→m unit error (1ft ≈ 0.30m); use 1.2m instead. Never emit height < 1.0m for outdoor boundary context.
 - ATTACHED STRUCTURES ("attached to the south/north/east/west wall", "garage on the side", "extension"): the new structure's footprint EXTENDS FROM the shared wall face outward. Never collapse profile endpoints — p1 must differ from p2 on every SdWall.
 - EXTENSION RULE (algorithm for every attached structure): (1) Read the shared-face wall endpoints W1, W2 from prior tool_calls in this conversation. (2) perpendicular direction = away from parent: if wall is along X axis (W1.y=W2.y), perp=[0,-1] for south or [0,+1] for north; if along Y axis (W1.x=W2.x), perp=[-1,0] for west or [+1,0] for east. (3) Far-face: F1=[W1[0]+perp[0]*depth, W1[1]+perp[1]*depth], F2=[W2[0]+perp[0]*depth, W2[1]+perp[1]*depth]. (4) Emit three walls: far [F1,F2], side-A [W1,F1], side-B [W2,F2]. INVARIANT: every emitted wall has p1≠p2 (dist≥0.5m). NEVER submit [W,W] — same coordinate for both endpoints.
 `.trim();
