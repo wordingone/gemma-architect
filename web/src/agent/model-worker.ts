@@ -229,6 +229,75 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     };
   }
 
+  // §#1581-S1 (OPFS custom cache): replace Cache API with Origin Private File System.
+  // Cache API fails on cold-cache Chrome under cross-origin cache pressure (cache.put
+  // UnknownError → model in-memory-only → buffer_manager race on first real inference).
+  // OPFS is persistent, not evicted by browser data-clearing, and has no per-origin quota cap
+  // that triggers UnknownError. First visit: download + store to OPFS. Subsequent: serve from
+  // OPFS directly (no network, no cache pressure). Falls back silently if OPFS unavailable.
+  try {
+    const _nav = (globalThis as unknown as { navigator?: { storage?: { getDirectory?: () => Promise<FileSystemDirectoryHandle> } } }).navigator;
+    const opfsRoot = await _nav?.storage?.getDirectory?.();
+    if (opfsRoot) {
+      const modelCacheDir = await opfsRoot.getDirectoryHandle("model-cache", { create: true });
+      const _urlToOpfsName = (url: string): string => {
+        const hash = Array.from(url).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
+        const safe = url.replace(/[^a-zA-Z0-9._-]/g, "_");
+        return `${(hash >>> 0).toString(16).padStart(8, "0")}_${safe.slice(-180)}`;
+      };
+      tfEnv.useCustomCache = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (tfEnv as any).customCache = {
+        async match(url: string): Promise<Response | undefined> {
+          try {
+            const fh = await modelCacheDir.getFileHandle(_urlToOpfsName(url));
+            const file = await fh.getFile();
+            const buf = await file.arrayBuffer();
+            return new Response(buf, {
+              headers: { "Content-Type": "application/octet-stream", "Content-Length": String(buf.byteLength) },
+            });
+          } catch { return undefined; }
+        },
+        async put(url: string, response: Response, progress_callback?: (d: { progress: number; loaded: number; total: number }) => void): Promise<void> {
+          const filename = _urlToOpfsName(url);
+          // Skip if already cached
+          try { await modelCacheDir.getFileHandle(filename); return; } catch { /* not cached yet */ }
+          const total = parseInt(response.headers.get("content-length") ?? "0", 10);
+          let data: ArrayBuffer;
+          if (progress_callback && response.body && total > 0) {
+            const reader = response.body.getReader();
+            const chunks: Uint8Array[] = [];
+            let loaded = 0;
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value!);
+              loaded += value!.byteLength;
+              progress_callback({ progress: (loaded / total) * 100, loaded, total });
+            }
+            const merged = new Uint8Array(loaded);
+            let off = 0;
+            for (const c of chunks) { merged.set(c, off); off += c.byteLength; }
+            data = merged.buffer;
+          } else {
+            data = await response.arrayBuffer();
+          }
+          try {
+            const fh = await modelCacheDir.getFileHandle(filename, { create: true });
+            const writable = await fh.createWritable();
+            await writable.write(data);
+            await writable.close();
+          } catch (writeErr) {
+            console.warn("[model-worker] OPFS write failed, model stays in-memory:", writeErr);
+          }
+        },
+      };
+      console.info("[model-worker] OPFS cache active — model storage via Origin Private File System");
+    }
+  } catch (opfsErr) {
+    console.warn("[model-worker] OPFS unavailable, falling back to browser cache:", opfsErr);
+  }
+
   // §#1501: pre-acquire WebGPU device so ORT uses our reference (not an unexposed internal
   // one). On some integrated GPUs requestDevice() resolves AFTER ORT "loads" successfully
   // but before ort.env.webgpu.device is populated — causing warmup-flush + post-drafter-flush
