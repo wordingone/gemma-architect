@@ -178,6 +178,13 @@ await cdp("Page.addScriptToEvaluateOnNewDocument", {
   source: `window.__compact_events=[];window.addEventListener('agentmodel:compact',function(e){window.__compact_events.push({ts:Date.now(),preTurns:e.detail.preTurns,postTurns:e.detail.postTurns});});`,
 });
 
+// §#1595-M2: intercept phase_timing postMessages from model-worker.
+// Patches Worker constructor before any page scripts run; captures elapsed_ms from each
+// phase into window.__bootPhaseTiming keyed by phase name.
+await cdp("Page.addScriptToEvaluateOnNewDocument", {
+  source: `window.__bootPhaseTiming={};(function(){var O=self.Worker;function P(){var args=Array.prototype.slice.call(arguments);var w=new(Function.prototype.bind.apply(O,[null].concat(args)))();w.addEventListener('message',function(e){if(e&&e.data&&e.data.type==='phase_timing'){window.__bootPhaseTiming[e.data.phase+'_ms']=e.data.elapsed_ms;}});return w;}P.prototype=O.prototype;Object.setPrototypeOf(P,O);self.Worker=P;})();`,
+});
+
 // #1482: capture per-turn dispatch counts + goal state for receipt schema extensions.
 // #1491 gap-1: dispatchLedger captured synchronously inside agent:turn-complete to avoid CDP timing race.
 //   Prior approach: separate CDP drain evaluate ran AFTER reading __phase_j_current; race with
@@ -206,6 +213,13 @@ window.addEventListener('goal:changed',function(e){
 // ── Reload tab (unless --no-reload) ───────────────────────────────────────────
 
 const startMs = Date.now();
+// §#1595-M2: harness-side boot-phase timestamps (all relative to startMs).
+const harnessTimings = {
+  navigate_complete_ms: null,
+  consent_clicked_ms: null,
+  arc_first_nonnull_ms: null,
+  arc_ready_ms: null,
+};
 let consentAutoClicked = false;
 if (!NO_RELOAD) {
   if (COLD_CACHE) {
@@ -230,6 +244,7 @@ if (!NO_RELOAD) {
     await delay(2000);
     console.log(`[+${Date.now()-startMs}ms] Storage cleared. Navigating to Pages...`);
     await cdp("Page.navigate", { url: PAGES_URL });
+    harnessTimings.navigate_complete_ms = Date.now() - startMs;
     await delay(3000);
     // Cold-cache clears localStorage → #model-consent-overlay appears on first load.
     // Auto-click #consent-approve so the harness can proceed without user interaction.
@@ -248,6 +263,7 @@ if (!NO_RELOAD) {
           `document.querySelector('#model-consent-overlay #consent-approve').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); "clicked"`,
         );
         consentAutoClicked = true;
+        harnessTimings.consent_clicked_ms = Date.now() - startMs;
         console.log(`[+${Date.now()-startMs}ms] Consent overlay dismissed (auto-clicked #consent-approve)`);
         break;
       }
@@ -279,15 +295,22 @@ while (Date.now() < bootDeadline) {
   const elapsed  = Date.now() - startMs;
   console.log(`  [+${elapsed}ms] __arc.state=${arcState}`);
 
+  // §#1595-M2: capture first non-null ARC state as an anchor for worker phase timings.
+  if (harnessTimings.arc_first_nonnull_ms === null && arcState !== "not-found") {
+    harnessTimings.arc_first_nonnull_ms = elapsed;
+  }
+
   if (arcState === "ready") {
     bootComplete = true;
     bootArcState = arcState;
+    harnessTimings.arc_ready_ms = elapsed;
     break;
   }
   if (arcState === "generating" || arcState === "recycling" || arcState === "recovering") {
     // Passed through 'ready' faster than the 5s poll window — boot is complete.
     bootComplete = true;
     bootArcState = arcState;
+    harnessTimings.arc_ready_ms = elapsed;
     console.log(`  → boot detected via '${arcState}' (missed ready window) — will wait for ready before turn 1`);
     break;
   }
@@ -303,6 +326,8 @@ if (!bootComplete) {
 }
 
 const bootMs = Date.now() - startMs;
+// §#1595-M2: read worker phase timings captured by the injected Worker patch.
+const workerPhaseTiming = (await evaluate("window.__bootPhaseTiming ?? {}").catch(() => null)) ?? {};
 if (COLD_CACHE && bootMs < 150_000) {
   console.error(`\nFAIL-FAST: boot_ms=${bootMs} < 150000 — model loaded from cache (cold-cache clear was ineffective). Re-run after full cold-cache clear.`);
   process.exit(1);
@@ -651,6 +676,38 @@ const receipt = {
   cumulative_growth_ok: cumulativeGrowthOk,             // §#1504
   cumulative_growth_violations: cumulativeGrowthViolations, // §#1504
   failure_breakdown: failureBreakdown,                  // §#1504 — null on PASS, populated on FAIL
+  // §#1595-M2: boot-phase timing diagnostic — harness-side + worker-side phase timestamps.
+  // All harness_* fields are ms relative to Phase J startMs.
+  // All worker_* fields are ms relative to the worker module's _workerStartMs (different epoch).
+  // Use the delta between consecutive worker phases to diagnose where boot time is spent.
+  boot_phase_timing: {
+    harness_navigate_complete_ms: harnessTimings.navigate_complete_ms,
+    harness_consent_clicked_ms: harnessTimings.consent_clicked_ms,
+    harness_arc_first_nonnull_ms: harnessTimings.arc_first_nonnull_ms,
+    harness_arc_ready_ms: harnessTimings.arc_ready_ms,
+    worker_init_ms: workerPhaseTiming.worker_init_ms ?? null,
+    worker_from_pretrained_start_ms: workerPhaseTiming.from_pretrained_start_ms ?? null,
+    worker_from_pretrained_end_ms: workerPhaseTiming.from_pretrained_end_ms ?? null,
+    worker_opfs_first_write_ms: workerPhaseTiming.opfs_first_write_ms ?? null,
+    worker_model_ready_ms: workerPhaseTiming.model_ready_ms ?? null,
+    worker_warmup_start_ms: workerPhaseTiming.warmup_start_ms ?? null,
+    worker_warmup_end_ms: workerPhaseTiming.warmup_end_ms ?? null,
+    // Download duration (CDN → OPFS write complete): from_pretrained_end - from_pretrained_start
+    worker_download_and_write_duration_ms:
+      (workerPhaseTiming.from_pretrained_end_ms != null && workerPhaseTiming.from_pretrained_start_ms != null)
+        ? workerPhaseTiming.from_pretrained_end_ms - workerPhaseTiming.from_pretrained_start_ms
+        : null,
+    // Warmup duration: warmup_end - warmup_start
+    worker_warmup_duration_ms:
+      (workerPhaseTiming.warmup_end_ms != null && workerPhaseTiming.warmup_start_ms != null)
+        ? workerPhaseTiming.warmup_end_ms - workerPhaseTiming.warmup_start_ms
+        : null,
+  },
+  // Sanity check: warmup_end - from_pretrained_start should be < boot_ms (both in worker-epoch).
+  phase_timing_delta_ok:
+    (workerPhaseTiming.warmup_end_ms != null && workerPhaseTiming.from_pretrained_start_ms != null)
+      ? (workerPhaseTiming.warmup_end_ms - workerPhaseTiming.from_pretrained_start_ms) <= bootMs
+      : null,
   passed,
 };
 writeFileSync(outFile, JSON.stringify(receipt, null, 2));

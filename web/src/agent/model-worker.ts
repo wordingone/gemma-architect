@@ -22,6 +22,7 @@
 //                          prefillMs, decodeMs, inputLength, tokensOut}
 //   {type:"generate-error", turnId, error}
 //   {type:"error",       error}
+//   {type:"phase_timing", phase, elapsed_ms}     // §#1595-M2: boot-phase diagnostic timing
 
 import { Gemma4ForConditionalGeneration, AutoProcessor, RawImage, env as tfEnv } from "@huggingface/transformers";
 import { getMtpSessions, runMtpSpecDecode, MTP_CONFIG_E4B } from "./webgpu-mtp-backend.js";
@@ -31,6 +32,11 @@ import { fetchDrafterCached } from "./drafter-cache.js";
 // hash-stamped ort.bundle.min-*.js that could 404 on Pages when deployment
 // hashes drifted between builds. Static import eliminates the separate chunk.
 import * as ort from "onnxruntime-web";
+
+// §#1595-M2: module-level epoch for phase_timing elapsed_ms fields.
+const _workerStartMs = Date.now();
+// Sentinel: first OPFS write fires one phase_timing event then stays silent.
+let _opfsFirstWriteFired = false;
 
 // ── Worker state ──────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,6 +117,7 @@ self.onmessage = async (ev: MessageEvent<Record<string, unknown>>) => {
 
 // ── Init: from_pretrained + warmup probe + drafter ───────────────────────────
 async function handleInit(data: Record<string, unknown>): Promise<void> {
+  post({ type: "phase_timing", phase: "worker_init", elapsed_ms: Date.now() - _workerStartMs });
   // §A-init (#990): dispose prior ORT sessions on re-init (model swap) — prevents VRAM leak.
   if (_drafterSession) {
     try { await (_drafterSession as any).release?.(); } catch { /* non-fatal */ }
@@ -283,6 +290,10 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
             data = await response.arrayBuffer();
           }
           try {
+            if (!_opfsFirstWriteFired) {
+              _opfsFirstWriteFired = true;
+              post({ type: "phase_timing", phase: "opfs_first_write", elapsed_ms: Date.now() - _workerStartMs });
+            }
             const fh = await modelCacheDir.getFileHandle(filename, { create: true });
             const writable = await fh.createWritable();
             await writable.write(data);
@@ -330,6 +341,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 
   let loadedLabel = "CPU";
 
+  post({ type: "phase_timing", phase: "from_pretrained_start", elapsed_ms: Date.now() - _workerStartMs });
   for (const { device, dtype, label } of backends) {
     // §#1501: if WebGPU device acquisition failed at the top, skip webgpu backend entirely
     // and proceed directly to the CPU fallback — avoids a load attempt that ORT would also fail.
@@ -355,6 +367,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         });
       }
       const processor = await AutoProcessor.from_pretrained(modelId);
+      post({ type: "phase_timing", phase: "from_pretrained_end", elapsed_ms: Date.now() - _workerStartMs });
 
       // WebGPU sanity probe — same as main-thread path (#128/#133).
       // Skipped on recycle (noWarmup): GPU device is persistent, shaders already compiled.
@@ -397,10 +410,12 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
 
   _bootModelReady = true;
   post({ type: "model-ready", device: loadedLabel });
+  post({ type: "phase_timing", phase: "model_ready", elapsed_ms: Date.now() - _workerStartMs });
   checkBootComplete();
 
   // Warmup probe — warms GPU shader pipeline; non-fatal if it fails.
   // Skipped on recycle (noWarmup): compiled pipelines persist in GPU driver cache.
+  post({ type: "phase_timing", phase: "warmup_start", elapsed_ms: Date.now() - _workerStartMs });
   if (!noWarmup) {
     try {
       post({ type: "progress", phase: "warmup", bytes: 0, total: 0, throughputBytesPerSec: 0 });
@@ -467,6 +482,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
       console.warn("[model-worker] warmup probe failed:", (e as Error).message ?? e);
     }
   }
+  post({ type: "phase_timing", phase: "warmup_end", elapsed_ms: Date.now() - _workerStartMs });
 
   _bootWarmupDone = true;
   post({ type: "warmup-done", skipped: noWarmup }); // #1313: skipped=true when noWarmup (recycle path)
