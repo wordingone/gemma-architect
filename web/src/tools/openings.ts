@@ -9,11 +9,23 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { getPendingHostId } from "../viewer/snap-state";
 
 // FZK-Haus sourced dimensions (via scripts/extract-fzk-templates.ts) — for FZK fixture load path only
+// EG interior doors: Innentuer-1/2/3 (IFC #17468/#19199/#19504)
 export const FZK_DOOR_W    = 0.885;
 export const FZK_DOOR_H    = 2.01;
+// EG front door: Haustuer (IFC #27013)
+export const FZK_FRONT_DOOR_W = 1.01;
+export const FZK_FRONT_DOOR_H = 2.01;
+// Terrace door: Terrassentuer (IFC #31079)
+export const FZK_TERRACE_DOOR_W      = 2.01;
+export const FZK_TERRACE_DOOR_H      = 2.375;
+export const FZK_TERRACE_FANLIGHT_H  = 0.5;
+// EG ground-floor windows: EG-Fenster-1 to -9 (IFC #23024 et al.)
 export const FZK_WINDOW_W  = 2.0;
 export const FZK_WINDOW_H  = 1.2;
 export const FZK_WINDOW_SILL = 0.8;  // IFC Brüstungshöhe #23241/#67296
+// OG upper-floor windows: OG-Fenster-1/2 (IFC #66459/#74280)
+export const FZK_OG_WINDOW_W    = 1.0;
+export const FZK_OG_WINDOW_H    = 1.0;
 
 // IBC / California residential defaults for new user-placed elements
 export const DEFAULT_DOOR_W   = 0.914;   // IBC R311.2: 36" exterior residential
@@ -317,11 +329,11 @@ export function buildDoor(p: { x: number; y: number }, dims?: { w?: number; h?: 
   return { mesh, chain };
 }
 
-export function buildWindow(p: { x: number; y: number }): { mesh: THREE.Mesh; chain: string } {
-  const w    = FZK_WINDOW_W;
+export function buildWindow(p: { x: number; y: number }, dims?: { w?: number; h?: number; sill?: number }): { mesh: THREE.Mesh; chain: string } {
+  const w    = dims?.w    ?? FZK_WINDOW_W;
   const t    = DEFAULT_WALL_THICKNESS;
-  const h    = FZK_WINDOW_H;
-  const sill = FZK_WINDOW_SILL;
+  const h    = dims?.h    ?? FZK_WINDOW_H;
+  const sill = dims?.sill ?? FZK_WINDOW_SILL;
 
   // Prefer GLB asset (#1127); fall back to JSON-based geometry, then synthetic.
   const glbGroup = _windowGlbCache[_windowVariant];

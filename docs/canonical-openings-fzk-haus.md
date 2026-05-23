@@ -177,6 +177,39 @@ Pass = all four YES. Any NO triggers a granular issue per surface.
 
 ---
 
-## 8. Stair Note
+## 8. Extended Visual Gate — W5–W7 (SDK gap pre-stage, #1611)
+
+These require `doorType`/`windowType` params from PR #1611. Add to the §7 consolidated `/visual-check` call after #1611 merges.
+
+### W5 — Front door wider than interior door
+
+**Question:** Is the front door (Haustuer) visibly wider than the interior doors — approximately 1.01m vs 0.885m, a ~14% width difference?
+
+**DSL to produce scene:** `SdDoor doorType=front` + `SdDoor doorType=interior` side by side on south wall.
+
+**CORRECT:** Two portrait-rectangle doors; front door noticeably wider.  
+**DEFECTIVE:** Both doors same apparent width; or front door narrower.
+
+### W6 — Terrace door clearly larger
+
+**Question:** Is the terrace door (Terrassentuer) clearly wider and taller than the front door — approximately 2.01×2.375m vs 1.01×2.01m?
+
+**DSL to produce scene:** `SdDoor doorType=terrace` on south wall.
+
+**CORRECT:** Significantly wider door with total height ≈2.375m; a tall double or sliding panel.  
+**DEFECTIVE:** Terrace door similar size to front door; or fanlight not present.
+
+### W7 — OG window square vs EG window landscape
+
+**Question:** Is the upper-floor window (OG-Fenster) square (1:1 ratio) in clear contrast to the ground-floor window's landscape (2:1.2) shape?
+
+**DSL to produce scene:** `SdWindow windowType=og` above `SdWindow windowType=eg` on same wall.
+
+**CORRECT:** OG window clearly square; EG window clearly wider; both sills at 0.8m above their floor level.  
+**DEFECTIVE:** Both windows same shape; or OG window appears landscape.
+
+---
+
+## 9. Stair Note
 
 FZK-Haus has one stair entity: `#14502 IFCSTAIR 'Wendeltreppe'` (spiral stair). Its IFC property sets report all riser/tread/width values as 0 — ArchiCAD GDL export did not propagate discrete flight parameters. Only available dimensions: overall height = 2.0m (#14954), surface area 7.69m² (#14951), volume 0.208m³ (#14952). **Not suitable for a dimensional gate** — no flight-level data in the IFC.

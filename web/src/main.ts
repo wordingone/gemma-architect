@@ -60,7 +60,7 @@ import { onElementCommitted, cutSlabVoidFromBoxMesh, addVoidToWallObject } from 
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, rebuildGroupWallHeight, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
-import { buildDoor, buildWindow, buildOpening, DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./tools/openings";
+import { buildDoor, buildWindow, buildOpening, DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_DOOR_W, FZK_DOOR_H, FZK_FRONT_DOOR_W, FZK_FRONT_DOOR_H, FZK_TERRACE_DOOR_W, FZK_TERRACE_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL, FZK_OG_WINDOW_W, FZK_OG_WINDOW_H } from "./tools/openings";
 import { initSectionHandles } from "./viewer/section-handles";
 import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
@@ -1070,8 +1070,22 @@ registerHandler("SdDoor", (args) => {
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
   const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
-  const doorW = Math.min((args.width as number | undefined) ?? DEFAULT_DOOR_W, 1.83);  // cap 6ft max
-  const doorH = Math.min((args.height as number | undefined) ?? DEFAULT_DOOR_H, 2.44);  // cap 8ft max
+  const doorType = (args.doorType as string | undefined);
+  let doorW: number;
+  let doorH: number;
+  if (doorType === "front") {
+    doorW = (args.width as number | undefined) ?? FZK_FRONT_DOOR_W;
+    doorH = (args.height as number | undefined) ?? FZK_FRONT_DOOR_H;
+  } else if (doorType === "terrace") {
+    doorW = (args.width as number | undefined) ?? FZK_TERRACE_DOOR_W;
+    doorH = (args.height as number | undefined) ?? FZK_TERRACE_DOOR_H;
+  } else if (doorType === "interior") {
+    doorW = (args.width as number | undefined) ?? FZK_DOOR_W;
+    doorH = (args.height as number | undefined) ?? FZK_DOOR_H;
+  } else {
+    doorW = Math.min((args.width as number | undefined) ?? DEFAULT_DOOR_W, 1.83);  // IBC cap 6ft max
+    doorH = Math.min((args.height as number | undefined) ?? DEFAULT_DOOR_H, 2.44);  // IBC cap 8ft max
+  }
   const { mesh, chain } = buildDoor(p, { w: doorW, h: doorH });
   mesh.position.z = elevation;
   if (cplane.kind === "host-derived") {
@@ -1140,15 +1154,21 @@ registerHandler("SdWindow", (args) => {
   const pos = args.position as number[] | undefined;
   const elevation = getActiveLevelElevation();
   const p = { x: pos?.[0] ?? 0, y: pos?.[1] ?? 0 };
-  const { mesh, chain } = buildWindow(p);
+  // Resolve effective dims: windowType preset < explicit width/height/sillH args.
+  const winType = (args.windowType as string | undefined);
+  const isOG = winType === "og";
+  const winW    = (args.width  as number | undefined) ?? (isOG ? FZK_OG_WINDOW_W : FZK_WINDOW_W);
+  const winH    = (args.height as number | undefined) ?? (isOG ? FZK_OG_WINDOW_H : FZK_WINDOW_H);
+  const winSill = (args.sillH  as number | undefined) ?? FZK_WINDOW_SILL;
+  const { mesh, chain } = buildWindow(p, { w: winW, h: winH, sill: winSill });
   mesh.position.z = elevation + mesh.position.z;
   if (cplane.kind === "host-derived") {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cplane.normal);
     mesh.quaternion.copy(q);
   }
   mesh.userData.creator = "window";
-  mesh.userData.voidW = FZK_WINDOW_W;
-  mesh.userData.voidH = FZK_WINDOW_H;
+  mesh.userData.voidW = winW;
+  mesh.userData.voidH = winH;
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdWindow", args);
   mesh.userData.levelId = getActiveLevelId();
@@ -1163,9 +1183,9 @@ registerHandler("SdWindow", (args) => {
     const voidCenter = new THREE.Vector3(
       mesh.position.x,
       mesh.position.y,
-      mesh.position.z + FZK_WINDOW_H / 2,
+      mesh.position.z + winH / 2,
     );
-    const voidGroup = addVoidToWallObject(hostObjWin, voidCenter, FZK_WINDOW_W, FZK_WINDOW_H);
+    const voidGroup = addVoidToWallObject(hostObjWin, voidCenter, winW, winH);
     if (voidGroup) {
       pushReplaceAction(voidGroup, [hostObjWin], "wall-void-cut");
       mesh.userData.hostExpressID = (hostObjWin.userData as Record<string, unknown>).expressID as string ?? hostObjWin.uuid;

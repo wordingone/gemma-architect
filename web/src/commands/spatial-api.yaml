@@ -1096,14 +1096,21 @@
         type: solid
       position:
         type: point3
+      doorType:
+        type: string
+        enum: [interior, front, terrace]
+        default: interior
+        description: "FZK-Haus preset — interior: 0.885×2.01m (Innentuer), front: 1.01×2.01m (Haustuer), terrace: 2.01×2.375m (Terrassentuer). Explicit width/height override preset."
       width:
         type: number
         unit: m
         default: 0.914
+        description: "[optional m] Explicit override; uses doorType preset when omitted."
       height:
         type: number
         unit: m
         default: 2.032
+        description: "[optional m] Explicit override; uses doorType preset when omitted."
       layer:
         type: string
         description: "Layer ID to override automatic creator-to-layer routing."
@@ -1124,18 +1131,26 @@
         type: solid
       position:
         type: point3
+      windowType:
+        type: string
+        enum: [eg, og]
+        default: eg
+        description: "FZK-Haus preset — eg: 2.0×1.2m sill=0.8m (EG-Fenster ground floor), og: 1.0×1.0m sill=0.8m (OG-Fenster upper floor). Explicit width/height/sillH override preset."
       width:
         type: number
         unit: m
-        default: 1.2
+        default: 2.0
+        description: "[optional m] Explicit override; uses windowType preset when omitted."
       height:
         type: number
         unit: m
-        default: 1.4
+        default: 1.2
+        description: "[optional m] Explicit override; uses windowType preset when omitted."
       sillH:
         type: number
         unit: m
-        default: 0.9
+        default: 0.8
+        description: "[optional m] Sill height above floor. Explicit override; uses windowType preset (0.8m) when omitted."
       layer:
         type: string
         description: "Layer ID to override automatic creator-to-layer routing."
