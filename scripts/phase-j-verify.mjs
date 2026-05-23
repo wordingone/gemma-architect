@@ -540,6 +540,7 @@ if (bootComplete && bootArcState !== "ready") {
 
 const turnResults = [];
 let turn1BufferManagerErrors = 0;
+let modelDiedAtTurn = null; // §#1666: 1-indexed turn number when __model_dead fired, else null
 
 if (bootComplete) {
   console.log(`\n── Running ${DEMO_PROMPTS.length} prompts ─────────────────────────────────────`);
@@ -608,6 +609,8 @@ if (bootComplete) {
     const turnDeadline = Date.now() + TURN_TIMEOUT_MS;
     // §#1461: snapshot recycleCount BEFORE this turn to detect per-turn recycles.
     const initialRecycleCount = await evaluate("window.__arc?.recycleCount ?? 0");
+    // §#1666: reset dead-model sentinel before this turn's poll loop.
+    await evaluate("window.__model_dead = false").catch(() => null);
 
     while (Date.now() < turnDeadline) {
       await delay(3000);
@@ -632,6 +635,14 @@ if (bootComplete) {
         continue;
       }
       if (state === "ready" && elapsed > 5000) {
+        // §#1666: check dead-model sentinel before declaring generate-done.
+        const _modelDead = await evaluate("window.__model_dead ?? false").catch(() => false);
+        if (_modelDead) {
+          outcome = "model-not-loaded";
+          modelDiedAtTurn = i + 1;
+          console.error(`  ✗ model died at turn ${i+1} — aborting remaining turns`);
+          break;
+        }
         outcome = "generate-done";
         // §#1508: GENERATE_DONE (ARC→ready) fires before _executeAndPush() runs dispatches.
         // Reading __phase_j_current immediately misses the ledger — dispatchLedger=[] every turn.
@@ -682,6 +693,7 @@ if (bootComplete) {
     if (workerRecycled) flags.push("WORKER_RECYCLED");
     if (turnBufferErrors > 0) flags.push("BUFFER_MGR_RACE");
     if (outcome === "fatal-error") flags.push("MODEL_STALL");
+    if (outcome === "model-not-loaded") flags.push("MODEL_DEAD");
     if (turnConsoleSlice.some(e => /D3D12_OOM|gpu\s*fatal/i.test(e.text)) || turnArcInvalids.some(t => t.includes("D3D12_OOM"))) flags.push("D3D12_OOM");
 
     const durationMs = Date.now() - turnMs0;
@@ -709,6 +721,8 @@ if (bootComplete) {
     };
     if (fatalErrorMsg !== undefined) turnEntry.fatalErrorMsg = fatalErrorMsg;
     turnResults.push(turnEntry);
+    // §#1666: abort remaining turns when model died this turn.
+    if (outcome === "model-not-loaded") break;
   }
 }
 
@@ -928,6 +942,8 @@ const receipt = {
   scene_restore_offered_on_boot: restorePromptShown ?? null,
   // §#1637: populated before ws.close() — see bootCapabilityModalShown variable above.
   boot_capability_modal_shown: bootCapabilityModalShown,
+  // §#1666: 1-indexed turn where model died (generate-error "model not loaded"), null if clean.
+  model_died_at_turn: modelDiedAtTurn,
   // §#1637 wasm-cohort fields (null when not in wasm-cohort mode)
   wasm_cohort: WASM_COHORT ? (() => {
     // §#1638: compute progress bar monotonicity from poller series

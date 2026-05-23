@@ -22,6 +22,7 @@ export type RuntimeEvent =
   | { type: "GENERATE_REQUESTED"; turnId: string }
   | { type: "PREFILL_DONE" }
   | { type: "GENERATE_DONE"; turnId: string }
+  | { type: "GENERATE_FAILED" }
   | { type: "D3D12_OOM"; reason?: string }
   | { type: "WATCHDOG_TIMEOUT"; turnId: string }
   | { type: "WORKER_RECYCLED"; recycleCount: number; reason: string }
@@ -45,6 +46,8 @@ const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], Run
   generating: {
     PREFILL_DONE:     "generating",
     GENERATE_DONE:    "ready",
+    // §#1666: generate-error (model not loaded) → reset to ready so next prompt isn't deadlocked.
+    GENERATE_FAILED:  "ready",
     D3D12_OOM:        "recycling",
     WATCHDOG_TIMEOUT: "recycling",
     FATAL_ERROR:      "failed",

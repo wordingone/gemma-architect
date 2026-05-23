@@ -195,6 +195,7 @@ export class ChatPanel {
   private _continuationSuppressed = false;
   private _continuationCount = 0;
   private _fatalBubbleShown = false;
+  private _modelDeadBubbleShown = false;
   private _watchdogTimeoutPending = false;
   private _contextChipEl!: HTMLDivElement;
 
@@ -679,6 +680,19 @@ export class ChatPanel {
         return;
       }
       if (isGpuFatal) this._fatalBubbleShown = true;
+      // §#1666: model-not-loaded = worker init race; show ONE persistent banner, block sends.
+      const isModelNotLoaded = err.message === "model not loaded";
+      if (isModelNotLoaded && this._modelDeadBubbleShown) {
+        (window as unknown as _GemmaW).__gemmaSession.errorCount++;
+        return;
+      }
+      if (isModelNotLoaded) {
+        this._modelDeadBubbleShown = true;
+        this._pushMsg({ role: "assistant", content: "", error: "Model session ended — reload the page to continue.", recovery: "reload" });
+        (window as unknown as _GemmaW).__gemmaSession.errorCount++;
+        _emitTelemetryError(err.message, { isModelNotLoaded: true });
+        return;
+      }
       // #1428: model-load-failed errors (WebGPU unsupported or other fatal load) also warrant
       // a reload button — the model is in an unrecoverable state; refresh is the only fix.
       const isModelLoadFailed = err.message.startsWith("Model failed to load");
@@ -692,8 +706,10 @@ export class ChatPanel {
       // §#1628: report to Sentry (PII-scrubbed in emitError).
       _emitTelemetryError(err.message, { isGpuFatal, isModelLoadFailed, isTimeout });
     } finally {
-      this._sendBtn.disabled = false;
-      this._sendBtn.textContent = "SEND";
+      if (!this._modelDeadBubbleShown) {
+        this._sendBtn.disabled = false;
+        this._sendBtn.textContent = "SEND";
+      }
     }
   }
 

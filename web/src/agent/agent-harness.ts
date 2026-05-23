@@ -375,6 +375,11 @@ function initWorkerIfNeeded(): Worker {
           _generateCallbacks.delete(msg.turnId as string);
           cb.reject(new Error(msg.error as string));
         }
+        // §#1666: reset ARC from "generating" → "ready" so subsequent prompts don't deadlock.
+        _arc.dispatch({ type: "GENERATE_FAILED" });
+        if (msg.error === "model not loaded") {
+          (window as unknown as Record<string, unknown>).__model_dead = true;
+        }
         break;
       }
       case "error": {
