@@ -1091,7 +1091,9 @@ registerHandler("SdDoor", (args) => {
       if (c !== "SdWall" && c !== "wall") return;
       if (child.userData?.levelId !== activeLvlIdDoor) return;
       const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
-      const dist = doorRef.distanceTo(wallCenter);
+      // §#1725: use 2D XY distance — levelId already ensures correct floor, so imperial
+      // elevation mismatch (ft stored vs m window constants) must not block wall-find.
+      const dist = Math.sqrt((doorRef.x - wallCenter.x) ** 2 + (doorRef.y - wallCenter.y) ** 2);
       if (dist < minDist) { minDist = dist; hostObjDoor = child; }
     });
     if (!hostObjDoor) {
@@ -1176,7 +1178,9 @@ registerHandler("SdWindow", (args) => {
       if (c !== "SdWall" && c !== "wall") return;
       if (child.userData?.levelId !== activeLvlIdWin) return;
       const wallCenter = new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3());
-      const dist = winRef.distanceTo(wallCenter);
+      // §#1725: use 2D XY distance — levelId already ensures correct floor, so imperial
+      // elevation mismatch (ft stored vs m window constants) must not block wall-find.
+      const dist = Math.sqrt((winRef.x - wallCenter.x) ** 2 + (winRef.y - wallCenter.y) ** 2);
       if (dist < minDist) { minDist = dist; hostObjWin = child; }
     });
     if (!hostObjWin) {
@@ -1366,20 +1370,33 @@ registerHandler("SdRoof", (args) => {
       }
     }
 
+    // §#1724: derive gable-end coordinates from scene wall bounding box rather than from
+    // the footprint arg — the model may dispatch SdRoof without footprint, yielding wrong
+    // defaults (centerX=0, w=8, d=10) that miss the actual walls.
+    let sceneGMin = Infinity, sceneGMax = -Infinity;
+    for (const cand of _gableWallCandidates) {
+      const ep = cand.userData.endpoints as Array<{ x: number; y: number }> | undefined;
+      if (!ep || ep.length < 2) continue;
+      const v0 = landscape ? ep[0].x : ep[0].y;
+      const v1 = landscape ? ep[1].x : ep[1].y;
+      if (v0 < sceneGMin) sceneGMin = v0;
+      if (v0 > sceneGMax) sceneGMax = v0;
+      if (v1 < sceneGMin) sceneGMin = v1;
+      if (v1 > sceneGMax) sceneGMax = v1;
+    }
+
     for (const child of _gableWallCandidates) {
       const eps = child.userData.endpoints as Array<{ x: number; y: number }> | undefined;
       if (!eps || eps.length < 2) continue;
       const wx0 = eps[0].x, wy0 = eps[0].y;
       const wx1 = eps[1].x, wy1 = eps[1].y;
 
-      // Gable walls: both endpoints at the same gable-end X (landscape) or Y (portrait).
-      const gx1 = centerX - w / 2, gx2 = centerX + w / 2;
-      const gy1 = centerY - d / 2, gy2 = centerY + d / 2;
-      const isGable = landscape
-        ? (Math.abs(wx0 - gx1) < TOL && Math.abs(wx1 - gx1) < TOL) ||
-          (Math.abs(wx0 - gx2) < TOL && Math.abs(wx1 - gx2) < TOL)
-        : (Math.abs(wy0 - gy1) < TOL && Math.abs(wy1 - gy1) < TOL) ||
-          (Math.abs(wy0 - gy2) < TOL && Math.abs(wy1 - gy2) < TOL);
+      // Gable wall: both endpoints at the same span-direction coordinate AND that
+      // coordinate is at the scene bounding-box boundary (#1724).
+      const vA = landscape ? wx0 : wy0;
+      const vB = landscape ? wx1 : wy1;
+      const isGable = Math.abs(vA - vB) < TOL &&
+        (Math.abs(vA - sceneGMin) < TOL || Math.abs(vA - sceneGMax) < TOL);
       if (!isGable) continue;
 
       const wallMesh = child;
