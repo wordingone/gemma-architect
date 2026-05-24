@@ -126,7 +126,10 @@ export type OpPhase =
   | { kind: "loft_curve1" }
   | { kind: "loft_curve2"; curve1: THREE.Line }
   | { kind: "sweep_rail" }
-  | { kind: "sweep_profile"; rail: THREE.Line };
+  | { kind: "sweep_profile"; rail: THREE.Line }
+  | { kind: "revolve_profile" }
+  | { kind: "revolve_axis_a"; profilePts: number[][] }
+  | { kind: "revolve_axis_b"; profilePts: number[][]; axisFrom: THREE.Vector3 };
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
@@ -1077,6 +1080,7 @@ export function opPhaseIsObjectSelect(phase: OpPhase): boolean {
     case "loft_curve2":
     case "sweep_rail":
     case "sweep_profile":
+    case "revolve_profile":
       return true;
     case "dim_a":
       return phase.tool === "volume-dim";
@@ -1299,7 +1303,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     ? new THREE.Vector3(sv.x, sv.y, sv.z)
     : world ? (() => { const s = snapWorldForView(viewer, world); return new THREE.Vector3(s.x, s.y, s.z); })()
              : null;
-  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select" && phase.kind !== "loft_curve1" && phase.kind !== "loft_curve2" && phase.kind !== "sweep_rail" && phase.kind !== "sweep_profile") return false;
+  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select" && phase.kind !== "loft_curve1" && phase.kind !== "loft_curve2" && phase.kind !== "sweep_rail" && phase.kind !== "sweep_profile" && phase.kind !== "revolve_profile") return false;
 
   if (phase.kind === "extrude_select") {
     // profileOnly=true limits raycast to CLICK_PROFILE_CREATORS (sketch curves +
@@ -1420,6 +1424,53 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     const result = dispatchSync("SdSweep", { rail: { points: railPts }, profile: { points: profilePts } }) as { error?: string } | null;
     if (result?.error) {
       ptPrompt(`Sweep failed: ${result.error}  [Escape = cancel]`);
+      return true;
+    }
+    opFinish(viewer);
+    return true;
+  }
+
+  if (phase.kind === "revolve_profile") {
+    const hit = opRaycastObject(viewer, clientX, clientY);
+    if (!hit || !(hit.obj instanceof THREE.Line)) {
+      ptPrompt("Revolve — click a profile curve  [Escape = cancel]");
+      return true;
+    }
+    opSetHover(null);
+    _applyBoolHighlight(hit.obj, 0x44aaff);
+    const pos = hit.obj.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const profilePts: number[][] = [];
+    for (let i = 0; i < pos.count; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(hit.obj.matrixWorld);
+      profilePts.push([v.x, v.y, v.z]);
+    }
+    _opPhase = { kind: "revolve_axis_a", profilePts };
+    ptPrompt(`Revolve — profile selected (${hit.obj.userData.creator ?? "line"}) — click first axis point  [Escape = cancel]`);
+    return true;
+  }
+
+  if (phase.kind === "revolve_axis_a") {
+    if (!snapped3) return true;
+    _opPhase = { kind: "revolve_axis_b", profilePts: phase.profilePts, axisFrom: snapped3.clone() };
+    ptPrompt("Revolve — click second axis point to define revolution axis  [Escape = cancel]");
+    return true;
+  }
+
+  if (phase.kind === "revolve_axis_b") {
+    if (!snapped3) return true;
+    const { profilePts, axisFrom } = phase;
+    if (axisFrom.distanceTo(snapped3) < 0.001) {
+      ptPrompt("Revolve — axis points are too close together, click a different second point  [Escape = cancel]");
+      return true;
+    }
+    const result = dispatchSync("SdRevolve", {
+      profile: { points: profilePts },
+      axisFrom: [axisFrom.x, axisFrom.y, axisFrom.z],
+      axisTo:   [snapped3.x, snapped3.y, snapped3.z],
+      angleEnd: 2 * Math.PI,
+    }) as { error?: string } | null;
+    if (result?.error) {
+      ptPrompt(`Revolve failed: ${result.error}  [Escape = cancel]`);
       return true;
     }
     opFinish(viewer);
@@ -2033,6 +2084,9 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   } else if (tool === "sweep") {
     _opPhase = { kind: "sweep_rail" };
     ptPrompt("Sweep — click path/rail curve  [Escape = cancel]");
+  } else if (tool === "revolve") {
+    _opPhase = { kind: "revolve_profile" };
+    ptPrompt("Revolve — click a profile curve  [Escape = cancel]");
   } else if (tool === "boolean") {
     _opPhase = { kind: "bool_a" };
     ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)");
