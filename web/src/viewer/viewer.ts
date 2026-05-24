@@ -841,19 +841,17 @@ export class Viewer {
       // start a fresh drag, so stopImmediatePropagation cleanly blocks
       // the redundant TC drag-start.
       perspPane.body.addEventListener("pointerdown", (e: PointerEvent) => {
-        const now = performance.now();
-        const dx = e.clientX - this.lastClickPos.x;
-        const dy = e.clientY - this.lastClickPos.y;
-        const isDbl = (now - this.lastClickTs) < 500 && Math.hypot(dx, dy) < 10;
-
         if (this.relocate.active) {
           // Any pointerdown while in relocate exits. Don't refresh
           // lastClick because exit clicks aren't drag starts.
           this.onRelocateExit(e);
           return;
         }
-        // Visible breadcrumb so we can verify the path runs.
-        console.log("[relocate] pointerdown detail=", e.detail, "isDbl=", isDbl, "lastHover=", this.lastHover);
+        if (e.button !== 0) return;
+        const now = performance.now();
+        const dx = e.clientX - this.lastClickPos.x;
+        const dy = e.clientY - this.lastClickPos.y;
+        const isDbl = (now - this.lastClickTs) < 500 && Math.hypot(dx, dy) < 10;
         if (isDbl) {
           this.onDblclickHandle(e, perspPane);
           if (this.relocate.active) {
