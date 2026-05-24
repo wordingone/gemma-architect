@@ -1,0 +1,23 @@
+{
+  "_source": "buildSlab() parametric — FZK-Haus 12×10m footprint, DEFAULT_SLAB_THICKNESS=0.1m",
+  "_note": "Footprint matches wall/roof fixtures (a={x:-6,y:-5}, b={x:6,y:5}). Thickness pinned at DEFAULT_SLAB_THICKNESS=0.1m (IFC reference #34509 uses 0.2m — different; fixture pins the builder, not IFC round-trip). geom.translate(0,0,t/2) offsets geometry so z=[0,t] in local space; mesh.position.z=0.",
+  "params": {
+    "a": { "x": -6, "y": -5 },
+    "b": { "x": 6, "y": 5 },
+    "thickness": null,
+    "_thickness_note": "null = DEFAULT_SLAB_THICKNESS (0.1m)"
+  },
+  "invariants": {
+    "geom_x": 12.0,
+    "geom_y": 10.0,
+    "geom_z": 0.1,
+    "position_x": 0.0,
+    "position_y": 0.0,
+    "position_z": 0.0,
+    "rotation_x": 0.0,
+    "rotation_y": 0.0,
+    "rotation_z": 0.0,
+    "userData_creator": "slab",
+    "userData_kind": "brep"
+  }
+}
