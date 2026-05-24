@@ -1164,6 +1164,34 @@ export function buildRoof(
     }
     group.add(sheathB);
 
+    // Gable end triangular cap panels (#1651): explicit triangles at each short end
+    // so the gable face is visually distinct from the slope sheathing regardless of
+    // whether adjacent wall meshes are present or successfully modified.
+    // Wall material (0x9ec5d8) vs sheathing material (0x5a3a2a) gives clear contrast.
+    // 0.01 m outward offset prevents z-fighting with the wall pentagon (see SdRoof handler).
+    const gableCapMat = new THREE.MeshStandardMaterial({ color: 0x9ec5d8, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
+    for (const sign of [-1, 1] as const) {
+      const offset = sign * 0.01;
+      const verts = landscape
+        ? new Float32Array([
+            sign * ridgeLenHalf + offset, -spanHalf, 0,
+            sign * ridgeLenHalf + offset,  spanHalf, 0,
+            sign * ridgeLenHalf + offset,  0,        rH,
+          ])
+        : new Float32Array([
+            -spanHalf, sign * ridgeLenHalf + offset, 0,
+             spanHalf, sign * ridgeLenHalf + offset, 0,
+             0,        sign * ridgeLenHalf + offset, rH,
+          ]);
+      const capGeom = new THREE.BufferGeometry();
+      capGeom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+      capGeom.setIndex([0, 1, 2]);
+      capGeom.computeVertexNormals();
+      const capMesh = new THREE.Mesh(capGeom, gableCapMat.clone());
+      capMesh.userData.name = "GableCap";
+      group.add(capMesh);
+    }
+
   }
 
   const chain = `const roof = buildSectionRoof(${round(w)}, ${round(d)}, { type:"${roofType}", pitchDeg:${round(pitchDeg)}, overhang:${round(overhang)} }).translate([${round(cx)}, ${round(cy)}, 0]);`;
