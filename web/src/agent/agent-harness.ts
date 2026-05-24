@@ -458,6 +458,59 @@ function initWorkerIfNeeded(): Worker {
         _generateCallbacks.clear();
         break;
       }
+      // §#1627-D: classification-aware device.lost handler.
+      // Worker fires this when GPUDevice.lost resolves with reason !== "destroyed".
+      // retryBudget=1 (dgpu) → existing D3D12 OOM recycle path (one WebGPU retry).
+      // retryBudget=0 (igpu/software) → navigate to ?gpu=wasm, no WebGPU retry.
+      case "device-lost": {
+        const _adClass  = (msg.adClass  as string) ?? "unknown";
+        const _budget   = (msg.retryBudget as number) ?? 0;
+        const _lostReason = (msg.reason as string) ?? "unknown";
+        console.log(`[#1627-D] harness: device.lost adClass=${_adClass} reason=${_lostReason} retryBudget=${_budget}`);
+        window.dispatchEvent(new CustomEvent("agentmodel:device-lost", {
+          detail: { adClass: _adClass, reason: _lostReason, retryBudget: _budget },
+        }));
+        if (_budget === 0) {
+          // igpu/software: skip WebGPU retry — reload under WASM EP (boot-capability-gate path 2).
+          console.log("[#1627-D] igpu/software device.lost — redirecting to ?gpu=wasm");
+          window.location.assign(new URL("?gpu=wasm", window.location.href).href);
+        } else if (_inferenceWorker) {
+          // dgpu: treat as D3D12 OOM — one recycle allowed before fatal path (matches §C-recycle-limit #1381).
+          _inferenceWorker.postMessage({ type: "destroy-device" });
+          const _w = _inferenceWorker;
+          _inferenceWorker = null;
+          _arc.dispatch({ type: "D3D12_OOM" });
+          (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _arc.recycleCount;
+          const _win = window as unknown as Record<string, unknown>;
+          _win.__agent_d3d12_recycles = ((_win.__agent_d3d12_recycles as number | undefined) ?? 0) + 1;
+          window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
+            detail: { recycleCount: _arc.recycleCount, reason: "device-lost-dgpu" },
+          }));
+          emitRecycle(_arc.recycleCount, "device-lost-dgpu"); // §#1628
+          if (_arc.recycleCount >= 2) {
+            const _fatalMsg = "GPU device lost after multiple resets — please refresh the page to continue.";
+            _arc.dispatch({ type: "FATAL_ERROR", error: _fatalMsg });
+            for (const [, cb] of _generateCallbacks) cb.reject(new Error(_fatalMsg));
+            _generateCallbacks.clear();
+            updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  ERROR`);
+            window.dispatchEvent(new CustomEvent("agentmodel:fatal", {
+              detail: { reason: "device-lost-recycle-limit", recycleCount: _arc.recycleCount },
+            }));
+            window.dispatchEvent(new CustomEvent("agentmodel:boot-complete"));
+            setTimeout(() => { _w.terminate(); }, 400);
+          } else {
+            _arc.dispatch({ type: "WORKER_RECYCLED", recycleCount: _arc.recycleCount, reason: "device-lost-dgpu" }); // → recovering
+            updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ⟳`);
+            for (const [, cb] of _generateCallbacks) {
+              const _re = Object.assign(new Error("device-lost: worker recycled"), { isD3D12Recycle: true });
+              cb.reject(_re);
+            }
+            _generateCallbacks.clear();
+            setTimeout(() => { _w.terminate(); initWorkerIfNeeded(); }, 400);
+          }
+        }
+        break;
+      }
     }
   };
 

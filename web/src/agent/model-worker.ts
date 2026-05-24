@@ -394,6 +394,20 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         if (_preAcquiredGpuDevice) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (ort.env as any).webgpu = { ...((ort.env as any).webgpu ?? {}), device: _preAcquiredGpuDevice };
+          // §#1627-D: classification-aware device.lost handler.
+          // device.lost resolves when the GPU device is unexpectedly removed (TDR, driver crash,
+          // resource pressure). Reason "destroyed" = intentional handleDestroyDevice cleanup — skip.
+          // dgpu: retryBudget=1 → main thread recycles via existing D3D12 OOM path (one retry).
+          // igpu/software: retryBudget=0 → main thread navigates to ?gpu=wasm (no WebGPU retry).
+          const _lostBudget = _adClassification === "dgpu" ? 1 : 0;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (_preAcquiredGpuDevice as any).lost
+            ?.then((info: { reason: string; message: string }) => {
+              if (info?.reason === "destroyed") return; // intentional — handleDestroyDevice, non-fatal
+              console.log(`[#1627-D] device.lost reason=${info?.reason ?? "unknown"} adClass=${_adClassification} retryBudget=${_lostBudget}`);
+              post({ type: "device-lost", adClass: _adClassification, reason: info?.reason ?? "unknown", retryBudget: _lostBudget });
+            })
+            .catch(() => { /* device destroyed before .lost resolved — non-fatal */ });
         }
       }
     }
