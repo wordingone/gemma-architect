@@ -126,16 +126,20 @@ test("custom sheet size honors W × H input", () => {
   expect(Math.abs(w / h - 500 / 700)).toBeLessThan(0.05);
 });
 
-test("title block is editable and reflects in SVG export", () => {
+test("SVG export has no titleblock chrome (SHEET/SCALE/DRAWN not rendered)", () => {
   const host = freshHost();
   buildLayoutMode(host, {
     size: "A1",
     orientation: "landscape",
     titleBlock: { project: "MY PROJECT", sheet: "A-202", drawnBy: "ME" },
+    initialPanels: [{ x: 50, y: 50, w: 400, h: 300, viewport: "top", scale: "1:100", title: "PLAN" }],
   });
   const svg = exportLayoutAsSvg(host);
-  expect(svg).toContain("MY PROJECT");
-  expect(svg).toContain("A-202");
+  expect(svg).not.toContain("SHEET");
+  expect(svg).not.toContain("SCALE");
+  expect(svg).not.toContain("DRAWN");
+  // Panel title still present
+  expect(svg).toContain("PLAN");
 });
 
 test("scale picker accepts presets and parseable custom ratios", () => {

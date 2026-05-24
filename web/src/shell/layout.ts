@@ -1586,45 +1586,15 @@ function composeSvg(c: LayoutController): string {
     </g>`;
   }).join("\n  ");
 
-  const TB_H = 60;
-  const titleBlock = composeTitleBlock(c, w, h, TB_H);
-
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w.toFixed(2)} ${h.toFixed(2)}" width="${mm.w}mm" height="${mm.h}mm">
   <rect x="0" y="0" width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="#fefefa" stroke="#1a1a22" stroke-width="1"/>
   <rect x="12" y="12" width="${(w - 24).toFixed(2)}" height="${(h - 24).toFixed(2)}" fill="none" stroke="#5a5a66" stroke-width="0.4"/>
   ${panelMarkup}
-  ${titleBlock}
 </svg>
 `;
 }
 
-function composeTitleBlock(c: LayoutController, w: number, h: number, tbh: number): string {
-  const cellW = [2, 1, 1, 1, 1];
-  const total = cellW.reduce((a, b) => a + b, 0);
-  const cells: Array<[string, keyof TitleBlock]> = [
-    ["PROJECT", "project"],
-    ["Sheet",   "sheet"],
-    ["Scale",   "scale"],
-    ["Drawn",   "drawnBy"],
-    ["Date",    "date"],
-  ];
-  let xOff = 0;
-  const parts: string[] = [];
-  parts.push(`<rect x="0" y="${(h - tbh).toFixed(2)}" width="${w.toFixed(2)}" height="${tbh.toFixed(2)}" fill="#fefefa" stroke="#1a1a22" stroke-width="1"/>`);
-  for (let i = 0; i < cells.length; i++) {
-    const [label, key] = cells[i];
-    const cw = (cellW[i] / total) * w;
-    const x = xOff;
-    parts.push(`<g transform="translate(${x.toFixed(2)} ${(h - tbh).toFixed(2)})">`);
-    if (i < cells.length - 1) parts.push(`<line x1="${cw.toFixed(2)}" y1="0" x2="${cw.toFixed(2)}" y2="${tbh.toFixed(2)}" stroke="#5a5a66" stroke-width="0.5"/>`);
-    parts.push(`<text x="8" y="14" font-size="8" font-family="monospace" fill="#5a5a66" letter-spacing="1">${escapeXml(label.toUpperCase())}</text>`);
-    parts.push(`<text x="8" y="34" font-size="14" font-family="monospace" fill="#1a1a22">${escapeXml(c.title[key])}</text>`);
-    parts.push(`</g>`);
-    xOff += cw;
-  }
-  return parts.join("\n  ");
-}
 
 function escapeXml(s: string): string {
   return s.replace(/[<>&"']/g, (ch) => {
@@ -1705,33 +1675,6 @@ export async function exportLayoutAsPdf(host: HTMLElement): Promise<ArrayBuffer>
     doc.setTextColor(26, 26, 34);
     doc.text(p.title, px + 1.5, py + 3);
     doc.text(String(p.scale), px + pw - 1.5, py + 3, { align: "right" });
-  }
-
-  // Title block at the bottom (60 px tall in screen units).
-  const tbhMm = 60 * PX_TO_MM;
-  const tbY = sheetHmm - tbhMm;
-  doc.setLineWidth(0.5);
-  doc.line(0, tbY, sheetWmm, tbY);
-  const cells: Array<[string, keyof TitleBlock, number]> = [
-    ["PROJECT", "project", 0.00],
-    ["SHEET",   "sheet",   0.33],
-    ["SCALE",   "scale",   0.50],
-    ["DRAWN",   "drawnBy", 0.67],
-    ["DATE",    "date",    0.83],
-  ];
-  for (const [label, key, fx] of cells) {
-    const tx = fx * sheetWmm + 2;
-    doc.setFontSize(5);
-    doc.setTextColor(90, 90, 102);
-    doc.text(label, tx, tbY + 4);
-    doc.setFontSize(9);
-    doc.setTextColor(26, 26, 34);
-    doc.text(c.title[key], tx, tbY + 12);
-    if (fx > 0) {
-      doc.setLineWidth(0.2);
-      doc.setDrawColor(120, 120, 128);
-      doc.line(fx * sheetWmm, tbY, fx * sheetWmm, sheetHmm);
-    }
   }
 
   // jsPDF exposes the output as ArrayBuffer via output("arraybuffer").
