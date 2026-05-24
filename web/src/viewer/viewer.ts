@@ -2917,9 +2917,14 @@ export class Viewer {
     const plane = this._clipLabels.get(label);
     if (!plane) return;
     mesh.updateMatrixWorld(true);
-    // PlaneGeometry local normal = +Z. Transform through normal matrix to world.
     const m3 = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
-    const normal = new THREE.Vector3(0, 0, 1).applyMatrix3(m3).normalize();
+    // Use mesh.userData.clipLocalNormal if set (builders that rotate the mesh so
+    // local +Z ≠ intended clip direction store the intended local vector here).
+    // Default: PlaneGeometry local normal = +Z.
+    const localN = (mesh.userData.clipLocalNormal instanceof THREE.Vector3)
+      ? mesh.userData.clipLocalNormal.clone()
+      : new THREE.Vector3(0, 0, 1);
+    const normal = localN.applyMatrix3(m3).normalize();
     const origin = new THREE.Vector3().setFromMatrixPosition(mesh.matrixWorld);
     plane.normal.copy(normal);
     plane.constant = -normal.dot(origin);
@@ -3246,11 +3251,23 @@ export class Viewer {
     const thumbRenderer = this._thumbRenderer!;
     const gizmoWasVisible = this.gizmos.map(g => g.visible);
     this.gizmos.forEach(g => { g.visible = false; });
+    // Hide clip-plane / section-box editing gizmos in layout thumbnails (#1729-B).
+    const clipMeshes: Array<{ obj: THREE.Object3D; wasVisible: boolean }> = [];
+    this.scene.traverse((obj) => {
+      const kind = obj.userData.kind as string | undefined;
+      if (kind === "clip-plane" || kind === "section-box") {
+        clipMeshes.push({ obj, wasVisible: obj.visible });
+        obj.visible = false;
+      }
+    });
+    // Propagate active clip planes to thumb renderer (#1729-C).
+    thumbRenderer.localClippingEnabled = this._sectionPlanes.length > 0 || this._clipPlanes.length > 0;
     if (needUndraftForThumb) {
       withoutDrafting(this.scene, () => thumbRenderer.render(this.scene, cam));
     } else {
       thumbRenderer.render(this.scene, cam);
     }
+    clipMeshes.forEach(({ obj, wasVisible }) => { obj.visible = wasVisible; });
     this.gizmos.forEach((g, i) => { g.visible = gizmoWasVisible[i]; });
     this.scene.overrideMaterial = prevOverride;
     const ctx = dest.getContext("2d");

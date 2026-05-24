@@ -1515,17 +1515,23 @@ export function buildClipPlanePlan(
 ): { mesh: THREE.Object3D; chain: string; dispatchOnCommit: { verb: string; args: Record<string, unknown> } } {
   const mat = new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
   const label = `clip-${Date.now()}`;
-  const planZ = p.z ?? 0;
+  // Standard plan-cut height 1.2m above the clicked floor level (#1729-A).
+  const PLAN_CUT_HEIGHT = 1.2;
+  const planZ = (p.z ?? 0) + PLAN_CUT_HEIGHT;
   const size = 5;
   const geom = new THREE.PlaneGeometry(size, size);
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.set(p.x, p.y, planZ);
+  // Rotate 180° around X so mesh world-normal = -Z, matching clip normal [0,0,-1].
+  // Required for updateClippingPlane() to read the correct direction during gumball drags.
+  mesh.rotation.x = Math.PI;
   const origin: [number, number, number] = [round(p.x), round(p.y), round(planZ)];
-  const normal: [number, number, number] = [0, 0, -1]; // clip z > planZ so floor-plan below cut remains visible
+  const normal: [number, number, number] = [0, 0, -1]; // clip z > planZ — floor-plan below cut remains visible
   mesh.userData.kind = "clip-plane";
   mesh.userData.creator = "SdClippingPlane";
   mesh.userData.excludeFromClip = true;
   mesh.userData.clipLabel = label;
+  mesh.userData.clipLocalNormal = new THREE.Vector3(0, 0, 1); // local +Z after π-X rotation = world -Z
   return {
     mesh,
     chain: `SdClippingPlane({origin:[${origin}],normal:[${normal}],label:"${label}"})`,
@@ -1541,7 +1547,11 @@ export function buildClipPlaneSection(
   const label = `clip-${Date.now()}`;
   const dx = b.x - a.x, dy = b.y - a.y;
   const lineLen = Math.sqrt(dx * dx + dy * dy) || 1;
-  const nx = -dy / lineLen, ny = dx / lineLen;
+  // Normal points toward the conventional "near" side of the section (#1729-A):
+  // for a left-to-right line, (dy/len, -dx/len) = (0,-1) = south — the reader-facing side.
+  // Mesh rotation Euler(π/2,0,atan2(dy,dx)) maps local +Z to world (sinα,-cosα,0) which
+  // equals (dy/len,-dx/len,0), matching this normal so updateClippingPlane stays consistent.
+  const nx = dy / lineLen, ny = -dx / lineLen;
   const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
   const planeH = 5;
   const geom = new THREE.PlaneGeometry(lineLen, planeH);
