@@ -3748,7 +3748,19 @@ function _triggerAutoSave(): void {
   }, 2000);
 }
 
-registerPostDispatch(() => { _triggerAutoSave(); });
+// Non-mutating verbs — these change only UI/goal/selection state, not the 3D scene that
+// viewer.exportScene() serializes. Excluding them prevents the 2 s debounce from blocking
+// navigation when IDB is already fully current. (#1700)
+const _NON_MUTATING_VERBS = new Set([
+  "setActiveTool", "setActiveLevel",
+  "toggleLayerVisibility", "toggleObjectVisibility",
+  "selectObject", "deselectAll",
+  "create_goal", "update_goal", "get_goal",
+  "setCamera", "resetCamera",
+]);
+registerPostDispatch((canonical) => {
+  if (!_NON_MUTATING_VERBS.has(canonical)) _triggerAutoSave();
+});
 
 setInterval(async () => {
   if (_hasUserContent()) {
