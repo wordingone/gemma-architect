@@ -1,11 +1,14 @@
-// nurbs-brep.ts unit tests — Brep foundation (#1737 sub-issue).
+// nurbs-brep.ts unit tests — Brep foundation (#1737) + per-element tolerance (#1818 PR-0).
 // Covers: shellFromSurface, brepFromSurface, brepConcat, brepFaceCount,
-//         brepIsSolid, brepIsOpen, brepNakedEdgeCount.
+//         brepIsSolid, brepIsOpen, brepNakedEdgeCount,
+//         BREP_DEFAULT_TOLERANCE, brepMaxTolerance, intersectionTolerance.
 import { describe, test, expect } from "bun:test";
 import {
   shellFromSurface, brepFromShell, brepFromSurface, brepConcat,
   brepFaceCount, brepIsSolid, brepIsOpen, brepNakedEdgeCount,
-  type BrepShell, type Brep,
+  brepMaxTolerance, intersectionTolerance,
+  BREP_DEFAULT_TOLERANCE,
+  type BrepShell, type Brep, type BrepEdge,
 } from "../src/nurbs/nurbs-brep";
 import type { PlaneSurface } from "../src/nurbs/nurbs-surfaces";
 import { Plane, Interval, Point3 } from "../src/nurbs/nurbs-primitives";
@@ -164,8 +167,8 @@ describe("nurbs-brep foundation", () => {
           {
             faces: [shellFromSurface(planeSurface()).faces[0]],
             edges: [
-              { curve: { kind: "line", from: Point3.create(0,0,0), to: Point3.create(1,0,0), domain: Interval.create(0, 1) }, faceIndex1: 0, faceIndex2: null },
-              { curve: { kind: "line", from: Point3.create(1,0,0), to: Point3.create(1,1,0), domain: Interval.create(0, 1) }, faceIndex1: 0, faceIndex2: 0 },
+              { curve: { kind: "line", from: Point3.create(0,0,0), to: Point3.create(1,0,0), domain: Interval.create(0, 1) }, faceIndex1: 0, faceIndex2: null, tolerance: BREP_DEFAULT_TOLERANCE },
+              { curve: { kind: "line", from: Point3.create(1,0,0), to: Point3.create(1,1,0), domain: Interval.create(0, 1) }, faceIndex1: 0, faceIndex2: 0, tolerance: BREP_DEFAULT_TOLERANCE },
             ],
             vertices: [],
             isClosed: false,
@@ -179,10 +182,11 @@ describe("nurbs-brep foundation", () => {
       function shellWithNaked(n: number): BrepShell {
         return {
           faces: [],
-          edges: Array.from({ length: n }, (_, i) => ({
+          edges: Array.from({ length: n }, (_, i): BrepEdge => ({
             curve: { kind: "line" as const, from: Point3.create(i, 0, 0), to: Point3.create(i + 1, 0, 0), domain: Interval.create(i, i + 1) },
             faceIndex1: 0,
             faceIndex2: null,
+            tolerance: BREP_DEFAULT_TOLERANCE,
           })),
           vertices: [],
           isClosed: false,
@@ -190,6 +194,76 @@ describe("nurbs-brep foundation", () => {
       }
       const b = brepConcat(brepFromShell(shellWithNaked(2)), brepFromShell(shellWithNaked(3)));
       expect(brepNakedEdgeCount(b)).toBe(5);
+    });
+  });
+
+  describe("per-element tolerance (#1818 PR-0)", () => {
+    test("shellFromSurface sets face tolerance to BREP_DEFAULT_TOLERANCE", () => {
+      const s = shellFromSurface(planeSurface());
+      expect(s.faces[0].tolerance).toBe(BREP_DEFAULT_TOLERANCE);
+    });
+
+    test("shellFromSurface accepts custom tolerance", () => {
+      const tol = 1e-4;
+      const s = shellFromSurface(planeSurface(), tol);
+      expect(s.faces[0].tolerance).toBe(tol);
+    });
+
+    test("brepMaxTolerance: empty Brep returns BREP_DEFAULT_TOLERANCE", () => {
+      expect(brepMaxTolerance({ shells: [] })).toBe(BREP_DEFAULT_TOLERANCE);
+    });
+
+    test("brepMaxTolerance: single face with default tolerance", () => {
+      const b = brepFromSurface(planeSurface());
+      expect(brepMaxTolerance(b)).toBe(BREP_DEFAULT_TOLERANCE);
+    });
+
+    test("brepMaxTolerance: returns max across heterogeneous tolerances", () => {
+      const highTolShell: BrepShell = {
+        faces: [{ ...shellFromSurface(planeSurface()).faces[0], tolerance: 1e-3 }],
+        edges: [{ curve: { kind: "line" as const, from: Point3.create(0,0,0), to: Point3.create(1,0,0), domain: Interval.create(0,1) }, faceIndex1: 0, faceIndex2: null, tolerance: 5e-4 }],
+        vertices: [{ point: Point3.create(0,0,0), edgeIndices: [0], tolerance: 1e-5 }],
+        isClosed: false,
+      };
+      const lowTolShell: BrepShell = {
+        faces: [{ ...shellFromSurface(planeSurface()).faces[0], tolerance: 1e-7 }],
+        edges: [],
+        vertices: [],
+        isClosed: false,
+      };
+      const b = brepConcat(brepFromShell(highTolShell), brepFromShell(lowTolShell));
+      expect(brepMaxTolerance(b)).toBeCloseTo(1e-3);
+    });
+
+    test("intersectionTolerance: edge.tol + face.tol without fuzzy", () => {
+      const face = { ...shellFromSurface(planeSurface()).faces[0], tolerance: 1e-5 };
+      const edge: BrepEdge = { curve: { kind: "line" as const, from: Point3.create(0,0,0), to: Point3.create(1,0,0), domain: Interval.create(0,1) }, faceIndex1: 0, faceIndex2: null, tolerance: 2e-5 };
+      expect(intersectionTolerance(edge, face)).toBeCloseTo(3e-5);
+    });
+
+    test("intersectionTolerance: adds fuzzyValue slack", () => {
+      const face = { ...shellFromSurface(planeSurface()).faces[0], tolerance: 1e-5 };
+      const edge: BrepEdge = { curve: { kind: "line" as const, from: Point3.create(0,0,0), to: Point3.create(1,0,0), domain: Interval.create(0,1) }, faceIndex1: 0, faceIndex2: null, tolerance: 2e-5 };
+      expect(intersectionTolerance(edge, face, 1e-4)).toBeCloseTo(1.3e-4);
+    });
+
+    test("two coincident-edge breps with locally-different tolerances preserve each face's tolerance", () => {
+      // AC7 from #1818: correct boolean of two coincident-edge solids with locally-different tolerances.
+      // This test verifies the data model is correct (algorithm to follow in PR-6).
+      const precisionFace = { ...shellFromSurface(planeSurface()).faces[0], tolerance: 1e-7 };
+      const importedFace  = { ...shellFromSurface(planeSurface()).faces[0], tolerance: 1e-3 };
+      const mixedShell: BrepShell = {
+        faces: [precisionFace, importedFace],
+        edges: [],
+        vertices: [],
+        isClosed: false,
+      };
+      const b = brepFromShell(mixedShell);
+      // Each face retains its own tolerance — no normalization to a global ε.
+      expect(b.shells[0].faces[0].tolerance).toBe(1e-7);
+      expect(b.shells[0].faces[1].tolerance).toBe(1e-3);
+      // Max tolerance reflects the coarsest face.
+      expect(brepMaxTolerance(b)).toBeCloseTo(1e-3);
     });
   });
 });
