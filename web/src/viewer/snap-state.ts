@@ -109,7 +109,7 @@ export function makeSnapId(x: number, y: number, z = 0): string {
 
 // ── Vertex snap runtime ───────────────────────────────────────────────────────
 
-function collectSnapVertices(viewer: Viewer): SnapVertex[] {
+export function collectSnapVertices(viewer: Viewer): SnapVertex[] {
   const scene = viewer.getScene();
   const out: SnapVertex[] = [];
   const seen = new Set<string>();
