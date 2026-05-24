@@ -132,24 +132,27 @@ All 41 palette entries, drawn from `web/src/shell/workbench.ts:110-167` (`PALETT
 | `door` | — | P1,P3,P6 + ghost preview on hover + `atTopOfLevel` Z + variant picker (3 presets); openings.ts |
 | `window` | — | same as door; 2 pane-style variants; openings.ts |
 | `stair` | — | P1,P3,P4(stairParams),P6,P7 + 3-mode dropdown + run-derived count; structural.ts:401 |
-| `roof` | P5 | Footprint dashed preview during draw; Group sub-elements (IfcMember rafters, ridge, fascia, soffit); `atTopOfLevel`; userData.roofParams; structural.ts:804 |
 | `select` | N/A | 4-mode dropdown; op clean cancel; workbench.ts:700 |
 | `move` | N/A | PT state machine; gumball off; coord input; axis constraints; tools/index.ts:968 |
 | `rotate` | N/A | PT state machine; 3-click axis; gumball off; tools/index.ts:968 |
 | `scale` | N/A | 3-mode dropdown; PT state machine; gumball off; tools/index.ts:968 |
-| `extrude` | O6(partial) | 3-phase (select→drag→commit); auto-profile detection from SKETCH_PROFILE_CREATORS; op-tool.ts:1784 |
 | `copy` | — | O1-O5,O7; auto-selects existing target; coord input dx/dy/dz; op-tool.ts:1847 |
 | `clip` | — | 2-mode dropdown; buildClipPlanePlan (1 click) + buildClipPlaneSection (2 clicks); structural.ts:1513 |
+| `volume-dim` | — | Single-click object; full result label; op-tool.ts:1793 |
 
 **PARTIAL** — core mechanic works, 1–2 criteria missing.
 
 | Button | Missing | Gap |
 |---|---|---|
-| `slab` | P5 | No `endpoints`; snapping won't find wall corners of slab edges |
-| `column` | P5 | No `endpoints`; single-click point tool — P4 N/A |
-| `beam` | P5 | No `endpoints`; centroid at midpoint + level height, correct |
+| `roof` | P5 | Footprint dashed preview during draw; Group sub-elements (rafters, ridge, fascia, soffit); `atTopOfLevel`; userData.roofParams; structural.ts:804 |
+| `extrude` | O6 | 3-phase (select→drag→commit); auto-profile detection from SKETCH_PROFILE_CREATORS; preview present during drag but absent during select phase; op-tool.ts:1784 |
+| `slab` | P5 | No `endpoints`; snapping won't find wall corners of slab edges; structural.ts:238 |
+| `column` | P5 | No `endpoints`; single-click point tool — P4 N/A; structural.ts:255 |
+| `beam` | P5 | No `endpoints`; centroid at midpoint + level height, correct; structural.ts:777 |
+| `space` | P5 | Semi-transparent box; usable geometry; no snap integration; structural.ts:1173 |
+| `foundation` | P5 | Box below Z=0; usable geometry; no snap integration; structural.ts:1189 |
+| `ceiling` | P5 | Box at `atTopOfLevel`; usable geometry; no snap integration; structural.ts:1205 |
 | `boolean` | O6 | Phase machine full (bool_a→bool_b→bool_mode chooser); preview not shown during object selection |
-| `fillet` | O6 | Phase machine present (fillet_select→fillet_edge); edge highlight missing; user-reported non-functional — needs browser verification |
 | `array` | O6 | 4 sub-types (linear/polar/curve/rect); full phase machine; no live preview during array |
 | `polygon` | P2,P5 | kind="brep" (should be "polygon"); no endpoints; has controlPoints; sketch.ts:106 |
 | `point` | P5,P7 | Single-point marker; no endpoints; no rubber-band (1-click, correct); sketch.ts:248 |
@@ -160,28 +163,30 @@ All 41 palette entries, drawn from `web/src/shell/workbench.ts:110-167` (`PALETT
 | `aligned-dim` | O6 | Full op phase (dim_a→dim_b→dim_c); SVG overlay; no live segment preview |
 | `angular-dim` | O6 | Same pattern |
 | `area-dim` | O6 | Click-accumulate polygon points |
-| `volume-dim` | — | Single-click object; full result label |
 | `label` | O6 | label_pick → label_text (text input) |
 | `transient-measure` | O6 | tmeasure_a → tmeasure_b; distance label |
 
-**STUB** — registered in TOOL_HANDLERS; geometry produced; most criteria absent.
+**STUB** — defective; registered but produces wrong or broken output.
 
 | Button | Gap |
 |---|---|
-| `space` | P5 only; semi-transparent box; usable but no snap integration |
-| `foundation` | P5 only; box below Z=0 |
-| `ceiling` | P5 only; box at `atTopOfLevel` |
-| `ramp` | P1 wrong: position at a.x,a.y (start, not centroid); P5 missing; sketch.ts:205 |
-| `grid` | Specialist: kind="grid-line", always Z=0; no snap endpoints needed |
-| `level` | Specialist: produces sprite + level state; `buildLevel` returns levelId |
-| `datum` | Has controlPoints (raw `[x,y,z]` arrays, not THREE.Vector3); no endpoints |
-| `section` | Non-create: produces section-box clip state, not persistent mesh |
+| `ramp` | P1 violated: `mesh.position.set(a.x, a.y, 0)` — start point, not centroid; P5 missing; sketch.ts:205 |
+| `fillet` | Phase machine present (fillet_select→fillet_edge); edge highlight missing; user-reported non-functional; browser verification required before promoting |
+
+**SPECIALIST** — works correctly but does not fit the standard create-tool shape by design.
+
+| Button | Notes |
+|---|---|
+| `grid` | Always Z=0 (architectural intent); kind="grid-line"; snap endpoints not applicable to grid lines |
+| `level` | Produces sprite + level state entry; `buildLevel` returns `levelId`; atZ from getGeometryZ, not levelStore |
+| `datum` | Always Z=0; has `controlPoints` as raw `[x,y,z][]` (not THREE.Vector3 — normalize in a follow-up) |
+| `section` | Non-create: produces SectionBox clip state, not a persistent scene mesh; fires `dispatchOnCommit` |
 
 ---
 
 ## Phase 3 — Extracted Architectural Pattern
 
-Triangulated from `line` / `wall` / `door` / `stair` — four PERFECTED buttons with different shapes.
+Triangulated from `line` / `wall` / `door` / `stair` — four PERFECTED buttons with different shapes (2D sketch / 2-pt 3D / 1-pt with elevation / 2-pt multi-param).
 
 ### 3A — Button wiring (workbench.ts:697-734)
 
@@ -396,7 +401,7 @@ on commit:
 | `beam` | Missing `userData.endpoints` | Add endpoints at a/b world positions |
 | `polygon` | `userData.kind = "brep"` (should be "polygon") | C5 fix |
 | `ramp` | `mesh.position.set(a.x, a.y, 0)` — start point, not centroid (C6 violation) | Centroid fix |
-| `fillet` | Edge highlight missing; user-reported non-functional | Browser verification needed |
-| `datum` | `userData.controlPoints` as raw arrays, not `THREE.Vector3[]` | Normalize to match snap-state consumer expectations |
+| `fillet` | User-reported non-functional; now classified STUB | Browser verification + fix before promoting to PARTIAL |
+| `datum` | `userData.controlPoints` as raw `[x,y,z][]`, not `THREE.Vector3[]` | Normalize to match snap-state consumer expectations |
 
 *Confirmed via code audit. No browser verification performed in this PR — doc-only.*
