@@ -833,29 +833,7 @@ const turnsWithDispatch = turnResults.filter(r => (r.dispatchCount ?? 0) > 0).le
 const turn1DispatchCount = turnResults[0]?.dispatchCount ?? 0;
 const turn1GoalState     = turnResults[0]?.goalState ?? "absent";
 
-console.log(`\n┌──────────────────────────────────────────────────────┐`);
-console.log(`│  Phase J verify — ${ts().slice(0,19)}               │`);
-console.log(`├──────────────────────────────────────────────────────┤`);
-console.log(`│  mode          : ${String(COLD_CACHE ? "COLD-CACHE" : "warm").padEnd(35)}│`);
-console.log(`│  boot-complete : ${String(bootComplete).padEnd(35)}│`);
-console.log(`│  ARC inv-trans : ${String(arcInvClean ? "CLEAN" : `${arcInvalidTransitions.length} errors`).padEnd(35)}│`);
-console.log(`│  bufMgr (all)  : ${String(bufMgrClean ? "CLEAN" : `${bufferManagerErrors.length} errors`).padEnd(35)}│`);
-console.log(`│  cache.put errs: ${String(cachePutClean ? "CLEAN" : `${cachePutErrors.length} errors`).padEnd(35)}│`);
-console.log(`│  worker recycles: ${String(recycleClean ? "0" : `${workerRecycleCount} ← BASELINE-FAIL`).padEnd(34)}│`);
-console.log(`│  GENERATE_DONE : ${String(`${cleanTurns}/${DEMO_PROMPTS.length} clean, ${doneTurns} total`).padEnd(35)}│`);
-console.log(`│  total time    : ${String(`${Math.round(totalMs/1000)}s`).padEnd(35)}│`);
-if (compactEvents.length > 0) {
-  console.log(`│  compact_events: ${String(`${compactEvents.length} compaction(s)`).padEnd(35)}│`);
-}
-console.log(`├──────────────────────────────────────────────────────┤`);
-for (const r of turnResults) {
-  const icon = r.outcome === "generate-done" && !r.workerRecycled ? "✓" : "✗";
-  const tags = [r.outcome, r.workerRecycled?"recycled[BASELINE-FAIL]":"", r.bufferManagerErrors>0?"bufMgr!":"", r.nlResponse?"nl-only":r.dispatchCount>0?`d=${r.dispatchCount}`:"", r.goalState!=="absent"?`goal:${r.goalState}`:""].filter(Boolean).join(" ");
-  const label = `${icon} ${r.prompt.slice(0,22).padEnd(22)} [${tags}]`;
-  console.log(`│  ${label.padEnd(52)}│`);
-}
-// #1482/#1477: dispatch gate — turn 1 must dispatch tool_calls (not plan-only);
-// turn 2 (scene-query) must produce NL-only response (no dispatch).
+// #1482/#1477: dispatch gate — declared before receipt write (receipt + summary both need these)
 const turn1DispatchOk = turn1DispatchCount >= 3;
 const turn2NlOk       = T1_ONLY ? true : (turnResults[1]?.isNlResponse === true);
 const passed = bootComplete && arcInvClean && bufMgrClean && cachePutClean && recycleClean  // M1 gates
@@ -863,17 +841,6 @@ const passed = bootComplete && arcInvClean && bufMgrClean && cachePutClean && re
   && turn1DispatchOk
   && turn2NlOk
   && cumulativeGrowthOk;  // §#1504
-console.log(`├──────────────────────────────────────────────────────┤`);
-console.log(`│  turn1 dispatch: ${String(turn1DispatchOk ? `${turn1DispatchCount} dispatches ✓` : `${turn1DispatchCount} dispatches ✗ (need ≥3)`).padEnd(35)}│`);
-if (T1_ONLY) {
-  console.log(`│  turn2 NL-only : ${"skipped (t1-only)".padEnd(35)}│`);
-} else {
-  console.log(`│  turn2 NL-only : ${String(turn2NlOk ? "true ✓" : `${turnResults[1]?.isNlResponse} ✗`).padEnd(35)}│`);
-}
-console.log(`│  cumul-growth  : ${String(cumulativeGrowthOk ? "OK ✓" : `VIOLATED (${cumulativeGrowthViolations.length})`).padEnd(35)}│`);
-const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : "FAIL"}`;
-console.log(verdict.padEnd(54) + "  │");
-console.log(`└──────────────────────────────────────────────────────┘`);
 
 // ── Sub-C: scene persistence fields (§#1644) ──────────────────────────────────
 // scene_persist_warning_present: beforeunload hook registered (Sub-A gate)
@@ -1049,5 +1016,39 @@ try {
     console.error(`[receipt] fallback written: ${outFile}`);
   } catch { /* unrecoverable */ }
 }
+
+// ── Summary printed AFTER receipt write — bash timeout can't eat the receipt ──
+console.log(`\n┌──────────────────────────────────────────────────────┐`);
+console.log(`│  Phase J verify — ${ts().slice(0,19)}               │`);
+console.log(`├──────────────────────────────────────────────────────┤`);
+console.log(`│  mode          : ${String(COLD_CACHE ? "COLD-CACHE" : "warm").padEnd(35)}│`);
+console.log(`│  boot-complete : ${String(bootComplete).padEnd(35)}│`);
+console.log(`│  ARC inv-trans : ${String(arcInvClean ? "CLEAN" : `${arcInvalidTransitions.length} errors`).padEnd(35)}│`);
+console.log(`│  bufMgr (all)  : ${String(bufMgrClean ? "CLEAN" : `${bufferManagerErrors.length} errors`).padEnd(35)}│`);
+console.log(`│  cache.put errs: ${String(cachePutClean ? "CLEAN" : `${cachePutErrors.length} errors`).padEnd(35)}│`);
+console.log(`│  worker recycles: ${String(recycleClean ? "0" : `${workerRecycleCount} ← BASELINE-FAIL`).padEnd(34)}│`);
+console.log(`│  GENERATE_DONE : ${String(`${cleanTurns}/${DEMO_PROMPTS.length} clean, ${doneTurns} total`).padEnd(35)}│`);
+console.log(`│  total time    : ${String(`${Math.round(totalMs/1000)}s`).padEnd(35)}│`);
+if (compactEvents.length > 0) {
+  console.log(`│  compact_events: ${String(`${compactEvents.length} compaction(s)`).padEnd(35)}│`);
+}
+console.log(`├──────────────────────────────────────────────────────┤`);
+for (const r of turnResults) {
+  const icon = r.outcome === "generate-done" && !r.workerRecycled ? "✓" : "✗";
+  const tags = [r.outcome, r.workerRecycled?"recycled[BASELINE-FAIL]":"", r.bufferManagerErrors>0?"bufMgr!":"", r.nlResponse?"nl-only":r.dispatchCount>0?`d=${r.dispatchCount}`:"", r.goalState!=="absent"?`goal:${r.goalState}`:""].filter(Boolean).join(" ");
+  const label = `${icon} ${r.prompt.slice(0,22).padEnd(22)} [${tags}]`;
+  console.log(`│  ${label.padEnd(52)}│`);
+}
+console.log(`├──────────────────────────────────────────────────────┤`);
+console.log(`│  turn1 dispatch: ${String(turn1DispatchOk ? `${turn1DispatchCount} dispatches ✓` : `${turn1DispatchCount} dispatches ✗ (need ≥3)`).padEnd(35)}│`);
+if (T1_ONLY) {
+  console.log(`│  turn2 NL-only : ${"skipped (t1-only)".padEnd(35)}│`);
+} else {
+  console.log(`│  turn2 NL-only : ${String(turn2NlOk ? "true ✓" : `${turnResults[1]?.isNlResponse} ✗`).padEnd(35)}│`);
+}
+console.log(`│  cumul-growth  : ${String(cumulativeGrowthOk ? "OK ✓" : `VIOLATED (${cumulativeGrowthViolations.length})`).padEnd(35)}│`);
+const verdict = `│  VERDICT : ${passed ? "PASS — baseline direction: ↑" : "FAIL"}`;
+console.log(verdict.padEnd(54) + "  │");
+console.log(`└──────────────────────────────────────────────────────┘`);
 
 process.exit(WASM_COHORT ? (receipt.wasm_cohort?.wasm_cohort_passed ? 0 : 1) : (passed ? 0 : 1));
