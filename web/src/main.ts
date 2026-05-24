@@ -15,7 +15,7 @@ import { initShellChrome, setRibbonMode, setRibbonElementTypes, resetRibbonEleme
 import { formatLength, formatArea, formatVolume, unitLabel } from "./units";
 import { opAddLabel, opBuildAnnotLine, getOpPhase, getLastOpFinishMs } from "./viewer/op-tool";
 import { ptIsCoordInputActive } from "./viewer/transforms";
-import { buildWorkbench } from "./shell/workbench";
+import { buildWorkbench, rebuildPaletteForMode } from "./shell/workbench";
 import { buildModes, activateMode, getLayoutHost } from "./shell/modes";
 import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback, exportLayoutAsDxf, addPanel, getPanels } from "./shell/layout";
 import { initCmdK } from "./ui/cmdk";
@@ -3791,6 +3791,7 @@ initShellChrome({
   onModeChange: (k) => {
     activateMode(k, workbenchEl);
     setRibbonMode(k as "model" | "layout" | "research");
+    rebuildPaletteForMode(k);
     viewer.setGumballEnabled(k === "model");
     viewer.setGridAxesVisible(k !== "layout");
     if (k === "layout") applyDrafting(viewer.getScene());

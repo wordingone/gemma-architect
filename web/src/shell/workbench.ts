@@ -190,6 +190,36 @@ const PALETTE_SECTIONS: PaletteSection[] = [
   ]},
 ];
 
+const LAYOUT_PALETTE_SECTIONS: PaletteSection[] = [
+  { tools: [
+    { id: "select", icon: "select", label: "Select" },
+    { id: "pan",    icon: "pan",    label: "Pan" },
+    { id: "zoom",   icon: "zoom",   label: "Zoom" },
+  ]},
+  { tools: [
+    { id: "vp-viewport", icon: "viewport",       label: "Viewport" },
+    { id: "vp-frame",    icon: "frame",          label: "Frame" },
+    { id: "vp-scale",    icon: "scale",          label: "Scale" },
+    { id: "vp-align",    icon: "align-center-h", label: "Align" },
+    { id: "vp-detail",   icon: "detail",         label: "Detail" },
+  ]},
+  { tools: [
+    { id: "line",   icon: "line",   label: "Line" },
+    { id: "rect",   icon: "rect",   label: "Rectangle" },
+    { id: "circle", icon: "circle", label: "Circle" },
+  ]},
+  { tools: [
+    { id: "ruler",       icon: "ruler",       label: "Ruler" },
+    { id: "compass",     icon: "compass",     label: "Compass" },
+    { id: "text",        icon: "text",        label: "Text" },
+    { id: "leader",      icon: "leader",      label: "Leader" },
+    { id: "callout",     icon: "callout",     label: "Callout" },
+    { id: "aligned-dim", icon: "aligned-dim", label: "Aligned Dim" },
+    { id: "angular-dim", icon: "angular-dim", label: "Angular Dim" },
+    { id: "area-dim",    icon: "area-dim",    label: "Area" },
+  ]},
+];
+
 type DockTab = { id: string; icon: string; label: string };
 const DOCK_TABS: DockTab[] = [
   { id: "prompt",  icon: "sparkle", label: "CREATE" },
@@ -688,7 +718,10 @@ function showClipModeMenu(anchor: HTMLElement): void {
   document.addEventListener("pointerup", onUp);
 }
 
+let _paletteHost: HTMLElement | null = null;
+
 function buildPalette(host: HTMLElement) {
+  _paletteHost = host;
   host.innerHTML = "";
 
   const tip = getPaletteTip();
@@ -828,6 +861,42 @@ function buildPalette(host: HTMLElement) {
 
   host.appendChild(variantPicker);
 
+}
+
+function buildLayoutPalette(host: HTMLElement) {
+  host.innerHTML = "";
+  const tip = getPaletteTip();
+  host.addEventListener("mouseover", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>(".palette-btn");
+    if (!btn) return;
+    tip.textContent = btn.getAttribute("aria-label") ?? "";
+    tip.style.left = (e as MouseEvent).clientX + 14 + "px";
+    tip.style.top  = (e as MouseEvent).clientY - 10 + "px";
+    tip.style.display = "block";
+  });
+  host.addEventListener("mouseout", (e) => {
+    const leaving = (e.target as HTMLElement).closest<HTMLElement>(".palette-btn");
+    if (!leaving) return;
+    const to = (e as MouseEvent).relatedTarget as HTMLElement | null;
+    if (to && leaving.contains(to)) return;
+    tip.style.display = "none";
+  });
+  for (const section of LAYOUT_PALETTE_SECTIONS) {
+    const sec = el("div", "palette-section");
+    for (const tool of section.tools) {
+      const btn = el("button", "palette-btn", { type: "button", "aria-label": tool.label, "data-tool": tool.id });
+      btn.innerHTML = iconSVG(tool.icon, 18);
+      btn.addEventListener("click", () => dispatchSync("setActiveTool", { toolId: tool.id }));
+      sec.appendChild(btn);
+    }
+    host.appendChild(sec);
+  }
+}
+
+export function rebuildPaletteForMode(mode: string) {
+  if (!_paletteHost) return;
+  if (mode === "layout") buildLayoutPalette(_paletteHost);
+  else buildPalette(_paletteHost);
 }
 
 function buildSnapDock(): HTMLElement {

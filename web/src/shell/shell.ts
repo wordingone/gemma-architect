@@ -336,7 +336,7 @@ export function setRibbonMode(mode: "model" | "layout" | "research") {
   }
   if (mode === "layout") {
     _ribbonTabsEl.style.display = "none";  // no section tabs in layout mode
-    fillRibbonTools(_ribbonToolsEl, LAYOUT_TOOL_GROUPS);
+    fillRibbonTools(_ribbonToolsEl, []);    // palette replaces top ribbon in layout
     _ribbonEl?.querySelector(".ribbon-assets")?.remove();
   } else if (mode === "research") {
     _ribbonTabsEl.style.display = "none";  // no section tabs in research mode

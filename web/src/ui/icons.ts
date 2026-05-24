@@ -86,6 +86,7 @@ export function iconSVG(name: string, size = 16): string {
     case "history": return `<svg ${attr}><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 3"/></svg>`;
     case "link":    return `<svg ${attr}><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5"/></svg>`;
     case "pan":     return `<svg ${attr}><path d="M12 3l-2 3h4zM12 21l2-3h-4zM3 12l3 2v-4zM21 12l-3-2v4z"/></svg>`;
+    case "zoom":    return `<svg ${attr}><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M8 11h6M11 8v6"/></svg>`;
     case "text":    return `<svg ${attr}><path d="M5 5h14M12 5v14M9 19h6"/></svg>`;
     case "leader":  return `<svg ${attr}><path d="M4 20l9-9M17 7l3-3M17 7h3v3"/></svg>`;
     case "frame":   return `<svg ${attr}><rect x="3" y="3" width="18" height="18"/><path d="M3 8h18M3 16h18M8 3v18M16 3v18" opacity="0.35"/></svg>`;
