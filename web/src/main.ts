@@ -57,6 +57,7 @@ import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
 import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
 import { onElementCommitted, cutSlabVoidFromBoxMesh, addVoidToWallObject } from "./tools/join-groups";
+import { attemptWallCornerJoins } from "./tools/wall-corners";
 import { getSnapTarget } from "./viewer/snap-state";
 import { makeLevelSprite, updateLevelSprite, buildWall, buildWallPitchedTop, buildSlab, buildColumn, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildStair, buildBox, buildReferenceLine, rebuildWallParams, rebuildGroupWallHeight, type RoofParams, type CurtainWallParams, type StairParams, DEFAULT_WALL_HEIGHT, DEFAULT_SLAB_THICKNESS } from "./tools/structural";
 import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRailing, buildPoint, buildCurve } from "./tools/sketch";
@@ -871,6 +872,7 @@ registerHandler("SdWall", (args) => {
   mesh.userData.dispatchArgs = args;
   mesh.userData.chain = chain;
   viewer.addMesh(mesh, "brep");
+  if (topProfile !== "pitched") attemptWallCornerJoins(mesh, viewer.getScene());
   onElementCommitted(mesh, viewer.getScene());
   const dx = b.x - a.x, dy = b.y - a.y;
   return { created: "wall", length: Math.sqrt(dx * dx + dy * dy) || wallLen };

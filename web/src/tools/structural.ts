@@ -143,12 +143,12 @@ export function buildWall(a: { x: number; y: number }, b: { x: number; y: number
     new THREE.Vector3(-len / 2, 0, 0),
     new THREE.Vector3(len / 2, 0, 0),
   ];
-  // Initialize corners to rectangular defaults; attemptWallCornerJoins will update them.
-  initWallCorners(mesh);
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
   ] as SnapVertex[];
+  // Initialize corners to rectangular defaults; attemptWallCornerJoins will update them.
+  initWallCorners(mesh);
   const chain = `const wall = makeBox(${round(len)}, ${round(t)}, ${round(h)}).rotate(${round(angDeg)}, [0, 0, 0], [0, 0, 1]).translate([${round(cx)}, ${round(cy)}, 0]);`;
 
   return { mesh, chain };
@@ -220,11 +220,11 @@ export function buildWallPitchedTop(
     new THREE.Vector3(-len / 2, 0, 0),
     new THREE.Vector3( len / 2, 0, 0),
   ];
-  initWallCorners(mesh);
   mesh.userData.endpoints = [
     { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
     { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
   ] as SnapVertex[];
+  initWallCorners(mesh);
   const chain = `// gable wall len=${round(len)} eave=${round(eaveH)} ridge=${round(eaveH + ridgeH)}`;
   return { mesh, chain };
 }
