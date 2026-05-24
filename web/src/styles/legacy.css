@@ -737,31 +737,35 @@ footer span { margin: 0 0.55rem; color: var(--border); }
 }
 
 /* ── Restore-last-session prompt ─────────────────────────────────────────── */
+/* Top-right toast below ribbon — does not overlap CREATE-tab bottom edge. */
+/* Uses overlay tokens so it adapts to vellum (day) and blueprint (night). */
 .restore-prompt {
   position: fixed;
-  bottom: 36px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-2, #1e1e1e);
-  border: 1px solid var(--border, #333);
-  border-radius: 6px;
-  padding: 8px 12px;
+  top: 54px;
+  right: 16px;
+  background: var(--overlay-bg);
+  backdrop-filter: var(--overlay-blur);
+  -webkit-backdrop-filter: var(--overlay-blur);
+  border: 1px solid var(--glass-stroke-strong);
+  border-radius: var(--r, 2px);
+  padding: 8px 14px;
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 12px;
+  font-family: var(--sans, 'Archivo Narrow', sans-serif);
   z-index: 9990;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  box-shadow: 0 2px 8px oklch(0 0 0 / 0.12);
   white-space: nowrap;
 }
 .restore-prompt[hidden] { display: none; }
-.restore-prompt-msg { color: var(--fg, #ccc); }
+.restore-prompt-msg { color: var(--ink-soft); }
 .restore-btn {
-  padding: 3px 12px;
-  border-radius: 4px;
-  border: 1px solid var(--accent, #4a9eff);
-  background: var(--accent, #4a9eff);
-  color: #fff;
+  padding: 3px 10px;
+  border-radius: var(--r-sm, 1px);
+  border: 1px solid var(--sanguine);
+  background: var(--sanguine);
+  color: var(--paper-base);
   cursor: pointer;
   font-size: 11px;
   font-family: inherit;
@@ -769,12 +773,12 @@ footer span { margin: 0 0.55rem; color: var(--border); }
 .restore-btn:hover { opacity: 0.85; }
 .restore-discard-btn {
   padding: 3px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--border, #444);
+  border-radius: var(--r-sm, 1px);
+  border: 1px solid var(--hairline-soft);
   background: transparent;
-  color: var(--fg-dim, #888);
+  color: var(--ink-dim);
   cursor: pointer;
   font-size: 11px;
   font-family: inherit;
 }
-.restore-discard-btn:hover { color: var(--fg, #ccc); }
+.restore-discard-btn:hover { color: var(--ink-soft); }
