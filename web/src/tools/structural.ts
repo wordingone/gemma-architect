@@ -298,7 +298,8 @@ function _intersect2D(
 
 // Build a parametric landing mesh whose plan-shape is a parallelogram aligned to the
 // incoming (d1) and outgoing (d2) flight directions. Replaces the fixed square box.
-// Falls back to a rectangular box when flights are nearly parallel (|sin θ| < 0.1).
+// Falls back to a direction-aligned square when flights are nearly parallel (|sin θ| < 0.1),
+// which prevents the intersection points from shooting off to astronomical distances.
 function _makeLandingMesh(
   pB: { x: number; y: number },
   d1n: { x: number; y: number }, // normalized incoming direction
@@ -309,27 +310,44 @@ function _makeLandingMesh(
   stairId: string,
 ): THREE.Mesh {
   const half = stairW / 2;
-  const n1 = { x: -d1n.y, y: d1n.x }; // left-normal of d1
-  const n2 = { x: -d2n.y, y: d2n.x }; // left-normal of d2
 
-  // Four bounding edge lines of the landing (pair aligned to each flight direction).
-  const pL1 = { x: pB.x + n1.x * half, y: pB.y + n1.y * half };
-  const pR1 = { x: pB.x - n1.x * half, y: pB.y - n1.y * half };
-  const pL2 = { x: pB.x + n2.x * half, y: pB.y + n2.y * half };
-  const pR2 = { x: pB.x - n2.x * half, y: pB.y - n2.y * half };
+  // |cross| = |sin θ| for unit vectors. Below 0.1 (~5.7°) the intersection
+  // is unreliably far away (stairW / (2 sin θ) → ∞ on smooth curves).
+  const cross = d1n.x * d2n.y - d1n.y * d2n.x;
+  let A: { x: number; y: number },
+      B: { x: number; y: number },
+      C: { x: number; y: number },
+      D: { x: number; y: number };
 
-  // Fallback corners (axis-aligned square) used when flights are parallel.
-  const fallback: Array<{ x: number; y: number }> = [
-    { x: pB.x - half, y: pB.y + half },
-    { x: pB.x - half, y: pB.y - half },
-    { x: pB.x + half, y: pB.y - half },
-    { x: pB.x + half, y: pB.y + half },
-  ];
-
-  const A = _intersect2D(pL1, d1n, pL2, d2n) ?? fallback[0];
-  const B = _intersect2D(pR1, d1n, pL2, d2n) ?? fallback[1];
-  const C = _intersect2D(pR1, d1n, pR2, d2n) ?? fallback[2];
-  const D = _intersect2D(pL1, d1n, pR2, d2n) ?? fallback[3];
+  if (Math.abs(cross) < 0.1) {
+    // Nearly parallel — use a direction-aligned square so the landing tracks the stair.
+    const avgX = (d1n.x + d2n.x) / 2, avgY = (d1n.y + d2n.y) / 2;
+    const avgLen = Math.sqrt(avgX * avgX + avgY * avgY) || 1;
+    const fx = avgX / avgLen, fy = avgY / avgLen; // forward
+    const lx = -fy, ly = fx; // left-normal
+    A = { x: pB.x - fx * half + lx * half, y: pB.y - fy * half + ly * half };
+    B = { x: pB.x - fx * half - lx * half, y: pB.y - fy * half - ly * half };
+    C = { x: pB.x + fx * half - lx * half, y: pB.y + fy * half - ly * half };
+    D = { x: pB.x + fx * half + lx * half, y: pB.y + fy * half + ly * half };
+  } else {
+    const n1 = { x: -d1n.y, y: d1n.x }; // left-normal of d1
+    const n2 = { x: -d2n.y, y: d2n.x }; // left-normal of d2
+    // Four bounding edge lines of the landing (pair aligned to each flight direction).
+    const pL1 = { x: pB.x + n1.x * half, y: pB.y + n1.y * half };
+    const pR1 = { x: pB.x - n1.x * half, y: pB.y - n1.y * half };
+    const pL2 = { x: pB.x + n2.x * half, y: pB.y + n2.y * half };
+    const pR2 = { x: pB.x - n2.x * half, y: pB.y - n2.y * half };
+    const fallback: Array<{ x: number; y: number }> = [
+      { x: pB.x - half, y: pB.y + half },
+      { x: pB.x - half, y: pB.y - half },
+      { x: pB.x + half, y: pB.y - half },
+      { x: pB.x + half, y: pB.y + half },
+    ];
+    A = _intersect2D(pL1, d1n, pL2, d2n) ?? fallback[0];
+    B = _intersect2D(pR1, d1n, pL2, d2n) ?? fallback[1];
+    C = _intersect2D(pR1, d1n, pR2, d2n) ?? fallback[2];
+    D = _intersect2D(pL1, d1n, pR2, d2n) ?? fallback[3];
+  }
 
   const shape = new THREE.Shape();
   shape.moveTo(A.x - pB.x, A.y - pB.y);
