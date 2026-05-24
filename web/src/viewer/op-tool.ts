@@ -459,7 +459,9 @@ function opApply2DFillet(
     const d = allVerts[i].distanceTo(localCorner);
     if (d < minD) { minD = d; cornerIdx = i; }
   }
-  if (cornerIdx <= 0 || cornerIdx >= allVerts.length - 1) return;
+  // For a closed LineLoop all corner indices are valid (including 0 and last).
+  const isLoop = line instanceof THREE.LineLoop;
+  if (!isLoop && (cornerIdx <= 0 || cornerIdx >= allVerts.length - 1)) return;
 
   // Rebuild vertex array with arc replacing the corner
   const newVerts: THREE.Vector3[] = [
@@ -497,9 +499,12 @@ export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: num
     if (!pos || pos.count < 3) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
     const mat4 = phase.target.matrixWorld;
 
+    // LineLoop (rect/polygon/circle): every vertex is a corner — include all.
+    // Open Line: first and last are endpoints; skip them.
+    const isLoop = phase.target instanceof THREE.LineLoop;
     let bestIdx = -1;
     let bestDist = 64; // px — wider search radius than regular snap for corners
-    for (let i = 1; i < pos.count - 1; i++) { // skip first and last (endpoints can't be filleted)
+    for (let i = (isLoop ? 0 : 1); i < (isLoop ? pos.count : pos.count - 1); i++) {
       const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mat4);
       const sc = projectToScreen(viewer, v.x, v.y, v.z);
       if (!sc) continue;
@@ -509,9 +514,11 @@ export function opUpdateFilletEdge(viewer: Viewer, clientX: number, clientY: num
 
     if (bestIdx < 0) { opClearPreview(viewer); _opHoverEdgePts = null; _opHoverCornerPts = null; return; }
 
-    const prev   = new THREE.Vector3().fromBufferAttribute(pos, bestIdx - 1).applyMatrix4(mat4);
+    const prevIdx = isLoop ? (bestIdx - 1 + pos.count) % pos.count : bestIdx - 1;
+    const nextIdx = isLoop ? (bestIdx + 1) % pos.count : bestIdx + 1;
+    const prev   = new THREE.Vector3().fromBufferAttribute(pos, prevIdx).applyMatrix4(mat4);
     const corner = new THREE.Vector3().fromBufferAttribute(pos, bestIdx).applyMatrix4(mat4);
-    const next   = new THREE.Vector3().fromBufferAttribute(pos, bestIdx + 1).applyMatrix4(mat4);
+    const next   = new THREE.Vector3().fromBufferAttribute(pos, nextIdx).applyMatrix4(mat4);
 
     _opHoverCornerPts = [prev, corner, next];
     _opHoverEdgePts   = [prev, next]; // stored for click handler compatibility
