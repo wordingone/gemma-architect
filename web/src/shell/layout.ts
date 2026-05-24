@@ -25,7 +25,7 @@
 import { iconSVG } from "../ui/icons";
 import { formatLength } from "../units.js";
 import { getState } from "../app-state.js";
-import type { Viewer } from "../viewer/viewer";
+import type { Viewer, ExportFacePoly } from "../viewer/viewer";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
 
@@ -1401,15 +1401,25 @@ function renderViewportSvg(p: PanelState, b: SceneBounds, viewer?: Viewer): stri
   const w = p.w, h = p.h;
   if (w < 4 || h < 4) return "";
 
-  // Real 3D edge projection (#1211): use live viewer when available.
+  // Real 3D edge projection (#1211 + #1803): fills first, edges on top.
   if (viewer) {
     const viewName = layoutViewportToViewName(p.viewport);
     const segs = viewer.getEdgeSegmentsForView(viewName, w, h);
-    if (segs.length > 0) {
+    const polys: ExportFacePoly[] = viewer.getFacePolygonsForView
+      ? viewer.getFacePolygonsForView(viewName, w, h)
+      : [];
+
+    if (segs.length > 0 || polys.length > 0) {
+      const fillMarkup = polys.map(({ pts, fill }) => {
+        const [a, b2, c] = pts;
+        return `<polygon points="${a[0].toFixed(2)},${a[1].toFixed(2)} ${b2[0].toFixed(2)},${b2[1].toFixed(2)} ${c[0].toFixed(2)},${c[1].toFixed(2)}" fill="${fill}" stroke="none"/>`;
+      }).join("\n      ");
       const lines = segs.map(([x1, y1, x2, y2]) =>
         `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`,
       ).join("\n      ");
       return `<svg viewBox="0 0 ${w.toFixed(2)} ${h.toFixed(2)}" preserveAspectRatio="xMidYMid meet">
+      <rect x="0" y="0" width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="#ffffff"/>
+      <g>${fillMarkup}</g>
       <g fill="none" stroke="#1a1a22" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round">
       ${lines}
       </g>
@@ -1596,6 +1606,11 @@ function composeSvg(c: LayoutController): string {
 }
 
 
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+}
+
 function escapeXml(s: string): string {
   return s.replace(/[<>&"']/g, (ch) => {
     switch (ch) {
@@ -1648,9 +1663,26 @@ export async function exportLayoutAsPdf(host: HTMLElement): Promise<ArrayBuffer>
     doc.setLineWidth(p.border === "thick" ? 0.6 : 0.25);
     doc.setDrawColor(26, 26, 34);
     if (p.border !== "none") doc.rect(px, py, pw, ph);
-    // Project SVG primitives — real geometry when viewer is available (#1211).
+    // Project geometry: fills first (behind edges), then edge lines on top.
+    // Fills: use direct getFacePolygonsForView when viewer is available (#1803).
+    if (viewer?.getFacePolygonsForView) {
+      const viewName = layoutViewportToViewName(p.viewport);
+      const polys = viewer.getFacePolygonsForView(viewName, p.w, p.h);
+      for (const { pts, fill } of polys) {
+        const [r, g, b2] = hexToRgb(fill);
+        doc.setFillColor(r, g, b2);
+        doc.triangle(
+          px + pts[0][0] * PX_TO_MM, py + pts[0][1] * PX_TO_MM,
+          px + pts[1][0] * PX_TO_MM, py + pts[1][1] * PX_TO_MM,
+          px + pts[2][0] * PX_TO_MM, py + pts[2][1] * PX_TO_MM,
+          "F",
+        );
+      }
+    }
+    // Edge lines on top of fills.
     const inner = renderViewportSvg(p, c.bounds(), viewer);
     doc.setLineWidth(0.25);
+    doc.setDrawColor(26, 26, 34);
     extractSvgLines(inner).forEach(([sx, sy, ex, ey]) => {
       doc.line(
         px + sx * PX_TO_MM,

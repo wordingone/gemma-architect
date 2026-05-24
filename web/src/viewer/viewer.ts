@@ -26,6 +26,12 @@ import { drawingLayerStore } from "../geometry/drawing-layers.js";
 import { clipSegByPlanes, worldToPanelXY } from "./line-clip.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
+
+/** Projected face polygon for 2D vector export fills (#1803). */
+export type ExportFacePoly = {
+  pts: [[number, number], [number, number], [number, number]];
+  fill: string;
+};
 type Pane = {
   id: string;
   view: ViewName;
@@ -2861,6 +2867,100 @@ export class Viewer {
     return segments;
   }
 
+  // Project face polygons for 2D vector export fills (#1803).
+  // Returns triangles (3 projected panel-XY points each) with a fill color
+  // derived from userData.creator. Backface-culled via camera forward direction.
+  // Editor chrome is excluded using the same noExport set as getEdgeSegmentsForView.
+  getFacePolygonsForView(view: ViewName, panelW: number, panelH: number): ExportFacePoly[] {
+    const pane = this.panes.find(p => p.view === view);
+    if (!pane || panelW < 1 || panelH < 1) return [];
+
+    let cam: THREE.Camera;
+    if (pane.camera instanceof THREE.OrthographicCamera) {
+      const src = pane.camera;
+      const worldTop    = src.top    || 5;
+      const worldBottom = src.bottom || -5;
+      const worldH = worldTop - worldBottom;
+      const half = worldH / 2;
+      const tmp = new THREE.OrthographicCamera(
+        -half * panelW / panelH, half * panelW / panelH,
+        worldTop, worldBottom, src.near, src.far,
+      );
+      tmp.position.copy(src.position);
+      tmp.quaternion.copy(src.quaternion);
+      tmp.updateProjectionMatrix();
+      cam = tmp;
+    } else {
+      const src = pane.camera as THREE.PerspectiveCamera;
+      const tmp = src.clone() as THREE.PerspectiveCamera;
+      tmp.aspect = panelW / panelH;
+      tmp.updateProjectionMatrix();
+      cam = tmp;
+    }
+
+    const projMat = new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    const viewDir = new THREE.Vector3();
+    cam.getWorldDirection(viewDir);
+
+    const _noExport = new Set<THREE.Object3D>();
+    for (const g of this.gizmos) g.traverse((o) => _noExport.add(o));
+    if (this.pivotProxy) this.pivotProxy.traverse((o) => _noExport.add(o));
+    this._cplaneGizmo.group.traverse((o) => _noExport.add(o));
+    this.grid.traverse((o) => _noExport.add(o));
+    this.axes.traverse((o) => _noExport.add(o));
+
+    const polys: ExportFacePoly[] = [];
+    const tmpA = new THREE.Vector3();
+    const tmpB = new THREE.Vector3();
+    const tmpC = new THREE.Vector3();
+    const tmpN = new THREE.Vector3();
+
+    this.scene.updateMatrixWorld(false);
+    this.scene.traverse((child) => {
+      if (_noExport.has(child) || child.userData.noRenderMode) return;
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const geom = mesh.geometry as THREE.BufferGeometry | undefined;
+      if (!geom?.attributes.position) return;
+
+      const creator = (mesh.userData as { creator?: string }).creator;
+      const fill = _exportFillForCreator(creator);
+      const mat4 = mesh.matrixWorld;
+      const pos = geom.attributes.position.array as Float32Array;
+      const idx = geom.index?.array as Uint32Array | Uint16Array | undefined;
+      const triCount = idx ? Math.floor(idx.length / 3) : Math.floor(pos.length / 9);
+
+      for (let t = 0; t < triCount; t++) {
+        let ai: number, bi: number, ci: number;
+        if (idx) {
+          ai = idx[t * 3] * 3;
+          bi = idx[t * 3 + 1] * 3;
+          ci = idx[t * 3 + 2] * 3;
+        } else {
+          ai = t * 9; bi = t * 9 + 3; ci = t * 9 + 6;
+        }
+        tmpA.set(pos[ai], pos[ai + 1], pos[ai + 2]).applyMatrix4(mat4);
+        tmpB.set(pos[bi], pos[bi + 1], pos[bi + 2]).applyMatrix4(mat4);
+        tmpC.set(pos[ci], pos[ci + 1], pos[ci + 2]).applyMatrix4(mat4);
+
+        // Backface cull: skip faces whose normal points away from camera.
+        tmpN.crossVectors(
+          tmpB.clone().sub(tmpA),
+          tmpC.clone().sub(tmpA),
+        );
+        if (tmpN.dot(viewDir) > 0) continue;
+
+        const a2 = worldToPanelXY(tmpA, projMat, panelW, panelH);
+        const b2 = worldToPanelXY(tmpB, projMat, panelW, panelH);
+        const c2 = worldToPanelXY(tmpC, projMat, panelW, panelH);
+        if (!a2 || !b2 || !c2) continue;
+
+        polys.push({ pts: [a2, b2, c2], fill });
+      }
+    });
+    return polys;
+  }
+
   // Rebuild stencil fill geometry for the current clip + section planes.
   private _rebuildFill(): void {
     const all = [...this._sectionPlanes, ...this._clipPlanes];
@@ -3383,4 +3483,20 @@ function _deserializeSceneObj(s: SerializedSceneObj): THREE.Object3D | null {
     for (const cs of s.children) { const child = _deserializeSceneObj(cs); if (child) obj.add(child); }
   }
   return obj;
+}
+
+
+// Map userData.creator to an architectural fill color for 2D exports (#1803).
+// Section-cut structural elements: dark fill (Rhino/Revit poché convention).
+// Sketch/misc objects: light grey so they read as background geometry.
+function _exportFillForCreator(creator: string | undefined): string {
+  switch (creator) {
+    case "wall":
+    case "column":
+    case "beam":       return "#1a1a22"; // solid black — section-cut structural
+    case "slab":
+    case "foundation": return "#55555f"; // dark grey — concrete cut
+    case "roof":       return "#8888a0"; // medium grey — roof surface
+    default:           return "#d8d8e0"; // light grey — sketch / other geometry
+  }
 }
