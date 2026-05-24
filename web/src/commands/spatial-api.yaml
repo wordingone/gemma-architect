@@ -929,9 +929,9 @@
         default: 4
       thickness:
         type: number
-        description: "\"Slab thickness (IBC 4\\\" nominal = 0.1 m).\","
+        description: "Slab thickness. Residential floor: 0.2 m (8\"). IBC 4\" nominal (0.1 m) is the handler default for direct API calls."
         unit: m
-        default: 0.1
+        default: 0.2
       level:
         type: string
         description: "Level ID or name."

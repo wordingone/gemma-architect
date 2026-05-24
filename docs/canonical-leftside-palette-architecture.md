@@ -146,9 +146,9 @@ All 41 palette entries, drawn from `web/src/shell/workbench.ts:110-167` (`PALETT
 |---|---|---|
 | `roof` | P5 | Footprint dashed preview during draw; Group sub-elements (rafters, ridge, fascia, soffit); `atTopOfLevel`; userData.roofParams; structural.ts:804 |
 | `extrude` | O6 | 3-phase (select→drag→commit); auto-profile detection from SKETCH_PROFILE_CREATORS; preview present during drag but absent during select phase; op-tool.ts:1784 |
-| `slab` | P5 | No `endpoints`; snapping won't find wall corners of slab edges; structural.ts:238 |
-| `column` | P5 | No `endpoints`; single-click point tool — P4 N/A; structural.ts:255 |
-| `beam` | P5 | No `endpoints`; centroid at midpoint + level height, correct; structural.ts:777 |
+| `slab` | ~~P5~~ | ~~No `endpoints`~~ — fixed #1798; 4 footprint corners + `_snapCreationPos` at centroid. **→ PERFECTED** |
+| `column` | ~~P5~~ | ~~No `endpoints`~~ — fixed #1798; base-centre endpoint + `_snapCreationPos`. **→ PERFECTED** |
+| `beam` | ~~P5~~ | ~~No `endpoints`~~ — fixed #1798; both endpoints at beam elevation + `_snapCreationPos`. **→ PERFECTED** |
 | `space` | P5 | Semi-transparent box; usable geometry; no snap integration; structural.ts:1173 |
 | `foundation` | P5 | Box below Z=0; usable geometry; no snap integration; structural.ts:1189 |
 | `ceiling` | P5 | Box at `atTopOfLevel`; usable geometry; no snap integration; structural.ts:1205 |
@@ -179,7 +179,7 @@ All 41 palette entries, drawn from `web/src/shell/workbench.ts:110-167` (`PALETT
 |---|---|
 | `grid` | Always Z=0 (architectural intent); kind="grid-line"; snap endpoints not applicable to grid lines |
 | `level` | Produces sprite + level state entry; `buildLevel` returns `levelId`; atZ from getGeometryZ, not levelStore |
-| `datum` | Always Z=0; has `controlPoints` as raw `[x,y,z][]` (not THREE.Vector3 — normalize in a follow-up) |
+| `datum` | Always Z=0; controlPoints normalized to `THREE.Vector3[]` (fixed #1799); `_snapCreationPos` set for gumball-move delta |
 | `section` | Non-create: produces SectionBox clip state, not a persistent scene mesh; fires `dispatchOnCommit` |
 
 ---
@@ -396,12 +396,12 @@ on commit:
 
 | Tool | Gap | Suggested issue |
 |---|---|---|
-| `slab` | Missing `userData.endpoints` | Add endpoints at 4 corners (matching wall pattern) |
-| `column` | Missing `userData.endpoints` | Add endpoint at column base center |
-| `beam` | Missing `userData.endpoints` | Add endpoints at a/b world positions |
+| `slab` | ~~Missing `userData.endpoints`~~ | Fixed #1798 |
+| `column` | ~~Missing `userData.endpoints`~~ | Fixed #1798 |
+| `beam` | ~~Missing `userData.endpoints`~~ | Fixed #1798 |
 | `polygon` | `userData.kind = "brep"` (should be "polygon") | C5 fix |
 | `ramp` | ~~`mesh.position.set(a.x, a.y, 0)` — start point, not centroid (C6 violation)~~ | Fixed #1718 |
 | `fillet` | ~~User-reported non-functional; now classified STUB~~ | ~~Browser verification + fix before promoting to PARTIAL~~ Fixed #1719 |
-| `datum` | `userData.controlPoints` as raw `[x,y,z][]`, not `THREE.Vector3[]` | Normalize to match snap-state consumer expectations |
+| `datum` | ~~`userData.controlPoints` as raw `[x,y,z][]`, not `THREE.Vector3[]`~~ | Fixed #1799 |
 
 *Confirmed via code audit. No browser verification performed in this PR — doc-only.*
