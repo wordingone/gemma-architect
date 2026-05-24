@@ -2423,6 +2423,26 @@
       label:
         type: string
         description: "Named handle for later removal"
+      autoSheet:
+        type: boolean
+        description: "[optional] Auto-create a linked Section sheet in the Layout tab (default: true)"
+        default: true
+      bounds:
+        type: object
+        description: "[optional] Crop-region extents for the linked sheet"
+        properties:
+          startOffset:
+            type: number
+            description: "Left edge offset from origin along cut line (m)"
+          endOffset:
+            type: number
+            description: "Right edge offset from origin along cut line (m)"
+          farClip:
+            type: number
+            description: "Depth behind cut plane (m)"
+          height:
+            type: number
+            description: "View height (m)"
     required: [origin, normal]
   topology_role: view
   kg_predicates: []

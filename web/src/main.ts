@@ -18,7 +18,8 @@ import { ptIsCoordInputActive } from "./viewer/transforms";
 import { buildWorkbench, rebuildPaletteForMode } from "./shell/workbench";
 import { loadDrawingLayers } from "./geometry/drawing-layers";
 import { buildModes, activateMode, getLayoutHost } from "./shell/modes";
-import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback, exportLayoutAsDxf, addPanel, getPanels } from "./shell/layout";
+import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback, exportLayoutAsDxf, addPanel, getPanels, addLinkedClipPlaneSheet } from "./shell/layout";
+import { clippingPlaneStore, type CPlaneBounds } from "./geometry/clipping-planes";
 import { initCmdK } from "./ui/cmdk";
 import { initExportDrawer, openExportDrawer } from "./io/export-drawer";
 import { Viewer } from "./viewer/viewer";
@@ -326,12 +327,22 @@ registerHandler("SdFitToObject", (args) => {
 registerHandler("SdClippingPlane", (args) => {
   const origin = args.origin as [number, number, number];
   const normal = args.normal as [number, number, number];
-  const label = args.label as string | undefined;
+  const label = (args.label as string | undefined) ?? `clip-${Date.now()}`;
+  const autoSheet = args.autoSheet !== false; // default true
+  const boundsArg = args.bounds as Partial<CPlaneBounds> | undefined;
   if (!Array.isArray(origin) || origin.length < 3 || !Array.isArray(normal) || normal.length < 3)
     return { error: "origin and normal must be [x,y,z] arrays" };
   viewer.addClippingPlane(origin, normal, label);
   document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
-  return { ok: true, origin, normal, label };
+  const entity = clippingPlaneStore.add(origin, normal, label, boundsArg);
+  let sheetId: string | undefined;
+  if (autoSheet) {
+    const layoutHost = getLayoutHost();
+    if (layoutHost) {
+      sheetId = addLinkedClipPlaneSheet(layoutHost, entity.id, `Section — ${label}`);
+    }
+  }
+  return { ok: true, origin, normal, label, clipPlaneId: entity.id, sheetId };
 });
 
 registerHandler("SdClippingPlanesClear", () => {

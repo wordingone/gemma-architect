@@ -615,6 +615,22 @@ class LayoutController {
     this.renderTabs();
   }
 
+  /** Auto-create a named sheet linked to a clipping-plane entity (#1849). Returns new sheet id. */
+  addLinkedSheet(name: string): string {
+    const id = newSheetId();
+    this.sheets.push({
+      id,
+      name,
+      size: this.size,
+      orientation: this.orientation,
+      customMm: { ...this.customMm },
+      panels: [],
+    });
+    this.renderTabs();
+    this.switchSheet(this.sheets.length - 1);
+    return id;
+  }
+
   private addSheet(presetId?: SheetPresetId): void {
     if (!presetId) { this._showPresetPicker(); return; }
     const def = presetId !== "blank" ? SHEET_PRESET_DEFS[presetId as Exclude<SheetPresetId, "blank">] : null;
@@ -1360,6 +1376,30 @@ class LayoutController {
 
 const _controllers = new WeakMap<HTMLElement, LayoutController>();
 
+/** Maps sheetData.id → ClippingPlaneEntity.id for auto-linked sheets (#1849). */
+const _sheetClipLinks = new Map<string, string>();
+
+/** Return the clipping-plane entity ID linked to a sheet, if any. */
+export function getClipPlaneIdForSheet(sheetId: string): string | undefined {
+  return _sheetClipLinks.get(sheetId);
+}
+
+/**
+ * Auto-create a linked section sheet in the Layout tab for a new clipping plane (#1849).
+ * Called by the SdClippingPlane handler when autoSheet is true.
+ * @param host      The paper-mode host element (from getLayoutHost()).
+ * @param clipPlaneId  The ClippingPlaneEntity id from clippingPlaneStore.
+ * @param name      Sheet tab label (e.g. "Section — Clip A").
+ * @returns The new sheetData.id, or "" if no LayoutController is mounted.
+ */
+export function addLinkedClipPlaneSheet(host: HTMLElement, clipPlaneId: string, name: string): string {
+  const c = _controllers.get(host);
+  if (!c) return "";
+  const sheetId = c.addLinkedSheet(name);
+  _sheetClipLinks.set(sheetId, clipPlaneId);
+  return sheetId;
+}
+
 // --- Public exports ---
 
 export function buildLayoutMode(host: HTMLElement, opts: LayoutOptions = {}): LayoutController {
@@ -1677,6 +1717,9 @@ export interface SheetTemplate {
 
   // Camera axis for this sheet.
   camera: "top" | "front" | "right";
+
+  /** ID of the linked ClippingPlaneEntity (#1849). Present when sheet was auto-created by SdClippingPlane. */
+  clipPlaneId?: string;
 }
 
 /** Default elevation sheet set (#1850): N/E/S/W, one per cardinal direction. */
