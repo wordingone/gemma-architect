@@ -1,0 +1,22 @@
+{
+  "_source": "buildDoor() parametric — DEFAULT_DOOR_W=0.914m (IBC R311.2: 36\"), DEFAULT_DOOR_H=2.032m (IBC R311.2: 80\"), p={x:0,y:0}",
+  "_note": "In test environment (no browser, fetch fails): _doorData=null, _doorGlbCache[0]=null → synthetic path. _syntheticDoor(w=0.914, t=0.2, h=2.032): merged bbox x∈[-0.457,0.457] y∈[-0.1,0.1] z∈[0,2.032]. mesh.position.set(0,0,0). Rotation default zero.",
+  "params": {
+    "p": { "x": 0, "y": 0 }
+  },
+  "invariants": {
+    "geom_x": 0.914,
+    "geom_y": 0.2,
+    "geom_z": 2.032,
+    "position_x": 0.0,
+    "position_y": 0.0,
+    "position_z": 0.0,
+    "rotation_x": 0.0,
+    "rotation_y": 0.0,
+    "rotation_z": 0.0,
+    "userData_creator": "door",
+    "userData_kind": "mesh",
+    "userData_voidW": 0.914,
+    "userData_voidH": 2.032
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "_source": "buildStair() parametric — DEFAULT_STAIR_WIDTH=1.0m, DEFAULT_STAIR_RISE=0.1778m (7\"), DEFAULT_STAIR_TREAD=0.2794m (11\"), straight shape from a={x:0,y:0} to b={x:2.794,y:0}",
+  "_note": "b.x=2.794 chosen so totalRun/tread = 2.794/0.2794 = 10.0 exactly → nRisers=10 (no rounding error). totalRise = 10×0.1778 = 1.778m (~5'-10\"). group.position=(a.x,a.y,0). rotation.z=atan2(0,2.794)=0. Returns THREE.Group (kind=compound), not THREE.Mesh.",
+  "params": {
+    "a": { "x": 0, "y": 0 },
+    "b": { "x": 2.794, "y": 0 }
+  },
+  "invariants": {
+    "userData_creator": "stair",
+    "userData_kind": "compound",
+    "stairParams_nRisers": 10,
+    "stairParams_stairW": 1.0,
+    "stairParams_totalRise": 1.778,
+    "position_x": 0.0,
+    "position_y": 0.0,
+    "position_z": 0.0,
+    "rotation_z": 0.0,
+    "children_min": 1
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "_source": "buildWindow() parametric — FZK_WINDOW_W=2.0m, FZK_WINDOW_H=1.2m, FZK_WINDOW_SILL=0.8m, p={x:0,y:0}",
+  "_note": "In test environment (no browser, fetch fails): _windowData=null, _windowGlbCache[0]=null → synthetic path. _syntheticWindow(w=2.0, t=0.2, h=1.2): merged bbox x∈[-1.0,1.0] y∈[-0.1,0.1] z∈[0,1.2]. mesh.position.set(0,0,sill=0.8). Rotation default zero. position_z pins sill height (Brüstungshöhe) at 0.8m (IFC ref #23241/#67296).",
+  "params": {
+    "p": { "x": 0, "y": 0 }
+  },
+  "invariants": {
+    "geom_x": 2.0,
+    "geom_y": 0.2,
+    "geom_z": 1.2,
+    "position_x": 0.0,
+    "position_y": 0.0,
+    "position_z": 0.8,
+    "rotation_x": 0.0,
+    "rotation_y": 0.0,
+    "rotation_z": 0.0,
+    "userData_creator": "window",
+    "userData_kind": "mesh",
+    "userData_voidW": 2.0,
+    "userData_voidH": 1.2
+  }
+}
