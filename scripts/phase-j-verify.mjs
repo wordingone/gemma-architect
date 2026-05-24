@@ -1023,12 +1023,27 @@ if (_rawOutputs.length > 0) {
   for (const entry of _rawOutputs) {
     lines.push(`## Turn ${entry.turnId} (${entry.ts})\n\n\`\`\`\n${entry.raw}\n\`\`\`\n`);
   }
-  writeFileSync(sidecarFile, lines.join('\n'));
-  console.log(`Sidecar: ${sidecarFile}`);
+  try {
+    writeFileSync(sidecarFile, lines.join('\n'));
+    console.log(`Sidecar: ${sidecarFile}`);
+  } catch (sidecarErr) {
+    // §#1758: sidecar write failure must not block receipt write
+    console.error(`[receipt] sidecar write failed: ${sidecarErr.message}`);
+    sidecarFile = null;
+  }
 }
 receipt.raw_output_sidecar = sidecarFile ? sidecarFile.replace(STATE_DIR + '/', '') : null;
 
-writeFileSync(outFile, JSON.stringify(receipt, null, 2));
-console.log(`\nReceipt: ${outFile}`);
+// §#1758: explicit error logging so post-VERDICT crashes are observable
+try {
+  writeFileSync(outFile, JSON.stringify(receipt, null, 2));
+  console.log(`\nReceipt: ${outFile}`);
+} catch (receiptErr) {
+  console.error(`[receipt] WRITE FAILED: ${receiptErr.message}`);
+  try {
+    writeFileSync(outFile, JSON.stringify({ sha, passed, error: receiptErr.message }, null, 2));
+    console.error(`[receipt] fallback written: ${outFile}`);
+  } catch { /* unrecoverable */ }
+}
 
 process.exit(WASM_COHORT ? (receipt.wasm_cohort?.wasm_cohort_passed ? 0 : 1) : (passed ? 0 : 1));
