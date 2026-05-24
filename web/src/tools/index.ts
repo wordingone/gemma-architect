@@ -1332,7 +1332,14 @@ export function initCreateMode(viewer: Viewer): void {
     }
 
     if ((opPhase && opPhaseSupressesSnap(opPhase)) || ptPhaseIsObjectSelect() || tool === "wall-pick") {
-      hideCursorDot();
+      // During explicit object-select phases (extrude_select, bool_a/b, fillet_select),
+      // keep the cursor visible so the user knows where they are clicking.
+      // Only hide cursor for non-select snap-suppressed phases (fillet_edge, lasso, window).
+      if (opPhase && opPhaseIsObjectSelect(opPhase)) {
+        moveCursorDot(viewer, { x: ev.clientX, y: ev.clientY }, ev.clientX, ev.clientY, false);
+      } else {
+        hideCursorDot();
+      }
       setSnapTarget(null);
       return;
     }
@@ -1365,9 +1372,12 @@ export function initCreateMode(viewer: Viewer): void {
         snapped = vertex;
       } else {
         setSnapTarget(null);
-        snapped = getLastSurfaceHit()
-          ? { x: getLastSurfaceHit()!.x, y: getLastSurfaceHit()!.y, z: getLastSurfaceHit()!.z }
-          : snapWorldForView(viewer, world);
+        // Use grid/floor-plane XY always; inherit Z from surface hit when available.
+        // Previously used surface-hit XY, which caused cursor to jump to mesh-face
+        // positions (e.g. wall faces) rather than the floor plane — "snap to unknown."
+        const _sfcHit = getLastSurfaceHit();
+        const _gs = snapWorldForView(viewer, world);
+        snapped = _sfcHit ? { x: _gs.x, y: _gs.y, z: _sfcHit.z } : _gs;
       }
     }
     if (tool === "clip-section") {

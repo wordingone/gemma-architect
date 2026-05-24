@@ -10,7 +10,7 @@ import { nearestSnapVertex, closestPtOnSegToRay } from "./snap-state";
 import { projectToScreen, unprojectToXY, snapWorldForView } from "./projection";
 import {
   ptGetTarget, ptPrompt, ptClearPrompt,
-  ptShowCoordInput, ptHideCoordInput,
+  ptShowCoordInput, ptHideCoordInput, _ptCoordInputEl,
 } from "./transforms";
 import { getChooserEl, opSetHover, setChooserHint } from "./picker-hint";
 import { pushAction, pushReplaceAction } from "../history";
@@ -636,6 +636,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.55, metalness: 0.05 });
     const mesh = new THREE.Mesh(geom, mat);
     mesh.position.set(ctr.x, ctr.y, 0);
+    mesh.userData._snapCreationPos = { x: ctr.x, y: ctr.y, z: 0 };
     // Cardinal snap points on top + bottom circles (N/S/E/W + center)
     const cx = ctr.x, cy = ctr.y;
     const circlePts = [
@@ -1423,6 +1424,8 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     _opPhase = { kind: "fillet_edge_radius", target: phase.target, edgeA, edgeB, cornerV };
     ptPrompt("Fillet radius — type a value and press Enter");
     ptShowCoordInput("radius");
+    // Sync focus so keypresses (e.g. "1") go to the input immediately, not to nav shortcuts.
+    _ptCoordInputEl?.focus({ preventScroll: true });
     return true;
   }
 

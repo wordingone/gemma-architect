@@ -116,8 +116,17 @@ function collectSnapVertices(viewer: Viewer): SnapVertex[] {
   scene.traverse((obj) => {
     const eps = (obj.userData as { endpoints?: SnapVertex[] }).endpoints;
     if (!eps) return;
+    // Apply gumball-move delta: endpoints are stored in world space at creation time.
+    // When the object is moved, mesh.position changes but stored endpoints don't update.
+    // _snapCreationPos records mesh.position at creation so we can correct the offset.
+    const base = (obj.userData as { _snapCreationPos?: { x: number; y: number; z: number } })._snapCreationPos;
+    const dx = base ? obj.position.x - base.x : 0;
+    const dy = base ? obj.position.y - base.y : 0;
+    const dz = base ? obj.position.z - base.z : 0;
     for (const ep of eps) {
-      if (!seen.has(ep.id)) { seen.add(ep.id); out.push(ep); }
+      const wx = ep.x + dx, wy = ep.y + dy, wz = ep.z + dz;
+      const id = dx === 0 && dy === 0 && dz === 0 ? ep.id : makeSnapId(wx, wy, wz);
+      if (!seen.has(id)) { seen.add(id); out.push({ id, x: wx, y: wy, z: wz }); }
     }
   });
   return out;

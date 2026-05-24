@@ -36,6 +36,7 @@ export function buildRect(a: { x: number; y: number }, b: { x: number; y: number
   const mesh = new THREE.LineLoop(geom, mat);
   mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: cx, y: cy, z: 0 };
   mesh.userData.kind = "rectangle";
   mesh.userData.creator = "rect";
   mesh.userData.endpoints = [
@@ -65,6 +66,7 @@ export function buildCircle(center: { x: number; y: number }, radial: { x: numbe
   const mesh = new THREE.LineLoop(geom, mat);
   mesh.position.set(center.x, center.y, 0);
   mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: center.x, y: center.y, z: 0 };
   mesh.userData.kind = "circle";
   mesh.userData.creator = "circle";
   // Cardinal snap points (N/S/E/W + center) for vertex snap.
@@ -107,6 +109,7 @@ export function buildArc(
   const mesh = new THREE.Line(geom, mat);
   mesh.position.set(center.x, center.y, 0);
   mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: center.x, y: center.y, z: 0 };
   mesh.userData.kind = "arc";
   mesh.userData.creator = "arc";
   mesh.userData.radius = r;
@@ -140,6 +143,7 @@ export function buildLine(a: { x: number; y: number }, b: { x: number; y: number
   const mesh = new THREE.LineSegments(geom, mat);
   mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: cx, y: cy, z: 0 };
   mesh.userData.kind = "line";
   mesh.userData.creator = "line";
   mesh.userData.controlPoints = [new THREE.Vector3(a.x - cx, a.y - cy, 0), new THREE.Vector3(b.x - cx, b.y - cy, 0)];
@@ -172,6 +176,7 @@ export function buildPolygon(center: { x: number; y: number }, radial: { x: numb
   const mesh = new THREE.LineLoop(geom, mat);
   mesh.position.set(center.x, center.y, 0);
   mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: center.x, y: center.y, z: 0 };
   mesh.userData.kind = "polygon";
   mesh.userData.creator = "polygon";
   mesh.userData.controlPoints = verts.map(([x, y]) => new THREE.Vector3(x, y, 0));
@@ -202,6 +207,7 @@ export function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THR
   const mesh = new THREE.Line(geom, mat);
   mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: cx, y: cy, z: 0 };
   mesh.userData.kind = "polyline";
   mesh.userData.creator = "polyline";
   mesh.userData.isClosed = isClosed;
@@ -231,6 +237,7 @@ export function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.
   const mesh = new THREE.Line(geom, mat);
   mesh.position.set(cx, cy, 0);
   mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: cx, y: cy, z: 0 };
   mesh.userData.kind = "curve";
   mesh.userData.creator = "curve";
   mesh.userData.isClosed = isClosed;
