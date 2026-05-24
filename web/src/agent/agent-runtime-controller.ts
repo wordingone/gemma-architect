@@ -42,7 +42,8 @@ const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], Run
   booting:    { MODEL_READY: "booting", BOOT_COMPLETE: "ready", FATAL_ERROR: "failed",
                 PREFILL_DONE: "booting" }, // warmup-done fires before boot-complete (#1407)
   ready:      { GENERATE_REQUESTED: "generating", BOOT_REQUESTED: "booting",
-                PREFILL_DONE: "ready" },   // warmup-done after recycle if noWarmup=false
+                PREFILL_DONE: "ready",    // warmup-done after recycle if noWarmup=false
+                D3D12_OOM: "recycling" }, // planned recycle dispatched before GENERATE_REQUESTED (#1750)
   generating: {
     PREFILL_DONE:     "generating",
     GENERATE_DONE:    "ready",
