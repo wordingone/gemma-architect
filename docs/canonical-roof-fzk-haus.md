@@ -3,8 +3,9 @@
 **Created:** 2026-05-22  
 **Owner:** Archie  
 **Status:** Complete — IFC-verified, code gaps identified  
-**Issues:** #1553 (umbrella)  
-**IFC source:** `web/public/samples/AC20-FZK-Haus.ifc` (ArchiCAD 20, IFC4)
+**Issues:** #1553 (umbrella), #1675 (engine-determinism gate)  
+**IFC source:** `web/public/samples/AC20-FZK-Haus.ifc` (ArchiCAD 20, IFC4)  
+**Fixture (source-of-truth):** `web/test/fixtures/fzk-haus-roof-target.json` — per-element vertex/edge/face/volume/angle invariants captured from this IFC. Code changes that drift from the fixture fail `web/test/roof-fzk-invariant.test.ts`. Update the fixture only with explicit justification in the PR body.
 
 ---
 

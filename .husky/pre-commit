@@ -1,3 +1,5 @@
 #!/bin/sh
 # Imperial-prompt lint gate — blocks commits with metric dimension strings in test inputs.
 bun scripts/lint-test-prompts.mjs || exit 1
+# FZK roof invariant gate — blocks commits that drift parametric roof geometry from KIT IFC fixture.
+bun test web/test/roof-fzk-invariant.test.ts || exit 1
