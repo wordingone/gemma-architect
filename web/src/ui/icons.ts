@@ -23,6 +23,8 @@ export function iconSVG(name: string, size = 16): string {
     case "line":    return `<svg ${attr}><path d="M4 20L20 4"/><circle cx="4" cy="20" r="1.5"/><circle cx="20" cy="4" r="1.5"/></svg>`;
     case "arc":     return `<svg ${attr}><path d="M3 18a9 9 0 0 1 18 0"/></svg>`;
     case "spline":  return `<svg ${attr}><path d="M3 18c4 0 4-12 9-12s5 12 9 12"/></svg>`;
+    case "sweep":   return `<svg ${attr}><path d="M3 17c5-2 10-2 18 0"/><path d="M12 4c0 5 3 9 3 13"/><circle cx="12" cy="4" r="1.5"/></svg>`;
+    case "revolve": return `<svg ${attr}><path d="M6 12a6 6 0 0 0 12 0"/><path d="M12 6v12"/><path d="M15 9l-3-3-3 3"/></svg>`;
     case "fillet":  return `<svg ${attr}><path d="M3 21V9a6 6 0 0 1 6-6h12"/></svg>`;
     case "chamfer": return `<svg ${attr}><path d="M3 21V11l8-8h10"/></svg>`;
     case "wall":    return `<svg ${attr}><rect x="3" y="6" width="18" height="12"/><path d="M9 6v12M15 6v12"/></svg>`;
