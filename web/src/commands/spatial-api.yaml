@@ -1044,6 +1044,15 @@
         type: string
         description: "Stair plan shape."
         default: straight
+      count:
+        type: number
+        description: "[optional] Explicit tread count. Overrides run-derived count."
+      riser:
+        type: number
+        description: "[optional unit=m] Riser height per step."
+      tread:
+        type: number
+        description: "[optional unit=m] Tread depth per step."
       layer:
         type: string
         description: "Layer ID to override automatic creator-to-layer routing."

@@ -1002,16 +1002,17 @@ registerHandler("SdStair", (args) => {
       b = { x: b.x + (bx - mx), y: b.y + (by - my) };
     }
   }
-  // Dimensions are fixed by asset — agent controls placement only (per #1678).
-  const activeLvl = levelStore.get(getActiveLevelId());
-  const lvlHeight = activeLvl?.height ?? 3.0;
-  const derivedCount = Math.max(1, Math.ceil(lvlHeight / STAIR_STEP_RISE));
+  // Explicit parametric args take priority; omitting count lets buildStair derive from run distance.
+  // Width is fixed by asset preset (#1678); riser/tread default to standard values when not explicit.
+  const explicitCount = typeof args.count === "number" ? Math.max(1, Math.round(args.count)) : null;
+  const explicitRiser = typeof args.riser === "number" ? args.riser : null;
+  const explicitTread = typeof args.tread === "number" ? args.tread : null;
   const stairParams: StairParams = {
-    type:        (args.type  as StairParams["type"]  | undefined) ?? "straight",
-    count:       derivedCount,
+    type:        (args.type as StairParams["type"] | undefined) ?? "straight",
     width:       STAIR_WIDTH,
-    treadDepth:  STAIR_STEP_DEPTH,
-    riserHeight: STAIR_STEP_RISE,
+    treadDepth:  explicitTread  ?? STAIR_STEP_DEPTH,
+    riserHeight: explicitRiser  ?? STAIR_STEP_RISE,
+    ...(explicitCount != null ? { count: explicitCount } : {}),
   };
   const { group, chain, footprint } = buildStair(a, b, stairParams);
   const elev = getActiveLevelElevation();
