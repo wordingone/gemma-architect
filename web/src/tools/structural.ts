@@ -248,6 +248,13 @@ export function buildSlab(a: { x: number; y: number }, b: { x: number; y: number
   mesh.position.set(cx, cy, 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "slab";
+  mesh.userData._snapCreationPos = { x: cx, y: cy, z: 0 };
+  mesh.userData.endpoints = [
+    { x: a.x, y: a.y, z: 0, id: makeSnapId(a.x, a.y, 0) },
+    { x: b.x, y: a.y, z: 0, id: makeSnapId(b.x, a.y, 0) },
+    { x: b.x, y: b.y, z: 0, id: makeSnapId(b.x, b.y, 0) },
+    { x: a.x, y: b.y, z: 0, id: makeSnapId(a.x, b.y, 0) },
+  ];
   const chain = `const slab = drawRectangle(${round(w)}, ${round(d)}).sketchOnPlane("XY").extrude(${round(t)}).translate([${round(cx)}, ${round(cy)}, 0]);`;
   return { mesh, chain };
 }
@@ -262,6 +269,10 @@ export function buildColumn(p: { x: number; y: number }): { mesh: THREE.Mesh; ch
   mesh.position.set(p.x, p.y, 0);
   mesh.userData.kind = "brep";
   mesh.userData.creator = "column";
+  mesh.userData._snapCreationPos = { x: p.x, y: p.y, z: 0 };
+  mesh.userData.endpoints = [
+    { x: p.x, y: p.y, z: 0, id: makeSnapId(p.x, p.y, 0) },
+  ];
   const chain = `const col = drawRectangle(${round(s)}, ${round(s)}).sketchOnPlane("XY").extrude(${round(h)}).translate([${round(p.x)}, ${round(p.y)}, 0]);`;
   return { mesh, chain };
 }
@@ -805,6 +816,11 @@ export function buildBeam(a: { x: number; y: number }, b: { x: number; y: number
   mesh.rotation.z = (angDeg * Math.PI) / 180;
   mesh.userData.kind = "brep";
   mesh.userData.creator = "beam";
+  mesh.userData._snapCreationPos = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: h };
+  mesh.userData.endpoints = [
+    { x: a.x, y: a.y, z: h, id: makeSnapId(a.x, a.y, h) },
+    { x: b.x, y: b.y, z: h, id: makeSnapId(b.x, b.y, h) },
+  ];
   const chain = `const beam = makeBox(${round(len)}, ${round(s)}, ${round(s)}).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round((a.x + b.x) / 2)}, ${round((a.y + b.y) / 2)}, ${round(h)}]);`;
   return { mesh, chain };
 }
