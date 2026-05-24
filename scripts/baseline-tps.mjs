@@ -102,15 +102,16 @@ if (!targets) {
   process.exit(1);
 }
 
+// Use any existing page tab — we navigate it to Pages URL anyway.
+// Do NOT filter on localhost: the tab's origin will become Pages after navigation.
 const pagesHost = new URL(PAGES_URL).host;
-let target = targets.find(t => t.url?.includes(pagesHost) && t.type === "page");
-if (!target) {
-  // No matching tab — get whatever page tab is open
-  target = targets.find(t => t.type === "page");
-}
+let target = targets.find(t => t.type === "page");
 if (!target) {
   console.error("ERROR: no page tab found in shared browser");
   process.exit(1);
+}
+if (/localhost|127\.0\.0\.1/.test(target.url)) {
+  console.log(`[baseline-tps] Tab is at ${target.url} — will navigate to Pages URL (origin-local storage cleared after nav)`);
 }
 
 console.log(`[baseline-tps] Attaching to tab: ${target.url}`);
@@ -121,47 +122,66 @@ await cdp.send("Page.enable");
 await cdp.send("Runtime.enable");
 await cdp.send("Network.enable");
 
-// 3. Cold-cache clear
-console.log("[baseline-tps] Clearing caches (cold-cache mandate)...");
-await cdp.send("Network.clearBrowserCache");
-await cdp.send("Network.clearBrowserCookies");
-
-// Clear Cache API, IDB, Service Workers via evaluate
-await cdp.send("Runtime.evaluate", {
-  expression: `(async () => {
-    // Unregister service workers
-    if (navigator.serviceWorker) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
-    }
-    // Clear Cache API
-    if (caches) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    }
-    // Clear IDB
-    const dbs = await indexedDB.databases?.() ?? [];
-    await Promise.all(dbs.map(db => new Promise((res, rej) => {
-      const req = indexedDB.deleteDatabase(db.name);
-      req.onsuccess = res; req.onerror = rej;
-    })));
-    return 'cleared';
-  })()`,
-  awaitPromise: true,
-}).catch(e => console.warn("[baseline-tps] Cache clear partial:", e.message));
-
-// 4. Navigate to Pages URL (cold boot)
+// 3. Navigate to Pages URL FIRST (must be in Pages origin to clear Pages storage)
 console.log("[baseline-tps] Navigating to Pages URL...");
-const navDone = new Promise(res => {
+const nav1Done = new Promise(res => {
   cdp.on("Page.frameNavigated", (p) => {
     if (p.frame.url?.includes(pagesHost)) res(p.frame.url);
   });
 });
 await cdp.send("Page.navigate", { url: PAGES_URL });
-await Promise.race([navDone, sleep(15000)]);
-console.log("[baseline-tps] Navigation done. Waiting for boot...");
+await Promise.race([nav1Done, sleep(30000)]);
+console.log("[baseline-tps] Pages URL loaded. Now clearing origin storage (cold-cache)...");
+await sleep(2000); // let page settle before clearing
 
-// 5. Wait for agentmodel:boot-complete (cold boot takes 2-5 min for E4B)
+// 4. Cold-cache clear in Pages origin context
+// Network-level: browser-wide HTTP cache + cookies
+await cdp.send("Network.clearBrowserCache");
+await cdp.send("Network.clearBrowserCookies");
+
+// Origin-level: Cache API, IDB, SW — runs in Pages origin, clears Pages storage only
+const clearResult = await cdp.send("Runtime.evaluate", {
+  expression: `(async () => {
+    const log = [];
+    try {
+      if (navigator.serviceWorker) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+        log.push('sw:' + regs.length);
+      }
+    } catch (e) { log.push('sw-err:' + e.message); }
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+      log.push('cache:' + keys.length);
+    } catch (e) { log.push('cache-err:' + e.message); }
+    try {
+      const dbs = await indexedDB.databases?.() ?? [];
+      await Promise.all(dbs.map(db => new Promise((res, rej) => {
+        const req = indexedDB.deleteDatabase(db.name);
+        req.onsuccess = res; req.onerror = () => rej(req.error); req.onblocked = res;
+      })));
+      log.push('idb:' + dbs.length);
+    } catch (e) { log.push('idb-err:' + e.message); }
+    try { localStorage.clear(); log.push('ls'); } catch {}
+    return log.join(',');
+  })()`,
+  awaitPromise: true,
+}).catch(e => ({ result: { value: "clear-error:" + e.message } }));
+console.log(`[baseline-tps] Storage cleared: ${clearResult?.result?.value ?? '?'}`);
+
+// 5. Reload to cold-boot (all storage now clear — this is the actual cold-cache start)
+console.log("[baseline-tps] Reloading for cold-cache boot...");
+const nav2Done = new Promise(res => {
+  cdp.on("Page.frameNavigated", (p) => {
+    if (p.frame.url?.includes(pagesHost) && p.frame.parentId === undefined) res(p.frame.url);
+  });
+});
+await cdp.send("Page.reload", { ignoreCache: true });
+await Promise.race([nav2Done, sleep(15000)]);
+console.log("[baseline-tps] Reload done. Waiting for boot...");
+
+// 6. Wait for agentmodel:boot-complete (cold boot takes 2-5 min for E4B)
 const BOOT_TIMEOUT_MS = 360000; // 6 min
 const bootDone = new Promise((res, rej) => {
   const t = setTimeout(() => rej(new Error("Boot timeout (6 min)")), BOOT_TIMEOUT_MS);
