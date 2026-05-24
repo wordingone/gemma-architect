@@ -845,8 +845,9 @@ const passed = bootComplete && arcInvClean && bufMgrClean && cachePutClean && re
 // ── Sub-C: scene persistence fields (§#1644) ──────────────────────────────────
 // scene_persist_warning_present: beforeunload hook registered (Sub-A gate)
 // scene_restore_offered_on_boot: restore prompt shown after boot (Sub-B, cold-cache=false if no prior scene)
-const sceneBeforeunloadHooked = await evaluate("!!window.__sceneBeforeunloadHooked").catch(() => null);
-const restorePromptShown = await evaluate("!!(document.getElementById('restore-prompt') && !document.getElementById('restore-prompt').hidden)").catch(() => null);
+const _evalTimeout = (p) => Promise.race([p.catch(() => null), new Promise(r => setTimeout(() => r(null), 5000))]);
+const sceneBeforeunloadHooked = await _evalTimeout(evaluate("!!window.__sceneBeforeunloadHooked"));
+const restorePromptShown = await _evalTimeout(evaluate("!!(document.getElementById('restore-prompt') && !document.getElementById('restore-prompt').hidden)"));
 
 // ── Write receipt ──────────────────────────────────────────────────────────────
 
