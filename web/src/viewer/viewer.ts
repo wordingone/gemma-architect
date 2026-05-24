@@ -96,6 +96,7 @@ export class Viewer {
   private gizmos: TransformControls[] = [];
   private gizmoCaptured: { position: THREE.Vector3; quaternion: THREE.Quaternion; scale: THREE.Vector3 } | null = null;
   private _gumballEnabled = true;
+  private _opToolActive = false;
   // Pivot proxy — Rhino "relocate gumball" needs the gumball pose to be
   // separable from the geometry pose. The three TransformControls always
   // attach to this proxy, never directly to the geometry. The proxy's
@@ -1078,6 +1079,10 @@ export class Viewer {
     // OrbitControls/TransformControls own the drag natively. But with nothing
     // selected, fall through to the picker so the user can click to select.
     if ((tool === "move" || tool === "rotate" || tool === "scale") && this.targetObject !== null) return;
+    // If an op-tool (extrude, boolean, fillet, …) is active, its vpBody handler
+    // takes priority. Skip the selection picker so the gumball doesn't flash on
+    // the clicked object before the op-tool handler processes the click.
+    if (this._opToolActive) return;
     // If a gumball handle is hovered/active (axis set) or dragging, do not
     // run selection picking on this pointerdown. Otherwise selection updates
     // race with TransformControls pointerdown and break handle drags.
@@ -1267,6 +1272,8 @@ export class Viewer {
       for (const g of this.gizmos) g.attach(this.pivotProxy);
     }
   }
+
+  setOpToolActive(active: boolean): void { this._opToolActive = active; }
 
   setGridAxesVisible(visible: boolean): void {
     this.grid.visible = visible;

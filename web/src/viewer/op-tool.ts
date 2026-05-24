@@ -187,6 +187,7 @@ export function opFinish(viewer: Viewer, resetTool = true): void {
   if (_finishedKind !== "sel_window" && _finishedKind !== "sel_lasso") {
     viewer.deselectCurrent();
   }
+  viewer.setOpToolActive(false);
   viewer.setGumballEnabled(true);
   if (resetTool) dispatchSync("setActiveTool", { toolId: "select" });
 }
@@ -219,7 +220,7 @@ function _applyBoolHighlight(obj: THREE.Object3D, hex: number): void {
   const orig = mats[idx] as THREE.MeshStandardMaterial;
   const cloned = orig.clone();
   cloned.emissive.setHex(hex);
-  cloned.emissiveIntensity = 1;
+  cloned.emissiveIntensity = 2.5;
   if (Array.isArray(m.material)) {
     const next = [...m.material]; next[idx] = cloned; m.material = next;
   } else {
@@ -635,6 +636,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
       { x: cx + r, y: cy }, { x: cx - r, y: cy },
       { x: cx, y: cy + r }, { x: cx, y: cy - r },
     ];
+    mesh.userData.footprintCircle = { cx, cy, r };
     mesh.userData.endpoints = snapEndpointsFromProfile(circlePts, h);
     mesh.userData.edgePairs = snapEdgePairsFromProfile(circlePts, h);
     return mesh;
@@ -660,6 +662,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
         const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
         const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
         const mesh = new THREE.Mesh(geom, mat);
+        mesh.userData.footprintPts = snapPts2d;
         mesh.userData.endpoints = snapEndpointsFromProfile(snapPts2d, h);
         mesh.userData.edgePairs = snapEdgePairsFromProfile(snapPts2d, h);
         return mesh;
@@ -699,6 +702,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
       const mat = new THREE.MeshStandardMaterial({ color: 0xd0a868, roughness: 0.55, metalness: 0.05 });
       const mesh = new THREE.Mesh(geom, mat);
       const polPts = cpWorld.map((v) => ({ x: v.x, y: v.y }));
+      mesh.userData.footprintPts = polPts;
       mesh.userData.endpoints = snapEndpointsFromProfile(polPts, h);
       mesh.userData.edgePairs = snapEdgePairsFromProfile(polPts, h);
       return mesh;
@@ -721,6 +725,7 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
         const mat = new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.55, metalness: 0.05 });
         const mesh = new THREE.Mesh(geom, mat);
         const polPts = worldPts.map((v) => ({ x: v.x, y: v.y }));
+        mesh.userData.footprintPts = polPts;
         mesh.userData.endpoints = snapEndpointsFromProfile(polPts, h);
         mesh.userData.edgePairs = snapEdgePairsFromProfile(polPts, h);
         return mesh;
@@ -766,14 +771,97 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
       const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
       const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
       const mesh = new THREE.Mesh(geom, mat);
+      mesh.userData.footprintPts = worldPts;
       mesh.userData.endpoints = snapEndpointsFromProfile(worldPts, h);
       mesh.userData.edgePairs = snapEdgePairsFromProfile(worldPts, h);
       return mesh;
     }
   }
 
-  // Solid mesh used as profile: extrude by re-sweeping along Z from its footprint.
+  // Solid mesh used as profile: re-extrude from stored footprint or by extracting
+  // the bottom-face polygon. Fixes "circle → box" when re-extruding an extrude result.
   if (profile instanceof THREE.Mesh) {
+    // 1. Stored footprint circle (cylinders from circle extrusions).
+    const fc = profile.userData.footprintCircle as { cx: number; cy: number; r: number } | undefined;
+    if (fc) {
+      const geom = new THREE.CylinderGeometry(fc.r, fc.r, h, 64);
+      geom.rotateX(Math.PI / 2);
+      geom.translate(0, 0, h / 2);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xb6d59a, roughness: 0.55, metalness: 0.05 });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.set(fc.cx, fc.cy, 0);
+      const circlePts = [
+        { x: fc.cx, y: fc.cy },
+        { x: fc.cx + fc.r, y: fc.cy }, { x: fc.cx - fc.r, y: fc.cy },
+        { x: fc.cx, y: fc.cy + fc.r }, { x: fc.cx, y: fc.cy - fc.r },
+      ];
+      mesh.userData.footprintCircle = fc;
+      mesh.userData.endpoints = snapEndpointsFromProfile(circlePts, h);
+      mesh.userData.edgePairs = snapEdgePairsFromProfile(circlePts, h);
+      return mesh;
+    }
+    // 2. Stored footprint polygon (polygon/polyline/rect/curve extrusions).
+    const fp = profile.userData.footprintPts as Array<{ x: number; y: number }> | undefined;
+    if (fp && fp.length >= 3) {
+      const shape = new THREE.Shape();
+      shape.moveTo(fp[0].x, fp[0].y);
+      for (let i = 1; i < fp.length; i++) shape.lineTo(fp[i].x, fp[i].y);
+      shape.closePath();
+      const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+      const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.userData.footprintPts = fp;
+      mesh.userData.endpoints = snapEndpointsFromProfile(fp, h);
+      mesh.userData.edgePairs = snapEdgePairsFromProfile(fp, h);
+      return mesh;
+    }
+    // 3. Extract bottom-face vertices from world-space geometry (fallback for imported/CSG meshes).
+    profile.updateMatrixWorld();
+    const posAttr = profile.geometry.getAttribute("position") as THREE.BufferAttribute | null;
+    if (posAttr && posAttr.count >= 3) {
+      const mat4 = profile.matrixWorld;
+      let minZw = Infinity;
+      for (let i = 0; i < posAttr.count; i++) {
+        const z = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(mat4).z;
+        if (z < minZw) minZw = z;
+      }
+      const rawPts: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < posAttr.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(posAttr, i).applyMatrix4(mat4);
+        if (Math.abs(v.z - minZw) > 0.01) continue;
+        rawPts.push({ x: v.x, y: v.y });
+      }
+      const uniq: Array<{ x: number; y: number }> = [];
+      const DEDUP = 0.01;
+      for (const p of rawPts) {
+        if (!uniq.some(q => Math.hypot(p.x - q.x, p.y - q.y) < DEDUP)) uniq.push(p);
+      }
+      if (uniq.length >= 3) {
+        // Filter out interior points that are near the centroid (e.g. fan-center vertex).
+        const fcx = uniq.reduce((s, p) => s + p.x, 0) / uniq.length;
+        const fcy = uniq.reduce((s, p) => s + p.y, 0) / uniq.length;
+        const dists = uniq.map(p => Math.hypot(p.x - fcx, p.y - fcy));
+        const avgDist = dists.reduce((s, d) => s + d, 0) / dists.length;
+        const perimeter = avgDist > 0.01 ? uniq.filter((_, i) => dists[i] > avgDist * 0.4) : uniq;
+        if (perimeter.length >= 3) {
+          const pcx = perimeter.reduce((s, p) => s + p.x, 0) / perimeter.length;
+          const pcy = perimeter.reduce((s, p) => s + p.y, 0) / perimeter.length;
+          perimeter.sort((a, b) => Math.atan2(a.y - pcy, a.x - pcx) - Math.atan2(b.y - pcy, b.x - pcx));
+          const shape = new THREE.Shape();
+          shape.moveTo(perimeter[0].x, perimeter[0].y);
+          for (let i = 1; i < perimeter.length; i++) shape.lineTo(perimeter[i].x, perimeter[i].y);
+          shape.closePath();
+          const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+          const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
+          const mesh = new THREE.Mesh(geom, mat);
+          mesh.userData.footprintPts = perimeter;
+          mesh.userData.endpoints = snapEndpointsFromProfile(perimeter, h);
+          mesh.userData.edgePairs = snapEdgePairsFromProfile(perimeter, h);
+          return mesh;
+        }
+      }
+    }
+    // 4. Last resort: bounding box.
     const geom = new THREE.BoxGeometry(Math.max(0.05, size.x), Math.max(0.05, size.y || size.x), h);
     geom.translate(ctr.x, ctr.y, h / 2);
     const mat = new THREE.MeshStandardMaterial({ color: 0xc9c0a8, roughness: 0.55, metalness: 0.05 });
@@ -822,7 +910,7 @@ export function opRaycastObject(
   const rc = new THREE.Raycaster();
   rc.setFromCamera(ndc, viewer.getActiveCamera());
 
-  const hitThresh = hoverMode ? 20 : (profileOnly ? 28 : 10);
+  const hitThresh = hoverMode ? 20 : (profileOnly ? 40 : 10);
   let thinHit: { obj: THREE.Object3D; point: THREE.Vector3 } | null = null;
   let thinHitD = hitThresh;
   viewer.getScene().traverse((o) => {
@@ -908,6 +996,12 @@ export function opRaycastObject(
     if (!(o instanceof THREE.Mesh)) return;
     if (!o.geometry?.getAttribute("position")) return;
     if (profileOnly && !CLICK_PROFILE_CREATORS.has(o.userData.creator ?? "")) return;
+    // Skip very large flat meshes as extrude profiles (e.g., floor slabs > 50m² footprint)
+    // to prevent accidentally extruding the ground plane.
+    if (profileOnly) {
+      const b = new THREE.Box3().setFromObject(o); const s = new THREE.Vector3(); b.getSize(s);
+      if (s.x * s.y > 50) return;
+    }
     // #950: skip meshes that are effectively invisible (parent-group visibility).
     if (!isDisplay) {
       let anc: THREE.Object3D | null = o;
@@ -1167,9 +1261,11 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     const box = new THREE.Box3().setFromObject(hit.obj);
     const size = new THREE.Vector3(); box.getSize(size);
     const ctr = new THREE.Vector3(); box.getCenter(ctr);
-    opSetHover(null);
     opClearPreview(viewer);
     _selectHoverProfile = null;
+    // Keep the profile visually highlighted during the height-setting phase so
+    // the user can confirm which object was selected.
+    opSetHover(hit.obj);
     _opPhase = { kind: "extrude_height", profile: hit.obj, cx: ctr.x, cy: ctr.y, w: size.x, d: size.y };
     ptPrompt(`Extrude height — profile: ${creator} — move cursor up/down to set height, click to commit  [Escape = cancel]`);
     return true;
@@ -1779,7 +1875,11 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   _opPhase = null;
   ptClearPrompt();
   ptHideCoordInput();
+  viewer.setOpToolActive(true);
   viewer.setGumballEnabled(false);
+  // Clear any prior selection so the gumball doesn't persist into the op phase.
+  // Skip for copy/array which need the current selection as their source object.
+  if (tool !== "copy" && tool !== "array") viewer.deselectCurrent();
 
   if (tool === "extrude") {
     _opPhase = { kind: "extrude_select" };
