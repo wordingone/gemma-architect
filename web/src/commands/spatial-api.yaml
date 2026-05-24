@@ -433,6 +433,27 @@
   kernel: nurbs-webgpu
   alias_source: generic_cad_vocabulary
 
+- name: SdPlane
+  kernel_op: plane
+  parameters:
+    type: object
+    properties:
+      origin:
+        type: point3
+        description: "[required] Origin corner of the plane"
+      xAxis:
+        type: point3
+        description: "[required] Point along the width edge (defines X direction)"
+      yAxis:
+        type: point3
+        description: "[required] Point along the height edge (defines Y direction)"
+    required: [origin, xAxis, yAxis]
+  topology_role: face
+  kg_predicates: []
+  synonyms: [plane, ref-plane, surface-plane]
+  kernel: nurbs-webgpu
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §4 Boolean ops
 # ============================================================

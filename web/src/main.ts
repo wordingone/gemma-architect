@@ -2212,6 +2212,39 @@ registerHandler("SdLoft", (args) => {
   }
 });
 
+registerHandler("SdPlane", (args) => {
+  try {
+    const [ox=0,oy=0,oz=0] = (args.origin  as number[] | undefined) ?? [];
+    const [ux=1,uy=0,uz=0] = (args.xAxis   as number[] | undefined) ?? [];
+    const [vx=0,vy=1,vz=0] = (args.yAxis   as number[] | undefined) ?? [];
+    const o  = new THREE.Vector3(ox, oy, oz);
+    const uv = new THREE.Vector3(ux, uy, uz).sub(o); // edge u
+    const vv = new THREE.Vector3(vx, vy, vz).sub(o); // edge v
+    const c0 = o.clone();
+    const c1 = o.clone().add(uv);
+    const c2 = o.clone().add(uv).add(vv);
+    const c3 = o.clone().add(vv);
+    const positions = new Float32Array([
+      c0.x, c0.y, c0.z,
+      c1.x, c1.y, c1.z,
+      c2.x, c2.y, c2.z,
+      c3.x, c3.y, c3.z,
+    ]);
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geom.setIndex([0, 1, 2, 0, 2, 3]);
+    geom.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x88aacc, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.userData.kind = "plane";
+    mesh.userData.creator = "plane";
+    viewer.addMesh(mesh, "mesh");
+    return { created: "plane" };
+  } catch (e) {
+    return { error: String(e), created: null };
+  }
+});
+
 registerHandler("SdArray", (args) => {
   const count = Math.max(1, Math.trunc((args.count as number | undefined) ?? 1));
   const spacing = (args.spacing as number[] | undefined) ?? [1, 0, 0];

@@ -131,6 +131,7 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "loft",    icon: "loft",    label: "Loft" },
     { id: "sweep",   icon: "sweep",   label: "Sweep" },
     { id: "revolve", icon: "revolve", label: "Revolve" },
+    { id: "plane",   icon: "plane",   label: "Plane" },
     { id: "boolean", icon: "boolean", label: "Boolean" },
     { id: "fillet",  icon: "fillet",  label: "Fillet" },
   ]},

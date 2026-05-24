@@ -129,7 +129,10 @@ export type OpPhase =
   | { kind: "sweep_profile"; rail: THREE.Line }
   | { kind: "revolve_profile" }
   | { kind: "revolve_axis_a"; profilePts: number[][] }
-  | { kind: "revolve_axis_b"; profilePts: number[][]; axisFrom: THREE.Vector3 };
+  | { kind: "revolve_axis_b"; profilePts: number[][]; axisFrom: THREE.Vector3 }
+  | { kind: "plane_pt1" }
+  | { kind: "plane_pt2"; origin: THREE.Vector3 }
+  | { kind: "plane_pt3"; origin: THREE.Vector3; xAxis: THREE.Vector3 };
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
@@ -1477,6 +1480,44 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     return true;
   }
 
+  if (phase.kind === "plane_pt1") {
+    if (!snapped3) return true;
+    _opPhase = { kind: "plane_pt2", origin: snapped3.clone() };
+    ptPrompt("Plane — click point along width edge  [Escape = cancel]");
+    return true;
+  }
+
+  if (phase.kind === "plane_pt2") {
+    if (!snapped3) return true;
+    if (snapped3.distanceTo(phase.origin) < 0.001) {
+      ptPrompt("Plane — points too close, pick a different point  [Escape = cancel]");
+      return true;
+    }
+    _opPhase = { kind: "plane_pt3", origin: phase.origin, xAxis: snapped3.clone() };
+    ptPrompt("Plane — click point along height edge  [Escape = cancel]");
+    return true;
+  }
+
+  if (phase.kind === "plane_pt3") {
+    if (!snapped3) return true;
+    const { origin, xAxis } = phase;
+    if (snapped3.distanceTo(origin) < 0.001 || snapped3.distanceTo(xAxis) < 0.001) {
+      ptPrompt("Plane — point too close to previous, pick a different point  [Escape = cancel]");
+      return true;
+    }
+    const result = dispatchSync("SdPlane", {
+      origin: [origin.x, origin.y, origin.z],
+      xAxis:  [xAxis.x,  xAxis.y,  xAxis.z],
+      yAxis:  [snapped3.x, snapped3.y, snapped3.z],
+    }) as { error?: string } | null;
+    if (result?.error) {
+      ptPrompt(`Plane failed: ${result.error}  [Escape = cancel]`);
+      return true;
+    }
+    opFinish(viewer);
+    return true;
+  }
+
   if (phase.kind === "bool_a") {
     const hit = opRaycastObject(viewer, clientX, clientY);
     if (!hit) { ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)"); return true; }
@@ -2087,6 +2128,9 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   } else if (tool === "revolve") {
     _opPhase = { kind: "revolve_profile" };
     ptPrompt("Revolve — click a profile curve  [Escape = cancel]");
+  } else if (tool === "plane") {
+    _opPhase = { kind: "plane_pt1" };
+    ptPrompt("Plane — click origin point  [Escape = cancel]");
   } else if (tool === "boolean") {
     _opPhase = { kind: "bool_a" };
     ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)");
