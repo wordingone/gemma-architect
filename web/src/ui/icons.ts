@@ -27,6 +27,9 @@ export function iconSVG(name: string, size = 16): string {
     case "revolve": return `<svg ${attr}><path d="M6 12a6 6 0 0 0 12 0"/><path d="M12 6v12"/><path d="M15 9l-3-3-3 3"/></svg>`;
     case "plane":   return `<svg ${attr}><path d="M3 18L12 6l9 12"/><path d="M3 18h18"/><circle cx="12" cy="6" r="1.5"/></svg>`;
     case "surface": return `<svg ${attr}><path d="M3 18c3-3 6-3 9 0s6 3 9 0"/><path d="M3 12c3-3 6-3 9 0s6 3 9 0"/><path d="M3 6c3-3 6-3 9 0s6 3 9 0"/></svg>`;
+    case "bool-union": return `<svg ${attr}><circle cx="9" cy="12" r="6" opacity=".5"/><circle cx="15" cy="12" r="6" opacity=".5"/></svg>`;
+    case "bool-diff":  return `<svg ${attr}><circle cx="9" cy="12" r="6" opacity=".5"/><circle cx="15" cy="12" r="6" opacity=".2"/><path d="M12 6.5a6 6 0 0 0 0 11" fill="none"/></svg>`;
+    case "bool-intersect": return `<svg ${attr}><circle cx="9" cy="12" r="6" opacity=".2"/><circle cx="15" cy="12" r="6" opacity=".2"/><path d="M12 6.5a6 6 0 0 1 0 11 6 6 0 0 1 0-11Z" opacity=".8"/></svg>`;
     case "fillet":  return `<svg ${attr}><path d="M3 21V9a6 6 0 0 1 6-6h12"/></svg>`;
     case "chamfer": return `<svg ${attr}><path d="M3 21V11l8-8h10"/></svg>`;
     case "wall":    return `<svg ${attr}><rect x="3" y="6" width="18" height="12"/><path d="M9 6v12M15 6v12"/></svg>`;

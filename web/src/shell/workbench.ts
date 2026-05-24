@@ -133,8 +133,11 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "revolve", icon: "revolve", label: "Revolve" },
     { id: "plane",   icon: "plane",   label: "Plane" },
     { id: "surface", icon: "surface", label: "Surface" },
-    { id: "boolean", icon: "boolean", label: "Boolean" },
-    { id: "fillet",  icon: "fillet",  label: "Fillet" },
+    { id: "boolean",       icon: "boolean",       label: "Boolean" },
+    { id: "bool-union",    icon: "bool-union",    label: "Union" },
+    { id: "bool-diff",     icon: "bool-diff",     label: "Difference" },
+    { id: "bool-intersect",icon: "bool-intersect",label: "Intersect" },
+    { id: "fillet",        icon: "fillet",        label: "Fillet" },
   ]},
   { tools: [
     { id: "wall",       icon: "wall",       label: "Wall" },

@@ -83,8 +83,8 @@ export function registerOpToolHooks(hooks: OpToolHooks): void {
 export type OpPhase =
   | { kind: "extrude_select" }
   | { kind: "extrude_height"; profile: THREE.Object3D; cx: number; cy: number; w: number; d: number }
-  | { kind: "bool_a" }
-  | { kind: "bool_b"; objA: THREE.Object3D }
+  | { kind: "bool_a"; presetOp?: "union" | "difference" | "split" }
+  | { kind: "bool_b"; objA: THREE.Object3D; presetOp?: "union" | "difference" | "split" }
   | { kind: "bool_op"; objA: THREE.Object3D; objB: THREE.Object3D }
   | { kind: "fillet_select" }
   | { kind: "fillet_edge";        target: THREE.Mesh | THREE.Line }
@@ -1571,8 +1571,11 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     opSetHover(null);
     const mA = objA as THREE.Mesh;
     _applyBoolHighlight(mA, 0x003399);
-    _opPhase = { kind: "bool_b", objA };
-    ptPrompt("Boolean — click the second solid (first highlighted in blue)");
+    _opPhase = { kind: "bool_b", objA, presetOp: phase.presetOp };
+    const bPrompt = phase.presetOp
+      ? `${phase.presetOp === "split" ? "Intersect" : phase.presetOp.charAt(0).toUpperCase() + phase.presetOp.slice(1)} — click second solid (A highlighted)`
+      : "Boolean — click the second solid (first highlighted in blue)";
+    ptPrompt(bPrompt);
     return true;
   }
 
@@ -1600,9 +1603,13 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     opSetHover(null);
     const mB = objB as THREE.Mesh;
     _applyBoolHighlight(mB, 0xcc6600);
-    _opPhase = { kind: "bool_op", objA: phase.objA, objB };
-    opShowBoolChooser(viewer, phase.objA, objB);
-    ptPrompt("Boolean — choose operation");
+    if (phase.presetOp) {
+      opExecBoolean(viewer, phase.objA, objB, phase.presetOp);
+    } else {
+      _opPhase = { kind: "bool_op", objA: phase.objA, objB };
+      opShowBoolChooser(viewer, phase.objA, objB);
+      ptPrompt("Boolean — choose operation");
+    }
     return true;
   }
 
@@ -2166,6 +2173,15 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   } else if (tool === "boolean") {
     _opPhase = { kind: "bool_a" };
     ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)");
+  } else if (tool === "bool-union") {
+    _opPhase = { kind: "bool_a", presetOp: "union" };
+    ptPrompt("Union — click first solid  [Escape = cancel]");
+  } else if (tool === "bool-diff") {
+    _opPhase = { kind: "bool_a", presetOp: "difference" };
+    ptPrompt("Difference — click first solid (A)  [Escape = cancel]");
+  } else if (tool === "bool-intersect") {
+    _opPhase = { kind: "bool_a", presetOp: "split" };
+    ptPrompt("Intersect — click first solid  [Escape = cancel]");
   } else if (tool === "fillet") {
     _opPhase = { kind: "fillet_select" };
     ptPrompt("Fillet — click a solid mesh or a polyline/curve corner  [Escape = cancel]");
