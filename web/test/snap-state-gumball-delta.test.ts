@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { collectSnapVertices, makeSnapId } from "../src/viewer/snap-state";
 import type { Viewer } from "../src/viewer/viewer";
 import { buildRect, buildCircle, buildArc, buildLine, buildPolygon, buildPolyline, buildCurve } from "../src/tools/sketch";
-import { buildSlab, buildColumn, buildBeam, buildGridLine, buildReferenceLine } from "../src/tools/structural";
+import { buildSlab, buildColumn, buildBeam, buildGridLine, buildReferenceLine, DEFAULT_COLUMN_HEIGHT } from "../src/tools/structural";
 
 const TOL = 1e-3;
 
@@ -170,7 +170,7 @@ describe("snap-state gumball-delta correction", () => {
   });
 
   test("beam: both endpoints follow gumball move", () => {
-    const h = 4; // DEFAULT_COLUMN_HEIGHT
+    const h = DEFAULT_COLUMN_HEIGHT;
     const { mesh } = buildBeam({ x: 0, y: 0 }, { x: 4, y: 0 });
     const scene = sceneWith(mesh);
     const v = fakeViewer(scene);

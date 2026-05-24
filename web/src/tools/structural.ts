@@ -19,7 +19,7 @@ export function setStructuralViewer(v: Viewer | null): void { _viewer = v; }
 export const DEFAULT_WALL_HEIGHT = 3;
 const DEFAULT_WALL_THICKNESS = 0.2;
 export const DEFAULT_SLAB_THICKNESS = 0.1;   // IBC 4" residential floor (was 0.2 = 7.87")
-const DEFAULT_COLUMN_HEIGHT = 4;
+export const DEFAULT_COLUMN_HEIGHT = 4;
 const DEFAULT_RECT_HEIGHT = 2.8;
 const DEFAULT_EXTRUDE_HEIGHT = 2.5;
 const DEFAULT_BEAM_SIZE = 0.2;
