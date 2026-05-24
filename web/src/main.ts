@@ -17,7 +17,7 @@ import { opAddLabel, opBuildAnnotLine, getOpPhase, getLastOpFinishMs } from "./v
 import { ptIsCoordInputActive } from "./viewer/transforms";
 import { buildWorkbench } from "./shell/workbench";
 import { buildModes, activateMode, getLayoutHost } from "./shell/modes";
-import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback, exportLayoutAsDxf } from "./shell/layout";
+import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback, exportLayoutAsDxf, addPanel, getPanels } from "./shell/layout";
 import { initCmdK } from "./ui/cmdk";
 import { initExportDrawer, openExportDrawer } from "./io/export-drawer";
 import { Viewer } from "./viewer/viewer";
@@ -3418,6 +3418,14 @@ async function handleExport(fmt: string): Promise<void> {
     }
     const host = getLayoutHost();
     if (!host) { setStatus("Layout not initialized.", "warn"); return; }
+    // If layout has no panels, auto-seed a 4-panel default so export has content.
+    if (getPanels(host).length === 0) {
+      const S = 480, pad = 20;
+      addPanel(host, { x: pad,       y: pad,       w: S, h: S, viewport: "top",         scale: "1:100", title: "PLAN — TOP" });
+      addPanel(host, { x: pad+S+pad, y: pad,       w: S, h: S, viewport: "front",       scale: "1:100", title: "ELEVATION — FRONT" });
+      addPanel(host, { x: pad,       y: pad+S+pad, w: S, h: S, viewport: "right",       scale: "1:100", title: "ELEVATION — RIGHT" });
+      addPanel(host, { x: pad+S+pad, y: pad+S+pad, w: S, h: S, viewport: "perspective", scale: "1:100", title: "3D VIEW" });
+    }
     const stem = "sheet";
     try {
       if (fmt === "svg") {
@@ -3439,6 +3447,7 @@ async function handleExport(fmt: string): Promise<void> {
         setStatus(`DXF (LibreDWG-WASM unavailable — SVG sidecar) · ${(text.length / 1024).toFixed(1)} KB`, "ok");
       }
     } catch (e) {
+      console.error("[SdExport] 2D export failed:", e);
       setStatus(`Layout export ${fmt.toUpperCase()} failed: ${(e as Error).message}`, "err");
     }
     return;
@@ -3546,6 +3555,7 @@ async function handleExport(fmt: string): Promise<void> {
       setStatus(`Unknown export format: ${fmt}`, "err");
     }
   } catch (e) {
+    console.error("[SdExport] 3D export failed:", e);
     setStatus(`Export ${fmt.toUpperCase()} failed: ${(e as Error).message}`, "err");
   }
 }

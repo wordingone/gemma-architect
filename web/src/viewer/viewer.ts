@@ -1016,6 +1016,7 @@ export class Viewer {
   }
 
   private onCanvasMouseDown(e: MouseEvent): void {
+    if (e.button !== 0) return;
     // W-6 host-pick: intercept before all other logic.
     if (this._hostPickCallback) {
       const cb = this._hostPickCallback;
