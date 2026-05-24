@@ -1,12 +1,15 @@
 /**
- * extract-fzk-roof.ts — Dump FZK-Haus roof sub-component positions and dims.
+ * extract-fzk-roof.ts — THIN WRAPPER. Use extract-fixture-from-ifc.ts instead.
  *
  * Usage: bun scripts/extract-fzk-roof.ts
  *
- * Scans IfcSlab (ROOF predefined), IfcMember, IfcCovering, IfcPlate elements
- * in the FZK-Haus IFC and outputs a structured JSON describing each element's
- * world-space bounding box, centroid, and dimensions.  The output is used to
- * derive the normalized parametric definition for buildRoof().
+ * Equivalent to:
+ *   bun scripts/extract-fixture-from-ifc.ts \
+ *     --ifc web/public/samples/AC20-FZK-Haus.ifc \
+ *     --filter IfcSlab+IfcMember+IfcCovering+IfcPlate+IfcRoof+IfcWall \
+ *     --out web/public/samples/fzk-roof-elements.json
+ *
+ * Retained for backwards compatibility. Prefer the generalized extractor.
  */
 
 import { readFile, writeFile } from "node:fs/promises";

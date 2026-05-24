@@ -1,0 +1,2212 @@
+{
+  "schema_version": 1,
+  "source_ifc": "web/public/samples/AC20-FZK-Haus.ifc",
+  "filter": [
+    "IfcSlab",
+    "IfcBeam",
+    "IfcMember",
+    "IfcCovering"
+  ],
+  "elements": [
+    {
+      "expressID": 34509,
+      "ifcType": "IfcSlab",
+      "bbox": {
+        "minX": 0,
+        "maxX": 12,
+        "minY": -0.2,
+        "maxY": 0,
+        "minZ": -10,
+        "maxZ": 0,
+        "w": 12,
+        "d": 0.2,
+        "h": 10
+      },
+      "dims": [
+        12,
+        10,
+        0.2
+      ],
+      "centroid": {
+        "x": 6,
+        "y": -0.1,
+        "z": -5
+      },
+      "volume": 24,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          0,
+          1
+        ]
+      },
+      "vertCount": 34,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcSlab",
+        "role": null
+      }
+    },
+    {
+      "expressID": 59290,
+      "ifcType": "IfcSlab",
+      "bbox": {
+        "minX": 0.1,
+        "maxX": 11.9,
+        "minY": 2.5,
+        "maxY": 2.7,
+        "minZ": -9.9,
+        "maxZ": -0.1,
+        "w": 11.8,
+        "d": 0.2,
+        "h": 9.8
+      },
+      "dims": [
+        11.8,
+        9.8,
+        0.2
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 2.6,
+        "z": -5
+      },
+      "volume": 19.967156,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          0,
+          1
+        ]
+      },
+      "vertCount": 96,
+      "faceCount": 32,
+      "userData": {
+        "ifcClass": "IfcSlab",
+        "role": null
+      }
+    },
+    {
+      "expressID": 59553,
+      "ifcType": "IfcSlab",
+      "bbox": {
+        "minX": -0.5,
+        "maxX": 12.5,
+        "minY": 2.911325,
+        "maxY": 6.317691,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 13,
+        "d": 3.406367,
+        "h": 5.5
+      },
+      "dims": [
+        13,
+        5.5,
+        3.406367
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 4.614508,
+        "z": -7.75
+      },
+      "volume": 16.512218,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          0,
+          1
+        ]
+      },
+      "vertCount": 34,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcSlab",
+        "role": null
+      }
+    },
+    {
+      "expressID": 59753,
+      "ifcType": "IfcSlab",
+      "bbox": {
+        "minX": -0.5,
+        "maxX": 12.5,
+        "minY": 2.911325,
+        "maxY": 6.317691,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 13,
+        "d": 3.406367,
+        "h": 5.5
+      },
+      "dims": [
+        13,
+        5.5,
+        3.406367
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 4.614508,
+        "z": -2.25
+      },
+      "volume": 16.512218,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          0,
+          1
+        ]
+      },
+      "vertCount": 34,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcSlab",
+        "role": null
+      }
+    },
+    {
+      "expressID": 20374,
+      "ifcType": "IfcBeam",
+      "bbox": {
+        "minX": 3.570039,
+        "maxX": 7.65,
+        "minY": 2.26,
+        "maxY": 2.5,
+        "minZ": -4.23,
+        "maxZ": -4.03,
+        "w": 4.079961,
+        "d": 0.24,
+        "h": 0.2
+      },
+      "dims": [
+        4.079961,
+        0.24,
+        0.2
+      ],
+      "centroid": {
+        "x": 5.61002,
+        "y": 2.38,
+        "z": -4.13
+      },
+      "volume": 0.195838,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 34,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcBeam",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37582,
+      "ifcType": "IfcBeam",
+      "bbox": {
+        "minX": -0.5,
+        "maxX": 12.5,
+        "minY": 3.2,
+        "maxY": 3.36,
+        "minZ": -9.809474,
+        "maxZ": -9.729474,
+        "w": 13,
+        "d": 0.16,
+        "h": 0.08
+      },
+      "dims": [
+        13,
+        0.16,
+        0.08
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 3.28,
+        "z": -9.769474
+      },
+      "volume": 0.1664,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcBeam",
+        "role": null
+      }
+    },
+    {
+      "expressID": 40416,
+      "ifcType": "IfcBeam",
+      "bbox": {
+        "minX": -0.5,
+        "maxX": 12.5,
+        "minY": 3.2,
+        "maxY": 3.36,
+        "minZ": -0.270526,
+        "maxZ": -0.190526,
+        "w": 13,
+        "d": 0.16,
+        "h": 0.08
+      },
+      "dims": [
+        13,
+        0.16,
+        0.08
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 3.28,
+        "z": -0.230526
+      },
+      "volume": 0.1664,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcBeam",
+        "role": null
+      }
+    },
+    {
+      "expressID": 40539,
+      "ifcType": "IfcBeam",
+      "bbox": {
+        "minX": -0.5,
+        "maxX": 12.5,
+        "minY": 5.926751,
+        "maxY": 6.086751,
+        "minZ": -5.04,
+        "maxZ": -4.96,
+        "w": 13,
+        "d": 0.16,
+        "h": 0.08
+      },
+      "dims": [
+        13,
+        0.16,
+        0.08
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 6.006751,
+        "z": -5
+      },
+      "volume": 0.1664,
+      "orientation": {
+        "principal": [
+          1,
+          0,
+          0
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcBeam",
+        "role": null
+      }
+    },
+    {
+      "expressID": 35169,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 1.06,
+        "maxX": 1.14,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 1.1,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 35304,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 10.16,
+        "maxX": 10.24,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 10.2,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 35427,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 9.46,
+        "maxX": 9.54,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 9.5,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 35550,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 8.76,
+        "maxX": 8.84,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 8.8,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 35673,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 8.06,
+        "maxX": 8.14,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 8.1,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 35796,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 6.66,
+        "maxX": 6.74,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 6.7,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 35919,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 5.96,
+        "maxX": 6.04,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36042,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 5.26,
+        "maxX": 5.34,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 5.3,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36165,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 4.56,
+        "maxX": 4.64,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 4.6,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36288,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 3.86,
+        "maxX": 3.94,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 3.9,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36411,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 3.16,
+        "maxX": 3.24,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 3.2,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36534,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 2.46,
+        "maxX": 2.54,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 2.5,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36657,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 1.76,
+        "maxX": 1.84,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 1.8,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36780,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 0.36,
+        "maxX": 0.44,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 0.4,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 36903,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": -0.34,
+        "maxX": -0.26,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": -0.3,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37026,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 12.42,
+        "maxX": 12.5,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 12.46,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37149,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 12.26,
+        "maxX": 12.34,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 12.3,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37272,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 11.56,
+        "maxX": 11.64,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 11.6,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37395,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 10.86,
+        "maxX": 10.94,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 10.9,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37710,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": -0.5,
+        "maxX": -0.42,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": -0.46,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37833,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": -0.5,
+        "maxX": -0.42,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": -0.46,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 37956,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": -0.34,
+        "maxX": -0.26,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": -0.3,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38079,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 0.36,
+        "maxX": 0.44,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 0.4,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38202,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 1.06,
+        "maxX": 1.14,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 1.1,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38325,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 1.76,
+        "maxX": 1.84,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 1.8,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38448,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 2.46,
+        "maxX": 2.54,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 2.5,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38571,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 3.16,
+        "maxX": 3.24,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 3.2,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38694,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 3.86,
+        "maxX": 3.94,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 3.9,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38817,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 4.56,
+        "maxX": 4.64,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 4.6,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 38940,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 5.26,
+        "maxX": 5.34,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 5.3,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39063,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 5.96,
+        "maxX": 6.04,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 6,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39186,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 6.66,
+        "maxX": 6.74,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 6.7,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39309,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 7.36,
+        "maxX": 7.44,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 7.4,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39432,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 8.06,
+        "maxX": 8.14,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 8.1,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39555,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 8.76,
+        "maxX": 8.84,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 8.8,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39678,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 9.46,
+        "maxX": 9.54,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 9.5,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39801,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 10.16,
+        "maxX": 10.24,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 10.2,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 39924,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 10.86,
+        "maxX": 10.94,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 10.9,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 40047,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 11.56,
+        "maxX": 11.64,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 11.6,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 40170,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 12.26,
+        "maxX": 12.34,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 12.3,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 40293,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 12.42,
+        "maxX": 12.5,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -5,
+        "maxZ": 0.5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 12.46,
+        "y": 4.591414,
+        "z": -2.25
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    },
+    {
+      "expressID": 40662,
+      "ifcType": "IfcMember",
+      "bbox": {
+        "minX": 7.36,
+        "maxX": 7.44,
+        "minY": 2.911325,
+        "maxY": 6.271503,
+        "minZ": -10.5,
+        "maxZ": -5,
+        "w": 0.08,
+        "d": 3.360178,
+        "h": 5.5
+      },
+      "dims": [
+        5.5,
+        3.360178,
+        0.08
+      ],
+      "centroid": {
+        "x": 7.4,
+        "y": 4.591414,
+        "z": -7.75
+      },
+      "volume": 0.081291,
+      "orientation": {
+        "principal": [
+          0,
+          0,
+          1
+        ],
+        "secondary": [
+          0,
+          1,
+          0
+        ]
+      },
+      "vertCount": 24,
+      "faceCount": 12,
+      "userData": {
+        "ifcClass": "IfcMember",
+        "role": null
+      }
+    }
+  ]
+}
