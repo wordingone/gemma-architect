@@ -181,39 +181,51 @@ await cdp.send("Page.reload", { ignoreCache: true });
 await Promise.race([nav2Done, sleep(15000)]);
 console.log("[baseline-tps] Reload done. Waiting for boot...");
 
-// 6. Wait for agentmodel:boot-complete (cold boot takes 2-5 min for E4B)
+// 6. Wait for boot — poll every 5s (avoid long-running awaitPromise that dies on reload)
+// Runtime.evaluate with awaitPromise:true gets cancelled by Page.reload navigation.
 const BOOT_TIMEOUT_MS = 360000; // 6 min
-const bootDone = new Promise((res, rej) => {
-  const t = setTimeout(() => rej(new Error("Boot timeout (6 min)")), BOOT_TIMEOUT_MS);
-  cdp.send("Runtime.evaluate", {
-    expression: `
-      new Promise((resolve) => {
-        if (document.querySelector('.chat-input') && !document.querySelector('.boot-screen')) {
-          resolve('already-ready');
-          return;
-        }
-        window.addEventListener('agentmodel:boot-complete', () => resolve('boot-complete'), { once: true });
-        window.addEventListener('agentmodel:fatal', () => resolve('fatal'), { once: true });
-      })
-    `,
-    awaitPromise: true,
-    timeout: BOOT_TIMEOUT_MS,
-  }).then(r => { clearTimeout(t); res(r.result?.value ?? 'unknown'); })
-    .catch(e => { clearTimeout(t); rej(e); });
-});
+const bootStart = Date.now();
+let bootResult = null;
 
-let bootResult;
-try {
-  bootResult = await bootDone;
-  console.log(`[baseline-tps] Boot result: ${bootResult}`);
-  if (bootResult === "fatal") {
-    console.error("ERROR: boot ended with fatal — WebGPU not available or model failed to load");
-    process.exit(1);
+while (Date.now() - bootStart < BOOT_TIMEOUT_MS) {
+  await sleep(5000);
+  let check;
+  try {
+    check = await cdp.send("Runtime.evaluate", {
+      expression: `
+        (() => {
+          const input = document.querySelector('.chat-input');
+          const bootOverlay = document.querySelector('.boot-overlay, .loading-overlay, [data-boot]');
+          const fatalEl = document.querySelector('.fatal-error, [data-fatal]');
+          if (fatalEl) return 'fatal';
+          if (input && !bootOverlay) return 'ready';
+          const telLen = (window.__telemetry ?? []).length;
+          return 'booting:' + telLen;
+        })()
+      `,
+    });
+  } catch (e) {
+    // Page still navigating after reload — normal for first few polls
+    const elapsed = ((Date.now() - bootStart) / 1000).toFixed(0);
+    console.log(`[baseline-tps] Boot poll error (page still loading?): ${e.message} (+${elapsed}s)`);
+    continue;
   }
-} catch (e) {
-  console.error("ERROR: boot timeout:", e.message);
+  const val = check.result?.value ?? 'unknown';
+  const elapsed = ((Date.now() - bootStart) / 1000).toFixed(0);
+  console.log(`[baseline-tps] Boot check: ${val} (+${elapsed}s)`);
+  if (val === 'ready') { bootResult = 'ready'; break; }
+  if (val === 'fatal') { bootResult = 'fatal'; break; }
+}
+
+if (!bootResult) {
+  console.error("ERROR: boot timeout after 6 min");
   process.exit(1);
 }
+if (bootResult === 'fatal') {
+  console.error("ERROR: boot fatal — WebGPU not available or model failed to load");
+  process.exit(1);
+}
+console.log(`[baseline-tps] Boot complete (+${((Date.now() - bootStart)/1000).toFixed(0)}s)`);
 
 // 6. Read model info
 const modelInfo = await cdp.send("Runtime.evaluate", {
