@@ -3421,6 +3421,13 @@ export class Viewer {
     const thumbRenderer = this._thumbRenderer!;
     const gizmoWasVisible = this.gizmos.map(g => g.visible);
     this.gizmos.forEach(g => { g.visible = false; });
+    // Hide axis labels + grid in layout thumbnails (#1845).
+    const axesWasVisible = this.axes.visible;
+    const axisLabelWasVisible = this.axisLabels.map(s => s.visible);
+    const gridWasVisible = this.grid.visible;
+    this.axes.visible = false;
+    this.axisLabels.forEach(s => { s.visible = false; });
+    this.grid.visible = false;
     // Hide clip-plane / section-box editing gizmos in layout thumbnails (#1729-B).
     const clipMeshes: Array<{ obj: THREE.Object3D; wasVisible: boolean }> = [];
     this.scene.traverse((obj) => {
@@ -3439,6 +3446,9 @@ export class Viewer {
     }
     clipMeshes.forEach(({ obj, wasVisible }) => { obj.visible = wasVisible; });
     this.gizmos.forEach((g, i) => { g.visible = gizmoWasVisible[i]; });
+    this.axes.visible = axesWasVisible;
+    this.axisLabels.forEach((s, i) => { s.visible = axisLabelWasVisible[i]; });
+    this.grid.visible = gridWasVisible;
     this.scene.overrideMaterial = prevOverride;
     const ctx = dest.getContext("2d");
     if (ctx) ctx.drawImage(this._thumbCanvas!, 0, 0, w, h);
