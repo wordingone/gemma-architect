@@ -25,7 +25,8 @@
 import { iconSVG } from "../ui/icons";
 import { formatLength } from "../units.js";
 import { getState } from "../app-state.js";
-import type { Viewer, ExportFacePoly } from "../viewer/viewer";
+import type { Viewer, ExportFacePoly, ClassifiedEdgeSeg } from "../viewer/viewer";
+import { LINEWEIGHT } from "../viewer/viewer";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
 
@@ -1401,27 +1402,43 @@ function renderViewportSvg(p: PanelState, b: SceneBounds, viewer?: Viewer): stri
   const w = p.w, h = p.h;
   if (w < 4 || h < 4) return "";
 
-  // Real 3D edge projection (#1211 + #1803): fills first, edges on top.
+  // Real 3D edge projection (#1211 + #1803 + #1804): fills first, classified edges on top.
   if (viewer) {
     const viewName = layoutViewportToViewName(p.viewport);
-    const segs = viewer.getEdgeSegmentsForView(viewName, w, h);
+    // Use classified edges (#1804) when available; fall back to unclassified (#1211).
+    const classifiedSegs: ClassifiedEdgeSeg[] = viewer.getClassifiedEdgeSegmentsForView
+      ? viewer.getClassifiedEdgeSegmentsForView(viewName, w, h)
+      : [];
+    const segs = classifiedSegs.length > 0
+      ? []
+      : viewer.getEdgeSegmentsForView(viewName, w, h);
     const polys: ExportFacePoly[] = viewer.getFacePolygonsForView
       ? viewer.getFacePolygonsForView(viewName, w, h)
       : [];
 
-    if (segs.length > 0 || polys.length > 0) {
+    if (classifiedSegs.length > 0 || segs.length > 0 || polys.length > 0) {
       const fillMarkup = polys.map(({ pts, fill }) => {
         const [a, b2, c] = pts;
         return `<polygon points="${a[0].toFixed(2)},${a[1].toFixed(2)} ${b2[0].toFixed(2)},${b2[1].toFixed(2)} ${c[0].toFixed(2)},${c[1].toFixed(2)}" fill="${fill}" stroke="none"/>`;
       }).join("\n      ");
-      const lines = segs.map(([x1, y1, x2, y2]) =>
-        `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`,
-      ).join("\n      ");
+
+      let edgeMarkup: string;
+      if (classifiedSegs.length > 0) {
+        // Classified edges: render each class with its lineweight.
+        edgeMarkup = classifiedSegs.map(({ x1, y1, x2, y2, cls }) =>
+          `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke-width="${LINEWEIGHT[cls]}"/>`,
+        ).join("\n      ");
+      } else {
+        edgeMarkup = segs.map(([x1, y1, x2, y2]) =>
+          `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`,
+        ).join("\n      ");
+      }
+
       return `<svg viewBox="0 0 ${w.toFixed(2)} ${h.toFixed(2)}" preserveAspectRatio="xMidYMid meet">
       <rect x="0" y="0" width="${w.toFixed(2)}" height="${h.toFixed(2)}" fill="#ffffff"/>
       <g>${fillMarkup}</g>
-      <g fill="none" stroke="#1a1a22" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round">
-      ${lines}
+      <g fill="none" stroke="#1a1a22" stroke-linecap="round" stroke-linejoin="round">
+      ${edgeMarkup}
       </g>
     </svg>`;
     }

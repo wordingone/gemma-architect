@@ -24,6 +24,9 @@ import { ClipFillManager } from "./clip-fill.js";
 import { getLayerForCreator } from "../geometry/layers.js";
 import { drawingLayerStore } from "../geometry/drawing-layers.js";
 import { clipSegByPlanes, worldToPanelXY } from "./line-clip.js";
+import { classifyMeshEdges, type ClassifiedEdgeSeg } from "./edge-classifier.js";
+export type { ClassifiedEdgeSeg } from "./edge-classifier.js";
+export { LINEWEIGHT } from "./edge-classifier.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 
@@ -2959,6 +2962,64 @@ export class Viewer {
       }
     });
     return polys;
+  }
+
+  // Classified edge segments for lineweight-aware 2D exports (#1804).
+  // Returns one ClassifiedEdgeSeg per edge (not per EdgesGeometry segment —
+  // this walks raw triangles so naked/silhouette/tangent can be detected).
+  getClassifiedEdgeSegmentsForView(view: ViewName, panelW: number, panelH: number): ClassifiedEdgeSeg[] {
+    const pane = this.panes.find(p => p.view === view);
+    if (!pane || panelW < 1 || panelH < 1) return [];
+
+    let cam: THREE.Camera;
+    if (pane.camera instanceof THREE.OrthographicCamera) {
+      const src = pane.camera;
+      const worldTop    = src.top    || 5;
+      const worldBottom = src.bottom || -5;
+      const worldH = worldTop - worldBottom;
+      const half = worldH / 2;
+      const tmp = new THREE.OrthographicCamera(
+        -half * panelW / panelH, half * panelW / panelH,
+        worldTop, worldBottom, src.near, src.far,
+      );
+      tmp.position.copy(src.position);
+      tmp.quaternion.copy(src.quaternion);
+      tmp.updateProjectionMatrix();
+      cam = tmp;
+    } else {
+      const src = pane.camera as THREE.PerspectiveCamera;
+      const tmp = src.clone() as THREE.PerspectiveCamera;
+      tmp.aspect = panelW / panelH;
+      tmp.updateProjectionMatrix();
+      cam = tmp;
+    }
+
+    const projMat = new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    const viewDir = new THREE.Vector3();
+    cam.getWorldDirection(viewDir);
+    const sectionPlanes = [...this._sectionPlanes, ...this._clipPlanes];
+
+    const _noExport = new Set<THREE.Object3D>();
+    for (const g of this.gizmos) g.traverse((o) => _noExport.add(o));
+    if (this.pivotProxy) this.pivotProxy.traverse((o) => _noExport.add(o));
+    this._cplaneGizmo.group.traverse((o) => _noExport.add(o));
+    this.grid.traverse((o) => _noExport.add(o));
+    this.axes.traverse((o) => _noExport.add(o));
+
+    const out: ClassifiedEdgeSeg[] = [];
+    this.scene.updateMatrixWorld(false);
+    this.scene.traverse((child) => {
+      if (_noExport.has(child) || child.userData.noRenderMode) return;
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const geom = mesh.geometry as THREE.BufferGeometry | undefined;
+      if (!geom?.attributes.position) return;
+      const segs = classifyMeshEdges(
+        geom, mesh.matrixWorld, projMat, viewDir, panelW, panelH, sectionPlanes,
+      );
+      for (const s of segs) out.push(s);
+    });
+    return out;
   }
 
   // Rebuild stencil fill geometry for the current clip + section planes.
