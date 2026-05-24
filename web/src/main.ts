@@ -2245,6 +2245,36 @@ registerHandler("SdPlane", (args) => {
   }
 });
 
+registerHandler("SdSurface", (args) => {
+  try {
+    const raw = (args.profile ?? args.points) as unknown;
+    let pts: number[][];
+    if (Array.isArray(raw) && Array.isArray(raw[0])) {
+      pts = raw as number[][];
+    } else if (raw && typeof raw === "object" && "points" in (raw as object)) {
+      pts = (raw as { points: number[][] }).points;
+    } else {
+      return { error: "SdSurface: provide profile with points or points array", created: null };
+    }
+    if (pts.length < 3) return { error: "SdSurface requires at least 3 points", created: null };
+    const z0 = pts[0][2] ?? 0;
+    const shape = new THREE.Shape();
+    shape.moveTo(pts[0][0], pts[0][1]);
+    for (const p of pts.slice(1)) shape.lineTo(p[0], p[1]);
+    shape.closePath();
+    const geom = new THREE.ShapeGeometry(shape);
+    geom.translate(0, 0, z0);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x4499cc, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.userData.kind = "surface";
+    mesh.userData.creator = "surface";
+    viewer.addMesh(mesh, "mesh");
+    return { created: "surface" };
+  } catch (e) {
+    return { error: String(e), created: null };
+  }
+});
+
 registerHandler("SdArray", (args) => {
   const count = Math.max(1, Math.trunc((args.count as number | undefined) ?? 1));
   const spacing = (args.spacing as number[] | undefined) ?? [1, 0, 0];

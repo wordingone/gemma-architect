@@ -454,6 +454,24 @@
   kernel: nurbs-webgpu
   alias_source: generic_cad_vocabulary
 
+- name: SdSurface
+  kernel_op: surface
+  parameters:
+    type: object
+    properties:
+      profile:
+        type: edge_or_surface
+        description: "[optional] Profile/boundary curve (closed curve → capped surface)"
+      points:
+        type: array
+        description: "[optional] Explicit boundary polygon [[x,y,z],...]"
+    required: []
+  topology_role: face
+  kg_predicates: []
+  synonyms: [surface, patch, cap, fill]
+  kernel: nurbs-webgpu
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §4 Boolean ops
 # ============================================================

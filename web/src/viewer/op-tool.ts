@@ -132,7 +132,8 @@ export type OpPhase =
   | { kind: "revolve_axis_b"; profilePts: number[][]; axisFrom: THREE.Vector3 }
   | { kind: "plane_pt1" }
   | { kind: "plane_pt2"; origin: THREE.Vector3 }
-  | { kind: "plane_pt3"; origin: THREE.Vector3; xAxis: THREE.Vector3 };
+  | { kind: "plane_pt3"; origin: THREE.Vector3; xAxis: THREE.Vector3 }
+  | { kind: "surface_pick" };
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
@@ -1084,6 +1085,7 @@ export function opPhaseIsObjectSelect(phase: OpPhase): boolean {
     case "sweep_rail":
     case "sweep_profile":
     case "revolve_profile":
+    case "surface_pick":
       return true;
     case "dim_a":
       return phase.tool === "volume-dim";
@@ -1306,7 +1308,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     ? new THREE.Vector3(sv.x, sv.y, sv.z)
     : world ? (() => { const s = snapWorldForView(viewer, world); return new THREE.Vector3(s.x, s.y, s.z); })()
              : null;
-  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select" && phase.kind !== "loft_curve1" && phase.kind !== "loft_curve2" && phase.kind !== "sweep_rail" && phase.kind !== "sweep_profile" && phase.kind !== "revolve_profile") return false;
+  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select" && phase.kind !== "loft_curve1" && phase.kind !== "loft_curve2" && phase.kind !== "sweep_rail" && phase.kind !== "sweep_profile" && phase.kind !== "revolve_profile" && phase.kind !== "surface_pick") return false;
 
   if (phase.kind === "extrude_select") {
     // profileOnly=true limits raycast to CLICK_PROFILE_CREATORS (sketch curves +
@@ -1512,6 +1514,33 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     }) as { error?: string } | null;
     if (result?.error) {
       ptPrompt(`Plane failed: ${result.error}  [Escape = cancel]`);
+      return true;
+    }
+    opFinish(viewer);
+    return true;
+  }
+
+  if (phase.kind === "surface_pick") {
+    const hit = opRaycastObject(viewer, clientX, clientY);
+    if (!hit || !(hit.obj instanceof THREE.Line)) {
+      ptPrompt("Surface — click a closed curve to fill  [Escape = cancel]");
+      return true;
+    }
+    opSetHover(null);
+    _applyBoolHighlight(hit.obj, 0x44aaff);
+    const pos = hit.obj.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const pts: number[][] = [];
+    for (let i = 0; i < pos.count; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(hit.obj.matrixWorld);
+      pts.push([v.x, v.y, v.z]);
+    }
+    if (pts.length < 3) {
+      ptPrompt("Surface — selected curve has insufficient points  [Escape = cancel]");
+      return true;
+    }
+    const result = dispatchSync("SdSurface", { profile: { points: pts } }) as { error?: string } | null;
+    if (result?.error) {
+      ptPrompt(`Surface failed: ${result.error}  [Escape = cancel]`);
       return true;
     }
     opFinish(viewer);
@@ -2131,6 +2160,9 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   } else if (tool === "plane") {
     _opPhase = { kind: "plane_pt1" };
     ptPrompt("Plane — click origin point  [Escape = cancel]");
+  } else if (tool === "surface") {
+    _opPhase = { kind: "surface_pick" };
+    ptPrompt("Surface — click a closed curve to fill  [Escape = cancel]");
   } else if (tool === "boolean") {
     _opPhase = { kind: "bool_a" };
     ptPrompt("Boolean — click first solid  (2D closed sketches auto-extrude to 3 m)");
