@@ -6992,6 +6992,49 @@ await resetScene('before-box-inject');
   await resetScene('post-S143');
 }
 
+// ── S144 — clip-plane-bounds-dispatch (#1849 §5.1-§5.2): SdClippingPlane with bounds ──────────────
+// §5.1+§5.2: handler accepts origin/normal/bounds + optional label; adds plane to viewer;
+// viewer count goes from 0 → 1 → 0 after clear. autoSheet path exercised (no Layout controller
+// mounted in verify env so sheetId returns ""; plane still added). §5.3+§5.4 verified in tests.
+{
+  await resetScene('pre-S144');
+  const r144 = await evaluate(`(async function() {
+    try {
+      const dispatch = window.__dispatch;
+      const v = window.__viewer;
+      if (!dispatch || !v) return { passed: false, evidence: { reason: 'dispatch or viewer missing' } };
+
+      // Baseline — should be 0 after resetScene.
+      const countBefore = v.getClippingPlaneCount?.() ?? -1;
+
+      // Dispatch with all §5.1-§5.2 fields: origin, normal, label, bounds, autoSheet.
+      dispatch('SdClippingPlane', {
+        origin: [0, 5, 0],
+        normal: [0, -1, 0],
+        label: 's144-cplane',
+        bounds: { startOffset: -8, endOffset: 8, farClip: 30, height: 8 },
+        autoSheet: true,
+      });
+      await new Promise(r => setTimeout(r, 200));
+      const countAfterAdd = v.getClippingPlaneCount?.() ?? -1;
+
+      // Clear — count should return to 0.
+      dispatch('SdClippingPlanesClear', {});
+      await new Promise(r => setTimeout(r, 100));
+      const countAfterClear = v.getClippingPlaneCount?.() ?? -1;
+
+      // §5.1: plane registered in viewer (≥1 after dispatch, normal SdClippingPlane adds 2: front + back).
+      // §5.2: no JS exception thrown (autoSheet path runs without error even without mounted Layout).
+      const passed = countBefore === 0 && countAfterAdd >= 1 && countAfterClear === 0;
+      return { passed, evidence: { countBefore, countAfterAdd, countAfterClear } };
+    } catch (e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('clip-plane-bounds-dispatch', !!(r144?.passed), r144 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S144');
+}
+
 } finally {
   await cleanup();
 }

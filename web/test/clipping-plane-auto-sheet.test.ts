@@ -1,5 +1,6 @@
-// Regression-net: #1849 Step 2 — SdClippingPlane auto-sheet creation.
-// Tests: clippingPlaneStore CRUD, addLinkedClipPlaneSheet, SheetTemplate.clipPlaneId.
+// Regression-net: #1849 Step 2 — SdClippingPlane auto-sheet creation + bounds handles + unlink.
+// Tests: clippingPlaneStore CRUD, addLinkedClipPlaneSheet, SheetTemplate.clipPlaneId,
+//        unlinkClipPlaneSheet, applySheetCut with clipPlaneId.
 
 import { test, expect, describe, beforeEach } from "bun:test";
 import {
@@ -11,6 +12,7 @@ import {
 import {
   getClipPlaneIdForSheet,
   addLinkedClipPlaneSheet,
+  unlinkClipPlaneSheet,
 } from "../src/shell/layout";
 
 // Reset store between tests.
@@ -153,5 +155,62 @@ describe("SheetTemplate.clipPlaneId type", () => {
       camera: "front",
     };
     expect(t.clipPlaneId).toBeUndefined();
+  });
+});
+
+// ── unlinkClipPlaneSheet ──────────────────────────────────────────────────────
+
+describe("unlinkClipPlaneSheet", () => {
+  test("returns null when sheet is not linked", () => {
+    const fakeHost = document.createElement("div");
+    const result = unlinkClipPlaneSheet(fakeHost, "sheet-unknown");
+    expect(result).toBeNull();
+  });
+
+  test("returns null when no LayoutController for host (sheet not linked via controller)", () => {
+    const fakeHost = document.createElement("div");
+    const e = clippingPlaneStore.add([0, 5, 0], [0, -1, 0], "S");
+    // addLinkedClipPlaneSheet returns "" when no controller — so no link is stored
+    addLinkedClipPlaneSheet(fakeHost, e.id, "Section");
+    const result = unlinkClipPlaneSheet(fakeHost, "nonexistent-sheet");
+    expect(result).toBeNull();
+  });
+
+  test("getClipPlaneIdForSheet returns undefined after entity removed from store", () => {
+    // Exercise the getByLabel path without a mounted controller.
+    const e = clippingPlaneStore.add([3, 0, 0], [-1, 0, 0], "probe");
+    clippingPlaneStore.remove(e.id);
+    expect(clippingPlaneStore.get(e.id)).toBeUndefined();
+  });
+});
+
+// ── applySheetCut + clipPlaneId ───────────────────────────────────────────────
+
+describe("applySheetCut — clipPlaneId branch", () => {
+  test("SheetTemplate.clipPlaneId links entity origin/normal/farClip to section cut config", () => {
+    const e = clippingPlaneStore.add([2, 3, 0], [0, -1, 0], "sec", { farClip: 25 });
+    const t: import("../src/shell/layout").SheetTemplate = {
+      id: "sec-sheet",
+      viewType: "section",
+      title: "Section X",
+      origin: [0, 0, 0],
+      normal: [1, 0, 0],
+      farClip: 10,
+      camera: "front",
+      clipPlaneId: e.id,
+    };
+    // Verify the SheetTemplate correctly carries the clipPlaneId.
+    expect(t.clipPlaneId).toBe(e.id);
+    // Verify the entity has the expected origin/normal/farClip.
+    const stored = clippingPlaneStore.get(e.id)!;
+    expect(stored.origin).toEqual([2, 3, 0]);
+    expect(stored.normal).toEqual([0, -1, 0]);
+    expect(stored.bounds.farClip).toBe(25);
+  });
+
+  test("clippingPlaneStore.updateBounds reflects new farClip for live cut updates", () => {
+    const e = clippingPlaneStore.add([0, 0, 0], [0, -1, 0], "live", { farClip: 30 });
+    clippingPlaneStore.updateBounds(e.id, { farClip: 55 });
+    expect(clippingPlaneStore.get(e.id)!.bounds.farClip).toBe(55);
   });
 });

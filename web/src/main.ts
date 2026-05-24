@@ -66,6 +66,7 @@ import { buildRect, buildCircle, buildLine, buildPolyline, buildRamp, buildRaili
 import { buildDoor, buildWindow, buildOpening } from "./tools/openings";
 import { DEFAULT_DOOR_W, DEFAULT_DOOR_H, FZK_DOOR_W, FZK_DOOR_H, FZK_FRONT_DOOR_W, FZK_FRONT_DOOR_H, FZK_TERRACE_DOOR_W, FZK_TERRACE_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL, FZK_OG_WINDOW_W, FZK_OG_WINDOW_H, STAIR_STEP_RISE, STAIR_STEP_DEPTH, STAIR_WIDTH } from "./tools/dimensions";
 import { initSectionHandles } from "./viewer/section-handles";
+import { initClipPlaneHandles, setActiveClipPlaneEntity } from "./viewer/clip-plane-handles";
 import { initWallHeightHandle } from "./viewer/wall-height-handle";
 import { replayCloneSideEffects } from "./viewer/copy-array";
 import { undo, redo, pushAction, pushTransformAction, pushBatchAction, captureTransform, clearHistory, pushReplaceAction, beginTransaction, endTransaction, pushCustomAction } from "./history";
@@ -207,6 +208,7 @@ syncToolActiveClass();
 syncUnitsToStorage();
 initCreateMode(viewer);
 initSectionHandles(viewer, viewportAreaEl);
+initClipPlaneHandles(viewer, viewportAreaEl);
 initWallHeightHandle(viewer, viewportAreaEl);
 
 // Undo/Redo handlers (#55): route SdUndo and SdRedo to the history module.
@@ -335,6 +337,7 @@ registerHandler("SdClippingPlane", (args) => {
   viewer.addClippingPlane(origin, normal, label);
   document.dispatchEvent(new CustomEvent("viewer:clip-changed"));
   const entity = clippingPlaneStore.add(origin, normal, label, boundsArg);
+  setActiveClipPlaneEntity(entity.id);
   let sheetId: string | undefined;
   if (autoSheet) {
     const layoutHost = getLayoutHost();

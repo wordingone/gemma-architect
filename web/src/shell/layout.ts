@@ -27,6 +27,7 @@ import { formatLength } from "../units.js";
 import { getState } from "../app-state.js";
 import type { Viewer, ExportFacePoly, ClassifiedEdgeSeg } from "../viewer/viewer";
 import { LINEWEIGHT, DASH_PATTERN, DXF_LWEIGHT, DXF_LINETYPE } from "../viewer/viewer";
+import { clippingPlaneStore } from "../geometry/clipping-planes";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
 
@@ -321,6 +322,8 @@ class LayoutController {
   // Set by onSheetMouseUp when a drag-to-create completes; suppresses the
   // subsequent click event so click-to-add doesn't fire a second addPanel.
   private _dragCompleted = false;
+  // Unlink button — visible only when activeSheet is linked to a clip plane (#1849 §5.4).
+  private _unlinkBtn: HTMLElement | null = null;
   // Fit-to-stage scale factor (zoom). All mouse coords divided by this.
   private zoomFactor = 1;
   // Previous sheet pixel dimensions — used in applySheetDims to rescale panels proportionally.
@@ -555,6 +558,22 @@ class LayoutController {
     settings.appendChild(customWrap);
 
     tb.appendChild(settings);
+
+    // Unlink button — shown when the active sheet is linked to a clip-plane entity (#1849 §5.4).
+    const unlinkBtn = document.createElement("button");
+    unlinkBtn.type = "button";
+    unlinkBtn.className = "paper-tool paper-tool-unlink";
+    unlinkBtn.style.cssText = "display:none; margin-left:8px; background:none; border:1px solid var(--hairline); border-radius:2px; color:var(--sanguine,#c0392b); cursor:pointer; padding:0 8px; line-height:24px; font-size:10px; letter-spacing:0.05em;";
+    unlinkBtn.textContent = "Unlink";
+    unlinkBtn.title = "Detach sheet from linked clipping plane (freeze current bounds)";
+    unlinkBtn.addEventListener("click", () => {
+      const host = this.host;
+      const sheetId = this.activeSheet.id;
+      unlinkClipPlaneSheet(host, sheetId);
+      unlinkBtn.style.display = "none";
+    });
+    this._unlinkBtn = unlinkBtn;
+    tb.appendChild(unlinkBtn);
   }
 
   private renderTabs(): void {
@@ -611,13 +630,20 @@ class LayoutController {
     // Sync settings dropdowns.
     if (this.sizeSelEl) this.sizeSelEl.value = this.size;
     if (this.oriSelEl) this.oriSelEl.value = this.orientation;
+    // Update Unlink button visibility for the new active sheet (#1849 §5.4).
+    if (this._unlinkBtn) {
+      const isLinked = _sheetClipLinks.has(this.activeSheet.id);
+      this._unlinkBtn.style.display = isLinked ? "inline-block" : "none";
+    }
     // Update tab highlight.
     this.renderTabs();
   }
 
   /** Auto-create a named sheet linked to a clipping-plane entity (#1849). Returns new sheet id. */
-  addLinkedSheet(name: string): string {
+  addLinkedSheet(name: string, clipPlaneId?: string): string {
     const id = newSheetId();
+    // Store the link BEFORE switchSheet so the Unlink button appears on first switch.
+    if (clipPlaneId) _sheetClipLinks.set(id, clipPlaneId);
     this.sheets.push({
       id,
       name,
@@ -1395,9 +1421,33 @@ export function getClipPlaneIdForSheet(sheetId: string): string | undefined {
 export function addLinkedClipPlaneSheet(host: HTMLElement, clipPlaneId: string, name: string): string {
   const c = _controllers.get(host);
   if (!c) return "";
-  const sheetId = c.addLinkedSheet(name);
-  _sheetClipLinks.set(sheetId, clipPlaneId);
-  return sheetId;
+  // Pass clipPlaneId so the link is stored BEFORE switchSheet fires (Unlink button visibility).
+  return c.addLinkedSheet(name, clipPlaneId);
+}
+
+/**
+ * Detach a linked sheet from its clipping-plane entity (#1849 §5.4).
+ * Copies the entity's current bounds into static SheetTemplate fields and removes the link.
+ * The ClippingPlaneEntity remains in the scene and store.
+ * @returns The frozen config (origin/normal/farClip) or null if the sheet wasn't linked.
+ */
+export function unlinkClipPlaneSheet(
+  host: HTMLElement,
+  sheetId: string,
+): { origin: [number, number, number]; normal: [number, number, number]; farClip: number } | null {
+  const clipPlaneId = _sheetClipLinks.get(sheetId);
+  if (!clipPlaneId) return null;
+  const entity = clippingPlaneStore.get(clipPlaneId);
+  _sheetClipLinks.delete(sheetId);
+  if (!entity) return null;
+  const frozen = { origin: entity.origin, normal: entity.normal, farClip: entity.bounds.farClip };
+  // Update controller's unlink button if this is the active sheet.
+  const c = _controllers.get(host);
+  if (c && c.activeSheet.id === sheetId && c["_unlinkBtn"]) {
+    (c["_unlinkBtn"] as HTMLElement).style.display = "none";
+  }
+  document.dispatchEvent(new CustomEvent("layout:sheet-unlinked", { detail: { sheetId, ...frozen } }));
+  return frozen;
 }
 
 // --- Public exports ---
@@ -1760,14 +1810,24 @@ export function applySheetCut(
       [ BIG,  BIG, lvl.elevation + cut],
     );
   } else if (t.viewType === "section") {
-    const origin: [number, number, number] = t.origin ?? [0, 0, 0];
-    const normal: [number, number, number] = t.normal ?? [0, -1, 0];
+    // §5.3: when linked to a clip-plane entity, read live origin/normal/farClip from store.
+    let origin: [number, number, number] = t.origin ?? [0, 0, 0];
+    let normal: [number, number, number] = t.normal ?? [0, -1, 0];
+    let farClip = t.farClip;
+    if (t.clipPlaneId) {
+      const entity = clippingPlaneStore.get(t.clipPlaneId);
+      if (entity) {
+        origin = entity.origin;
+        normal = entity.normal;
+        farClip = entity.bounds.farClip;
+      }
+    }
     viewer.addClippingPlane(origin, normal, "sheet-front");
-    if (t.farClip != null) {
+    if (farClip != null) {
       const back: [number, number, number] = [
-        origin[0] + normal[0] * t.farClip,
-        origin[1] + normal[1] * t.farClip,
-        origin[2] + normal[2] * t.farClip,
+        origin[0] + normal[0] * farClip,
+        origin[1] + normal[1] * farClip,
+        origin[2] + normal[2] * farClip,
       ];
       viewer.addClippingPlane(back, [-normal[0], -normal[1], -normal[2]], "sheet-back");
     }
