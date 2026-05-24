@@ -5392,9 +5392,8 @@ await resetScene('before-box-inject');
     (async () => {
       try {
         // 1. Create Level 2 at elevation 5.0; SdLevel auto-activates it.
-        const lvlResult = window.__dispatch('SdLevel', { name: 'Upper', elevation: 5.0, height: 3.0 });
+        const lvlResult = await window.__dispatch('SdLevel', { name: 'Upper', elevation: 5.0, height: 3.0 });
         const levelId = lvlResult?.levelId ?? 'level/1';
-        await new Promise(r => setTimeout(r, 50));
 
         // 2. Create wall on Level 2 (active).
         window.__dispatch('setActiveTool', { toolId: 'wall' });
@@ -5406,16 +5405,16 @@ await resetScene('before-box-inject');
         const wallUuid = wallMesh.uuid;
 
         // 3. Return to Level 1 so Level 2 can be safely hidden.
-        window.__dispatch('setActiveLevel', { id: 'level/0' });
+        await window.__dispatch('setActiveLevel', { id: 'level/0' });
 
         // 4. Hide Level 2 — sets mesh.visible = false on all levelId-matched scene children.
-        window.__dispatch('setLevelVisible', { id: levelId, visible: false });
+        await window.__dispatch('setLevelVisible', { id: levelId, visible: false });
 
         // 4a. Structural: wall mesh.visible must be false.
         const meshVisible = wallMesh.visible;
 
         // 4b. Behavioral: click at the wall position, assert no hidden wall selected.
-        window.__dispatch('setActiveTool', { toolId: 'select' });
+        await window.__dispatch('setActiveTool', { toolId: 'select' });
         // Clear any existing selection from wall-creation auto-select.
         window.__viewer.selectObject(null);
         await new Promise(r => setTimeout(r, 30));
