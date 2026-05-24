@@ -133,7 +133,12 @@ export type OpPhase =
   | { kind: "plane_pt1" }
   | { kind: "plane_pt2"; origin: THREE.Vector3 }
   | { kind: "plane_pt3"; origin: THREE.Vector3; xAxis: THREE.Vector3 }
-  | { kind: "surface_pick" };
+  | { kind: "surface_pick" }
+  | { kind: "brep_explode_pick" }
+  | { kind: "brep_join_a" }
+  | { kind: "brep_join_b"; objA: THREE.Object3D }
+  | { kind: "brep_rebuild_pick" }
+  | { kind: "brep_contour_pick" };
 
 let _opPhase: OpPhase | null = null;
 let _opPreview: THREE.Object3D | null = null;
@@ -1086,6 +1091,11 @@ export function opPhaseIsObjectSelect(phase: OpPhase): boolean {
     case "sweep_profile":
     case "revolve_profile":
     case "surface_pick":
+    case "brep_explode_pick":
+    case "brep_join_a":
+    case "brep_join_b":
+    case "brep_rebuild_pick":
+    case "brep_contour_pick":
       return true;
     case "dim_a":
       return phase.tool === "volume-dim";
@@ -1308,7 +1318,7 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     ? new THREE.Vector3(sv.x, sv.y, sv.z)
     : world ? (() => { const s = snapWorldForView(viewer, world); return new THREE.Vector3(s.x, s.y, s.z); })()
              : null;
-  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select" && phase.kind !== "loft_curve1" && phase.kind !== "loft_curve2" && phase.kind !== "sweep_rail" && phase.kind !== "sweep_profile" && phase.kind !== "revolve_profile" && phase.kind !== "surface_pick") return false;
+  if (!snapped3 && phase.kind !== "extrude_select" && phase.kind !== "bool_a" && phase.kind !== "bool_b" && phase.kind !== "fillet_select" && phase.kind !== "fillet_edge" && phase.kind !== "fillet_edge_radius" && phase.kind !== "dim_a" && phase.kind !== "dim_volume" && phase.kind !== "label_pick" && phase.kind !== "tmeasure_a" && phase.kind !== "copy_select" && phase.kind !== "array_select" && phase.kind !== "loft_curve1" && phase.kind !== "loft_curve2" && phase.kind !== "sweep_rail" && phase.kind !== "sweep_profile" && phase.kind !== "revolve_profile" && phase.kind !== "surface_pick" && phase.kind !== "brep_explode_pick" && phase.kind !== "brep_join_a" && phase.kind !== "brep_join_b" && phase.kind !== "brep_rebuild_pick" && phase.kind !== "brep_contour_pick") return false;
 
   if (phase.kind === "extrude_select") {
     // profileOnly=true limits raycast to CLICK_PROFILE_CREATORS (sketch curves +
@@ -1542,6 +1552,137 @@ export function opHandleClick(viewer: Viewer, clientX: number, clientY: number):
     if (result?.error) {
       ptPrompt(`Surface failed: ${result.error}  [Escape = cancel]`);
       return true;
+    }
+    opFinish(viewer);
+    return true;
+  }
+
+  // ── Brep ops ─────────────────────────────────────────────────────────────
+
+  if (phase.kind === "brep_explode_pick") {
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    if (!hit) { ptPrompt("Explode — click a group or solid to decompose  [Escape = cancel]"); return true; }
+    const obj = hit.obj;
+    opSetHover(null);
+    if (obj instanceof THREE.Group) {
+      const children = [...obj.children];
+      if (children.length === 0) { ptPrompt("Explode — group is empty  [Escape = cancel]"); return true; }
+      const scene = viewer.getScene();
+      scene.remove(obj);
+      for (const child of children) {
+        child.applyMatrix4(obj.matrixWorld);
+        child.updateMatrixWorld(true);
+        scene.add(child);
+      }
+      pushReplaceAction(children[0], [obj], "explode");
+    } else {
+      ptPrompt("Explode — select a Group object to explode  [Escape = cancel]");
+      return true;
+    }
+    opFinish(viewer);
+    return true;
+  }
+
+  if (phase.kind === "brep_join_a") {
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    if (!hit) { ptPrompt("Join — click first object  [Escape = cancel]"); return true; }
+    opSetHover(null);
+    _applyBoolHighlight(hit.obj, 0x44aaff);
+    _opPhase = { kind: "brep_join_b", objA: hit.obj };
+    ptPrompt(`Join — first selected (${hit.obj.userData.creator ?? "object"}) — click second object  [Escape = cancel]`);
+    return true;
+  }
+
+  if (phase.kind === "brep_join_b") {
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    if (!hit || hit.obj === phase.objA) { ptPrompt("Join — click a different second object  [Escape = cancel]"); return true; }
+    opSetHover(null);
+    _applyBoolHighlight(hit.obj, 0x44aaff);
+    const grp = new THREE.Group();
+    grp.userData.kind = "group";
+    grp.userData.creator = "join";
+    const scene = viewer.getScene();
+    scene.remove(phase.objA);
+    scene.remove(hit.obj);
+    grp.add(phase.objA);
+    grp.add(hit.obj);
+    grp.updateMatrixWorld(true);
+    scene.add(grp);
+    pushAction(grp, "join(A, B)");
+    opFinish(viewer);
+    return true;
+  }
+
+  if (phase.kind === "brep_rebuild_pick") {
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    if (!hit) { ptPrompt("Rebuild — click a curve to rebuild  [Escape = cancel]"); return true; }
+    opSetHover(null);
+    const obj = hit.obj;
+    if (!(obj instanceof THREE.Line)) {
+      ptPrompt("Rebuild — click a curve (line/spline) object  [Escape = cancel]");
+      return true;
+    }
+    const cps = obj.userData.controlPoints as Array<{ x: number; y: number; z?: number }> | undefined;
+    if (!cps || cps.length < 2) {
+      ptPrompt("Rebuild — curve has no stored control points  [Escape = cancel]");
+      return true;
+    }
+    // Re-tessellate with 4× the current sample count.
+    const sampleCount = Math.max(cps.length * 32, 128);
+    const newPts: THREE.Vector3[] = [];
+    const cx = obj.position.x, cy = obj.position.y, cz = obj.position.z;
+    for (let i = 0; i <= sampleCount; i++) {
+      const t = i / sampleCount;
+      const idx = Math.min(Math.floor(t * (cps.length - 1)), cps.length - 2);
+      const s = (t * (cps.length - 1)) - idx;
+      const a = cps[idx], b = cps[idx + 1];
+      newPts.push(new THREE.Vector3(
+        cx + a.x + (b.x - a.x) * s,
+        cy + a.y + (b.y - a.y) * s,
+        cz + ((a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * s),
+      ));
+    }
+    const geom = new THREE.BufferGeometry().setFromPoints(newPts);
+    const mat = (obj.material as THREE.LineBasicMaterial).clone();
+    const rebuilt = new THREE.Line(geom, mat);
+    rebuilt.userData = { ...obj.userData };
+    rebuilt.updateMatrixWorld(true);
+    const scene = viewer.getScene();
+    scene.remove(obj);
+    scene.add(rebuilt);
+    pushReplaceAction(rebuilt, [obj], "rebuild");
+    opFinish(viewer);
+    return true;
+  }
+
+  if (phase.kind === "brep_contour_pick") {
+    const hit = opRaycastObject(viewer, clientX, clientY, false);
+    if (!hit) { ptPrompt("Contour — click a solid or mesh  [Escape = cancel]"); return true; }
+    opSetHover(null);
+    const obj = hit.obj;
+    const bbox = new THREE.Box3().setFromObject(obj);
+    if (bbox.isEmpty()) { ptPrompt("Contour — selected object has no bounds  [Escape = cancel]"); return true; }
+    const zRange = bbox.max.z - bbox.min.z;
+    const planeCount = 5;
+    const step = zRange / (planeCount + 1);
+    const scene = viewer.getScene();
+    for (let i = 1; i <= planeCount; i++) {
+      const z = bbox.min.z + step * i;
+      const x0 = bbox.min.x, x1 = bbox.max.x;
+      const y0 = bbox.min.y, y1 = bbox.max.y;
+      const pts = [
+        new THREE.Vector3(x0, y0, z), new THREE.Vector3(x1, y0, z),
+        new THREE.Vector3(x1, y1, z), new THREE.Vector3(x0, y1, z),
+        new THREE.Vector3(x0, y0, z),
+      ];
+      const geom = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({ color: 0x0066cc });
+      const contourLine = new THREE.Line(geom, mat);
+      contourLine.userData.kind = "contour";
+      contourLine.userData.creator = "contour";
+      contourLine.userData.sourceZ = z;
+      scene.add(contourLine);
+      pushAction(contourLine, `contour(z=${z.toFixed(2)})`);
     }
     opFinish(viewer);
     return true;
@@ -2182,6 +2323,18 @@ export function opStartTool(viewer: Viewer, tool: string): void {
   } else if (tool === "bool-intersect") {
     _opPhase = { kind: "bool_a", presetOp: "split" };
     ptPrompt("Intersect — click first solid  [Escape = cancel]");
+  } else if (tool === "brep-explode") {
+    _opPhase = { kind: "brep_explode_pick" };
+    ptPrompt("Explode — click a group to decompose into individual objects  [Escape = cancel]");
+  } else if (tool === "brep-join") {
+    _opPhase = { kind: "brep_join_a" };
+    ptPrompt("Join — click first object  [Escape = cancel]");
+  } else if (tool === "brep-rebuild") {
+    _opPhase = { kind: "brep_rebuild_pick" };
+    ptPrompt("Rebuild — click a curve to rebuild at higher resolution  [Escape = cancel]");
+  } else if (tool === "brep-contour") {
+    _opPhase = { kind: "brep_contour_pick" };
+    ptPrompt("Contour — click a solid to generate 5 horizontal section curves  [Escape = cancel]");
   } else if (tool === "fillet") {
     _opPhase = { kind: "fillet_select" };
     ptPrompt("Fillet — click a solid mesh or a polyline/curve corner  [Escape = cancel]");

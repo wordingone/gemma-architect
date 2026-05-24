@@ -10,7 +10,9 @@ let _chooserEl: HTMLElement | null = null;
 // Op tools are handled by the opPhase state machine, not the click-to-place pipeline.
 export const OP_TOOL_IDS = new Set([
   "extrude", "loft", "sweep", "revolve", "plane", "surface",
-  "boolean", "bool-union", "bool-diff", "bool-intersect", "fillet",
+  "boolean", "bool-union", "bool-diff", "bool-intersect",
+  "brep-explode", "brep-join", "brep-rebuild", "brep-contour",
+  "fillet",
   "aligned-dim", "angular-dim", "area-dim", "volume-dim",
   "label", "transient-measure",
   "sel-window", "sel-lasso", "sel-boundary",

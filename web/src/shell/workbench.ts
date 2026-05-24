@@ -140,6 +140,12 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "fillet",        icon: "fillet",        label: "Fillet" },
   ]},
   { tools: [
+    { id: "brep-explode", icon: "brep-explode", label: "Explode" },
+    { id: "brep-join",    icon: "brep-join",    label: "Join" },
+    { id: "brep-rebuild", icon: "brep-rebuild", label: "Rebuild" },
+    { id: "brep-contour", icon: "brep-contour", label: "Contour" },
+  ]},
+  { tools: [
     { id: "wall",       icon: "wall",       label: "Wall" },
     { id: "slab",       icon: "slab",       label: "Slab" },
     { id: "column",     icon: "column",     label: "Column" },
@@ -245,9 +251,9 @@ function el(tag: string, cls?: string, attrs?: Record<string, string>): HTMLElem
   return e;
 }
 
-// PALETTE_SECTIONS indices: 0=transform 1=sketch 2=solid 3=arch 4=comp(CAD) 5=measure
-const ARCH_SECTION_IDX = 3;
-const COMP_SECTION_IDX = 4;
+// PALETTE_SECTIONS indices: 0=transform 1=sketch 2=solid 3=brep-ops 4=arch 5=comp(CAD) 6=measure
+const ARCH_SECTION_IDX = 4;
+const COMP_SECTION_IDX = 5;
 
 // Single shared tooltip element — created once, reused across all palette instances.
 function getPaletteTip(): HTMLDivElement {

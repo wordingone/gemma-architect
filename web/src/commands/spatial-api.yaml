@@ -1727,6 +1727,45 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- name: SdRebuild
+  kernel_op: rebuild
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+        description: "[required] Object to rebuild"
+      count:
+        type: number
+        description: "[optional unit=int default=0] New control point / segment count (0 = auto 2×)"
+    required: [target]
+  topology_role: curve
+  kg_predicates: []
+  synonyms: [rebuild, refit]
+  kernel: nurbs-webgpu
+  alias_source: generic_cad_vocabulary
+
+- name: SdContour
+  kernel_op: contour
+  parameters:
+    type: object
+    properties:
+      target:
+        type: any
+        description: "[required] Solid or surface to contour"
+      interval:
+        type: number
+        description: "[optional unit=m default=1] Contour interval (metres)"
+      count:
+        type: number
+        description: "[optional unit=int default=5] Number of contour planes (used if interval=0)"
+    required: [target]
+  topology_role: curve
+  kg_predicates: []
+  synonyms: [contour, sections, slice]
+  kernel: nurbs-webgpu
+  alias_source: generic_cad_vocabulary
+
 - name: SdLayer
   kernel_op: setLayer
   parameters:

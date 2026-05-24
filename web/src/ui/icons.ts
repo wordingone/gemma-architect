@@ -30,6 +30,10 @@ export function iconSVG(name: string, size = 16): string {
     case "bool-union": return `<svg ${attr}><circle cx="9" cy="12" r="6" opacity=".5"/><circle cx="15" cy="12" r="6" opacity=".5"/></svg>`;
     case "bool-diff":  return `<svg ${attr}><circle cx="9" cy="12" r="6" opacity=".5"/><circle cx="15" cy="12" r="6" opacity=".2"/><path d="M12 6.5a6 6 0 0 0 0 11" fill="none"/></svg>`;
     case "bool-intersect": return `<svg ${attr}><circle cx="9" cy="12" r="6" opacity=".2"/><circle cx="15" cy="12" r="6" opacity=".2"/><path d="M12 6.5a6 6 0 0 1 0 11 6 6 0 0 1 0-11Z" opacity=".8"/></svg>`;
+    case "brep-explode": return `<svg ${attr}><path d="M12 12L4 4M12 12l8-8M12 12l-8 8M12 12l8 8"/></svg>`;
+    case "brep-join":    return `<svg ${attr}><path d="M4 4l8 8-8 8M20 4l-8 8 8 8"/></svg>`;
+    case "brep-rebuild": return `<svg ${attr}><path d="M4 12c0-4.4 3.6-8 8-8"/><path d="M20 12c0 4.4-3.6 8-8 8"/><path d="M4 12h2M18 12h2"/><path d="M16 6l2-2-2-2"/><path d="M8 18l-2 2 2 2"/></svg>`;
+    case "brep-contour": return `<svg ${attr}><ellipse cx="12" cy="9" rx="8" ry="3"/><ellipse cx="12" cy="13" rx="6" ry="2.5"/><ellipse cx="12" cy="16.5" rx="4" ry="2"/></svg>`;
     case "fillet":  return `<svg ${attr}><path d="M3 21V9a6 6 0 0 1 6-6h12"/></svg>`;
     case "chamfer": return `<svg ${attr}><path d="M3 21V11l8-8h10"/></svg>`;
     case "wall":    return `<svg ${attr}><rect x="3" y="6" width="18" height="12"/><path d="M9 6v12M15 6v12"/></svg>`;
