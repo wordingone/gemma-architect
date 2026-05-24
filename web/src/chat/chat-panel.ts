@@ -846,13 +846,14 @@ export class ChatPanel {
     const t = lastTurn();
     if (t) await updateGoalTokens(t.tokens_in, t.tokens_out);
     // QW-2 (#409): emit turn-complete event — mirrors avir-cli Stop hook turn visibility.
-    window.dispatchEvent(new CustomEvent("agent:turn-complete", {
-      detail: {
-        verbs: resp.dispatches.map((d) => d.name),
-        sceneObjects: (window as unknown as { __viewer?: { scene?: { children?: unknown[] } } }).__viewer?.scene?.children?.length ?? 0,
-        turnMs: turnStartMs != null ? Date.now() - turnStartMs : undefined,
-      },
-    }));
+    // #1762: defer to macro-task so outer finally (sendBtn.disabled=false,
+    // _continuationRunning=false) completes before the handler at line 274 runs.
+    const _turnDetail = {
+      verbs: resp.dispatches.map((d) => d.name),
+      sceneObjects: (window as unknown as { __viewer?: { scene?: { children?: unknown[] } } }).__viewer?.scene?.children?.length ?? 0,
+      turnMs: turnStartMs != null ? Date.now() - turnStartMs : undefined,
+    };
+    setTimeout(() => window.dispatchEvent(new CustomEvent("agent:turn-complete", { detail: _turnDetail })), 0);
   }
 
   // A7 (#980): update goal banner from current goal state.
