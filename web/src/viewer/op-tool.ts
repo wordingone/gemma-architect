@@ -20,7 +20,7 @@ import { createCatmullRomAsNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 
 // Creators that are valid extrude profiles (click-select in extrude_select phase).
 export const EXTRUDABLE_CREATORS = new Set([
-  "rect", "circle", "polygon", "polyline", "curve", "line",
+  "rect", "circle", "polygon", "arc", "polyline", "curve", "line",
   "wall", "slab", "column", "box", "beam", "roof", "space",
   "extrude", "boolean-union", "boolean-difference", "boolean-split",
 ]);
@@ -29,7 +29,7 @@ export const EXTRUDABLE_CREATORS = new Set([
 // Narrower than EXTRUDABLE_CREATORS — avoids auto-selecting large 3D solids
 // (slabs, roofs, walls) as profiles when the user activates extrude.
 const SKETCH_PROFILE_CREATORS = new Set([
-  "rect", "circle", "polygon", "polyline", "curve", "line",
+  "rect", "circle", "polygon", "arc", "polyline", "curve", "line",
 ]);
 
 // Closed 2D sketch creators that can be auto-extruded before boolean.
@@ -41,7 +41,7 @@ const CLOSED_SKETCH_CREATORS = new Set(["circle", "rect", "polygon"]);
 // Includes previous extrude/boolean/CSG results so re-extrusion and surface
 // selection work (e.g. extruding a boolean result or a CSG brep surface).
 const CLICK_PROFILE_CREATORS = new Set([
-  "rect", "circle", "polygon", "polyline", "curve", "line",
+  "rect", "circle", "polygon", "arc", "polyline", "curve", "line",
   "extrude", "boolean-union", "boolean-difference", "boolean-split", "brep",
 ]);
 
@@ -646,6 +646,40 @@ function opBuildExtrudeMesh(profile: THREE.Object3D, h: number): THREE.Mesh {
     mesh.userData.footprintCircle = { cx, cy, r };
     mesh.userData.endpoints = snapEndpointsFromProfile(circlePts, h);
     mesh.userData.edgePairs = snapEdgePairsFromProfile(circlePts, h);
+    return mesh;
+  }
+
+  if (creator === "arc") {
+    profile.updateMatrixWorld();
+    const worldCenter = new THREE.Vector3(0, 0, 0).applyMatrix4(profile.matrixWorld);
+    const arcR = (profile.userData.radius as number | undefined) ?? 1;
+    const sa = (profile.userData.startAngle as number | undefined) ?? 0;
+    const ea = (profile.userData.endAngle as number | undefined) ?? Math.PI / 2;
+    const segs = 64;
+    const span = ea - sa;
+    const worldPts: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i <= segs; i++) {
+      const a = sa + (i / segs) * span;
+      worldPts.push({ x: worldCenter.x + arcR * Math.cos(a), y: worldCenter.y + arcR * Math.sin(a) });
+    }
+    // Open arc → ribbon surface
+    const verts: number[] = [];
+    const idxs: number[] = [];
+    worldPts.forEach((p, i) => {
+      verts.push(p.x, p.y, 0, p.x, p.y, h);
+      if (i < worldPts.length - 1) {
+        const b = i * 2;
+        idxs.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
+      }
+    });
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+    geom.setIndex(idxs);
+    geom.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x5585cc, roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.userData.endpoints = snapEndpointsFromProfile(worldPts, h);
+    mesh.userData.edgePairs = snapEdgePairsFromProfile(worldPts, h);
     return mesh;
   }
 

@@ -21,7 +21,7 @@ import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelO
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildStairOnPolyline, buildStairOnCurve, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildClipPlanePlan, buildClipPlaneSection, buildBox, buildExtrude } from "./structural";
 import { onElementCommitted, addVoidToWallObject } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
-import { buildRect, buildCircle, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
+import { buildRect, buildCircle, buildArc, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./openings";
 import { STAIR_STEP_RISE, STAIR_STEP_DEPTH, STAIR_WIDTH } from "./dimensions";
 import { drawingLayerStore, SKETCH_KINDS } from "../geometry/drawing-layers";
@@ -385,6 +385,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   "stair-polyline": { clicks: -1, handler: atZ((pts) => { const lvl = levelStore.get(getActiveLevelId()); const rise = lvl?.height ?? 3.0; const { group, chain } = buildStairOnPolyline(pts, { rise }); return { mesh: group, chain }; }) },
   "stair-curve":    { clicks: -1, handler: atZ((pts) => { const lvl = levelStore.get(getActiveLevelId()); const rise = lvl?.height ?? 3.0; const { group, chain } = buildStairOnCurve(pts, { rise }); return { mesh: group, chain }; }) },
   polygon:     { clicks: 2, handler: atZ(([a, b]) => buildPolygon(a, b)) },
+  arc:         { clicks: 3, handler: atZ(([c, s, e]) => buildArc(c, s, e)) },
   polyline:    { clicks: -1, handler: atZ((pts) => buildPolyline(pts)) },
   curve:       { clicks: -1, handler: atZ((pts) => buildCurve(pts)) },
   point:       { clicks: 1, handler: atZ(([p]) => buildPoint(p)) },

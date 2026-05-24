@@ -80,6 +80,54 @@ export function buildCircle(center: { x: number; y: number }, radial: { x: numbe
   return { mesh: mesh as unknown as THREE.Mesh, chain };
 }
 
+export function buildArc(
+  center: { x: number; y: number },
+  radiusPt: { x: number; y: number },
+  endPt: { x: number; y: number },
+): { mesh: THREE.Object3D; chain: string } {
+  const dx = radiusPt.x - center.x;
+  const dy = radiusPt.y - center.y;
+  const r = Math.max(0.05, Math.sqrt(dx * dx + dy * dy));
+  const startAng = Math.atan2(dy, dx);
+  const ex = endPt.x - center.x;
+  const ey = endPt.y - center.y;
+  let endAng = Math.atan2(ey, ex);
+  // Normalize so the arc sweeps CCW from startAng.
+  if (endAng <= startAng) endAng += 2 * Math.PI;
+  const segs = 64;
+  const span = endAng - startAng;
+  const pts: number[] = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = startAng + (i / segs) * span;
+    pts.push(r * Math.cos(a), r * Math.sin(a), 0);
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0x5585cc });
+  const mesh = new THREE.Line(geom, mat);
+  mesh.position.set(center.x, center.y, 0);
+  mesh.renderOrder = 1;
+  mesh.userData.kind = "arc";
+  mesh.userData.creator = "arc";
+  mesh.userData.radius = r;
+  mesh.userData.startAngle = startAng;
+  mesh.userData.endAngle = endAng;
+  mesh.userData.controlPoints = [
+    new THREE.Vector3(dx, dy, 0),
+    new THREE.Vector3(ex, ey, 0),
+  ];
+  const startX = center.x + r * Math.cos(startAng);
+  const startY = center.y + r * Math.sin(startAng);
+  const endX = center.x + r * Math.cos(endAng);
+  const endY = center.y + r * Math.sin(endAng);
+  mesh.userData.endpoints = [
+    { x: startX, y: startY, z: 0, id: makeSnapId(startX, startY, 0) },
+    { x: endX, y: endY, z: 0, id: makeSnapId(endX, endY, 0) },
+  ] as SnapVertex[];
+  const chain = `const arc = SdArc({ center: [${round(center.x)}, ${round(center.y)}, 0], radius: ${round(r)}, startAngle: ${round(startAng)}, endAngle: ${round(endAng)} });`;
+  return { mesh, chain };
+}
+
 export function buildLine(a: { x: number; y: number }, b: { x: number; y: number }): { mesh: THREE.Object3D; chain: string } {
   const cx = (a.x + b.x) / 2;
   const cy = (a.y + b.y) / 2;
