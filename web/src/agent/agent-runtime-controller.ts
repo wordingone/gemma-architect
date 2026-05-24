@@ -67,6 +67,7 @@ const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], Run
     PREFILL_DONE:       "recovering", // warmup PREFILL_DONE from dying worker — stay in recovering (#1581-S3)
     // Post-planned-recycle: first turn submitted before new worker finishes booting.
     GENERATE_REQUESTED: "generating",
+    D3D12_OOM:          "recycling",  // device lost during post-recycle boot (#1840)
   },
   // failed is terminal — only BOOT_REQUESTED (manual reload path) escapes it
   failed:     { BOOT_REQUESTED: "booting" },
