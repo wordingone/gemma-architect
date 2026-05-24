@@ -598,7 +598,7 @@ export class ChatPanel {
       const existingGoal = getCachedGoal();
       if (!isVisualQuery && !userImage && DESIGN_RE.test(text)) {
         if (!existingGoal || existingGoal.status !== "active") {
-          await createGoal(text, 10000);
+          await createGoal(text, 50000);
         }
       } else if (existingGoal?.status === "budget_limited") {
         // #1740: budget_limited is a soft cap — any new user message resets to active.
