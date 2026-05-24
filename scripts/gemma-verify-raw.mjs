@@ -5487,19 +5487,26 @@ await resetScene('before-box-inject');
         const selected = window.__viewer.getTargetObject();
         const selectionCommitted = selected !== null && selected.uuid === wallUuid;
 
-        // 5. Click destination point to place the copy (+5,0 offset).
+        // 5. Click destination point to place the copy.
+        // Use canvas-relative click instead of __projectToScreen(7,0,0): __projectToScreen
+        // returns null when the target world point is off-screen (camera-dependent), which
+        // caused silent skip of the second click and false-fail. Any visible canvas coordinate
+        // is valid — unprojectToXY always returns a non-null point via its plane-fallback.
         const meshCountBefore = window.__viewer.scene.children.filter(
           c => c.userData.creator === 'wall'
         ).length;
 
-        const sc2 = window.__projectToScreen(7, 0, 0);
-        if (sc2 && selectionCommitted) {
+        if (selectionCommitted) {
+          const rect = canvas.getBoundingClientRect();
+          // Click upper-right quadrant of canvas — reliably off-wall, within viewport.
+          const cx2 = rect.left + rect.width * 0.72;
+          const cy2 = rect.top  + rect.height * 0.25;
           canvas.dispatchEvent(new PointerEvent('pointerdown', {
-            bubbles: true, cancelable: true, clientX: sc2.x, clientY: sc2.y,
+            bubbles: true, cancelable: true, clientX: cx2, clientY: cy2,
             button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse',
           }));
           canvas.dispatchEvent(new PointerEvent('pointerup', {
-            bubbles: true, cancelable: true, clientX: sc2.x, clientY: sc2.y,
+            bubbles: true, cancelable: true, clientX: cx2, clientY: cy2,
             button: 0, buttons: 0, pointerId: 1, pointerType: 'mouse',
           }));
           await new Promise(r => setTimeout(r, 80));
