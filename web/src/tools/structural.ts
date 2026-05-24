@@ -1089,10 +1089,12 @@ export function buildRoof(
       ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, fW, fH), soffitMat.clone())
       : new THREE.Mesh(new THREE.BoxGeometry(fW, ridgeLenHalf * 2, fH), soffitMat.clone());
     fasciaA.userData.ifcClass = "IfcCovering";
+    fasciaA.userData.name = "Fascia";
     fasciaA.position.set(landscape ? 0 : -spanHalf, landscape ? -spanHalf : 0, -fH / 2);
     group.add(fasciaA);
     const fasciaB = fasciaA.clone();
     (fasciaB.material as THREE.Material) = (fasciaA.material as THREE.Material).clone();
+    fasciaB.userData.name = "Fascia";
     fasciaB.position.set(landscape ? 0 : spanHalf, landscape ? spanHalf : 0, -fH / 2);
     group.add(fasciaB);
 
@@ -1102,6 +1104,7 @@ export function buildRoof(
       ? new THREE.Mesh(new THREE.BoxGeometry(ridgeLenHalf * 2, soffitDepth, 0.02), soffitMat.clone())
       : new THREE.Mesh(new THREE.BoxGeometry(soffitDepth, ridgeLenHalf * 2, 0.02), soffitMat.clone());
     soffitA.userData.ifcClass = "IfcCovering";
+    soffitA.userData.name = "Soffit";
     soffitA.position.set(
       landscape ? 0 : -(spanHalf - overhang / 2),
       landscape ? -(spanHalf - overhang / 2) : 0,

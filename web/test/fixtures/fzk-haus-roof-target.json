@@ -69,6 +69,7 @@
     "fascia": {
       "count": 2,
       "ifcClass": "IfcCovering",
+      "name": "Fascia",
       "geom_x": 13.0,
       "geom_y": 0.03,
       "geom_z": 0.15,
@@ -79,6 +80,7 @@
     "soffit": {
       "count": 2,
       "ifcClass": "IfcCovering",
+      "name": "Soffit",
       "geom_x": 13.0,
       "geom_y": 0.5,
       "geom_z": 0.02,
@@ -88,6 +90,7 @@
     },
     "gable": {
       "standalone_mesh_count": 0,
+      "ifcClass": "IfcRoof",
       "_note": "§C: no standalone gable mesh; gable face = wall auto-trim boundary + slab side face (sub-fix 3)"
     }
   }
