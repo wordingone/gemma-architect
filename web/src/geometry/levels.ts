@@ -8,12 +8,56 @@ export type Level = {
   height: number;
   visible: boolean;
   active: boolean;
+  locked: boolean;
 };
+
+// IDB persistence for level lock state (#1752).
+// Separate DB so it doesn't interfere with scene auto-save versioning.
+const _META_DB = "gemma-level-meta";
+const _META_STORE = "meta";
+const _LOCKS_KEY = "locks";
+
+function _openMetaDB(): Promise<IDBDatabase> {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(_META_DB, 1);
+    req.onupgradeneeded = (e) => {
+      const db = (e.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(_META_STORE)) db.createObjectStore(_META_STORE);
+    };
+    req.onsuccess = (e) => res((e.target as IDBOpenDBRequest).result);
+    req.onerror = (e) => rej((e.target as IDBOpenDBRequest).error);
+  });
+}
+
+async function _saveLocks(locks: Record<string, boolean>): Promise<void> {
+  try {
+    const db = await _openMetaDB();
+    await new Promise<void>((res, rej) => {
+      const tx = db.transaction(_META_STORE, "readwrite");
+      tx.objectStore(_META_STORE).put(locks, _LOCKS_KEY);
+      tx.oncomplete = () => { db.close(); res(); };
+      tx.onerror = () => { db.close(); rej(tx.error); };
+    });
+  } catch { /* non-fatal — lock state is a UX hint, not safety-critical */ }
+}
+
+export async function loadLevelLocks(): Promise<void> {
+  try {
+    const db = await _openMetaDB();
+    const locks: Record<string, boolean> | undefined = await new Promise((res, rej) => {
+      const tx = db.transaction(_META_STORE, "readonly");
+      const req = tx.objectStore(_META_STORE).get(_LOCKS_KEY);
+      req.onsuccess = () => { db.close(); res(req.result as Record<string, boolean> | undefined); };
+      req.onerror = () => rej(req.error);
+    });
+    if (locks) levelStore.applyLocks(locks);
+  } catch { /* IDB unavailable — non-fatal */ }
+}
 
 const GROUND_LEVEL_ID = "level/0";
 
 const BUILTIN_LEVELS: Level[] = [
-  { id: GROUND_LEVEL_ID, name: "Level 1",  elevation: 0, height: 3.0, visible: true, active: true },
+  { id: GROUND_LEVEL_ID, name: "Level 1",  elevation: 0, height: 3.0, visible: true, active: true, locked: false },
 ];
 
 type LevelListener = () => void;
@@ -61,6 +105,7 @@ class LevelStore {
       height: opts.height ?? 3.0,
       visible: true,
       active: false,
+      locked: false,
     };
     this._levels.set(id, entry);
     this._notify();
@@ -99,6 +144,24 @@ class LevelStore {
     l.visible = visible;
     this._notify();
     return true;
+  }
+
+  setLocked(id: string, locked: boolean): boolean {
+    const l = this._levels.get(id);
+    if (!l) return false;
+    l.locked = locked;
+    this._notify();
+    // Persist lock state to IDB (fire-and-forget).
+    const snapshot: Record<string, boolean> = {};
+    for (const [lid, lvl] of this._levels) if (lvl.locked) snapshot[lid] = true;
+    _saveLocks(snapshot);
+    return true;
+  }
+
+  /** Apply persisted lock state (called once on app init after IDB load). */
+  applyLocks(locks: Record<string, boolean>): void {
+    for (const [id, lvl] of this._levels) lvl.locked = locks[id] === true;
+    this._notify();
   }
 
   remove(id: string): boolean {

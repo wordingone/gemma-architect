@@ -26,7 +26,7 @@ import { applyDrafting, removeDrafting, isDrafting } from "./geometry/drafting";
 import { DEMOS, applyParams, type DemoPrompt, type Param } from "./agent/demo-prompts";
 import { getLayerForCreator, layerStore } from "./geometry/layers";
 import { drawingLayerStore } from "./geometry/drawing-layers";
-import { levelStore, getActiveLevelId } from "./geometry/levels";
+import { levelStore, getActiveLevelId, loadLevelLocks } from "./geometry/levels";
 import { gridStore } from "./geometry/grids";
 import { snapPoint, setStep as snapSetStep, getStep as snapGetStep } from "./viewer/snap-state";
 import { buildIfc, buildIfcScene, ifcRoundTrip, type IfcSceneElement, type IfcLevel } from "./ifc/ifc";
@@ -1776,11 +1776,13 @@ function syncLevelOpacities(): void {
 registerHandler("setActiveLevel", (args) => {
   const id = args.id as string | undefined;
   if (!id) return { error: "id required" };
+  const level = levelStore.get(id);
+  if (!level) return { error: `level not found: ${id}` };
+  if (level.locked) return { status: "error", detail: `level ${level.name} is locked` };
   const ok = levelStore.setActive(id);
   if (!ok) return { error: `level not found: ${id}` };
-  const level = levelStore.get(id);
   syncLevelOpacities();
-  return { ok: true, activeLevel: id, elevation: level?.elevation };
+  return { ok: true, activeLevel: id, elevation: level.elevation };
 });
 
 registerHandler("setLevelVisible", (args) => {
@@ -2982,6 +2984,7 @@ function spawnWorker(): void {
       pendingRuns.forEach((fn) => fn());
       pendingRuns.length = 0;
       initSceneRestore();
+      loadLevelLocks(); // restore per-level lock state from IDB (#1752)
       return;
     }
 

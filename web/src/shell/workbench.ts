@@ -1362,7 +1362,22 @@ function buildLevelsTab(): HTMLElement {
       row.appendChild(delBtn);
     }
 
+    // Lock toggle — SVG lock icon matching Building Layers (workbench.ts:1569-1571).
+    const lockBtn = el("button", "level-lock-btn");
+    lockBtn.style.cssText = "background:none; border:none; cursor:pointer; color:var(--ink); opacity:" + (lvl.locked ? "1" : "0.35") + "; padding:0 2px; flex-shrink:0;";
+    lockBtn.title = lvl.locked ? "Unlock level" : "Lock level";
+    lockBtn.innerHTML = lvl.locked
+      ? `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`
+      : `<svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="5" width="8" height="7" rx="1" stroke="currentColor" stroke-dasharray="2 1"/><path d="M3 5V3.5a2 2 0 014 0V5" stroke="currentColor"/></svg>`;
+    lockBtn.addEventListener("click", (e) => {
+      e.stopPropagation(); // do NOT change active level on lock toggle
+      levelStore.setLocked(lvl.id, !lvl.locked);
+    });
+    row.appendChild(lockBtn);
+
+    // Clicking a locked level row does not switch active level (#1752).
     row.addEventListener("click", () => {
+      if (lvl.locked) return;
       (window as unknown as { __dispatch?: (cmd: string, args: unknown) => unknown }).__dispatch?.("setActiveLevel", { id: lvl.id });
     });
 
