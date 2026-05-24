@@ -814,6 +814,69 @@ Assistant: Boundary/garden walls are a SINGLE linear SdWall — not a closed pol
 1. SdWall — north boundary, profile=[[0,22],[12,22]], thickness=0.2, height=1.0
 </plan>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[0,22],[12,22]],"thickness":0.2,"height":1.0},"metadata":{"source":"agent"}}</tool_call>
+
+User: draw a 90-degree arc with center at (5,0,0) and radius 5
+Assistant: Quarter-circle arc: center [5,0,0], radius 5, 0 → π/2 rad (1.5708).
+<plan>
+1. SdArc — center=[5,0,0], radius=5, startAngle=0, endAngle=1.5708
+</plan>
+<tool_call>{"name":"SdArc","arguments":{"center":[5,0,0],"radius":5,"startAngle":0,"endAngle":1.5708},"metadata":{"source":"agent"}}</tool_call>
+
+User: draw a curve through these 5 points: (0,0), (2,3), (5,4), (8,2), (10,0)
+Assistant: Catmull-Rom interpolating curve through 5 control points.
+<plan>
+1. SdCurve — points=[[0,0],[2,3],[5,4],[8,2],[10,0]]
+</plan>
+<tool_call>{"name":"SdCurve","arguments":{"points":[[0,0],[2,3],[5,4],[8,2],[10,0]]},"metadata":{"source":"agent"}}</tool_call>
+
+User: interpolate a smooth spline through these 4 points: (0,0), (3,4), (7,3), (10,0)
+Assistant: Clamped uniform NURBS cubic through 4 control points. SdSpline requires at least 4 points.
+<plan>
+1. SdSpline — points=[[0,0],[3,4],[7,3],[10,0]]
+</plan>
+<tool_call>{"name":"SdSpline","arguments":{"points":[[0,0],[3,4],[7,3],[10,0]]},"metadata":{"source":"agent"}}</tool_call>
+
+User: loft these 3 cross-section curves into a surface
+Assistant: Loft 3 polyline cross-sections from z=0 to z=10.
+<plan>
+1. SdLoft — curves=[bottom [[0,0,0],[5,0,0]], mid [[0,0,5],[5,0,5]], top [[0,0,10],[5,0,10]]]
+</plan>
+<tool_call>{"name":"SdLoft","arguments":{"curves":[{"points":[[0,0,0],[5,0,0]]},{"points":[[0,0,5],[5,0,5]]},{"points":[[0,0,10],[5,0,10]]}]},"metadata":{"source":"agent"}}</tool_call>
+
+User: sweep this circular profile along the path curve
+Assistant: Sweep a full-circle arc (radius 1) along a 3-point polyline rail.
+<plan>
+1. SdSweep — profile={arc: center=[0,0,0], r=1, 0→6.2832}, rail={polyline: [[0,0,0],[5,0,0],[10,0,5]]}
+</plan>
+<tool_call>{"name":"SdSweep","arguments":{"profile":{"kind":"arc","center":[0,0,0],"radius":1,"startAngle":0,"endAngle":6.2832},"rail":{"points":[[0,0,0],[5,0,0],[10,0,5]]}},"metadata":{"source":"agent"}}</tool_call>
+
+User: revolve this profile around the Z-axis to make a solid of revolution
+Assistant: Revolve a line [0,0,0]→[5,0,0] full 360° around Z axis → disk/cylinder solid.
+<plan>
+1. SdRevolve — profile={line: from=[0,0,0], to=[5,0,0]}, axisFrom=[0,0,0], axisTo=[0,0,1], 0→6.2832
+</plan>
+<tool_call>{"name":"SdRevolve","arguments":{"profile":{"kind":"line","from":[0,0,0],"to":[5,0,0]},"axisFrom":[0,0,0],"axisTo":[0,0,1],"angleStart":0,"angleEnd":6.2832},"metadata":{"source":"agent"}}</tool_call>
+
+User: union the two selected objects
+Assistant: SdBoolean union — a and b are object UUIDs from the scene context "Current scene:" list.
+<plan>
+1. SdBoolean — op=union, a=<uuid-of-first-object>, b=<uuid-of-second-object>
+</plan>
+<tool_call>{"name":"SdBoolean","arguments":{"op":"union","a":"<uuid-of-object-a>","b":"<uuid-of-object-b>"},"metadata":{"source":"agent"}}</tool_call>
+
+User: cut a spherical hole through the box
+Assistant: SdBoolean difference — outer=box uuid, inner=sphere uuid (from scene context).
+<plan>
+1. SdBoolean — op=difference, a=<box-uuid>, b=<sphere-uuid>
+</plan>
+<tool_call>{"name":"SdBoolean","arguments":{"op":"difference","a":"<box-uuid>","b":"<sphere-uuid>"},"metadata":{"source":"agent"}}</tool_call>
+
+User: intersect these two overlapping solids
+Assistant: SdBoolean intersection — keeps only the shared volume.
+<plan>
+1. SdBoolean — op=intersection, a=<uuid-A>, b=<uuid-B>
+</plan>
+<tool_call>{"name":"SdBoolean","arguments":{"op":"intersection","a":"<uuid-A>","b":"<uuid-B>"},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 const WEBGPU_HOUSE_FEW_SHOT = `
@@ -851,6 +914,34 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows
 User: add a garden wall along the north boundary, 12m long and 1m tall
 Assistant: 12m → 12.0 (metric literal; no ft→m conversion). Single linear SdWall.
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,22],[12,22]],"thickness":0.2,"height":1.0}}</tool_call>
+
+User: draw a 90-degree arc with center at (5,0,0) and radius 5
+Assistant: Quarter-circle arc, 0 → π/2 rad.
+<tool_call>{"command":"SdArc","parameters":{"center":[5,0,0],"radius":5,"startAngle":0,"endAngle":1.5708}}</tool_call>
+
+User: draw a curve through these 5 points: (0,0), (2,3), (5,4), (8,2), (10,0)
+Assistant: Catmull-Rom curve.
+<tool_call>{"command":"SdCurve","parameters":{"points":[[0,0],[2,3],[5,4],[8,2],[10,0]]}}</tool_call>
+
+User: interpolate a smooth spline through 4 points: (0,0), (3,4), (7,3), (10,0)
+Assistant: NURBS cubic spline (≥4 points required).
+<tool_call>{"command":"SdSpline","parameters":{"points":[[0,0],[3,4],[7,3],[10,0]]}}</tool_call>
+
+User: loft 3 cross-section curves into a surface
+Assistant: Loft 3 polyline sections.
+<tool_call>{"command":"SdLoft","parameters":{"curves":[{"points":[[0,0,0],[5,0,0]]},{"points":[[0,0,5],[5,0,5]]},{"points":[[0,0,10],[5,0,10]]}]}}</tool_call>
+
+User: sweep a circular profile along a path curve
+Assistant: Sweep circle (r=1) along polyline rail.
+<tool_call>{"command":"SdSweep","parameters":{"profile":{"kind":"arc","center":[0,0,0],"radius":1,"startAngle":0,"endAngle":6.2832},"rail":{"points":[[0,0,0],[5,0,0],[10,0,5]]}}}</tool_call>
+
+User: revolve a line profile around the Z-axis
+Assistant: Full 360° revolution around Z axis.
+<tool_call>{"command":"SdRevolve","parameters":{"profile":{"kind":"line","from":[0,0,0],"to":[5,0,0]},"axisFrom":[0,0,0],"axisTo":[0,0,1],"angleStart":0,"angleEnd":6.2832}}</tool_call>
+
+User: union the two selected objects
+Assistant: SdBoolean union from scene UUIDs.
+<tool_call>{"command":"SdBoolean","parameters":{"op":"union","a":"<uuid-of-object-a>","b":"<uuid-of-object-b>"}}</tool_call>
 `.trim();
 
 export function buildSystemPrompt(skills?: Skill[]): string {
