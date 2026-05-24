@@ -3742,8 +3742,14 @@ function _setDirty(v: boolean, reason: string): void {
 }
 function _triggerAutoSave(): void {
   _setDirty(true, "post-dispatch");
-  if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+  // Do NOT reset an already-scheduled timer. With continuous dispatches (e.g. goal
+  // continuation loop firing every ~1s), resetting on each call pushes the save
+  // indefinitely into the future — _idbDirty never clears, beforeunload fires on
+  // every navigation attempt (#1700). Let the first scheduled save fire as-is; the
+  // next dispatch after save completes will schedule a fresh 2 s window.
+  if (_autoSaveTimer !== null) return;
   _autoSaveTimer = setTimeout(async () => {
+    _autoSaveTimer = null;
     try {
       const data = viewer.exportScene();
       if (data.length > 0) await sceneStoreSave(data);

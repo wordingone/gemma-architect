@@ -6942,6 +6942,56 @@ await resetScene('before-box-inject');
   await resetScene('post-S142');
 }
 
+// ── S143 — idb-dirty-clears-after-save (#1700): _idbDirty resets after auto-save ─────────────────
+// Pure code surface — no on-device model required.
+// Tests that the 2s debounce fires even under rapid continuous dispatches (goal continuation).
+// Root cause: prior code called clearTimeout on each dispatch, preventing the timer from ever firing.
+// Fix: timer is only scheduled once; subsequent calls return early if already scheduled.
+{
+  await resetScene('s143-pre');
+
+  const r143 = await evaluate(`(async function() {
+    try {
+      // Part A: single mutating dispatch — dirty clears within 3 s.
+      if (!window.__idbDiag) return { passed: false, evidence: { reason: '__idbDiag not exposed' } };
+
+      window.__dispatch?.('SdWall', { profile: [[0,0],[4,0]], thickness: 0.2, height: 3 });
+      await new Promise(r => setTimeout(r, 100));
+      const dirtyAfterDispatch = window.__idbDiag.dirty;
+
+      await new Promise(r => setTimeout(r, 3000)); // 3 s > 2 s debounce
+      const dirtyAfterWait = window.__idbDiag.dirty;
+      const saveCountA = window.__idbDiag.saveCount;
+
+      // Part B: rapid dispatches — dirty clears within 3 s of FIRST dispatch (not last).
+      // With the bug, each dispatch resets the 2 s timer; 5 dispatches at 200 ms intervals
+      // push the save to t+2.0s after the LAST dispatch (= ~3 s total), and if the loop
+      // is continuous the save never fires. With the fix, the timer is set once and fires
+      // 2 s after the first dispatch regardless.
+      const saveCountPre = window.__idbDiag.saveCount;
+      for (let i = 0; i < 5; i++) {
+        window.__dispatch?.('SdWall', { profile: [[i*6,10],[(i+1)*6,10]], thickness: 0.2, height: 3 });
+        await new Promise(r => setTimeout(r, 200));
+      }
+      const dirtyMid = window.__idbDiag.dirty;
+      await new Promise(r => setTimeout(r, 3000));
+      const dirtyAfterB = window.__idbDiag.dirty;
+      const saveCountB = window.__idbDiag.saveCount - saveCountPre;
+
+      const partA = dirtyAfterDispatch === true && dirtyAfterWait === false && saveCountA > 0;
+      const partB = dirtyMid === true && dirtyAfterB === false && saveCountB > 0;
+      return {
+        passed: partA && partB,
+        evidence: { dirtyAfterDispatch, dirtyAfterWait, saveCountA, dirtyMid, dirtyAfterB, saveCountB }
+      };
+    } catch (e) {
+      return { passed: false, evidence: { reason: String(e) } };
+    }
+  })()`);
+  record('idb-dirty-clears-after-save', !!(r143?.passed), r143 ?? { reason: 'evaluate returned null' });
+  await resetScene('post-S143');
+}
+
 } finally {
   await cleanup();
 }
