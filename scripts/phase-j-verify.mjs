@@ -20,6 +20,14 @@ import { writeFileSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
 import { CDP_PORT, CDP_BASE } from "./ports.mjs";
 import { installPromptHandlers } from "../../avir/infra/skills/cdp-prompts/handler.mjs"; // §#1704+#1708
+import { acquireLock, releaseLock } from "./harness-lock.mjs";
+
+// Single-flight guard — prevent concurrent runs colliding on :9222 CDP WebSocket.
+await acquireLock("phase-j-verify");
+process.on("exit", releaseLock);
+process.on("SIGINT",  () => { releaseLock(); process.exit(130); });
+process.on("SIGTERM", () => { releaseLock(); process.exit(143); });
+process.on("uncaughtException", (e) => { releaseLock(); console.error(e); process.exit(1); });
 
 const PAGES_URL   = "https://wordingone.github.io/gemma-architect/";
 const STATE_DIR   = `${process.cwd()}/state`;
