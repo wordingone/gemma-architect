@@ -873,6 +873,64 @@ function screenYtoDz(viewer: Viewer, screenY: number, base: { x: number; y: numb
   return (refScreenY - screenY) * mPerPx;
 }
 
+// ── Align / Distribute ────────────────────────────────────────────────────────
+
+export function execAlignTool(mode: string): void {
+  const multi = getMultiSelected();
+  const single = getSelected();
+  const objs: THREE.Object3D[] = multi.length > 1
+    ? multi.map((s) => s.transformTarget)
+    : single ? [single.transformTarget] : [];
+  if (objs.length < 2) return;
+
+  const boxes = objs.map((o) => new THREE.Box3().setFromObject(o));
+  const centers = boxes.map((b) => b.getCenter(new THREE.Vector3()));
+
+  if (mode === "align-left") {
+    const target = Math.min(...boxes.map((b) => b.min.x));
+    for (let i = 0; i < objs.length; i++) objs[i].position.x += target - boxes[i].min.x;
+  } else if (mode === "align-right") {
+    const target = Math.max(...boxes.map((b) => b.max.x));
+    for (let i = 0; i < objs.length; i++) objs[i].position.x += target - boxes[i].max.x;
+  } else if (mode === "align-top") {
+    const target = Math.max(...boxes.map((b) => b.max.y));
+    for (let i = 0; i < objs.length; i++) objs[i].position.y += target - boxes[i].max.y;
+  } else if (mode === "align-bottom") {
+    const target = Math.min(...boxes.map((b) => b.min.y));
+    for (let i = 0; i < objs.length; i++) objs[i].position.y += target - boxes[i].min.y;
+  } else if (mode === "align-center-h") {
+    const target = centers.reduce((s, c) => s + c.x, 0) / centers.length;
+    for (let i = 0; i < objs.length; i++) objs[i].position.x += target - centers[i].x;
+  } else if (mode === "align-center-v") {
+    const target = centers.reduce((s, c) => s + c.y, 0) / centers.length;
+    for (let i = 0; i < objs.length; i++) objs[i].position.y += target - centers[i].y;
+  } else if (mode === "dist-h") {
+    if (objs.length < 3) return;
+    const items = objs.map((o, i) => ({ o, minX: boxes[i].min.x, w: boxes[i].max.x - boxes[i].min.x }))
+      .sort((a, b) => a.minX - b.minX);
+    const totalW = items.reduce((s, e) => s + e.w, 0);
+    const span = (items[items.length - 1].minX + items[items.length - 1].w) - items[0].minX;
+    const gap = (span - totalW) / (items.length - 1);
+    let cursor = items[0].minX + items[0].w + gap;
+    for (let i = 1; i < items.length - 1; i++) {
+      items[i].o.position.x += cursor - items[i].minX;
+      cursor += items[i].w + gap;
+    }
+  } else if (mode === "dist-v") {
+    if (objs.length < 3) return;
+    const items = objs.map((o, i) => ({ o, minY: boxes[i].min.y, h: boxes[i].max.y - boxes[i].min.y }))
+      .sort((a, b) => a.minY - b.minY);
+    const totalH = items.reduce((s, e) => s + e.h, 0);
+    const span = (items[items.length - 1].minY + items[items.length - 1].h) - items[0].minY;
+    const gap = (span - totalH) / (items.length - 1);
+    let cursor = items[0].minY + items[0].h + gap;
+    for (let i = 1; i < items.length - 1; i++) {
+      items[i].o.position.y += cursor - items[i].minY;
+      cursor += items[i].h + gap;
+    }
+  }
+}
+
 // ── initCreateMode ────────────────────────────────────────────────────────────
 
 export function initCreateMode(viewer: Viewer): void {
@@ -951,7 +1009,7 @@ export function initCreateMode(viewer: Viewer): void {
     }
   });
 
-  const OP_TOOLS = new Set(["extrude", "loft", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure", "sel-window", "sel-lasso", "sel-boundary", "copy", "array"]);
+  const ALIGN_TOOLS = new Set(["align-left", "align-right", "align-top", "align-bottom", "align-center-h", "align-center-v", "dist-h", "dist-v"]);
 
   // Clear multi-select highlights when the viewer performs a normal single-object selection.
   window.addEventListener("viewer:select", () => {
@@ -973,7 +1031,12 @@ export function initCreateMode(viewer: Viewer): void {
       if (getOpPhase()) opCancel(viewer, false);
       viewer.setGumballEnabled(false);
       ptStartTool(tool as "move" | "rotate" | "scale" | "scale-1d" | "scale-2d");
-    } else if (OP_TOOLS.has(tool)) {
+    } else if (ALIGN_TOOLS.has(tool)) {
+      if (_ptPhase) ptCancel(viewer, false);
+      if (getOpPhase()) opCancel(viewer, false);
+      execAlignTool(tool);
+      dispatchSync("setActiveTool", { toolId: "select" });
+    } else if (OP_TOOL_IDS.has(tool)) {
       if (_ptPhase) ptCancel(viewer, false);
       if (getOpPhase()) opCancel(viewer, false);
       opStartTool(viewer, tool);

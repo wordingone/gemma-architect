@@ -55,7 +55,7 @@ import {
 import { SAMPLES } from "./io/sample-files";
 import type { WorkerOut } from "./worker";
 import { syncToolActiveClass, getState, setState, syncUnitsToStorage, hydrateFromStorage } from "./app-state";
-import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET } from "./tools/index";
+import { initCreateMode, emitClickWorld, DEFAULT_CEILING_OFFSET, execAlignTool } from "./tools/index";
 import { onElementCommitted, cutSlabVoidFromBoxMesh, addVoidToWallObject } from "./tools/join-groups";
 import { attemptWallCornerJoins } from "./tools/wall-corners";
 import { getSnapTarget } from "./viewer/snap-state";
@@ -513,6 +513,12 @@ registerHandler("SdArrayPolar", (args) => {
     ids.push(clone.uuid);
   }
   return { created: ids.length, count };
+});
+
+registerHandler("SdAlignObjects", (args) => {
+  const mode = (args.mode as string | undefined) ?? "left";
+  execAlignTool(mode);
+  return { ok: true, mode };
 });
 
 // Select-all handler (#31): populates the multi-set with every selectable

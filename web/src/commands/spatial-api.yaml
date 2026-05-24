@@ -903,6 +903,21 @@
   kernel: replicad
   alias_source: generic_cad_vocabulary
 
+- name: SdAlignObjects
+  kernel_op: alignObjects
+  parameters:
+    type: object
+    properties:
+      mode:
+        type: string
+        description: "left | right | top | bottom | center-h | center-v | dist-h | dist-v"
+    required: [mode]
+  topology_role: transform
+  kg_predicates: []
+  synonyms: [align, distribute, align left, align right, align top, align bottom, align center, align center horizontal, align center vertical, distribute horizontal, distribute vertical]
+  kernel: replicad
+  alias_source: generic_cad_vocabulary
+
 # ============================================================
 # §7 Architectural (IFC4-canonical)
 # ============================================================

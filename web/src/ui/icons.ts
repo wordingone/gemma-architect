@@ -114,6 +114,14 @@ export function iconSVG(name: string, size = 16): string {
     case "datum":        return `<svg ${attr}><path d="M12 5l8 13H4z"/><path d="M4 18h16"/></svg>`;
     case "copy":         return `<svg ${attr}><rect x="9" y="9" width="11" height="11"/><path d="M4 15V4h11"/></svg>`;
     case "array":        return `<svg ${attr}><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg>`;
+    case "align-left":     return `<svg ${attr}><path d="M4 3v18"/><rect x="4" y="7" width="12" height="10"/></svg>`;
+    case "align-right":    return `<svg ${attr}><path d="M20 3v18"/><rect x="8" y="7" width="12" height="10"/></svg>`;
+    case "align-top":      return `<svg ${attr}><path d="M3 4h18"/><rect x="7" y="4" width="10" height="12"/></svg>`;
+    case "align-bottom":   return `<svg ${attr}><path d="M3 20h18"/><rect x="7" y="8" width="10" height="12"/></svg>`;
+    case "align-center-h": return `<svg ${attr}><path d="M12 3v18" stroke-dasharray="2 1.5"/><rect x="5" y="6" width="14" height="5"/><rect x="7" y="13" width="10" height="5"/></svg>`;
+    case "align-center-v": return `<svg ${attr}><path d="M3 12h18" stroke-dasharray="2 1.5"/><rect x="5" y="5" width="6" height="14"/><rect x="13" y="7" width="6" height="10"/></svg>`;
+    case "dist-h":         return `<svg ${attr}><rect x="3" y="8" width="4" height="8"/><rect x="10" y="8" width="4" height="8"/><rect x="17" y="8" width="4" height="8"/><path d="M7 12h3M14 12h3" stroke-width="0.9"/></svg>`;
+    case "dist-v":         return `<svg ${attr}><rect x="8" y="3" width="8" height="4"/><rect x="8" y="10" width="8" height="4"/><rect x="8" y="17" width="8" height="4"/><path d="M12 7v3M12 14v3" stroke-width="0.9"/></svg>`;
     default:        return `<svg ${attr}><rect x="4" y="4" width="16" height="16"/></svg>`;
   }
 }
