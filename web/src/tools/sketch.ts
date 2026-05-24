@@ -108,30 +108,33 @@ export function buildPolygon(center: { x: number; y: number }, radial: { x: numb
   const dy = radial.y - center.y;
   const r = Math.max(0.05, Math.sqrt(dx * dx + dy * dy));
   const sides = DEFAULT_POLYGON_SIDES;
-  const h = DEFAULT_EXTRUDE_HEIGHT;
   const startAng = Math.atan2(dy, dx);
-  const shape = new THREE.Shape();
   const verts: Array<[number, number]> = [];
+  const pts: number[] = [];
   for (let i = 0; i < sides; i++) {
     const ang = startAng + (i * 2 * Math.PI) / sides;
     const x = r * Math.cos(ang);
     const y = r * Math.sin(ang);
     verts.push([x, y]);
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
+    pts.push(x, y, 0);
   }
-  shape.closePath();
-  const geom = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-  const mat = new THREE.MeshStandardMaterial({ color: 0xd0a868, roughness: 0.55, metalness: 0.05 });
-  const mesh = new THREE.Mesh(geom, mat);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xc9a86c });
+  const mesh = new THREE.LineLoop(geom, mat);
   mesh.position.set(center.x, center.y, 0);
-  mesh.userData.kind = "brep";
+  mesh.renderOrder = 1;
+  mesh.userData.kind = "polygon";
   mesh.userData.creator = "polygon";
   mesh.userData.controlPoints = verts.map(([x, y]) => new THREE.Vector3(x, y, 0));
   mesh.userData.isClosed = true;
+  mesh.userData.endpoints = verts.map(([x, y]) => ({
+    x: center.x + x, y: center.y + y, z: 0,
+    id: makeSnapId(center.x + x, center.y + y, 0),
+  })) as SnapVertex[];
   const worldVerts = verts.map(([x, y]) => `[${round(center.x + x)}, ${round(center.y + y)}]`).join(", ");
-  const chain = `const poly = drawPolyline([${worldVerts}], { close: true }).sketchOnPlane("XY").extrude(${round(h)});`;
-  return { mesh, chain };
+  const chain = `const poly = drawPolyline([${worldVerts}], { close: true }).sketchOnPlane("XY").extrude(0.002);`;
+  return { mesh: mesh as unknown as THREE.Mesh, chain };
 }
 
 export function buildPolyline(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3D; chain: string } {

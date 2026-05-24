@@ -119,6 +119,7 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "line",    icon: "line",    label: "Line" },
     { id: "rect",    icon: "rect",    label: "Rectangle" },
     { id: "circle",  icon: "circle",  label: "Circle" },
+    { id: "polygon", icon: "polygon", label: "Polygon" },
     { id: "polyline",icon: "polyline",label: "Polyline" },
     { id: "curve",   icon: "curve",   label: "Curve" },
     { id: "point",   icon: "point",   label: "Point" },
