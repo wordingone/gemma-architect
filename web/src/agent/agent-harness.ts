@@ -814,6 +814,7 @@ export function buildSystemPrompt(skills?: Skill[]): string {
     summariseDictionary(),
     `Current scene: ${buildSceneContext()}`,
     "SCENE QUERY RESPONSE: when asked to describe the scene, what you see, what is in the scene, or what the default scene looks like — respond with PLAIN TEXT ONLY. Do NOT emit <plan> or <tool_call> blocks. Instead: (1) describe the viewport image visually: shapes, colors, materials, arrangement, scale (2-3 sentences); (2) narrate the object inventory from the \'Current scene:\' line above in plain English. Combine into ONE natural prose paragraph. No bullet lists. No Sd* names in prose — verb chips are shown separately in the UI.",
+    'GOAL COMPLETION: when all requested elements are placed and the task is done, signal completion: <tool_call>{"name":"update_goal","arguments":{"status":"complete"},"metadata":{"source":"agent"}}</tool_call>',
     summariseSkills(skills),
     summariseClusters(),
     summariseCanvasSkills(),
@@ -845,6 +846,7 @@ export function buildWebGPUSystemPrompt(skills?: Skill[]): string {
     "UNITS: prompt-stated units are authoritative. '12m' → 12.0 always — never apply ft→m conversion when the prompt specifies 'm'. '12ft' → 3.66. Prompt unit overrides active unit system.",
     "BUILDINGS: For houses/buildings use SdLevel+SdWall+SdSlab+SdRoof+SdWindow+SdDoor+SdStair. Never use SdBox for a building — SdBox is raw geometry only.",
     "SCENE QUERY RESPONSE: when asked to describe the scene, what you see, what is in the scene, or what the default scene looks like — respond with PLAIN TEXT ONLY. Do NOT emit <plan> or <tool_call> blocks. Describe what you see: shapes, materials, arrangement. One natural prose paragraph.",
+    'GOAL COMPLETION: when all requested elements are placed and the task is done, signal completion: <tool_call>{"name":"update_goal","arguments":{"status":"complete"},"metadata":{"source":"agent"}}</tool_call>',
     WEBGPU_HOUSE_FEW_SHOT,
     verbList,
   ].filter(Boolean).join("\n\n");

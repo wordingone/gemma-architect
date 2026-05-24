@@ -266,7 +266,7 @@ export class ChatPanel {
     });
 
     // A6 (#980): continuation safety net — fires on agent:turn-complete while goal is active.
-    // #1485 revert (Axis E): single-turn dispatch; continuation only for initial zero-dispatch.
+    // #1740: multi-turn loop enabled — fire on non-zero-dispatch turns up to 6 iterations.
     window.addEventListener("agent:turn-complete", (e) => {
       const detail = (e as CustomEvent<{ verbs: string[] }>).detail;
       const goal = getCachedGoal();
@@ -283,8 +283,11 @@ export class ChatPanel {
           // Continuation turn produced no dispatches — model has nothing more to do.
           this._continuationSuppressed = true;
         }
+      } else if (this._continuationCount < 6) {
+        // Non-zero dispatch: model placed elements but may not be done yet.
+        // Fire another continuation turn (cap 6) until model calls update_goal.
+        void this._runContinuation(goal);
       }
-      // Non-zero dispatch turns: single-turn model handles all steps; no loop needed.
     });
 
     window.addEventListener("debug:telemetry-toggle", () => {
@@ -579,11 +582,14 @@ export class ChatPanel {
       // Non-design prompts (questions, single-verb commands) run single-turn without a goal.
       const VISUAL_RE = /(see|look|what|describe|show|scene|there|currently|have|how many|visible|appear|color|shape|render|view|display|tell me about)/i;
       const isVisualQuery = VISUAL_RE.test(text);
+      const existingGoal = getCachedGoal();
       if (!isVisualQuery && !userImage && DESIGN_RE.test(text)) {
-        const existingGoal = getCachedGoal();
         if (!existingGoal || existingGoal.status !== "active") {
           await createGoal(text, 10000);
         }
+      } else if (existingGoal?.status === "budget_limited") {
+        // #1740: budget_limited is a soft cap — any new user message resets to active.
+        await createGoal(existingGoal.objective, existingGoal.tokenBudget);
       }
       this._continuationSuppressed = false;
       this._continuationCount = 0;
