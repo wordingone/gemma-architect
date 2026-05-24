@@ -225,6 +225,11 @@ window.addEventListener('goal:changed',function(e){
   if(g&&g.status==='budget_limited'&&window.__budget_exceeded_at_turn==null){
     window.__budget_exceeded_at_turn=(window.__phase_j_turns.length||0)+1;
   }
+  // §#1740: capture continuation instrumentation when updateGoalContinuation fires.
+  if(g&&g.continuationIterations!=null){
+    window.__goal_continuation_iterations=g.continuationIterations;
+    window.__goal_continuation_terminal=g.terminalReason||null;
+  }
 });`,
 });
 
@@ -787,6 +792,10 @@ if (WASM_COHORT) {
   }
 }
 
+// §#1740: read goal continuation instrumentation before ws.close().
+const _contRaw = await evaluate(`JSON.stringify({iterations:window.__goal_continuation_iterations??null,terminal:window.__goal_continuation_terminal??null})`).catch(() => null);
+const _cont = (() => { try { return _contRaw ? JSON.parse(_contRaw) : null; } catch { return null; } })();
+
 // #1608: T1-only mode — position camera at SE 3/4 for /visual-check capture
 if (T1_ONLY) {
   console.log(`[+${Date.now()-startMs}ms] t1-only: positioning camera at SE 3/4 for /visual-check...`);
@@ -1003,6 +1012,8 @@ const receipt = {
   cdp_permissions_granted: _cdpPromptState.permissionsGranted,
   cdp_dialogs_handled: _cdpPromptState.dialogsHandled,
   cdp_downloads_allowed: _cdpPromptState.downloadsAllowed,
+  // §#1740: continuation loop telemetry — how many turns ran and why it stopped.
+  goal_continuation: _cont ? { iterations: _cont.iterations, terminal: _cont.terminal } : null,
 };
 // §#1659: write raw-output sidecar alongside receipt.
 let sidecarFile = null;

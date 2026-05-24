@@ -18,8 +18,8 @@ import { buildContextAugmentation } from "../agent/agent-context-augmentor";
 import { setPickerHint } from "../viewer/picker-hint";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { getState, subscribe } from "../app-state";
-import { createGoal, getCachedGoal, updateGoalTokens } from "../agent/goal-state";
-import type { Goal } from "../agent/goal-state";
+import { createGoal, getCachedGoal, updateGoalTokens, updateGoalContinuation } from "../agent/goal-state";
+import type { Goal, GoalTerminalReason } from "../agent/goal-state";
 
 type Message = {
   role: "user" | "assistant" | "system";
@@ -282,12 +282,25 @@ export class ChatPanel {
         } else {
           // Continuation turn produced no dispatches — model has nothing more to do.
           this._continuationSuppressed = true;
+          void updateGoalContinuation(this._continuationCount, "zero_dispatches");
         }
       } else if (this._continuationCount < 6) {
         // Non-zero dispatch: model placed elements but may not be done yet.
         // Fire another continuation turn (cap 6) until model calls update_goal.
         void this._runContinuation(goal);
+      } else {
+        // Iteration cap reached — stop looping.
+        this._continuationSuppressed = true;
+        void updateGoalContinuation(this._continuationCount, "cap_reached");
       }
+    });
+
+    // §#1740: record terminal reason when goal transitions to complete or budget_limited.
+    window.addEventListener("goal:changed", (e) => {
+      const g = (e as CustomEvent<{ status?: string; continuationIterations?: number }>).detail;
+      if (!g || g.continuationIterations != null) return; // skip our own updateGoalContinuation events
+      const terminal = g.status === "complete" ? "complete" : g.status === "budget_limited" ? "budget_limited" : null;
+      if (terminal) void updateGoalContinuation(this._continuationCount, terminal as GoalTerminalReason);
     });
 
     window.addEventListener("debug:telemetry-toggle", () => {

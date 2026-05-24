@@ -2,6 +2,7 @@
 // One goal per browser session (thread). Replacement generates a new UUID.
 
 export type GoalStatus = "active" | "paused" | "budget_limited" | "complete";
+export type GoalTerminalReason = "complete" | "budget_limited" | "cap_reached" | "zero_dispatches";
 
 export type Goal = {
   id: string;          // uuid, new on each replacement
@@ -12,6 +13,8 @@ export type Goal = {
   timeUsedMs: number;
   createdAtMs: number;
   updatedAtMs: number;
+  continuationIterations?: number;  // §#1740: count of _runContinuation calls for this goal
+  terminalReason?: GoalTerminalReason; // §#1740: why the continuation loop stopped
 };
 
 const DB_NAME = "gemma-cad";
@@ -104,6 +107,17 @@ export async function transitionGoal(status: GoalStatus): Promise<Goal | null> {
   await setGoal(goal);
   window.dispatchEvent(new CustomEvent("goal:changed", { detail: goal }));
   return goal;
+}
+
+// §#1740: record how many continuation turns ran and why the loop stopped.
+export async function updateGoalContinuation(iterations: number, terminal: GoalTerminalReason): Promise<void> {
+  const goal = await getGoal();
+  if (!goal) return;
+  goal.continuationIterations = iterations;
+  goal.terminalReason = terminal;
+  goal.updatedAtMs = Date.now();
+  await setGoal(goal);
+  window.dispatchEvent(new CustomEvent("goal:changed", { detail: goal }));
 }
 
 // In-memory cache for synchronous reads from synchronous prompt builders.
