@@ -28,6 +28,7 @@ import { getState } from "../app-state.js";
 import type { Viewer, ExportFacePoly, ClassifiedEdgeSeg } from "../viewer/viewer";
 import { LINEWEIGHT, DASH_PATTERN, DXF_LWEIGHT, DXF_LINETYPE } from "../viewer/viewer";
 import { clippingPlaneStore } from "../geometry/clipping-planes";
+import { levelStore } from "../geometry/levels";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
 
@@ -154,7 +155,8 @@ const SHEET_PRESET_DEFS: Record<Exclude<SheetPresetId, "blank">, SheetPresetDef>
   section:     { name: "Section",     viewport: "front",       scale: "1:50",  displayMode: "technical" },
   elevation:   { name: "Elevation",   viewport: "front",       scale: "1:50",  displayMode: "technical" },
 };
-const SHEET_PRESET_ORDER: Exclude<SheetPresetId, "blank">[] = ["perspective", "axonometric", "plan", "section", "elevation"];
+// "plan" omitted — plan sheets are managed dynamically by syncPlanSheets() (#1846).
+const SHEET_PRESET_ORDER: Exclude<SheetPresetId, "blank">[] = ["perspective", "axonometric", "section", "elevation"];
 
 // --- Scene bounds provider ------------------------------------------------
 
@@ -324,6 +326,12 @@ class LayoutController {
   private _dragCompleted = false;
   // Unlink button — visible only when activeSheet is linked to a clip plane (#1849 §5.4).
   private _unlinkBtn: HTMLElement | null = null;
+  // Subscription for levelStore changes — auto-syncs plan sheets (#1846).
+  private _levelUnsub: (() => void) | null = null;
+  // levelId → sheetId for auto-named plan sheets (#1846). Per-instance to avoid cross-test pollution.
+  private _planSheetByLevelId = new Map<string, string>();
+  // sheetIds where user manually renamed — opts out of auto-rename on level rename (#1846).
+  private _planSheetUserRenamed = new Set<string>();
   // Fit-to-stage scale factor (zoom). All mouse coords divided by this.
   private zoomFactor = 1;
   // Previous sheet pixel dimensions — used in applySheetDims to rescale panels proportionally.
@@ -343,7 +351,7 @@ class LayoutController {
     const size = opts.size ?? "Tabloid";
     const orientation = opts.orientation ?? "landscape";
     const customMm = opts.customMm ?? { ...DEFAULT_CUSTOM };
-    // 5 default sheets — one per canonical view type (W3.1).
+    // 4 preset sheets (perspective/axonometric/section/elevation). Plan sheets added by syncPlanSheets (#1846).
     this.sheets = SHEET_PRESET_ORDER.map((pid) => ({
       id: newSheetId(),
       name: SHEET_PRESET_DEFS[pid].name,
@@ -444,6 +452,11 @@ class LayoutController {
       this.sheetEl.appendChild(this.titleblockEl);
       this.renderTitleBlock();
     }
+
+    // Subscribe to levelStore so plan sheets track level changes (#1846).
+    if (this._levelUnsub) this._levelUnsub(); // clean up any prior subscription
+    this._levelUnsub = levelStore.subscribe(() => this.syncPlanSheets());
+    this.syncPlanSheets(); // initial sync — creates "Plan: Level 1" etc.
   }
 
   private buildToolbar(): void {
@@ -637,6 +650,71 @@ class LayoutController {
     }
     // Update tab highlight.
     this.renderTabs();
+  }
+
+  /**
+   * Sync plan sheets with the levelStore (#1846).
+   * Called once on init and on every levelStore change.
+   * - Adds a plan sheet for any level with no linked sheet.
+   * - Renames existing linked sheets when the level's name changes (unless user-renamed).
+   * - Removes plan sheets for levels that have been deleted.
+   */
+  private syncPlanSheets(): void {
+    const levels = levelStore.all();
+    const currentLevelIds = new Set(levels.map(l => l.id));
+
+    // Remove sheets for deleted levels.
+    for (const [levelId, sheetId] of [...this._planSheetByLevelId.entries()]) {
+      if (!currentLevelIds.has(levelId)) {
+        const idx = this.sheets.findIndex(s => s.id === sheetId);
+        if (idx !== -1) {
+          if (this.activeSheetIdx > idx) this.activeSheetIdx--;
+          else if (this.activeSheetIdx === idx) this.activeSheetIdx = Math.max(0, idx - 1);
+          this.sheets.splice(idx, 1);
+        }
+        this._planSheetByLevelId.delete(levelId);
+        this._planSheetUserRenamed.delete(sheetId);
+      }
+    }
+
+    // Add or rename sheets for current levels.
+    for (const level of levels) {
+      const expectedName = `Plan: ${level.name}`;
+      const existingSheetId = this._planSheetByLevelId.get(level.id);
+      if (!existingSheetId) {
+        // Create new plan sheet for this level.
+        const id = newSheetId();
+        this._planSheetByLevelId.set(level.id, id);
+        const defaultSheet = this.sheets[0];
+        this.sheets.push({
+          id,
+          name: expectedName,
+          size: defaultSheet?.size ?? "Tabloid",
+          orientation: defaultSheet?.orientation ?? "landscape",
+          customMm: defaultSheet ? { ...defaultSheet.customMm } : { ...DEFAULT_CUSTOM },
+          panels: [],
+        });
+      } else if (!this._planSheetUserRenamed.has(existingSheetId)) {
+        // Rename if level was renamed.
+        const sheet = this.sheets.find(s => s.id === existingSheetId);
+        if (sheet && sheet.name !== expectedName) sheet.name = expectedName;
+      }
+    }
+
+    this.renderTabs();
+  }
+
+  /** Return the levelId linked to a plan sheet, or undefined if not a plan sheet (#1846). */
+  getLinkedLevelId(sheetId: string): string | undefined {
+    for (const [levelId, sid] of this._planSheetByLevelId) {
+      if (sid === sheetId) return levelId;
+    }
+    return undefined;
+  }
+
+  /** Mark a plan sheet as user-renamed — opt out of auto-rename on level rename (#1846). */
+  markUserRenamed(sheetId: string): void {
+    this._planSheetUserRenamed.add(sheetId);
   }
 
   /** Auto-create a named sheet linked to a clipping-plane entity (#1849). Returns new sheet id. */
@@ -1405,9 +1483,28 @@ const _controllers = new WeakMap<HTMLElement, LayoutController>();
 /** Maps sheetData.id → ClippingPlaneEntity.id for auto-linked sheets (#1849). */
 const _sheetClipLinks = new Map<string, string>();
 
+
 /** Return the clipping-plane entity ID linked to a sheet, if any. */
 export function getClipPlaneIdForSheet(sheetId: string): string | undefined {
   return _sheetClipLinks.get(sheetId);
+}
+
+/**
+ * Return the levelId linked to a plan sheet (#1846), or undefined if not a plan sheet.
+ * @param host    The paper-mode host element.
+ * @param sheetId The sheet's id.
+ */
+export function getLinkedLevelIdForSheet(host: HTMLElement, sheetId: string): string | undefined {
+  return _controllers.get(host)?.getLinkedLevelId(sheetId);
+}
+
+/**
+ * Mark a plan sheet as user-renamed — disables auto-rename on future level renames (#1846).
+ * @param host    The paper-mode host element.
+ * @param sheetId The sheet's id.
+ */
+export function markPlanSheetUserRenamed(host: HTMLElement, sheetId: string): void {
+  _controllers.get(host)?.markUserRenamed(sheetId);
 }
 
 /**
