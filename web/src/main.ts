@@ -1373,10 +1373,19 @@ registerHandler("SdRoof", (args) => {
     // §#1724: derive gable-end coordinates from scene wall bounding box rather than from
     // the footprint arg — the model may dispatch SdRoof without footprint, yielding wrong
     // defaults (centerX=0, w=8, d=10) that miss the actual walls.
+    // §#1756: apply same footprint+FOOT_EXPAND filter as the eaveOffset loop — walls
+    // outside the building footprint (fences, sheds, partitions) must not expand
+    // sceneGMin/sceneGMax beyond the actual gable positions, which would push the
+    // boundary check > TOL away from the real gable wall endpoints.
+    const FOOT_EXPAND_GABLE = 1.5;
     let sceneGMin = Infinity, sceneGMax = -Infinity;
     for (const cand of _gableWallCandidates) {
       const ep = cand.userData.endpoints as Array<{ x: number; y: number }> | undefined;
       if (!ep || ep.length < 2) continue;
+      const midX = (ep[0].x + ep[1].x) / 2;
+      const midY = (ep[0].y + ep[1].y) / 2;
+      if (midX < centerX - w / 2 - FOOT_EXPAND_GABLE || midX > centerX + w / 2 + FOOT_EXPAND_GABLE) continue;
+      if (midY < centerY - d / 2 - FOOT_EXPAND_GABLE || midY > centerY + d / 2 + FOOT_EXPAND_GABLE) continue;
       const v0 = landscape ? ep[0].x : ep[0].y;
       const v1 = landscape ? ep[1].x : ep[1].y;
       if (v0 < sceneGMin) sceneGMin = v0;
@@ -1400,7 +1409,11 @@ registerHandler("SdRoof", (args) => {
       if (!isGable) continue;
 
       const wallMesh = child;
-      const wallEaveH = (wallMesh.userData.wallHeight as number | undefined) ?? DEFAULT_WALL_HEIGHT;
+      // Use eaveOffset (the height at which the roof is placed) so the gable pentagon's
+      // top edge aligns with the roof eave — not the individual wall's stored height,
+      // which may be shorter than eaveOffset when walls vary in height or when
+      // DEFAULT_WALL_HEIGHT > actual wallHeight (#1756).
+      const wallEaveH = eaveOffset;
       const cps = wallMesh.userData.controlPoints as THREE.Vector3[] | undefined;
       const len = cps && cps.length >= 2 ? cps[0].distanceTo(cps[1]) : (() => {
         const ddx = wx1 - wx0, ddy = wy1 - wy0;
