@@ -248,21 +248,39 @@ for (let pi = 0; pi < PROMPTS.length; pi++) {
   for (let turn = 1; turn <= TURNS_PER_PROMPT; turn++) {
     const beforeCount = baselineTelCount;
 
-    // Inject prompt into chat input
-    await cdp.send("Runtime.evaluate", {
+    // Wait for send button to be enabled (guards against disabled-during-boot or prior-turn-still-running)
+    const SEND_READY_TIMEOUT = 30000;
+    const sendReadyStart = Date.now();
+    while (Date.now() - sendReadyStart < SEND_READY_TIMEOUT) {
+      const btnState = await cdp.send("Runtime.evaluate", {
+        expression: `(() => {
+          const btn = document.querySelector('.chat-send-btn');
+          if (!btn) return 'no-btn';
+          return btn.disabled ? 'disabled:' + btn.textContent.trim() : 'ready';
+        })()`,
+      }).then(r => r.result?.value ?? 'unknown');
+      if (btnState === 'ready') break;
+      console.log(`  [turn ${turn}] send btn: ${btnState} — waiting...`);
+      await sleep(1000);
+    }
+
+    // Inject prompt: set value then click the send button directly (more reliable than keydown)
+    const injectResult = await cdp.send("Runtime.evaluate", {
       expression: `
         (() => {
           const inp = document.querySelector('.chat-input');
+          const btn = document.querySelector('.chat-send-btn');
           if (!inp) return 'no-input';
-          if (inp.disabled) return 'disabled';
+          if (!btn) return 'no-btn';
+          if (btn.disabled) return 'btn-disabled:' + btn.textContent.trim();
           inp.value = ${JSON.stringify(prompt.text)};
           inp.dispatchEvent(new Event('input', { bubbles: true }));
-          inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true, shiftKey: false }));
-          inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+          btn.click();
           return 'sent';
         })()
       `,
-    });
+    }).then(r => r.result?.value ?? 'unknown');
+    console.log(`  [turn ${turn}] inject: ${injectResult}`);
 
     // Poll for telemetry increment (turn completed)
     const TURN_TIMEOUT_MS = 120000; // 2 min per turn
