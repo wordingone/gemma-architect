@@ -3441,8 +3441,8 @@ async function handleExport(fmt: string): Promise<void> {
   if (is2D) {
     if (workbenchEl?.dataset.mode !== "layout") {
       activateMode("layout", workbenchEl);
-      // Allow layout to initialize before reading the host.
-      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      // No RAF wait needed — LayoutController is already initialized by buildModes();
+      // composeSvg/DXF read in-memory PanelState, not DOM metrics.
     }
     const host = getLayoutHost();
     if (!host) { setStatus("Layout not initialized.", "warn"); return; }
