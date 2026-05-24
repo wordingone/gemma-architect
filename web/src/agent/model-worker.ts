@@ -338,6 +338,8 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // non-null for the entire warmup path.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let _preAcquiredGpuDevice: any = null;
+  // §#1627-C: hoisted so backends array can use it for classification-aware device selection.
+  let _adClassification: "dgpu" | "igpu" | "software" | "unknown" = "unknown";
   try {
     const nav = (globalThis as unknown as { navigator?: Navigator }).navigator;
     if (nav?.gpu && !forceWasm) {  // §#1637: forceWasm=true skips WebGPU acquisition entirely
@@ -374,6 +376,7 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
         } else {
           _adClass = "dgpu";
         }
+        _adClassification = _adClass; // §#1627-C: hoist for backends array
         const _adFingerprint = {
           vendor: (_adInfo.vendor as string | undefined) ?? null,
           architecture: (_adInfo.architecture as string | undefined) ?? null,
@@ -396,9 +399,18 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
     }
   } catch { /* navigator.gpu unavailable — fall through to CPU backend */ }
 
-  const backends: Array<{ device: "webgpu" | "auto"; dtype: "q4f16" | "q4"; label: string }> = [
-    { device: "webgpu", dtype: "q4f16", label: "GPU" },
-    { device: "auto",   dtype: "q4",    label: "CPU" },
+  // §#1627-C: iGPU/software classification and forceWasm both bypass "auto" (which independently
+  // calls navigator.gpu.requestAdapter internally and picks WebGPU when available). Use explicit
+  // "cpu" to guarantee WASM ORT EP without any WebGPU probe inside transformers.js.
+  const _wasmFallback = forceWasm || _adClassification === "igpu" || _adClassification === "software";
+  if (_wasmFallback && !forceWasm) {
+    // User did not explicitly choose WASM — classification triggered it.
+    console.log(`[#1627-C] classification-triggered-wasm-fallback adClass=${_adClassification} — cpu device (WASM ORT EP)`);
+    post({ type: "phase_timing", phase: "wasm_fallback_classification", elapsed_ms: Date.now() - _workerStartMs, adClass: _adClassification });
+  }
+  const backends: Array<{ device: "webgpu" | "auto" | "cpu"; dtype: "q4f16" | "q4"; label: string }> = [
+    { device: "webgpu",                       dtype: "q4f16", label: "GPU" },
+    { device: _wasmFallback ? "cpu" : "auto", dtype: "q4",   label: "CPU" },
   ];
 
   let loadedLabel = "CPU";
@@ -447,6 +459,10 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (model as any).generate({ ...probeIn, max_new_tokens: 1 });
         } catch {
+          if (_adClassification === "igpu" || _adClassification === "software") {
+            console.log(`[#1627-C] webgpu-probe-failed adClass=${_adClassification} — falling back to WASM EP`);
+            post({ type: "phase_timing", phase: "wasm_fallback_probe_failure", elapsed_ms: Date.now() - _workerStartMs, adClass: _adClassification });
+          }
           continue; // WebGPU probe failed → try CPU
         }
       }
