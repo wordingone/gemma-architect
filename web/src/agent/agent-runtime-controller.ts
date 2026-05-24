@@ -40,10 +40,12 @@ export type TransitionCallback = (
 const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], RuntimeState>>> = {
   idle:       { BOOT_REQUESTED: "booting" },
   booting:    { MODEL_READY: "booting", BOOT_COMPLETE: "ready", FATAL_ERROR: "failed",
-                PREFILL_DONE: "booting" }, // warmup-done fires before boot-complete (#1407)
+                PREFILL_DONE: "booting",      // warmup-done fires before boot-complete (#1407)
+                GENERATE_REQUESTED: "generating" }, // prompt submitted during post-recycle boot (#1526 H3)
   ready:      { GENERATE_REQUESTED: "generating", BOOT_REQUESTED: "booting",
-                PREFILL_DONE: "ready",    // warmup-done after recycle if noWarmup=false
-                D3D12_OOM: "recycling" }, // planned recycle dispatched before GENERATE_REQUESTED (#1750)
+                PREFILL_DONE: "ready",        // warmup-done after recycle if noWarmup=false
+                D3D12_OOM: "recycling",       // planned recycle dispatched before GENERATE_REQUESTED (#1750)
+                WORKER_RECYCLED: "recovering" }, // unplanned recycle while idle — no prior D3D12_OOM (#1526 H2)
   generating: {
     PREFILL_DONE:     "generating",
     GENERATE_DONE:    "ready",
@@ -167,8 +169,17 @@ export class AgentRuntimeController {
         this.recycleCount++;
         break;
       case "WORKER_RECYCLED":
-        // Transition to "recovering" — new worker is about to be spawned.
-        // recycleCount already updated in D3D12_OOM/WATCHDOG_TIMEOUT.
+        if (this.state === "ready") {
+          // Unplanned recycle — worker died without prior D3D12_OOM/WATCHDOG_TIMEOUT.
+          // Reset flags and increment recycleCount (normally done by those events).
+          this.workerReady      = false;
+          this.bootComplete     = false;
+          this.prefillDone      = false;
+          this.turnCount        = 0;
+          this.nextInitNoWarmup = true;
+          this.recycleCount++;
+        }
+        // Planned path (recycling → recovering): recycleCount/flags already set by D3D12_OOM/WATCHDOG_TIMEOUT.
         break;
       case "RECOVERY_COMPLETE":
         // Unused — use BOOT_COMPLETE from recovering state instead.
