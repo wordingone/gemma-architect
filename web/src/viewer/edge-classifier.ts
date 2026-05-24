@@ -4,8 +4,9 @@
 //   section-cut  — edge intersects active section/clip plane
 //   silhouette   — adjacent faces straddle the view plane (one faces cam, one away)
 //   naked        — only one incident face (open mesh boundary: eave, slab edge)
-//   tangent      — adjacent faces nearly coplanar (smooth-surface boundary)
+//   hidden       — back-facing edge (visible in conventional dashed hidden-line style)
 //   edge         — standard shared face boundary (default)
+//   tangent      — adjacent faces nearly coplanar (smooth-surface boundary)
 //
 // Lineweight table (SVG stroke-width in panel px; PDF in mm via PX_TO_MM):
 //   section-cut  2.0   (0.7mm equiv — THICKEST)
@@ -13,11 +14,12 @@
 //   naked        1.0   (0.35mm equiv — MEDIUM)
 //   edge         0.7   (0.25mm equiv — THIN)
 //   tangent      0.5   (0.18mm equiv — HAIRLINE)
+//   hidden       0.35  (0.13mm equiv — DASHED HAIRLINE)
 
 import * as THREE from "three";
 import { worldToPanelXY } from "./line-clip.js";
 
-export type EdgeClass = "section-cut" | "silhouette" | "naked" | "edge" | "tangent";
+export type EdgeClass = "section-cut" | "silhouette" | "naked" | "edge" | "tangent" | "hidden";
 
 export type ClassifiedEdgeSeg = {
   x1: number; y1: number; x2: number; y2: number;
@@ -31,6 +33,41 @@ export const LINEWEIGHT: Record<EdgeClass, number> = {
   "naked":       1.0,
   "edge":        0.7,
   "tangent":     0.5,
+  "hidden":      0.35,
+};
+
+/**
+ * SVG stroke-dasharray value for each EdgeClass. Undefined = solid line.
+ * "4 2" → 4px dash, 2px gap — standard architectural hidden-line dashes at panel scale.
+ */
+export const DASH_PATTERN: Partial<Record<EdgeClass, string>> = {
+  "hidden": "4 2",
+};
+
+/**
+ * DXF lineweight codes (group 370, AC1015+). Values are in hundredths of mm.
+ * These map directly to the AutoCAD lweight enum.
+ */
+export const DXF_LWEIGHT: Record<EdgeClass, number> = {
+  "section-cut": 70,
+  "silhouette":  50,
+  "naked":       35,
+  "edge":        25,
+  "tangent":     18,
+  "hidden":      13,
+};
+
+/**
+ * DXF linetype name per EdgeClass. "CONTINUOUS" for solid; "DASHED" for hidden.
+ * The DASHED linetype must be defined in the LTYPE table.
+ */
+export const DXF_LINETYPE: Record<EdgeClass, string> = {
+  "section-cut": "CONTINUOUS",
+  "silhouette":  "CONTINUOUS",
+  "naked":       "CONTINUOUS",
+  "edge":        "CONTINUOUS",
+  "tangent":     "CONTINUOUS",
+  "hidden":      "DASHED",
 };
 
 // cos(20°) threshold for tangent-edge detection: faces with normal-dot > this
@@ -129,8 +166,11 @@ export function classifyMeshEdges(
 
     let cls: EdgeClass;
     if (faces.length === 1) {
-      // Naked edge — only one incident face.
-      cls = "naked";
+      const n = faceNormals[faces[0]];
+      const d = n.dot(viewDir);
+      // Naked back-facing → hidden dashed (structure behind cut visible as hidden line).
+      // Naked front-facing → naked solid (open boundary: eave, slab edge).
+      cls = d > 0 ? "hidden" : "naked";
     } else {
       const n1 = faceNormals[faces[0]];
       const n2 = faceNormals[faces[1]];
@@ -150,6 +190,9 @@ export function classifyMeshEdges(
       } else if (Math.sign(d1) !== Math.sign(d2)) {
         // Silhouette: adjacent faces straddle view direction (one front-facing, one back-facing).
         cls = "silhouette";
+      } else if (d1 > 0 && d2 > 0) {
+        // Both faces back-facing → hidden interior edge (dashed in architectural convention).
+        cls = "hidden";
       } else if (dot12 > COS_TANGENT_THRESH) {
         // Tangent: faces nearly coplanar (smooth surface boundary).
         cls = "tangent";

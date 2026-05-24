@@ -1,5 +1,5 @@
 // Phase 13 verification helpers:
-//   S_VLE — verify-layout-vector-export: DXF structure, AC1009 format, layer assignment
+//   S_VLE — verify-layout-vector-export: DXF structure, AC1015 format, per-class layer assignment
 //   S_CIE — verify-clip-in-export: clipSegByPlanes pure-math fixture tests
 
 import { test, expect } from "bun:test";
@@ -18,14 +18,21 @@ function countDxfEntity(dxf: string, entityType: string): number {
   return (dxf.match(new RegExp(`\n0\n${entityType}\n`, "g")) ?? []).length;
 }
 
-// Count LINE entities on a specific layer. DXF structure:
-//   0\nLINE\n8\n<LAYER>\n...
+// Count LINE entities on a specific layer. AC1015 DXF structure:
+//   0\nLINE\n5\n<handle>\n100\nAcDbEntity\n8\n<LAYER>\n...
+// Scan forward up to 12 lines past each LINE entity to find group 8 (layer name).
 function countDxfLinesOnLayer(dxf: string, layer: string): number {
   let count = 0;
   const lines = dxf.split("\n");
-  for (let i = 0; i < lines.length - 3; i++) {
-    if (lines[i] === "0" && lines[i + 1] === "LINE" && lines[i + 2] === "8" && lines[i + 3] === layer) {
-      count++;
+  for (let i = 0; i < lines.length - 2; i++) {
+    if (lines[i] === "0" && lines[i + 1] === "LINE") {
+      // Find group 8 within the next 12 lines.
+      for (let j = i + 2; j < Math.min(i + 14, lines.length - 1); j++) {
+        if (lines[j] === "8" && lines[j + 1] === layer) {
+          count++;
+          break;
+        }
+      }
     }
   }
   return count;
@@ -33,24 +40,27 @@ function countDxfLinesOnLayer(dxf: string, layer: string): number {
 
 // ── S_VLE — verify-layout-vector-export ──────────────────────────────────────
 
-test("S_VLE: DXF export — AC1009 version header present", () => {
+test("S_VLE: DXF export — AC1015 version header present", () => {
   const host = freshHost();
   buildLayoutMode(host, { size: "A1", orientation: "landscape" });
   const dxf = exportLayoutAsDxf(host);
-  expect(dxf).toContain("AC1009");
+  expect(dxf).toContain("AC1015");
   // $ACADVER group code 9 followed by version
   expect(dxf).toContain("$ACADVER");
 });
 
-test("S_VLE: DXF export — BORDER and GEOMETRY layers defined in TABLES section", () => {
+test("S_VLE: DXF export — BORDER and per-class layers defined in TABLES section", () => {
   const host = freshHost();
   buildLayoutMode(host, { size: "A1", orientation: "landscape" });
   const dxf = exportLayoutAsDxf(host);
   expect(dxf).toContain("BORDER");
-  expect(dxf).toContain("GEOMETRY");
-  // LAYER table present
+  // Per-class layers (#1804 AC1015 upgrade — replaces old GEOMETRY layer)
+  expect(dxf).toContain("A-SECT-CUT");
+  expect(dxf).toContain("A-HIDDEN");
+  // LAYER and LTYPE tables present
   expect(dxf).toContain("TABLES");
   expect(dxf).toContain("LAYER");
+  expect(dxf).toContain("LTYPE");
 });
 
 test("S_VLE: DXF export — well-formed: SECTION/ENDSEC pairs + EOF terminator", () => {
@@ -77,7 +87,7 @@ test("S_VLE: DXF export — panel border emits ≥4 LINE entities on BORDER laye
   expect(countDxfLinesOnLayer(dxf, "BORDER")).toBeGreaterThanOrEqual(4);
 });
 
-test("S_VLE: DXF export — geometry segments from mock viewer land on GEOMETRY layer", () => {
+test("S_VLE: DXF export — geometry segments from mock viewer land on A-EDGE layer (fallback)", () => {
   const host = freshHost();
   buildLayoutMode(host, {
     size: "A4",
@@ -86,6 +96,7 @@ test("S_VLE: DXF export — geometry segments from mock viewer land on GEOMETRY 
       { x: 50, y: 50, w: 200, h: 150, viewport: "top", scale: "1:50", title: "PLAN" },
     ],
   });
+  // Mock viewer without getClassifiedEdgeSegmentsForView → fallback to A-EDGE layer.
   const mockViewer = {
     getEdgeSegmentsForView: (_view: string, _w: number, _h: number): [number, number, number, number][] =>
       [[10, 20, 90, 20], [10, 80, 90, 80]], // 2 horizontal lines
@@ -94,7 +105,8 @@ test("S_VLE: DXF export — geometry segments from mock viewer land on GEOMETRY 
   const dxf = exportLayoutAsDxf(host);
   (window as unknown as Record<string, unknown>).__viewer = undefined;
 
-  const geomCount = countDxfLinesOnLayer(dxf, "GEOMETRY");
+  // Fallback unclassified edges land on A-EDGE (#1804 AC1015 upgrade).
+  const geomCount = countDxfLinesOnLayer(dxf, "A-EDGE");
   expect(geomCount).toBe(2);
   expect(countDxfEntity(dxf, "LINE")).toBeGreaterThanOrEqual(6); // 4 border + 2 geometry
 });

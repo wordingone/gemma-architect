@@ -26,7 +26,7 @@ import { drawingLayerStore } from "../geometry/drawing-layers.js";
 import { clipSegByPlanes, worldToPanelXY } from "./line-clip.js";
 import { classifyMeshEdges, type ClassifiedEdgeSeg } from "./edge-classifier.js";
 export type { ClassifiedEdgeSeg } from "./edge-classifier.js";
-export { LINEWEIGHT } from "./edge-classifier.js";
+export { LINEWEIGHT, DASH_PATTERN, DXF_LWEIGHT, DXF_LINETYPE } from "./edge-classifier.js";
 
 type ViewName = "top" | "persp" | "front" | "right";
 

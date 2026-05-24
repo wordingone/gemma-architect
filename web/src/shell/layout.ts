@@ -26,7 +26,7 @@ import { iconSVG } from "../ui/icons";
 import { formatLength } from "../units.js";
 import { getState } from "../app-state.js";
 import type { Viewer, ExportFacePoly, ClassifiedEdgeSeg } from "../viewer/viewer";
-import { LINEWEIGHT } from "../viewer/viewer";
+import { LINEWEIGHT, DASH_PATTERN, DXF_LWEIGHT, DXF_LINETYPE } from "../viewer/viewer";
 
 // --- Sheet sizes (mm) -----------------------------------------------------
 
@@ -1424,10 +1424,12 @@ function renderViewportSvg(p: PanelState, b: SceneBounds, viewer?: Viewer): stri
 
       let edgeMarkup: string;
       if (classifiedSegs.length > 0) {
-        // Classified edges: render each class with its lineweight.
-        edgeMarkup = classifiedSegs.map(({ x1, y1, x2, y2, cls }) =>
-          `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke-width="${LINEWEIGHT[cls]}"/>`,
-        ).join("\n      ");
+        // Classified edges: render each class with its lineweight + dash pattern.
+        edgeMarkup = classifiedSegs.map(({ x1, y1, x2, y2, cls }) => {
+          const dash = DASH_PATTERN[cls];
+          const dashAttr = dash ? ` stroke-dasharray="${dash}"` : "";
+          return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke-width="${LINEWEIGHT[cls]}"${dashAttr}/>`;
+        }).join("\n      ");
       } else {
         edgeMarkup = segs.map(([x1, y1, x2, y2]) =>
           `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`,
@@ -1696,29 +1698,41 @@ export async function exportLayoutAsPdf(host: HTMLElement): Promise<ArrayBuffer>
         );
       }
     }
-    // Edge lines on top of fills.
-    const inner = renderViewportSvg(p, c.bounds(), viewer);
-    doc.setLineWidth(0.25);
+    // Edge lines on top of fills — draw classified edges directly for lineweight+dash fidelity.
     doc.setDrawColor(26, 26, 34);
-    extractSvgLines(inner).forEach(([sx, sy, ex, ey]) => {
-      doc.line(
-        px + sx * PX_TO_MM,
-        py + sy * PX_TO_MM,
-        px + ex * PX_TO_MM,
-        py + ey * PX_TO_MM,
-      );
-    });
-    extractSvgPaths(inner).forEach((pts) => {
-      for (let k = 1; k < pts.length; k++) {
-        const a = pts[k - 1], b = pts[k];
-        doc.line(
-          px + a[0] * PX_TO_MM,
-          py + a[1] * PX_TO_MM,
-          px + b[0] * PX_TO_MM,
-          py + b[1] * PX_TO_MM,
-        );
+    if (viewer?.getClassifiedEdgeSegmentsForView) {
+      const viewName = layoutViewportToViewName(p.viewport);
+      const clSegs = viewer.getClassifiedEdgeSegmentsForView(viewName, p.w, p.h);
+      for (const { x1, y1, x2, y2, cls } of clSegs) {
+        const lw = LINEWEIGHT[cls] * PX_TO_MM;
+        doc.setLineWidth(lw);
+        const dash = DASH_PATTERN[cls];
+        if (dash) {
+          // "4 2" → [4*PX_TO_MM, 2*PX_TO_MM] mm dash/gap
+          const [d, g] = dash.split(" ").map((v) => parseFloat(v) * PX_TO_MM);
+          doc.setLineDashPattern([d, g], 0);
+        } else {
+          doc.setLineDashPattern([], 0);
+        }
+        doc.line(px + x1 * PX_TO_MM, py + y1 * PX_TO_MM, px + x2 * PX_TO_MM, py + y2 * PX_TO_MM);
       }
-    });
+      // Reset to solid after classified pass.
+      doc.setLineDashPattern([], 0);
+      doc.setLineWidth(0.25);
+    } else {
+      // Fallback: extract from SVG (no lineweight differentiation).
+      const inner = renderViewportSvg(p, c.bounds(), viewer);
+      doc.setLineWidth(0.25);
+      extractSvgLines(inner).forEach(([sx, sy, ex, ey]) => {
+        doc.line(px + sx * PX_TO_MM, py + sy * PX_TO_MM, px + ex * PX_TO_MM, py + ey * PX_TO_MM);
+      });
+      extractSvgPaths(inner).forEach((pts) => {
+        for (let k = 1; k < pts.length; k++) {
+          const a = pts[k - 1], b = pts[k];
+          doc.line(px + a[0] * PX_TO_MM, py + a[1] * PX_TO_MM, px + b[0] * PX_TO_MM, py + b[1] * PX_TO_MM);
+        }
+      });
+    }
     // Panel title + scale label.
     doc.setFontSize(7);
     doc.setTextColor(26, 26, 34);
@@ -1802,11 +1816,37 @@ export function exportLayoutAsDwgFallback(host: HTMLElement): string {
   return note + svg;
 }
 
-// DXF vector export — AC1009 (R12), AcDbLine entities. Segments come from the
-// real 3D edge-projection pipeline (getEdgeSegmentsForView) when a live viewer
-// is available, clipped against active section + clip planes (#1211).
-// Coordinates are in mm (sheet paper space). Y axis is DXF bottom-up (flipped
-// from screen top-down) so (0,0) is the bottom-left corner of the sheet.
+// DXF vector export — AC1015 (R2000), AcDbLine entities with per-layer lineweight (#1804).
+// One DXF layer per EdgeClass (AIA-style names). DASHED linetype defined inline for
+// hidden-line rendering. Coordinates in mm (sheet paper space). Y axis is DXF bottom-up.
+//
+// Layer → EdgeClass mapping:
+//   BORDER      — panel borders
+//   A-SECT-CUT  — section-cut (weight 70 = 0.70mm, CONTINUOUS)
+//   A-SILHOUETTE— silhouette  (weight 50 = 0.50mm, CONTINUOUS)
+//   A-NAKED     — naked edge  (weight 35 = 0.35mm, CONTINUOUS)
+//   A-EDGE      — standard edge (weight 25 = 0.25mm, CONTINUOUS)
+//   A-TANGENT   — tangent edge  (weight 18 = 0.18mm, CONTINUOUS)
+//   A-HIDDEN    — hidden line   (weight 13 = 0.13mm, DASHED)
+const _DXF_LAYERS: Array<{ name: string; color: number; lweight: number; ltype: string }> = [
+  { name: "BORDER",       color: 7, lweight: 50, ltype: "CONTINUOUS" },
+  { name: "A-SECT-CUT",   color: 1, lweight: DXF_LWEIGHT["section-cut"], ltype: DXF_LINETYPE["section-cut"] },
+  { name: "A-SILHOUETTE", color: 2, lweight: DXF_LWEIGHT["silhouette"],   ltype: DXF_LINETYPE["silhouette"] },
+  { name: "A-NAKED",      color: 3, lweight: DXF_LWEIGHT["naked"],        ltype: DXF_LINETYPE["naked"] },
+  { name: "A-EDGE",       color: 4, lweight: DXF_LWEIGHT["edge"],         ltype: DXF_LINETYPE["edge"] },
+  { name: "A-TANGENT",    color: 5, lweight: DXF_LWEIGHT["tangent"],      ltype: DXF_LINETYPE["tangent"] },
+  { name: "A-HIDDEN",     color: 8, lweight: DXF_LWEIGHT["hidden"],       ltype: DXF_LINETYPE["hidden"] },
+];
+
+const _DXF_CLS_TO_LAYER: Record<string, string> = {
+  "section-cut": "A-SECT-CUT",
+  "silhouette":  "A-SILHOUETTE",
+  "naked":       "A-NAKED",
+  "edge":        "A-EDGE",
+  "tangent":     "A-TANGENT",
+  "hidden":      "A-HIDDEN",
+};
+
 export function exportLayoutAsDxf(host: HTMLElement): string {
   const c = _controllers.get(host);
   if (!c) throw new Error("layout: host has no LayoutController");
@@ -1815,59 +1855,108 @@ export function exportLayoutAsDxf(host: HTMLElement): string {
   const PX_TO_MM = 1 / MM_TO_PX;
   const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
 
+  // Monotonic handle counter for AC1015 entity handles.
+  let _h = 1;
+  const h = () => (_h++).toString(16).toUpperCase();
+
   const lines: string[] = [];
-  // AC1009 header.
+
+  // AC1015 header.
   lines.push("0", "SECTION", "2", "HEADER");
-  lines.push("9", "$ACADVER", "1", "AC1009");
+  lines.push("9", "$ACADVER", "1", "AC1015");
+  lines.push("9", "$HANDSEED", "5", "FFFF");
   lines.push("9", "$EXTMIN", "10", "0", "20", "0", "30", "0");
   lines.push("9", "$EXTMAX",
     "10", mm.w.toFixed(4), "20", mm.h.toFixed(4), "30", "0");
   lines.push("0", "ENDSEC");
-  // Tables.
+
+  // Tables section: LTYPE + LAYER.
   lines.push("0", "SECTION", "2", "TABLES");
-  lines.push("0", "TABLE", "2", "LAYER", "70", "2");
-  lines.push("0", "LAYER", "2", "BORDER", "70", "0", "62", "7", "6", "CONTINUOUS");
-  lines.push("0", "LAYER", "2", "GEOMETRY", "70", "0", "62", "1", "6", "CONTINUOUS");
-  lines.push("0", "ENDTAB", "0", "ENDSEC");
+
+  // LTYPE table: CONTINUOUS + DASHED.
+  lines.push("0", "TABLE", "2", "LTYPE", "5", h(), "70", "2");
+  // CONTINUOUS linetype.
+  lines.push("0", "LTYPE", "5", h(),
+    "100", "AcDbSymbolTableRecord",
+    "100", "AcDbLinetypeTableRecord",
+    "2", "CONTINUOUS", "70", "0", "3", "Solid line", "72", "65", "73", "0", "40", "0.0");
+  // DASHED linetype: 0.5 on, 0.25 off (0.75mm period).
+  lines.push("0", "LTYPE", "5", h(),
+    "100", "AcDbSymbolTableRecord",
+    "100", "AcDbLinetypeTableRecord",
+    "2", "DASHED", "70", "0", "3", "__ __ __", "72", "65", "73", "2", "40", "0.75",
+    "49", "0.5", "74", "0",
+    "49", "-0.25", "74", "0");
+  lines.push("0", "ENDTAB");
+
+  // LAYER table.
+  lines.push("0", "TABLE", "2", "LAYER", "5", h(), "70", String(_DXF_LAYERS.length));
+  for (const { name, color, lweight, ltype } of _DXF_LAYERS) {
+    lines.push("0", "LAYER", "5", h(),
+      "100", "AcDbSymbolTableRecord",
+      "100", "AcDbLayerTableRecord",
+      "2", name, "70", "0", "62", String(color), "6", ltype, "370", String(lweight));
+  }
+  lines.push("0", "ENDTAB");
+  lines.push("0", "ENDSEC");
+
   // Entities.
   lines.push("0", "SECTION", "2", "ENTITIES");
 
   for (const p of c.panels) {
     const ox = p.x * PX_TO_MM;
     const oy = (sheetHpx - p.y - p.h) * PX_TO_MM; // flip Y for DXF bottom-up
+    const ph = p.h * PX_TO_MM;
 
     // Panel border on BORDER layer.
-    const bx1 = ox, by1 = oy, bx2 = ox + p.w * PX_TO_MM, by2 = oy + p.h * PX_TO_MM;
     if (p.border !== "none") {
+      const bx1 = ox, by1 = oy, bx2 = ox + p.w * PX_TO_MM, by2 = oy + p.h * PX_TO_MM;
       for (const [ax, ay, bx, by] of [
         [bx1, by1, bx2, by1], [bx2, by1, bx2, by2],
         [bx2, by2, bx1, by2], [bx1, by2, bx1, by1],
       ] as [number, number, number, number][]) {
-        lines.push("0", "LINE", "8", "BORDER",
+        lines.push("0", "LINE", "5", h(),
+          "100", "AcDbEntity", "8", "BORDER",
+          "100", "AcDbLine",
           "10", ax.toFixed(4), "20", ay.toFixed(4), "30", "0",
           "11", bx.toFixed(4), "21", by.toFixed(4), "31", "0");
       }
     }
 
-    // Geometry on GEOMETRY layer.
+    // Geometry: use classified edges (#1804) when available, fall back to unclassified.
     const viewName = layoutViewportToViewName(p.viewport);
-    const segs: [number, number, number, number][] = viewer
-      ? viewer.getEdgeSegmentsForView(viewName, p.w, p.h)
+    const classifiedSegs = viewer?.getClassifiedEdgeSegmentsForView
+      ? viewer.getClassifiedEdgeSegmentsForView(viewName, p.w, p.h)
       : [];
-    const pw = p.w * PX_TO_MM;
-    const ph = p.h * PX_TO_MM;
-    for (const [x1, y1, x2, y2] of segs) {
-      // Panel-local px → panel-local mm, flip Y, offset to sheet.
-      const sx = ox + x1 * PX_TO_MM;
-      const sy = oy + (ph - y1 * PX_TO_MM);
-      const ex = ox + x2 * PX_TO_MM;
-      const ey = oy + (ph - y2 * PX_TO_MM);
-      lines.push("0", "LINE", "8", "GEOMETRY",
-        "10", sx.toFixed(4), "20", sy.toFixed(4), "30", "0",
-        "11", ex.toFixed(4), "21", ey.toFixed(4), "31", "0");
+
+    if (classifiedSegs.length > 0) {
+      for (const { x1, y1, x2, y2, cls } of classifiedSegs) {
+        const layer = _DXF_CLS_TO_LAYER[cls] ?? "A-EDGE";
+        const sx = ox + x1 * PX_TO_MM;
+        const sy = oy + (ph - y1 * PX_TO_MM);
+        const ex = ox + x2 * PX_TO_MM;
+        const ey = oy + (ph - y2 * PX_TO_MM);
+        lines.push("0", "LINE", "5", h(),
+          "100", "AcDbEntity", "8", layer,
+          "100", "AcDbLine",
+          "10", sx.toFixed(4), "20", sy.toFixed(4), "30", "0",
+          "11", ex.toFixed(4), "21", ey.toFixed(4), "31", "0");
+      }
+    } else {
+      // Fallback: unclassified edges on A-EDGE layer.
+      const segs = viewer ? viewer.getEdgeSegmentsForView(viewName, p.w, p.h) : [];
+      for (const [x1, y1, x2, y2] of segs) {
+        const sx = ox + x1 * PX_TO_MM;
+        const sy = oy + (ph - y1 * PX_TO_MM);
+        const ex = ox + x2 * PX_TO_MM;
+        const ey = oy + (ph - y2 * PX_TO_MM);
+        lines.push("0", "LINE", "5", h(),
+          "100", "AcDbEntity", "8", "A-EDGE",
+          "100", "AcDbLine",
+          "10", sx.toFixed(4), "20", sy.toFixed(4), "30", "0",
+          "11", ex.toFixed(4), "21", ey.toFixed(4), "31", "0");
+      }
     }
-    // AABB fallback if no viewer / no segments: emit nothing (blank panel).
-    void pw;
   }
 
   lines.push("0", "ENDSEC", "0", "EOF");
