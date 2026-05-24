@@ -1,5 +1,5 @@
 // Regression-net: #1805 — SheetTemplate interface + applySheetCut.
-// Tests: SheetTemplate type shape, DEMO_SHEET_SET 8-sheet set, applySheetCut
+// Tests: SheetTemplate type shape, DEMO_SHEET_SET 4-elevation sheet set (#1850), applySheetCut
 // clip-plane configuration per viewType (plan/section/elevation/3d).
 
 import { test, expect, describe } from "bun:test";
@@ -50,44 +50,38 @@ function makeMockViewer() {
 // ── DEMO_SHEET_SET shape ────────────────────────────────────────────────────
 
 describe("DEMO_SHEET_SET", () => {
-  test("has exactly 8 sheets", () => {
-    expect(DEMO_SHEET_SET).toHaveLength(8);
+  test("has exactly 4 sheets (#1850: default elevation set)", () => {
+    expect(DEMO_SHEET_SET).toHaveLength(4);
   });
 
-  test("IDs are S1 through S8 in order", () => {
+  test("IDs are S1 through S4 in order", () => {
     const ids = DEMO_SHEET_SET.map((s) => s.id);
-    expect(ids).toEqual(["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]);
+    expect(ids).toEqual(["S1", "S2", "S3", "S4"]);
   });
 
-  test("S1 and S2 are plan views", () => {
-    expect(DEMO_SHEET_SET[0].viewType).toBe("plan");
-    expect(DEMO_SHEET_SET[1].viewType).toBe("plan");
+  test("all four sheets are elevation views", () => {
+    expect(DEMO_SHEET_SET.every((s) => s.viewType === "elevation")).toBe(true);
   });
 
-  test("S1 references level/0, S2 references level/1", () => {
-    expect(DEMO_SHEET_SET[0].levelId).toBe("level/0");
-    expect(DEMO_SHEET_SET[1].levelId).toBe("level/1");
+  test("cardinal dirs are N/E/S/W in order", () => {
+    expect(DEMO_SHEET_SET.map((s) => s.cardinalDir)).toEqual(["N", "E", "S", "W"]);
   });
 
-  test("S1 and S2 have cutOffset 1.372 (4'6\")", () => {
-    expect(DEMO_SHEET_SET[0].cutOffset).toBeCloseTo(1.372);
-    expect(DEMO_SHEET_SET[1].cutOffset).toBeCloseTo(1.372);
+  test("titles follow 'Elevation: <Dir>' format", () => {
+    expect(DEMO_SHEET_SET[0].title).toBe("Elevation: North");
+    expect(DEMO_SHEET_SET[1].title).toBe("Elevation: East");
+    expect(DEMO_SHEET_SET[2].title).toBe("Elevation: South");
+    expect(DEMO_SHEET_SET[3].title).toBe("Elevation: West");
   });
 
-  test("S3 and S4 are section views", () => {
-    expect(DEMO_SHEET_SET[2].viewType).toBe("section");
-    expect(DEMO_SHEET_SET[3].viewType).toBe("section");
+  test("N and S elevations use camera front", () => {
+    expect(DEMO_SHEET_SET[0].camera).toBe("front"); // N
+    expect(DEMO_SHEET_SET[2].camera).toBe("front"); // S
   });
 
-  test("S5–S8 are elevation views with cardinal dirs N/S/E/W", () => {
-    const elev = DEMO_SHEET_SET.slice(4);
-    expect(elev.every((s) => s.viewType === "elevation")).toBe(true);
-    expect(elev.map((s) => s.cardinalDir)).toEqual(["N", "S", "E", "W"]);
-  });
-
-  test("plan sheets use camera top", () => {
-    expect(DEMO_SHEET_SET[0].camera).toBe("top");
-    expect(DEMO_SHEET_SET[1].camera).toBe("top");
+  test("E and W elevations use camera right", () => {
+    expect(DEMO_SHEET_SET[1].camera).toBe("right"); // E
+    expect(DEMO_SHEET_SET[3].camera).toBe("right"); // W
   });
 
   test("all sheets have non-empty titles", () => {

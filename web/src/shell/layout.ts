@@ -1679,16 +1679,12 @@ export interface SheetTemplate {
   camera: "top" | "front" | "right";
 }
 
-/** Two-story house demo sheet set (S1–S8). Level IDs match DEMO_LEVELS. */
+/** Default elevation sheet set (#1850): N/E/S/W, one per cardinal direction. */
 export const DEMO_SHEET_SET: SheetTemplate[] = [
-  { id: "S1", viewType: "plan",      title: "Plan — Level 1",             levelId: "level/0", cutOffset: 1.372, camera: "top"   },
-  { id: "S2", viewType: "plan",      title: "Plan — Level 2",             levelId: "level/1", cutOffset: 1.372, camera: "top"   },
-  { id: "S3", viewType: "section",   title: "Section A-A (longitudinal)", origin: [0,0,0], normal: [0,-1,0], farClip: 30, camera: "front" },
-  { id: "S4", viewType: "section",   title: "Section B-B (transverse)",   origin: [0,0,0], normal: [-1,0,0], farClip: 20, camera: "right" },
-  { id: "S5", viewType: "elevation", title: "Elevation — North", cardinalDir: "N", farClip: 40, camera: "front" },
-  { id: "S6", viewType: "elevation", title: "Elevation — South", cardinalDir: "S", farClip: 40, camera: "front" },
-  { id: "S7", viewType: "elevation", title: "Elevation — East",  cardinalDir: "E", farClip: 40, camera: "right" },
-  { id: "S8", viewType: "elevation", title: "Elevation — West",  cardinalDir: "W", farClip: 40, camera: "right" },
+  { id: "S1", viewType: "elevation", title: "Elevation: North", cardinalDir: "N", farClip: 40, camera: "front" },
+  { id: "S2", viewType: "elevation", title: "Elevation: East",  cardinalDir: "E", farClip: 40, camera: "right" },
+  { id: "S3", viewType: "elevation", title: "Elevation: South", cardinalDir: "S", farClip: 40, camera: "front" },
+  { id: "S4", viewType: "elevation", title: "Elevation: West",  cardinalDir: "W", farClip: 40, camera: "right" },
 ];
 
 /** Level stub used in applySheetCut when levelStore is not provided. */
