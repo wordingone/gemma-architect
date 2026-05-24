@@ -11,9 +11,8 @@ import { compileDsl } from "../commands/dsl-eval";
 import { saveSkill, listSavedSkills, listCanvasClusters, type SkillStep, type SavedSkill, type CanvasCluster } from "./skill-store";
 import { openSaveSkillModal, openSaveClusterModal } from "./skill-modal";
 import { subscribe as subscribeAppState, getState } from "../app-state";
-import { seedStarterClusters, STARTER_IDS } from "./starter-clusters";
+import { purgeStarterClusters, STARTER_IDS } from "./starter-clusters";
 import { captureViewport } from "../agent/viewport-capture";
-import { STARTER_LIBRARY, STARTER_LIB_CATEGORIES, type StarterNodeDef } from "./starter-library";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -505,14 +504,8 @@ export class SkillCanvas {
       } catch { /* ignore */ }
     });
 
-    // Right-click: starter library submenu (#1113/SU-6)
-    viewport.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      const rect = viewport.getBoundingClientRect();
-      const cx = (e.clientX - rect.left - this._tx) / this._tz - 80;
-      const cy = (e.clientY - rect.top  - this._ty) / this._tz - 20;
-      this._showStarterMenu(cx, cy, e.clientX, e.clientY);
-    });
+    // Suppress default browser context menu on canvas (no starter menu per #1739).
+    viewport.addEventListener("contextmenu", (e) => { e.preventDefault(); });
 
     // Pan: middle-mouse drag
     viewport.addEventListener("mousedown", (e) => {
@@ -582,7 +575,7 @@ export class SkillCanvas {
   // ── Palette ────────────────────────────────────────────────────────────────
 
   private async _buildPalette(): Promise<void> {
-    await seedStarterClusters();
+    await purgeStarterClusters();
     const [saved, clusters] = await Promise.all([
       listSavedSkills().catch(() => [] as SavedSkill[]),
       listCanvasClusters().catch(() => [] as CanvasCluster[]),
@@ -626,52 +619,7 @@ export class SkillCanvas {
     scriptItem.addEventListener("dblclick", () => this._addScriptAtCenter());
     this._paletteEl.appendChild(scriptItem);
 
-    // ── Starter Library section ───────────────────────────────────────────────
-    if (starterClusters.length > 0) {
-      const starterTitle = document.createElement("div");
-      starterTitle.className = "skill-canvas-palette-title";
-      starterTitle.style.marginTop = "10px";
-      starterTitle.textContent = "Starter Library";
-      this._paletteEl.appendChild(starterTitle);
-      for (const cluster of starterClusters) {
-        this._paletteEl.appendChild(this._makeClusterItem(cluster));
-      }
-    }
-
-    // ── Starter node library section (#1113/SU-6) ────────────────────────────
-    {
-      const libTitle = document.createElement("div");
-      libTitle.className = "skill-canvas-palette-title";
-      libTitle.style.marginTop = "10px";
-      libTitle.textContent = "Nodes";
-      this._paletteEl.appendChild(libTitle);
-      for (const def of STARTER_LIBRARY) {
-        const item = document.createElement("div");
-        item.className = "skill-canvas-palette-item sc-palette-lib-node";
-        item.textContent = def.label;
-        item.title = def.description;
-        item.draggable = true;
-        item.dataset.libId = def.id;
-        item.addEventListener("dragstart", (e) => {
-          e.dataTransfer!.setData("text/plain", JSON.stringify({
-            kind: "skill",
-            skillName: def.label,
-            skillSteps: [{ verb: def.verb, args: def.args }],
-            _libInPorts: def.inPorts,
-            _libOutPorts: def.outPorts,
-          }));
-          e.dataTransfer!.effectAllowed = "copy";
-        });
-        item.addEventListener("dblclick", () => {
-          const rect = this._viewport.getBoundingClientRect();
-          this._addLibraryNode(def,
-            (rect.width  / 2 - this._tx) / this._tz - 80,
-            (rect.height / 2 - this._ty) / this._tz - 20
-          );
-        });
-        this._paletteEl.appendChild(item);
-      }
-    }
+    // §#1739: starter library + default nodes removed from palette.
 
     // Saved skills
     if (saved.length > 0) {
@@ -786,81 +734,6 @@ export class SkillCanvas {
       (rect.width  / 2 - this._tx) / this._tz - 80,
       (rect.height / 2 - this._ty) / this._tz - 20
     );
-  }
-
-  // ── Starter library node instantiation (#1113/SU-6) ──────────────────────
-
-  private _addLibraryNode(def: StarterNodeDef, x: number, y: number): void {
-    this._graph.nodes.push({
-      id: crypto.randomUUID(),
-      kind: "skill",
-      skillName: def.label,
-      skillSteps: [{ verb: def.verb, args: def.args }],
-      x: Math.max(0, x),
-      y: Math.max(0, y),
-      inPorts: def.inPorts,
-      outPorts: def.outPorts,
-    });
-    saveGraph(this._graph);
-    this._renderGraph();
-  }
-
-  private _showStarterMenu(canvasX: number, canvasY: number, screenX: number, screenY: number): void {
-    const existing = document.getElementById("sc-starter-menu");
-    if (existing) existing.remove();
-
-    const menu = document.createElement("div");
-    menu.id = "sc-starter-menu";
-    menu.className = "sc-context-menu";
-    menu.style.cssText = `position:fixed; left:${screenX}px; top:${screenY}px; z-index:9000; background:var(--paper,#1a1a1a); border:1px solid var(--hairline,#333); border-radius:5px; padding:4px 0; min-width:160px; box-shadow:0 4px 16px rgba(0,0,0,0.3); font-family:var(--mono); font-size:10px;`;
-
-    const title = document.createElement("div");
-    title.style.cssText = "padding:4px 10px 4px; color:var(--ink-faint,#666); font-size:9px; letter-spacing:0.08em; text-transform:uppercase; border-bottom:1px solid var(--hairline,#333); margin-bottom:2px;";
-    title.textContent = "Add Starter Node";
-    menu.appendChild(title);
-
-    for (const cat of STARTER_LIB_CATEGORIES) {
-      const items = STARTER_LIBRARY.filter(d => d.category === cat);
-      if (items.length === 0) continue;
-
-      const catLabel = document.createElement("div");
-      catLabel.style.cssText = "padding:4px 10px 2px; color:var(--ink-faint,#666); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; margin-top:2px;";
-      catLabel.textContent = cat;
-      menu.appendChild(catLabel);
-
-      for (const def of items) {
-        const item = document.createElement("div");
-        item.className = "sc-context-item";
-        item.style.cssText = "padding:4px 10px 4px 18px; cursor:pointer; color:var(--ink,#e8e8e8); white-space:nowrap;";
-        item.title = def.description;
-        item.textContent = def.label;
-        item.dataset.defId = def.id;
-        item.addEventListener("mouseenter", () => { item.style.background = "var(--paper-3,#2a2a2a)"; });
-        item.addEventListener("mouseleave", () => { item.style.background = ""; });
-        item.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          this._addLibraryNode(def, canvasX, canvasY);
-          menu.remove();
-        });
-        menu.appendChild(item);
-      }
-    }
-
-    const close = (e: MouseEvent) => {
-      if (!menu.contains(e.target as Node)) { menu.remove(); document.removeEventListener("mousedown", close); }
-    };
-    document.addEventListener("mousedown", close);
-    document.body.appendChild(menu);
-
-    // Clamp to viewport
-    requestAnimationFrame(() => {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const r = menu.getBoundingClientRect();
-      if (r.right > vw)  menu.style.left = `${Math.max(0, vw - r.width - 4)}px`;
-      if (r.bottom > vh) menu.style.top  = `${Math.max(0, vh - r.height - 4)}px`;
-    });
   }
 
   private _removeNode(id: string): void {

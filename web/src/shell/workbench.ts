@@ -40,7 +40,6 @@ import { prefetchModel, MODEL_ID, setClusterCatalog, setCanvasSkillCatalog } fro
 import { checkConsentAndLoad } from "../agent/model-consent";
 import { initBootScreen, getCapabilityGatePromise, isCadOnlyMode } from "../agent/boot-screen";
 import { listSavedSkills, deleteSkill, listClusters, saveCluster, deleteCluster, listCanvasClusters, type SavedSkill, type SkillStep, type SkillCluster, type SkillClusterStep } from "../skills/skill-store";
-import { STARTER_LIBRARY } from "../skills/starter-library";
 import type { Skill } from "../agent/skills-loader";
 import { openSaveSkillModal } from "../skills/skill-modal";
 import { SkillCanvas } from "../skills/skill-canvas";
@@ -2269,18 +2268,13 @@ async function refreshClusterCatalog(): Promise<void> {
 }
 
 async function refreshCanvasSkillCatalog(): Promise<void> {
-  const starterSkills = STARTER_LIBRARY.map(d => ({
-    name: d.label,
-    verb: d.verb,
-    desc: d.description,
-  }));
   const canvasClusters = await listCanvasClusters().catch(() => []);
   const clusterSkills = canvasClusters.map(c => ({
     name: c.name,
     verb: "SdInvokeSkill",
     desc: c.description ?? `${c.nodeCount} node canvas cluster`,
   }));
-  setCanvasSkillCatalog([...starterSkills, ...clusterSkills]);
+  setCanvasSkillCatalog(clusterSkills);
 }
 
 async function renderSkillNodes(): Promise<void> {

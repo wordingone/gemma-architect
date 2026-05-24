@@ -1,12 +1,11 @@
-// starter-clusters.ts — #428: Grasshopper-style built-in starter library.
-// Six CanvasClusters seeded to IndexedDB on first SKILL NODES tab open.
-// Uses a localStorage sentinel so seeding only runs once per browser profile.
+// starter-clusters.ts — #428: starter library (UI purged per #1739).
+// STARTERS / STARTER_IDS kept for the one-time IDB migration; no longer seeded.
 
 import type { CanvasCluster } from "./skill-store";
-import { putCanvasCluster } from "./skill-store";
+import { deleteCanvasCluster } from "./skill-store";
 import type { CanvasNode } from "./skill-canvas";
 
-const SEED_KEY = "gemma-starter-seeded-v1";
+const PURGE_KEY = "gemma-starter-purged-v1";
 
 function makeCluster(
   id: string,
@@ -107,8 +106,10 @@ const STARTERS: CanvasCluster[] = [
 
 export const STARTER_IDS = new Set(STARTERS.map(c => c.id));
 
-export async function seedStarterClusters(): Promise<void> {
-  if (typeof localStorage !== "undefined" && localStorage.getItem(SEED_KEY)) return;
-  await Promise.all(STARTERS.map(c => putCanvasCluster(c)));
-  if (typeof localStorage !== "undefined") localStorage.setItem(SEED_KEY, "1");
+// §#1739: one-time migration — remove any previously-seeded starter clusters from IDB.
+// Runs once per browser profile; preserves all non-starter (user-created) clusters.
+export async function purgeStarterClusters(): Promise<void> {
+  if (typeof localStorage !== "undefined" && localStorage.getItem(PURGE_KEY)) return;
+  await Promise.all(STARTERS.map(c => deleteCanvasCluster(c.id).catch(() => undefined)));
+  if (typeof localStorage !== "undefined") localStorage.setItem(PURGE_KEY, "1");
 }
