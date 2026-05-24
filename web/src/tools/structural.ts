@@ -1405,7 +1405,8 @@ export function buildGridLine(a: { x: number; y: number }, b: { x: number; y: nu
   line.userData.kind = "grid-line";
   line.userData.creator = "IfcGridLine";
   line.userData.label = label;
-  line.userData.controlPoints = [[a.x, a.y, 0], [b.x, b.y, 0]];
+  line.userData.controlPoints = [new THREE.Vector3(a.x, a.y, 0), new THREE.Vector3(b.x, b.y, 0)];
+  line.userData._snapCreationPos = { x: cx, y: cy, z: 0.001 };
   const chain = `IfcGridLine({origin:[${round(a.x)},${round(a.y)}],end:[${round(b.x)},${round(b.y)}]})`;
   return { mesh: line, chain };
 }
@@ -1479,7 +1480,8 @@ export function buildReferenceLine(a: { x: number; y: number }, b: { x: number; 
   line.userData.kind = "reference-line";
   line.userData.creator = "IfcReferenceLine";
   line.userData.refLineId = entry.id;
-  line.userData.controlPoints = [[a.x, a.y, 0], [b.x, b.y, 0]];
+  line.userData.controlPoints = [new THREE.Vector3(a.x, a.y, 0), new THREE.Vector3(b.x, b.y, 0)];
+  line.userData._snapCreationPos = { x: cx, y: cy, z: 0.002 };
   const chain = `IfcReferenceLine({origin:[${round(a.x)},${round(a.y)}],end:[${round(b.x)},${round(b.y)}]})`;
   return { mesh: line, chain };
 }
