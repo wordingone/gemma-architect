@@ -21,6 +21,8 @@
 
 import { iconSVG } from "../ui/icons";
 import { buildLayoutMode, addPanel, getController, type SceneBounds } from "./layout";
+import { buildLayoutPalette } from "./workbench";
+import { buildLayoutLayersPanel } from "./layers-panel";
 import {
   buildResearchIndex,
   queryResearch,
@@ -49,8 +51,19 @@ function buildPaperMode(boundsProvider?: () => SceneBounds | null): HTMLElement 
       ? () => { const b = boundsProvider(); return b ?? ({ min: [-1, -1, -1], max: [1, 1, 1] } as SceneBounds); }
       : undefined,
   });
-  // Suppress the "unused" warning on addPanel without removing it from the
-  // public surface — modes.ts re-exports it for any consumer that wants it.
+
+  // Inject leftside palette (grid-area: palette) into the paper-mode grid.
+  const paletteEl = document.createElement("div");
+  paletteEl.className = "paper-palette";
+  buildLayoutPalette(paletteEl);
+  el.appendChild(paletteEl);
+
+  // Inject rightside layers panel (grid-area: layers) into the paper-mode grid.
+  const layersEl = document.createElement("div");
+  layersEl.className = "paper-layers";
+  buildLayoutLayersPanel(layersEl);
+  el.appendChild(layersEl);
+
   void addPanel;
   return el;
 }

@@ -863,7 +863,7 @@ function buildPalette(host: HTMLElement) {
 
 }
 
-function buildLayoutPalette(host: HTMLElement) {
+export function buildLayoutPalette(host: HTMLElement) {
   host.innerHTML = "";
   const tip = getPaletteTip();
   host.addEventListener("mouseover", (e) => {

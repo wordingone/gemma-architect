@@ -16,6 +16,7 @@ import { formatLength, formatArea, formatVolume, unitLabel } from "./units";
 import { opAddLabel, opBuildAnnotLine, getOpPhase, getLastOpFinishMs } from "./viewer/op-tool";
 import { ptIsCoordInputActive } from "./viewer/transforms";
 import { buildWorkbench, rebuildPaletteForMode } from "./shell/workbench";
+import { loadDrawingLayers } from "./geometry/drawing-layers";
 import { buildModes, activateMode, getLayoutHost } from "./shell/modes";
 import { exportLayoutAsSvg, exportLayoutAsPdf, exportLayoutAsDwgFallback, exportLayoutAsDxf, addPanel, getPanels } from "./shell/layout";
 import { initCmdK } from "./ui/cmdk";
@@ -3815,6 +3816,7 @@ initShellChrome({
 });
 buildWorkbench();
 if (workbenchEl) buildModes(workbenchEl);
+loadDrawingLayers(); // restore persisted 2D layers from IDB
 initCmdK();
 initExportDrawer();
 // Ctrl+E shortcut → open export drawer.
