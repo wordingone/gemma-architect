@@ -37,11 +37,11 @@ describe("plan sheet initial sync", () => {
     expect(getLinkedLevelIdForSheet(host, planSheet.id)).toBe("level/0");
   });
 
-  test("4 non-plan preset sheets are created alongside the plan sheet", () => {
+  test("4 preset sheets (non-plan, non-rcp) are created alongside the plan sheet", () => {
     const host = document.createElement("div");
     const c = buildLayoutMode(host, { spawnDefault: false });
-    const nonPlan = c.sheets.filter(s => !s.name.startsWith("Plan:"));
-    expect(nonPlan.length).toBe(4); // perspective, axonometric, section, elevation
+    const presets = c.sheets.filter(s => !s.name.startsWith("Plan:") && !s.name.startsWith("RCP:"));
+    expect(presets.length).toBe(4); // perspective, axonometric, section, elevation
   });
 });
 

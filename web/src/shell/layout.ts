@@ -332,6 +332,10 @@ class LayoutController {
   private _planSheetByLevelId = new Map<string, string>();
   // sheetIds where user manually renamed — opts out of auto-rename on level rename (#1846).
   private _planSheetUserRenamed = new Set<string>();
+  // levelId → sheetId for auto-named RCP sheets (#1844).
+  private _rcpSheetByLevelId = new Map<string, string>();
+  // sheetIds where user manually renamed the RCP tab (#1844).
+  private _rcpSheetUserRenamed = new Set<string>();
   // Fit-to-stage scale factor (zoom). All mouse coords divided by this.
   private zoomFactor = 1;
   // Previous sheet pixel dimensions — used in applySheetDims to rescale panels proportionally.
@@ -453,10 +457,14 @@ class LayoutController {
       this.renderTitleBlock();
     }
 
-    // Subscribe to levelStore so plan sheets track level changes (#1846).
-    if (this._levelUnsub) this._levelUnsub(); // clean up any prior subscription
-    this._levelUnsub = levelStore.subscribe(() => this.syncPlanSheets());
-    this.syncPlanSheets(); // initial sync — creates "Plan: Level 1" etc.
+    // Subscribe to levelStore so plan + RCP sheets track level changes (#1846/#1844).
+    if (this._levelUnsub) this._levelUnsub();
+    this._levelUnsub = levelStore.subscribe(() => {
+      this.syncPlanSheets();
+      this.syncRcpSheets();
+    });
+    this.syncPlanSheets();
+    this.syncRcpSheets();
   }
 
   private buildToolbar(): void {
@@ -715,6 +723,61 @@ class LayoutController {
   /** Mark a plan sheet as user-renamed — opt out of auto-rename on level rename (#1846). */
   markUserRenamed(sheetId: string): void {
     this._planSheetUserRenamed.add(sheetId);
+  }
+
+  /** Sync RCP sheets with levelStore — mirrors syncPlanSheets() with "RCP:" prefix (#1844). */
+  private syncRcpSheets(): void {
+    const levels = levelStore.all();
+    const currentLevelIds = new Set(levels.map(l => l.id));
+
+    for (const [levelId, sheetId] of [...this._rcpSheetByLevelId.entries()]) {
+      if (!currentLevelIds.has(levelId)) {
+        const idx = this.sheets.findIndex(s => s.id === sheetId);
+        if (idx !== -1) {
+          if (this.activeSheetIdx > idx) this.activeSheetIdx--;
+          else if (this.activeSheetIdx === idx) this.activeSheetIdx = Math.max(0, idx - 1);
+          this.sheets.splice(idx, 1);
+        }
+        this._rcpSheetByLevelId.delete(levelId);
+        this._rcpSheetUserRenamed.delete(sheetId);
+      }
+    }
+
+    for (const level of levels) {
+      const expectedName = `RCP: ${level.name}`;
+      const existingSheetId = this._rcpSheetByLevelId.get(level.id);
+      if (!existingSheetId) {
+        const id = newSheetId();
+        this._rcpSheetByLevelId.set(level.id, id);
+        const defaultSheet = this.sheets[0];
+        this.sheets.push({
+          id,
+          name: expectedName,
+          size: defaultSheet?.size ?? "Tabloid",
+          orientation: defaultSheet?.orientation ?? "landscape",
+          customMm: defaultSheet ? { ...defaultSheet.customMm } : { ...DEFAULT_CUSTOM },
+          panels: [],
+        });
+      } else if (!this._rcpSheetUserRenamed.has(existingSheetId)) {
+        const sheet = this.sheets.find(s => s.id === existingSheetId);
+        if (sheet && sheet.name !== expectedName) sheet.name = expectedName;
+      }
+    }
+
+    this.renderTabs();
+  }
+
+  /** Return the levelId linked to an RCP sheet, or undefined if not an RCP sheet (#1844). */
+  getRcpLinkedLevelId(sheetId: string): string | undefined {
+    for (const [levelId, sid] of this._rcpSheetByLevelId) {
+      if (sid === sheetId) return levelId;
+    }
+    return undefined;
+  }
+
+  /** Mark an RCP sheet as user-renamed — opt out of auto-rename on level rename (#1844). */
+  markRcpUserRenamed(sheetId: string): void {
+    this._rcpSheetUserRenamed.add(sheetId);
   }
 
   /** Auto-create a named sheet linked to a clipping-plane entity (#1849). Returns new sheet id. */
@@ -1508,6 +1571,24 @@ export function markPlanSheetUserRenamed(host: HTMLElement, sheetId: string): vo
 }
 
 /**
+ * Return the levelId linked to an RCP sheet (#1844), or undefined if not an RCP sheet.
+ * @param host    The paper-mode host element.
+ * @param sheetId The sheet's id.
+ */
+export function getRcpLinkedLevelIdForSheet(host: HTMLElement, sheetId: string): string | undefined {
+  return _controllers.get(host)?.getRcpLinkedLevelId(sheetId);
+}
+
+/**
+ * Mark an RCP sheet as user-renamed — disables auto-rename on future level renames (#1844).
+ * @param host    The paper-mode host element.
+ * @param sheetId The sheet's id.
+ */
+export function markRcpSheetUserRenamed(host: HTMLElement, sheetId: string): void {
+  _controllers.get(host)?.markRcpUserRenamed(sheetId);
+}
+
+/**
  * Auto-create a linked section sheet in the Layout tab for a new clipping plane (#1849).
  * Called by the SdClippingPlane handler when autoSheet is true.
  * @param host      The paper-mode host element (from getLayoutHost()).
@@ -1838,7 +1919,7 @@ function escapeXml(s: string): string {
 // getFacePolygonsForView(), it sees only the geometry that belongs to this
 // sheet's view.
 
-export type SheetViewType = "plan" | "section" | "elevation" | "3d";
+export type SheetViewType = "plan" | "rcp" | "section" | "elevation" | "3d";
 export type CardinalDir = "N" | "S" | "E" | "W";
 
 export interface SheetTemplate {
@@ -1847,11 +1928,13 @@ export interface SheetTemplate {
   viewType: SheetViewType;
   title: string;
 
-  // Plan config
-  /** Level.id from the level store (required for viewType = "plan"). */
+  // Plan / RCP config (shared — both keyed by levelId)
+  /** Level.id from the level store (required for viewType = "plan" or "rcp"). */
   levelId?: string;
   /** Meters above level.elevation for the plan cut plane (default 1.372 m = 4'6"). */
   cutOffset?: number;
+  /** Meters above level.elevation for the RCP cut plane (default 2.44 m = 8'). */
+  rcpCutOffset?: number;
 
   // Section / Elevation config
   origin?: [number, number, number];
@@ -1878,7 +1961,7 @@ export const DEMO_SHEET_SET: SheetTemplate[] = [
 ];
 
 /** Level stub used in applySheetCut when levelStore is not provided. */
-export interface SheetLevelRef { elevation: number; }
+export interface SheetLevelRef { elevation: number; height?: number; }
 
 /**
  * Apply viewer clip planes for the given SheetTemplate.
@@ -1905,6 +1988,17 @@ export function applySheetCut(
     viewer.setSectionBox(
       [-BIG, -BIG, lvl.elevation],
       [ BIG,  BIG, lvl.elevation + cut],
+    );
+  } else if (t.viewType === "rcp") {
+    // Reflected ceiling plan (#1844): section box from rcpCutOffset up to level ceiling.
+    // Shows ceiling-mounted elements (light fixtures, joists, ducts) when viewed from top.
+    // Cut at 8' (2.44 m) from floor by default; upper bound is level.height (floor-to-ceiling).
+    const lvl = levels?.[t.levelId ?? ""] ?? { elevation: 0, height: 3.0 };
+    const rcpCut = t.rcpCutOffset ?? 2.44;
+    const levelHeight = lvl.height ?? 3.0;
+    viewer.setSectionBox(
+      [-BIG, -BIG, lvl.elevation + rcpCut],
+      [ BIG,  BIG, lvl.elevation + levelHeight],
     );
   } else if (t.viewType === "section") {
     // §5.3: when linked to a clip-plane entity, read live origin/normal/farClip from store.
