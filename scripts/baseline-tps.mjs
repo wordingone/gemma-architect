@@ -249,7 +249,7 @@ for (let pi = 0; pi < PROMPTS.length; pi++) {
     const beforeCount = baselineTelCount;
 
     // Wait for send button to be enabled (guards against disabled-during-boot or prior-turn-still-running)
-    const SEND_READY_TIMEOUT = 30000;
+    const SEND_READY_TIMEOUT = 600000; // 10 min — long prompts (two-story-house) can take >5 min
     const sendReadyStart = Date.now();
     while (Date.now() - sendReadyStart < SEND_READY_TIMEOUT) {
       const btnState = await cdp.send("Runtime.evaluate", {
@@ -283,7 +283,7 @@ for (let pi = 0; pi < PROMPTS.length; pi++) {
     console.log(`  [turn ${turn}] inject: ${injectResult}`);
 
     // Poll for telemetry increment (turn completed)
-    const TURN_TIMEOUT_MS = 120000; // 2 min per turn
+    const TURN_TIMEOUT_MS = 600000; // 10 min per turn — complex prompts (two-story-house) take >5 min on E4B
     const startMs = Date.now();
     let tgTps = null;
     let telEntry = null;
