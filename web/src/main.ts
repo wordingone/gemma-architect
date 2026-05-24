@@ -1264,6 +1264,34 @@ registerHandler("SdRoof", (args) => {
     d = (Math.max(...ys) - Math.min(...ys)) || 10;
     centerX = (Math.max(...xs) + Math.min(...xs)) / 2;
     centerY = (Math.max(...ys) + Math.min(...ys)) / 2;
+  } else {
+    // Footprint absent — infer bounding box from scene walls at the active level (#1756).
+    // Agent-emitted SdRoof often omits footprint; defaults (w=8,d=10,centerX=0) then
+    // exclude actual walls from eave-height inference and gable-candidate filter.
+    const inferElev = getActiveLevelElevation();
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let hasWalls = false;
+    viewer.getScene().traverse((child) => {
+      if (child.userData?.creator !== "wall") return;
+      const _wp = new THREE.Vector3();
+      child.getWorldPosition(_wp);
+      if (Math.abs(_wp.z - inferElev) > 0.5) return;
+      const _eps = child.userData.endpoints as Array<{ x: number; y: number }> | undefined;
+      if (!_eps || _eps.length < 2) return;
+      for (const _ep of _eps) {
+        if (_ep.x < minX) minX = _ep.x;
+        if (_ep.x > maxX) maxX = _ep.x;
+        if (_ep.y < minY) minY = _ep.y;
+        if (_ep.y > maxY) maxY = _ep.y;
+      }
+      hasWalls = true;
+    });
+    if (hasWalls && minX !== Infinity) {
+      w = (maxX - minX) || 8;
+      d = (maxY - minY) || 10;
+      centerX = (maxX + minX) / 2;
+      centerY = (maxY + minY) / 2;
+    }
   }
   const a = { x: -w / 2, y: -d / 2 };
   const b = { x: w / 2, y: d / 2 };
