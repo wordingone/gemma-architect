@@ -1,0 +1,64 @@
+{
+  "_source": "buildWall() parametric — FZK-Haus 12×10m exterior wall envelope, DEFAULT_WALL_HEIGHT=3m, DEFAULT_WALL_THICKNESS=0.2m",
+  "_note": "Footprint matches roof fixture (p0={x:-6,y:-5}, p1={x:6,y:5}). Walls placed at outer faces; midpoints define mesh.position. IFC reference: IfcWallStandardCase exterior walls 10m/12m at 2.7m height (different from buildWall defaults — parametric fixture pins the builder, not the IFC).",
+  "params": {
+    "height": 3,
+    "thickness": 0.2,
+    "walls": [
+      { "id": "south", "a": { "x": -6, "y": -5 }, "b": { "x": 6, "y": -5 } },
+      { "id": "east",  "a": { "x":  6, "y": -5 }, "b": { "x": 6, "y":  5 } },
+      { "id": "north", "a": { "x":  6, "y":  5 }, "b": { "x": -6, "y": 5 } },
+      { "id": "west",  "a": { "x": -6, "y":  5 }, "b": { "x": -6, "y": -5 } }
+    ]
+  },
+  "invariants": {
+    "south": {
+      "geom_x": 12.0,
+      "geom_y": 0.2,
+      "geom_z": 3.0,
+      "position_x": 0.0,
+      "position_y": -5.0,
+      "position_z": 0.0,
+      "rotation_z_deg": 0.0,
+      "userData_creator": "wall",
+      "userData_wallThickness": 0.2,
+      "userData_wallHeight": 3.0
+    },
+    "east": {
+      "geom_x": 10.0,
+      "geom_y": 0.2,
+      "geom_z": 3.0,
+      "position_x": 6.0,
+      "position_y": 0.0,
+      "position_z": 0.0,
+      "rotation_z_deg": 90.0,
+      "userData_creator": "wall",
+      "userData_wallThickness": 0.2,
+      "userData_wallHeight": 3.0
+    },
+    "north": {
+      "geom_x": 12.0,
+      "geom_y": 0.2,
+      "geom_z": 3.0,
+      "position_x": 0.0,
+      "position_y": 5.0,
+      "position_z": 0.0,
+      "rotation_z_deg": 180.0,
+      "userData_creator": "wall",
+      "userData_wallThickness": 0.2,
+      "userData_wallHeight": 3.0
+    },
+    "west": {
+      "geom_x": 10.0,
+      "geom_y": 0.2,
+      "geom_z": 3.0,
+      "position_x": -6.0,
+      "position_y": 0.0,
+      "position_z": 0.0,
+      "rotation_z_deg": -90.0,
+      "userData_creator": "wall",
+      "userData_wallThickness": 0.2,
+      "userData_wallHeight": 3.0
+    }
+  }
+}
