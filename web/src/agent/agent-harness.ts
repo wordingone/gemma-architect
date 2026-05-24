@@ -694,7 +694,7 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 11. SdWindow — east, position=[26,10,0], windowType=eg
 12. SdWindow — north, position=[13,20,0], windowType=eg
 13. SdWindow — west, position=[0,10,0], windowType=eg
-14. SdStair — NE corner, start=[23,16], end=[23,8], type=straight, targetHeight=9.0
+14. SdStair — NE corner, start=[23,16], end=[23,8], type=straight
 15. setActiveLevel — id=level/1
 16. SdSlab — upper, profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
 17. SdWall — south upper, profile=[[0,0],[26,0]], thickness=0.67, height=9.0
@@ -720,7 +720,7 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWindow","arguments":{"position":[13,20,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWindow","arguments":{"position":[0,10,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
-<tool_call>{"name":"SdStair","arguments":{"start":[23,16],"end":[23,8],"type":"straight","targetHeight":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdStair","arguments":{"start":[23,16],"end":[23,8],"type":"straight"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"setActiveLevel","arguments":{"id":"level/1"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdSlab","arguments":{"profile":[[0,0],[26,0],[26,20],[0,20]],"thickness":0.67},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[26,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
@@ -793,7 +793,7 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows
 <tool_call>{"command":"SdWindow","parameters":{"position":[0,10,0],"windowType":"og"}}</tool_call>
 <tool_call>{"command":"SdRoof","parameters":{"roofType":"pitched","footprint":[[0,0],[26,0],[26,20],[0,20]],"pitchDeg":30}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
-<tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight","riser":0.583,"tread":0.917,"width":3.0,"targetHeight":9.0}}</tool_call>
+<tool_call>{"command":"SdStair","parameters":{"start":[23,16],"end":[23,8],"type":"straight"}}</tool_call>
 
 User: add a garden wall along the north boundary, 12m long and 1m tall
 Assistant: 12m → 12.0 (metric literal; no ft→m conversion). Single linear SdWall.
