@@ -198,15 +198,20 @@ export function buildRamp(a: { x: number; y: number }, b: { x: number; y: number
   const angDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
   const w = DEFAULT_RAMP_WIDTH;
   const totalH = run / 12;
+  const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
   const geom = new THREE.BoxGeometry(run, w, 0.15);
-  geom.translate(run / 2, 0, totalH / 2);
+  geom.translate(0, 0, totalH / 2); // centre at local origin (no X offset) — position at centroid (#1718)
   const mat = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.65, metalness: 0.05 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(a.x, a.y, 0);
+  mesh.position.set(cx, cy, 0);
   mesh.rotation.z = (angDeg * Math.PI) / 180;
-  mesh.userData.kind = "brep";
+  mesh.userData.kind = "ramp";
   mesh.userData.creator = "ramp";
-  const chain = `const ramp = makeBox(${round(run)}, ${round(w)}, 0.15).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round(a.x)}, ${round(a.y)}, 0]);`;
+  mesh.userData.endpoints = [
+    { id: `${round(a.x)},${round(a.y)},0`, x: a.x, y: a.y, z: 0 },
+    { id: `${round(b.x)},${round(b.y)},0`, x: b.x, y: b.y, z: 0 },
+  ];
+  const chain = `const ramp = makeBox(${round(run)}, ${round(w)}, 0.15).rotate(${round(angDeg)}, [0,0,0], [0,0,1]).translate([${round(cx)}, ${round(cy)}, 0]);`;
   return { mesh, chain };
 }
 

@@ -170,7 +170,7 @@ All 41 palette entries, drawn from `web/src/shell/workbench.ts:110-167` (`PALETT
 
 | Button | Gap |
 |---|---|
-| `ramp` | P1 violated: `mesh.position.set(a.x, a.y, 0)` — start point, not centroid; P5 missing; sketch.ts:205 |
+| `ramp` | ~~P1 violated: `mesh.position.set(a.x, a.y, 0)` — start point, not centroid; P5 missing; sketch.ts:205~~ — fixed #1718; now PARTIAL (P1+P5 OK, P2 kind="ramp" OK, P7 rubber-band OK; no remaining known gaps) |
 | `fillet` | Phase machine present (fillet_select→fillet_edge); edge highlight missing; user-reported non-functional; browser verification required before promoting |
 
 **SPECIALIST** — works correctly but does not fit the standard create-tool shape by design.
@@ -400,7 +400,7 @@ on commit:
 | `column` | Missing `userData.endpoints` | Add endpoint at column base center |
 | `beam` | Missing `userData.endpoints` | Add endpoints at a/b world positions |
 | `polygon` | `userData.kind = "brep"` (should be "polygon") | C5 fix |
-| `ramp` | `mesh.position.set(a.x, a.y, 0)` — start point, not centroid (C6 violation) | Centroid fix |
+| `ramp` | ~~`mesh.position.set(a.x, a.y, 0)` — start point, not centroid (C6 violation)~~ | Fixed #1718 |
 | `fillet` | User-reported non-functional; now classified STUB | Browser verification + fix before promoting to PARTIAL |
 | `datum` | `userData.controlPoints` as raw `[x,y,z][]`, not `THREE.Vector3[]` | Normalize to match snap-state consumer expectations |
 
