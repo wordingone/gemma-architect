@@ -29,13 +29,14 @@ if (/localhost|127\.0\.0\.1/.test(PAGES_URL)) {
 }
 
 const turnsIdx = process.argv.indexOf("--turns");
-const TURNS_PER_PROMPT = turnsIdx !== -1 ? parseInt(process.argv[turnsIdx + 1]) : 10;
+const TURNS_PER_PROMPT = turnsIdx !== -1 ? parseInt(process.argv[turnsIdx + 1]) : 5;
 
 // ── Canonical imperial prompts (from STARTER_PROMPTS in chat-panel.ts) ───────
 
+// two-story-house excluded: multi-dispatch turn takes 15-20 min on E4B (>2000 tokens + tool calls).
+// tg_tps is a hardware/model characteristic, not prompt-dependent. The 5 shorter prompts
+// produce the same TPS baseline signal in a fraction of the time.
 const PROMPTS = [
-  { label: "two-story-house", complexity: "long",
-    text: "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs." },
   { label: "scene-query", complexity: "short",
     text: "What's currently in the scene?" },
   { label: "wall-height", complexity: "short",
@@ -310,7 +311,7 @@ for (let pi = 0; pi < PROMPTS.length; pi++) {
     }
 
     if (tgTps === null) {
-      console.warn(`  [turn ${turn}] TIMEOUT — no telemetry after 2 min`);
+      console.warn(`  [turn ${turn}] TIMEOUT — no telemetry after ${TURN_TIMEOUT_MS/60000} min`);
       samples.push({ prompt_idx: pi, prompt: prompt.label, complexity: prompt.complexity, turn, tg_tps: null, pp_tps: null, tokens_out: null, decode_ms: null, error: "timeout" });
     } else {
       const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
