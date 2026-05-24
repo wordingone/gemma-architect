@@ -1642,6 +1642,233 @@ function escapeXml(s: string): string {
   });
 }
 
+// --- Sheet template — #1805 -----------------------------------------------
+//
+// A SheetTemplate describes one drawing in a multi-sheet set: the view type,
+// the cut configuration (plan level, section plane, or cardinal elevation),
+// and the camera axis. applySheetCut() wires the viewer's clip-plane API
+// so that when the PDF engine queries getClassifiedEdgeSegmentsForView() or
+// getFacePolygonsForView(), it sees only the geometry that belongs to this
+// sheet's view.
+
+export type SheetViewType = "plan" | "section" | "elevation" | "3d";
+export type CardinalDir = "N" | "S" | "E" | "W";
+
+export interface SheetTemplate {
+  /** Sheet identifier, e.g. "S1" … "S8". */
+  id: string;
+  viewType: SheetViewType;
+  title: string;
+
+  // Plan config
+  /** Level.id from the level store (required for viewType = "plan"). */
+  levelId?: string;
+  /** Meters above level.elevation for the plan cut plane (default 1.372 m = 4'6"). */
+  cutOffset?: number;
+
+  // Section / Elevation config
+  origin?: [number, number, number];
+  normal?: [number, number, number];
+  /** How deep behind the cut plane to render (meters). */
+  farClip?: number;
+
+  // Elevation shorthand — auto-derives origin + normal from the model AABB.
+  cardinalDir?: CardinalDir;
+
+  // Camera axis for this sheet.
+  camera: "top" | "front" | "right";
+}
+
+/** Two-story house demo sheet set (S1–S8). Level IDs match DEMO_LEVELS. */
+export const DEMO_SHEET_SET: SheetTemplate[] = [
+  { id: "S1", viewType: "plan",      title: "Plan — Level 1",             levelId: "level/0", cutOffset: 1.372, camera: "top"   },
+  { id: "S2", viewType: "plan",      title: "Plan — Level 2",             levelId: "level/1", cutOffset: 1.372, camera: "top"   },
+  { id: "S3", viewType: "section",   title: "Section A-A (longitudinal)", origin: [0,0,0], normal: [0,-1,0], farClip: 30, camera: "front" },
+  { id: "S4", viewType: "section",   title: "Section B-B (transverse)",   origin: [0,0,0], normal: [-1,0,0], farClip: 20, camera: "right" },
+  { id: "S5", viewType: "elevation", title: "Elevation — North", cardinalDir: "N", farClip: 40, camera: "front" },
+  { id: "S6", viewType: "elevation", title: "Elevation — South", cardinalDir: "S", farClip: 40, camera: "front" },
+  { id: "S7", viewType: "elevation", title: "Elevation — East",  cardinalDir: "E", farClip: 40, camera: "right" },
+  { id: "S8", viewType: "elevation", title: "Elevation — West",  cardinalDir: "W", farClip: 40, camera: "right" },
+];
+
+/** Level stub used in applySheetCut when levelStore is not provided. */
+export interface SheetLevelRef { elevation: number; }
+
+/**
+ * Apply viewer clip planes for the given SheetTemplate.
+ * Call this before querying getClassifiedEdgeSegmentsForView or
+ * getFacePolygonsForView. Call resetSheetCut() afterwards.
+ *
+ * @param viewer   The active Viewer instance.
+ * @param t        SheetTemplate to apply.
+ * @param levels   Map/object of levelId → {elevation} (required for plan views).
+ */
+export function applySheetCut(
+  viewer: Viewer,
+  t: SheetTemplate,
+  levels?: Record<string, SheetLevelRef>,
+): void {
+  viewer.clearClippingPlanes();
+  viewer.clearSectionBox();
+
+  const BIG = 1e6;
+
+  if (t.viewType === "plan") {
+    const lvl = levels?.[t.levelId ?? ""] ?? { elevation: 0 };
+    const cut = (t.cutOffset ?? 1.372);
+    viewer.setSectionBox(
+      [-BIG, -BIG, lvl.elevation],
+      [ BIG,  BIG, lvl.elevation + cut],
+    );
+  } else if (t.viewType === "section") {
+    const origin: [number, number, number] = t.origin ?? [0, 0, 0];
+    const normal: [number, number, number] = t.normal ?? [0, -1, 0];
+    viewer.addClippingPlane(origin, normal, "sheet-front");
+    if (t.farClip != null) {
+      const back: [number, number, number] = [
+        origin[0] + normal[0] * t.farClip,
+        origin[1] + normal[1] * t.farClip,
+        origin[2] + normal[2] * t.farClip,
+      ];
+      viewer.addClippingPlane(back, [-normal[0], -normal[1], -normal[2]], "sheet-back");
+    }
+  } else if (t.viewType === "elevation") {
+    let origin: [number, number, number];
+    let normal: [number, number, number];
+    if (t.cardinalDir) {
+      const bounds = viewer.getSceneBounds?.();
+      const cx = bounds ? (bounds.min.x + bounds.max.x) / 2 : 0;
+      const cy = bounds ? (bounds.min.y + bounds.max.y) / 2 : 0;
+      const cz = bounds ? (bounds.min.z + bounds.max.z) / 2 : 0;
+      const margin = 0.1;
+      switch (t.cardinalDir) {
+        case "N": origin = [cx, bounds ? bounds.max.y + margin : BIG, cz]; normal = [0, -1, 0]; break;
+        case "S": origin = [cx, bounds ? bounds.min.y - margin : -BIG, cz]; normal = [0,  1, 0]; break;
+        case "E": origin = [bounds ? bounds.max.x + margin : BIG, cy, cz]; normal = [-1, 0, 0]; break;
+        case "W": origin = [bounds ? bounds.min.x - margin : -BIG, cy, cz]; normal = [ 1, 0, 0]; break;
+      }
+    } else {
+      origin = t.origin ?? [0, 0, 0];
+      normal = t.normal ?? [0, -1, 0];
+    }
+    viewer.addClippingPlane(origin!, normal!, "sheet-front");
+    if (t.farClip != null) {
+      const n = normal!;
+      const back: [number, number, number] = [
+        origin![0] + n[0] * t.farClip,
+        origin![1] + n[1] * t.farClip,
+        origin![2] + n[2] * t.farClip,
+      ];
+      viewer.addClippingPlane(back, [-n[0], -n[1], -n[2]], "sheet-back");
+    }
+  }
+  // viewType "3d": no cut — full scene.
+}
+
+/** Remove all sheet cuts and restore unclipped view. */
+export function resetSheetCut(viewer: Viewer): void {
+  viewer.clearClippingPlanes();
+  viewer.clearSectionBox();
+}
+
+/**
+ * Export a list of SheetTemplates as a multi-page PDF.
+ * Each template becomes one page; the viewer clip planes are applied and
+ * reset for each sheet. Sheet size defaults to A1 landscape.
+ */
+export async function exportSheetSetAsPdf(
+  templates: SheetTemplate[],
+  opts: {
+    sheetSize?: SheetSizeId;
+    orientation?: Orientation;
+    levels?: Record<string, SheetLevelRef>;
+    panelMarginMm?: number;
+  } = {},
+): Promise<ArrayBuffer> {
+  const {
+    sheetSize = "A1",
+    orientation = "landscape",
+    levels = {},
+    panelMarginMm = 10,
+  } = opts;
+
+  const mm = sheetMm(sheetSize, orientation, DEFAULT_CUSTOM);
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({
+    orientation: mm.w > mm.h ? "landscape" : "portrait",
+    unit: "mm",
+    format: [mm.w, mm.h],
+  });
+
+  const viewer = (window as unknown as { __viewer?: Viewer }).__viewer;
+  const PX_TO_MM = 25.4 / 96;
+  // Panel spans the full sheet minus margins.
+  const panelWmm = mm.w - panelMarginMm * 2;
+  const panelHmm = mm.h - panelMarginMm * 2;
+  const panelWpx = Math.round(panelWmm / PX_TO_MM);
+  const panelHpx = Math.round(panelHmm / PX_TO_MM);
+
+  for (let i = 0; i < templates.length; i++) {
+    const t = templates[i];
+    if (i > 0) doc.addPage([mm.w, mm.h], mm.w > mm.h ? "landscape" : "portrait");
+
+    // Sheet border.
+    doc.setLineWidth(0.4);
+    doc.setDrawColor(60, 60, 70);
+    doc.rect(3, 3, mm.w - 6, mm.h - 6);
+
+    // Sheet title.
+    doc.setFontSize(9);
+    doc.setTextColor(26, 26, 34);
+    doc.text(`${t.id}  ${t.title}`, panelMarginMm, mm.h - panelMarginMm / 2);
+
+    // Apply view-specific cut.
+    if (viewer) {
+      applySheetCut(viewer, t, levels);
+    }
+
+    const px = panelMarginMm;
+    const py = panelMarginMm;
+
+    // Render fills then classified edges (same logic as exportLayoutAsPdf).
+    if (viewer?.getFacePolygonsForView) {
+      const polys = viewer.getFacePolygonsForView(t.camera, panelWpx, panelHpx);
+      for (const { pts, fill } of polys) {
+        const [r, g, b2] = hexToRgb(fill);
+        doc.setFillColor(r, g, b2);
+        doc.triangle(
+          px + pts[0][0] * PX_TO_MM, py + pts[0][1] * PX_TO_MM,
+          px + pts[1][0] * PX_TO_MM, py + pts[1][1] * PX_TO_MM,
+          px + pts[2][0] * PX_TO_MM, py + pts[2][1] * PX_TO_MM,
+          "F",
+        );
+      }
+    }
+    doc.setDrawColor(26, 26, 34);
+    if (viewer?.getClassifiedEdgeSegmentsForView) {
+      const clSegs = viewer.getClassifiedEdgeSegmentsForView(t.camera, panelWpx, panelHpx);
+      for (const { x1, y1, x2, y2, cls } of clSegs) {
+        doc.setLineWidth(LINEWEIGHT[cls] * PX_TO_MM);
+        const dash = DASH_PATTERN[cls];
+        if (dash) {
+          const [d, g] = dash.split(" ").map((v) => parseFloat(v) * PX_TO_MM);
+          doc.setLineDashPattern([d, g], 0);
+        } else {
+          doc.setLineDashPattern([], 0);
+        }
+        doc.line(px + x1 * PX_TO_MM, py + y1 * PX_TO_MM, px + x2 * PX_TO_MM, py + y2 * PX_TO_MM);
+      }
+      doc.setLineDashPattern([], 0);
+      doc.setLineWidth(0.25);
+    }
+
+    // Reset cut for next sheet.
+    if (viewer) resetSheetCut(viewer);
+  }
+
+  return doc.output("arraybuffer") as ArrayBuffer;
+}
+
 // PDF export — uses jsPDF (dynamic import to avoid pulling it into the main
 // bundle until the user actually exports). We project panel SVG primitives
 // to PDF coordinates (mm-native: jsPDF uses bottom-up Y by default in pt,
