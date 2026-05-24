@@ -123,6 +123,7 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     { id: "arc",     icon: "arc",     label: "Arc" },
     { id: "polyline",icon: "polyline",label: "Polyline" },
     { id: "curve",   icon: "curve",   label: "Curve" },
+    { id: "spline",  icon: "spline",  label: "Spline" },
     { id: "point",   icon: "point",   label: "Point" },
   ]},
   { tools: [

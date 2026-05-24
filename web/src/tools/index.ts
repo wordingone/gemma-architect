@@ -21,7 +21,7 @@ import { registerSelectionOpsMarkers, getSelOverlay, clearSelOverlay, removeSelO
 import { setStructuralViewer, buildWall, rebuildWallInPlace, attemptWallJoins, buildSlab, buildColumn, buildStair, buildStairOnPolyline, buildStairOnCurve, buildBeam, buildRoof, buildSpace, buildFoundation, buildCeiling, buildCurtainWall, buildSkylight, buildGridLine, buildLevel, buildReferenceLine, buildSectionBox, buildClipPlane, buildClipPlanePlan, buildClipPlaneSection, buildBox, buildExtrude } from "./structural";
 import { onElementCommitted, addVoidToWallObject } from "./join-groups";
 import { attemptWallCornerJoins } from "./wall-corners";
-import { buildRect, buildCircle, buildArc, buildLine, buildPolygon, buildPolyline, buildCurve, buildRamp, buildRailing, buildPoint } from "./sketch";
+import { buildRect, buildCircle, buildArc, buildLine, buildPolygon, buildPolyline, buildCurve, buildSpline, buildRamp, buildRailing, buildPoint } from "./sketch";
 import { buildDoor, buildWindow, buildOpening, FZK_DOOR_W, FZK_DOOR_H, FZK_WINDOW_W, FZK_WINDOW_H, FZK_WINDOW_SILL } from "./openings";
 import { STAIR_STEP_RISE, STAIR_STEP_DEPTH, STAIR_WIDTH } from "./dimensions";
 import { drawingLayerStore, SKETCH_KINDS } from "../geometry/drawing-layers";
@@ -326,6 +326,7 @@ type ToolHandler = {
   handler: (pts: Array<{ x: number; y: number; z?: number }>) => SingleResult;
   chain?: boolean;
   commitMulti?: (pts: Array<{ x: number; y: number; z?: number }>) => SingleResult[];
+  minPoints?: number; // minimum point count required to commit unlimited-click tools
 };
 
 // 9 ft above the active level — canonical offset for ceiling and roof placement.
@@ -388,6 +389,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
   arc:         { clicks: 3, handler: atZ(([c, s, e]) => buildArc(c, s, e)) },
   polyline:    { clicks: -1, handler: atZ((pts) => buildPolyline(pts)) },
   curve:       { clicks: -1, handler: atZ((pts) => buildCurve(pts)) },
+  spline:      { clicks: -1, minPoints: 4, handler: atZ((pts) => buildSpline(pts)!) },
   point:       { clicks: 1, handler: atZ(([p]) => buildPoint(p)) },
   extrude:     { clicks: 3, handler: atZ(([c1, c2, c3]) => buildBox(c1, c2, c3)) },
   beam:        { clicks: 2, handler: atZ(([a, b]) => buildBeam(a, b)) },
@@ -410,7 +412,6 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
 
 const TOOL_TODOS: Record<string, string> = {
   arc:     "draw(start).arcTo(end, [via]).sketchOnPlane('XY').extrude(thickness)",
-  spline:  "draw(start).bezierTo(end, [c1], [c2]).sketchOnPlane('XY').extrude(thickness)",
   revolve: "select profile then axis then angle — TODO 3-step gizmo flow",
   move:    "select then drag — already covered by transform gizmo",
   rotate:  "select then drag — already covered by transform gizmo",
@@ -671,7 +672,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   const tool = readActiveTool();
   if (!tool) return null;
   const handler = TOOL_HANDLERS[tool];
-  if (!handler || handler.clicks !== -1 || _pending.length < 2) return null;
+  if (!handler || handler.clicks !== -1 || _pending.length < (handler.minPoints ?? 2)) return null;
   clearTemporary(viewer);
   clearSmartTrack(viewer);
   const pts = [..._pending];
@@ -687,6 +688,7 @@ function commitUnlimited(viewer: Viewer): { mesh: THREE.Object3D; chain: string 
   }
 
   const out = handler.handler(pts);
+  if (!out) { dispatchSync("setActiveTool", { toolId: "select" }); return null; }
   if (!out.mesh.userData.levelId) out.mesh.userData.levelId = getActiveLevelId();
   applyDrawingLayer(out.mesh);
   viewer.addMesh(out.mesh, out.mesh.userData.kind ?? "mesh", { noHistory: true });
@@ -986,6 +988,8 @@ export function initCreateMode(viewer: Viewer): void {
           ? "stair-curve — click control points  [Enter] build curved stair  [Esc] cancel"
           : tool === "stair-polyline"
           ? "stair-polyline — click points  [Enter] build polyline stair  [Esc] cancel"
+          : tool === "spline"
+          ? "spline — click ≥ 4 control points  [double-click or Enter] commit  [Esc] cancel"
           : `${tool} — click points  [double-click or Enter] commit  [Esc] cancel`;
         setPickerHint(label);
       } else if (h?.chain) {

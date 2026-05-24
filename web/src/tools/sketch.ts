@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { makeSnapId } from "../viewer/snap-state";
 import type { SnapVertex } from "../viewer/snap-state";
-import { createCatmullRomAsNurbs, tessellate } from "../nurbs/nurbs-curves.js";
+import { createCatmullRomAsNurbs, createClampedUniformNurbs, tessellate } from "../nurbs/nurbs-curves.js";
 
 const DEFAULT_RECT_HEIGHT = 2.8;
 const DEFAULT_POLYGON_SIDES = 6;
@@ -247,6 +247,35 @@ export function buildCurve(pts: Array<{ x: number; y: number }>): { mesh: THREE.
   mesh.userData.endpoints = curvePts.map((p) => ({ x: p.x, y: p.y, z: 0, id: makeSnapId(p.x, p.y, 0) })) as SnapVertex[];
   const worldPts = curvePts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
   const chain = `const curv = drawCurve([${worldPts}]${isClosed ? ", { close: true }" : ""}).sketchOnPlane("XY").extrude(0.002);`;
+  return { mesh, chain };
+}
+
+// buildSpline — clamped uniform NURBS cubic (SdSpline / InterpCrv-equivalent).
+// Same click flow as buildCurve (unlimited points, Enter to commit) but uses
+// createClampedUniformNurbs instead of Catmull-Rom; requires >= 4 points.
+export function buildSpline(pts: Array<{ x: number; y: number }>): { mesh: THREE.Object3D; chain: string } | null {
+  if (pts.length < 4) return null; // not enough points yet — keep accumulating
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const localVecs = pts.map((p) => new THREE.Vector3(p.x - cx, p.y - cy, 0));
+  const dataPts = localVecs.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  const nurbs = createClampedUniformNurbs(3, 4, dataPts);
+  const sampleCount = Math.max(pts.length * 16, 64);
+  const sampled3 = tessellate(nurbs, sampleCount + 1).map((p) => new THREE.Vector3(p.x, p.y, p.z));
+  const geom = new THREE.BufferGeometry().setFromPoints(sampled3);
+  const mat = new THREE.LineBasicMaterial({ color: 0x1565c0 });
+  const mesh = new THREE.Line(geom, mat);
+  mesh.position.set(cx, cy, 0);
+  mesh.renderOrder = 1;
+  mesh.userData._snapCreationPos = { x: cx, y: cy, z: 0 };
+  mesh.userData.kind = "spline";
+  mesh.userData.creator = "spline";
+  mesh.userData.controlPoints = localVecs;
+  mesh.userData.endpoints = pts.map((p) => ({ x: p.x, y: p.y, z: 0, id: makeSnapId(p.x, p.y, 0) })) as SnapVertex[];
+  const worldPts = pts.map((p) => `[${round(p.x)}, ${round(p.y)}]`).join(", ");
+  const chain = `const spl = drawSpline([${worldPts}]);`;
   return { mesh, chain };
 }
 
