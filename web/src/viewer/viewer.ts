@@ -2826,11 +2826,21 @@ export class Viewer {
     const tmpA = new THREE.Vector3();
     const tmpB = new THREE.Vector3();
 
+    // Build exclusion set: all descendants of editor-only objects (gumball
+    // TransformControls, pivot proxy, cplane gizmo, grid, axes) must not
+    // appear in exported drawings (#1802).
+    const _noExport = new Set<THREE.Object3D>();
+    for (const g of this.gizmos) g.traverse((o) => _noExport.add(o));
+    if (this.pivotProxy) this.pivotProxy.traverse((o) => _noExport.add(o));
+    this._cplaneGizmo.group.traverse((o) => _noExport.add(o));
+    this.grid.traverse((o) => _noExport.add(o));
+    this.axes.traverse((o) => _noExport.add(o));
+
     this.scene.updateMatrixWorld(false);
     this.scene.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (!mesh.isMesh) return;
-      if (child.userData.excludeFromClip || child.userData.isGizmo) return;
+      if (_noExport.has(child) || child.userData.noRenderMode) return;
       const geom = (mesh.geometry as THREE.BufferGeometry | undefined);
       if (!geom?.attributes.position) return;
       const edges = new THREE.EdgesGeometry(geom, 25);
