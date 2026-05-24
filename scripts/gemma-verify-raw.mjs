@@ -1846,22 +1846,22 @@ await resetScene('before-box-inject');
 // world-Y axis (matrixWorld column 1) is parallel to the wall's world-Y axis.
 // Uses matrixWorld.elements directly to avoid needing window.THREE.
 {
-  const r = await evaluate(`(() => {
+  const r = await evaluate(`(async () => {
     const dispatch = window.__dispatch;
     const scene = window.__viewer && window.__viewer.scene;
     if (!dispatch || !scene) return { passed: false, evidence: { reason: 'dispatch or scene unavailable' } };
 
     // Place a diagonal wall (45°) so its normal is not world-Y.
-    const wallResult = dispatch('IfcWall', { profile: [[0,0],[5,5]], height: 3 });
+    const wallResult = await dispatch('IfcWall', { profile: [[0,0],[5,5]], height: 3 });
     if (!wallResult || !wallResult.ok) return { passed: false, evidence: { reason: 'IfcWall dispatch failed', wallResult } };
 
     const walls = scene.children.filter(o => o.userData && (o.userData.creator === 'wall' || o.userData.creator === 'SdWall'));
     if (!walls.length) return { passed: false, evidence: { reason: 'no wall in scene' } };
     const wall = walls[walls.length - 1];
 
-    // Place a door with hostUuid.
-    const doorResult = dispatch('IfcDoor', {
-      width: 0.9, height: 2.1, position: [2.5, 2.5], hostUuid: wall.uuid,
+    // Place a door with hostUuid. No width/height — SdDoor dims are fixed by doorType preset.
+    const doorResult = await dispatch('IfcDoor', {
+      doorType: 'interior', position: [2.5, 2.5], hostUuid: wall.uuid,
     });
     if (!doorResult || !doorResult.ok) return { passed: false, evidence: { reason: 'IfcDoor dispatch failed', doorResult } };
 

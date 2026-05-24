@@ -678,6 +678,7 @@ registerHandler("SdBox", (args) => {
   const c2 = { x: w / 2, y: d / 2 };
   const c3 = { x: h, y: 0 }; // distance from footprint center (0,0) = h
   const { mesh, chain } = buildBox(c1, c2, c3);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), cplane.normal);
   mesh.position.z = getActiveLevelElevation();
   mesh.userData.cplaneKind = cplane.kind;
   mesh.userData.layerId = resolveLayerId("SdBox", args);
