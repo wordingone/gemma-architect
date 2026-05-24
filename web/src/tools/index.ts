@@ -949,7 +949,7 @@ export function initCreateMode(viewer: Viewer): void {
     }
   });
 
-  const OP_TOOLS = new Set(["extrude", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure", "sel-window", "sel-lasso", "sel-boundary", "copy", "array"]);
+  const OP_TOOLS = new Set(["extrude", "loft", "boolean", "fillet", "aligned-dim", "angular-dim", "area-dim", "volume-dim", "label", "transient-measure", "sel-window", "sel-lasso", "sel-boundary", "copy", "array"]);
 
   // Clear multi-select highlights when the viewer performs a normal single-object selection.
   window.addEventListener("viewer:select", () => {

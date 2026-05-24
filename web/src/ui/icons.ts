@@ -12,6 +12,7 @@ export function iconSVG(name: string, size = 16): string {
     case "rotate":  return `<svg ${attr}><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>`;
     case "scale":   return `<svg ${attr}><path d="M3 21V9M3 21h12M3 21l8-8"/><rect x="14" y="3" width="7" height="7"/></svg>`;
     case "extrude": return `<svg ${attr}><rect x="3" y="9" width="10" height="10"/><path d="M13 9l5-5h-10l-5 5"/><path d="M13 19l5-5V4"/></svg>`;
+    case "loft":    return `<svg ${attr}><path d="M3 18c5-3 13-3 18 0M3 6c5 3 13 3 18 0"/><path d="M3 6v12M21 6v12"/></svg>`;
     case "revolve": return `<svg ${attr}><ellipse cx="12" cy="12" rx="9" ry="3"/><path d="M3 12v0M21 12v0M12 3v18"/></svg>`;
     case "boolean": return `<svg ${attr}><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>`;
     case "sketch":  return `<svg ${attr}><path d="M4 20l8-16 8 16"/><path d="M7 14h10"/></svg>`;

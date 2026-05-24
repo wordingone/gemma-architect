@@ -127,6 +127,7 @@ const PALETTE_SECTIONS: PaletteSection[] = [
   ]},
   { tools: [
     { id: "extrude", icon: "extrude", label: "Extrude" },
+    { id: "loft",    icon: "loft",    label: "Loft" },
     { id: "boolean", icon: "boolean", label: "Boolean" },
     { id: "fillet",  icon: "fillet",  label: "Fillet" },
   ]},
