@@ -19,6 +19,7 @@
 import { writeFileSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
 import { CDP_PORT, CDP_BASE } from "./ports.mjs";
+import { installPromptHandlers } from "../../avir/infra/skills/cdp-prompts/handler.mjs"; // §#1704+#1708
 
 const PAGES_URL   = "https://wordingone.github.io/gemma-architect/";
 const STATE_DIR   = `${process.cwd()}/state`;
@@ -126,6 +127,16 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 await cdp("Runtime.enable");
 await cdp("Log.enable");
 await cdp("Page.enable");
+
+// §#1704+#1708: install CDP prompt handlers immediately after Page.enable, before any navigation.
+// Covers: all JS dialogs (beforeunload/alert/confirm/prompt) + all browser permission types
+// + downloads. Past PASS receipts were user-assisted (user manually clicking "Leave site?").
+const _cdpDownloadDir = `${STATE_DIR}/downloads`;
+mkdirSync(_cdpDownloadDir, { recursive: true });
+const _cdpPromptState = await installPromptHandlers(cdp, eventHandlers, {
+  origin: "https://wordingone.github.io",
+  downloadPath: _cdpDownloadDir,
+});
 
 // ── Collect console messages ───────────────────────────────────────────────────
 
@@ -270,14 +281,7 @@ if (!NO_RELOAD) {
     // Model must re-download from CDN (~2.5GB) — expect 15-20min boot window.
     // boot_ms < 150000 → model loaded from cache; receipt is INVALID as a gate test.
     console.log(`\n[+${0}ms] Clearing HTTP cache + cookies + Storage for true cold-cache...`);
-    // Pre-grant persistent-storage to prevent browser-native permission popup after consent
-    // click (navigator.storage.persist() in model-consent.ts:onApprove). Native popups are
-    // not in the DOM and cannot be clicked via CDP — must be pre-granted before navigation.
-    await cdp("Browser.setPermission", {
-      permission: { name: "persistent-storage" },
-      setting: "granted",
-      origin: "https://wordingone.github.io",
-    }).catch(() => null); // not fatal — older CDP versions may not support it
+    // Permissions + dialogs + downloads pre-handled above by installPromptHandlers (§#1704+#1708).
     await cdp("Network.clearBrowserCache", {});
     await cdp("Network.clearBrowserCookies", {});
     await cdp("Storage.clearDataForOrigin", {
@@ -995,6 +999,10 @@ const receipt = {
       wasm_cohort_passed: _wasmCohort.modalShown && _wasmCohort.choice === 'wasm-fallback' && bootComplete && turn1DispatchCount >= 1,
     };
   })() : null,
+  // §#1704+#1708: CDP prompt handling telemetry.
+  cdp_permissions_granted: _cdpPromptState.permissionsGranted,
+  cdp_dialogs_handled: _cdpPromptState.dialogsHandled,
+  cdp_downloads_allowed: _cdpPromptState.downloadsAllowed,
 };
 // §#1659: write raw-output sidecar alongside receipt.
 let sidecarFile = null;
