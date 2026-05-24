@@ -841,7 +841,7 @@ console.log(`│  boot-complete : ${String(bootComplete).padEnd(35)}│`);
 console.log(`│  ARC inv-trans : ${String(arcInvClean ? "CLEAN" : `${arcInvalidTransitions.length} errors`).padEnd(35)}│`);
 console.log(`│  bufMgr (all)  : ${String(bufMgrClean ? "CLEAN" : `${bufferManagerErrors.length} errors`).padEnd(35)}│`);
 console.log(`│  cache.put errs: ${String(cachePutClean ? "CLEAN" : `${cachePutErrors.length} errors`).padEnd(35)}│`);
-console.log(`│  worker recycles: ${String(recycleClean ? "0" : `${workerRecycleCount}`).padEnd(34)}│`);
+console.log(`│  worker recycles: ${String(recycleClean ? "0" : `${workerRecycleCount} ← BASELINE-FAIL`).padEnd(34)}│`);
 console.log(`│  GENERATE_DONE : ${String(`${cleanTurns}/${DEMO_PROMPTS.length} clean, ${doneTurns} total`).padEnd(35)}│`);
 console.log(`│  total time    : ${String(`${Math.round(totalMs/1000)}s`).padEnd(35)}│`);
 if (compactEvents.length > 0) {
@@ -850,7 +850,7 @@ if (compactEvents.length > 0) {
 console.log(`├──────────────────────────────────────────────────────┤`);
 for (const r of turnResults) {
   const icon = r.outcome === "generate-done" && !r.workerRecycled ? "✓" : "✗";
-  const tags = [r.outcome, r.workerRecycled?"recycled":"", r.bufferManagerErrors>0?"bufMgr!":"", r.nlResponse?"nl-only":r.dispatchCount>0?`d=${r.dispatchCount}`:"", r.goalState!=="absent"?`goal:${r.goalState}`:""].filter(Boolean).join(" ");
+  const tags = [r.outcome, r.workerRecycled?"recycled[BASELINE-FAIL]":"", r.bufferManagerErrors>0?"bufMgr!":"", r.nlResponse?"nl-only":r.dispatchCount>0?`d=${r.dispatchCount}`:"", r.goalState!=="absent"?`goal:${r.goalState}`:""].filter(Boolean).join(" ");
   const label = `${icon} ${r.prompt.slice(0,22).padEnd(22)} [${tags}]`;
   console.log(`│  ${label.padEnd(52)}│`);
 }
@@ -890,6 +890,8 @@ const failureBreakdown = passed ? null : {
   buffer_mgr_clean: bufMgrClean,
   cache_put_clean: cachePutClean,
   worker_recycle_clean: recycleClean,
+  worker_recycle_baseline_fail: !recycleClean,              // #1409: any recycle = BASELINE-FAIL
+  recycles_without_paired_root_cause_issue: workerRecycleCount, // #1409: count needing root-cause issue
   clean_turns_ok: cleanTurns >= Math.ceil(PROMPT_N * 0.6),
   turn1_dispatch_ok: turn1DispatchOk,
   turn2_nl_ok: turn2NlOk,
@@ -916,6 +918,8 @@ const receipt = {
   cache_put_clean: cachePutClean,             // M1: gate field
   worker_recycle_count: workerRecycleCount,   // M1: ARC recycleCount at session end
   worker_recycle_clean: recycleClean,         // M1: gate field
+  worker_recycle_baseline_fail: !recycleClean,              // #1409: any recycle = BASELINE-FAIL
+  recycles_without_paired_root_cause_issue: workerRecycleCount, // #1409: count needing root-cause issue
   // #1482 dispatch metrics
   turn1_dispatch_count: turn1DispatchCount,
   turn1_goal_state: turn1GoalState,
