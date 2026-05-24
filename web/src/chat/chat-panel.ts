@@ -42,14 +42,26 @@ function resolveStr(v: string | (() => string)): string {
 }
 
 const STARTER_PROMPTS: StarterPrompt[] = [
-  { label: "What's currently in the scene?", prompt: "What's currently in the scene?" },
   {
-    label: () => getState("unitSystem") === "imperial"
-      ? "Two-story house (26' × 20')"
-      : "Two-story house (8m × 6m)",
-    prompt: () => getState("unitSystem") === "imperial"
-      ? "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs."
-      : "Build a two-story residential house, 8m wide by 6m deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
+    label: "Two-story house",
+    prompt: "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.",
+  },
+  { label: "What's in the scene?", prompt: "What's currently in the scene?" },
+  {
+    label: "Modify selection",
+    prompt: "Change the height of the currently selected wall to 10'.",
+  },
+  {
+    label: "Add a garage",
+    prompt: "Add an attached single-car garage, 12' wide by 22' deep, connected to the right side of the house.",
+  },
+  {
+    label: "Cut a section",
+    prompt: "Cut a vertical section through the center of the building and describe the structural elements and layers visible in the section.",
+  },
+  {
+    label: "Organize & export",
+    prompt: "List all objects in the scene organized by floor level, then export the model as IFC.",
   },
 ];
 
@@ -328,7 +340,6 @@ export class ChatPanel {
       }
     };
     buildChips();
-    subscribe("unitSystem", () => buildChips());
 
     this._sendBtn.addEventListener("click", () => { void this._send(); });
     this._inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
