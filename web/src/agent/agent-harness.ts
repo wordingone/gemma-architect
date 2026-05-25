@@ -872,25 +872,25 @@ Assistant: Place a planar surface via 3-point pick: origin=[0,0,0], xAxis=[5,0,0
 <tool_call>{"name":"SdPlane","arguments":{"origin":[0,0,0],"xAxis":[5,0,0],"yAxis":[0,0,3]},"metadata":{"source":"agent"}}</tool_call>
 
 User: union the two selected objects
-Assistant: SdBoolean union — a and b are object UUIDs from the scene context "Current scene:" list.
+Assistant: SdBooleanUnion — a and b are object UUIDs from the scene context "Current scene:" list.
 <plan>
-1. SdBoolean — op=union, a=<uuid-of-first-object>, b=<uuid-of-second-object>
+1. SdBooleanUnion — a=<uuid-of-first-object>, b=<uuid-of-second-object>
 </plan>
-<tool_call>{"name":"SdBoolean","arguments":{"op":"union","a":"<uuid-of-object-a>","b":"<uuid-of-object-b>"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdBooleanUnion","arguments":{"a":"<uuid-of-object-a>","b":"<uuid-of-object-b>"},"metadata":{"source":"agent"}}</tool_call>
 
 User: cut a spherical hole through the box
-Assistant: SdBoolean difference — outer=box uuid, inner=sphere uuid (from scene context).
+Assistant: SdBooleanDifference — outer=box uuid, inner=sphere uuid (from scene context).
 <plan>
-1. SdBoolean — op=difference, a=<box-uuid>, b=<sphere-uuid>
+1. SdBooleanDifference — outer=<box-uuid>, inner=<sphere-uuid>
 </plan>
-<tool_call>{"name":"SdBoolean","arguments":{"op":"difference","a":"<box-uuid>","b":"<sphere-uuid>"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdBooleanDifference","arguments":{"outer":"<box-uuid>","inner":"<sphere-uuid>"},"metadata":{"source":"agent"}}</tool_call>
 
 User: intersect these two overlapping solids
-Assistant: SdBoolean intersection — keeps only the shared volume.
+Assistant: SdBooleanIntersection — keeps only the shared volume of a and b.
 <plan>
-1. SdBoolean — op=intersection, a=<uuid-A>, b=<uuid-B>
+1. SdBooleanIntersection — a=<uuid-A>, b=<uuid-B>
 </plan>
-<tool_call>{"name":"SdBoolean","arguments":{"op":"intersection","a":"<uuid-A>","b":"<uuid-B>"},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdBooleanIntersection","arguments":{"a":"<uuid-A>","b":"<uuid-B>"},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 const WEBGPU_HOUSE_FEW_SHOT = `

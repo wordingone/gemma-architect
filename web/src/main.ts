@@ -608,6 +608,21 @@ registerHandler("SdBoolean", (args) => {
   return { created: result.uuid, op: opArg };
 });
 
+// Per-variant boolean handlers — delegate to SdBoolean with fixed op.
+// SdBooleanDifference maps outer/inner → a/b for SdBoolean compatibility.
+registerHandler("SdBooleanUnion", (args) => {
+  const dr = dispatchSync("SdBoolean", { op: "union", a: args.a, b: args.b });
+  return dr.ok ? (dr as { ok: true; result: unknown }).result : { error: "Boolean union failed" };
+});
+registerHandler("SdBooleanDifference", (args) => {
+  const dr = dispatchSync("SdBoolean", { op: "difference", a: args.outer ?? args.a, b: args.inner ?? args.b });
+  return dr.ok ? (dr as { ok: true; result: unknown }).result : { error: "Boolean difference failed" };
+});
+registerHandler("SdBooleanIntersection", (args) => {
+  const dr = dispatchSync("SdBoolean", { op: "intersection", a: args.a, b: args.b });
+  return dr.ok ? (dr as { ok: true; result: unknown }).result : { error: "Boolean intersection failed" };
+});
+
 registerHandler("SdFillet", (args) => {
   const targetId = args.target as string | undefined;
   if (!targetId) return { error: "SdFillet — target is required" };

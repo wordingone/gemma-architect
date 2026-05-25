@@ -3,7 +3,9 @@
 //         ToyBooleanBackend (union structural concat, difference/intersection NOT_IMPLEMENTED),
 //         top-level dispatch (brepUnion/brepDifference/brepIntersection/brepSection),
 //         per-op backend selection, BACKEND_UNAVAILABLE error path.
-import { describe, test, expect, afterEach } from "bun:test";
+//         #1828: SdBooleanUnion/SdBooleanDifference/SdBooleanIntersection schema +
+//         synonym routing + dispatch routing + error path.
+import { describe, test, expect, afterEach, beforeEach } from "bun:test";
 import {
   registerBackend, registeredBackends, resolveBackend,
   brepUnion, brepDifference, brepIntersection, brepSection,
@@ -13,6 +15,10 @@ import {
 import { brepFromSurface, brepFaceCount, type Brep } from "../src/nurbs/nurbs-brep";
 import type { PlaneSurface } from "../src/nurbs/nurbs-surfaces";
 import { Plane, Interval } from "../src/nurbs/nurbs-primitives";
+import { getDictionary, clearDictionaryCache } from "../src/commands/dictionary";
+import {
+  resolveVerb, registerHandler, unregisterHandler, dispatchSync, setRuntimeAliases,
+} from "../src/commands/dispatch";
 
 function planeSurface(): PlaneSurface {
   return {
@@ -237,6 +243,110 @@ describe("top-level dispatch (brepUnion / brepDifference / brepIntersection / br
     // Call with explicit mock backend — mock IS called
     brepUnion(a, b, { backend: "mock-per-op" });
     expect(called).toBe(true);
+  });
+});
+
+// ── #1828: Schema + synonym + dispatch routing for per-variant handlers ────────
+
+describe("SdBooleanUnion / SdBooleanDifference / SdBooleanIntersection — schema (#1828)", () => {
+  beforeEach(() => { clearDictionaryCache(); setRuntimeAliases({}); });
+
+  test("SdBooleanUnion in dictionary, a+b required", () => {
+    const entry = getDictionary().find((e) => e.name === "SdBooleanUnion");
+    expect(entry).toBeDefined();
+    expect(entry!.args.find((a) => a.name === "a")?.required).toBe(true);
+    expect(entry!.args.find((a) => a.name === "b")?.required).toBe(true);
+  });
+
+  test("SdBooleanDifference in dictionary, outer+inner required", () => {
+    const entry = getDictionary().find((e) => e.name === "SdBooleanDifference");
+    expect(entry).toBeDefined();
+    expect(entry!.args.find((a) => a.name === "outer")?.required).toBe(true);
+    expect(entry!.args.find((a) => a.name === "inner")?.required).toBe(true);
+  });
+
+  test("SdBooleanIntersection in dictionary, a+b required", () => {
+    const entry = getDictionary().find((e) => e.name === "SdBooleanIntersection");
+    expect(entry).toBeDefined();
+    expect(entry!.args.find((a) => a.name === "a")?.required).toBe(true);
+    expect(entry!.args.find((a) => a.name === "b")?.required).toBe(true);
+  });
+});
+
+describe("boolean variant synonym routing (#1828)", () => {
+  beforeEach(() => { clearDictionaryCache(); setRuntimeAliases({}); });
+
+  test("'union' → SdBooleanUnion", () => expect(resolveVerb("union")).toBe("SdBooleanUnion"));
+  test("'fuse' → SdBooleanUnion",  () => expect(resolveVerb("fuse")).toBe("SdBooleanUnion"));
+  test("'merge' → SdBooleanUnion", () => expect(resolveVerb("merge")).toBe("SdBooleanUnion"));
+  test("'difference' → SdBooleanDifference", () => expect(resolveVerb("difference")).toBe("SdBooleanDifference"));
+  test("'cut' → SdBooleanDifference",      () => expect(resolveVerb("cut")).toBe("SdBooleanDifference"));
+  test("'subtract' → SdBooleanDifference", () => expect(resolveVerb("subtract")).toBe("SdBooleanDifference"));
+  test("'intersection' → SdBooleanIntersection", () => expect(resolveVerb("intersection")).toBe("SdBooleanIntersection"));
+  test("'intersect' → SdBooleanIntersection",    () => expect(resolveVerb("intersect")).toBe("SdBooleanIntersection"));
+  test("'common' → SdBooleanIntersection",       () => expect(resolveVerb("common")).toBe("SdBooleanIntersection"));
+});
+
+describe("per-variant dispatch routing (#1828)", () => {
+  beforeEach(() => {
+    clearDictionaryCache(); setRuntimeAliases({});
+    unregisterHandler("SdBooleanUnion");
+    unregisterHandler("SdBooleanDifference");
+    unregisterHandler("SdBooleanIntersection");
+  });
+
+  test("SdBooleanUnion mock receives a+b", () => {
+    const calls: Record<string, unknown>[] = [];
+    registerHandler("SdBooleanUnion", (args) => { calls.push(args); return { created: "union" }; });
+    const dr = dispatchSync("SdBooleanUnion", { a: "id-A", b: "id-B" });
+    expect(dr.ok).toBe(true);
+    expect(calls[0].a).toBe("id-A");
+    expect(calls[0].b).toBe("id-B");
+  });
+
+  test("synonym 'union' routes to SdBooleanUnion handler", () => {
+    const calls: unknown[] = [];
+    registerHandler("SdBooleanUnion", (args) => { calls.push(args); return { created: "union" }; });
+    expect(dispatchSync("union", { a: "id-A", b: "id-B" }).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+
+  test("SdBooleanDifference mock receives outer+inner", () => {
+    const calls: Record<string, unknown>[] = [];
+    registerHandler("SdBooleanDifference", (args) => { calls.push(args); return { created: "diff" }; });
+    dispatchSync("SdBooleanDifference", { outer: "box", inner: "sphere" });
+    expect(calls[0].outer).toBe("box");
+    expect(calls[0].inner).toBe("sphere");
+  });
+
+  test("synonym 'cut' routes to SdBooleanDifference handler", () => {
+    const calls: unknown[] = [];
+    registerHandler("SdBooleanDifference", (args) => { calls.push(args); return { created: "diff" }; });
+    expect(dispatchSync("cut", { outer: "id-A", inner: "id-B" }).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+
+  test("SdBooleanIntersection mock receives a+b", () => {
+    const calls: Record<string, unknown>[] = [];
+    registerHandler("SdBooleanIntersection", (args) => { calls.push(args); return { created: "inter" }; });
+    dispatchSync("SdBooleanIntersection", { a: "id-A", b: "id-B" });
+    expect(calls[0].a).toBe("id-A");
+    expect(calls[0].b).toBe("id-B");
+  });
+
+  test("SdBooleanUnion missing b → ok=false (schema validation)", () => {
+    registerHandler("SdBooleanUnion", () => ({ created: "union" }));
+    expect(dispatchSync("SdBooleanUnion", { a: "id-A" }).ok).toBe(false);
+  });
+
+  test("SdBooleanDifference missing inner → ok=false (schema validation)", () => {
+    registerHandler("SdBooleanDifference", () => ({ created: "diff" }));
+    expect(dispatchSync("SdBooleanDifference", { outer: "id-A" }).ok).toBe(false);
+  });
+
+  test("SdBooleanIntersection missing a → ok=false (schema validation)", () => {
+    registerHandler("SdBooleanIntersection", () => ({ created: "inter" }));
+    expect(dispatchSync("SdBooleanIntersection", { b: "id-B" }).ok).toBe(false);
   });
 });
 
