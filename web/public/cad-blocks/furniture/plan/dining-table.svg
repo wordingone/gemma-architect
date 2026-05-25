@@ -1,1 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80" width="120" height="80" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="20" y="10" width="80" height="60" rx="4" fill="white"/><rect x="35" y="2" width="20" height="10" rx="2" fill="white"/><rect x="65" y="2" width="20" height="10" rx="2" fill="white"/><rect x="35" y="68" width="20" height="10" rx="2" fill="white"/><rect x="65" y="68" width="20" height="10" rx="2" fill="white"/><rect x="2" y="25" width="18" height="30" rx="2" fill="white"/><rect x="100" y="25" width="18" height="30" rx="2" fill="white"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" stroke="currentColor" fill="none" stroke-width="1.00" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 17.000 5.000 A 3.000 3.000 0 0 0 14.000 8.000" />
+  <path d="M 17.000 5.000 L 83.000 5.000" />
+  <path d="M 86.000 8.000 A 3.000 3.000 0 0 0 83.000 5.000" />
+  <path d="M 86.000 8.000 L 86.000 46.000" />
+  <path d="M 83.000 49.000 A 3.000 3.000 0 0 0 86.000 46.000" />
+  <path d="M 83.000 49.000 L 17.000 49.000" />
+  <path d="M 14.000 8.000 L 14.000 46.000" />
+  <path d="M 14.000 46.000 A 3.000 3.000 0 0 0 17.000 49.000" />
+  <path d="M 95.000 8.000 A 3.000 3.000 0 0 0 92.000 5.000" />
+  <path d="M 95.000 8.000 L 95.000 46.000" />
+  <path d="M 92.000 49.000 A 3.000 3.000 0 0 0 95.000 46.000" />
+  <path d="M 8.000 5.000 A 3.000 3.000 0 0 0 5.000 8.000" />
+  <path d="M 5.000 8.000 L 5.000 46.000" />
+  <path d="M 5.000 46.000 A 3.000 3.000 0 0 0 8.000 49.000" />
+  <path d="M 8.000 5.000 L 17.000 5.000" />
+  <path d="M 83.000 5.000 L 92.000 5.000" />
+  <path d="M 83.000 49.000 L 92.000 49.000" />
+  <path d="M 8.000 49.000 L 17.000 49.000" />
+</svg>

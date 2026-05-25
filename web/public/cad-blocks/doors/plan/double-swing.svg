@@ -1,1 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="0" y="0" width="5" height="50" fill="white"/><path d="M50.00,0.00 A50,50 0 0,1 0.00,50.00" stroke-dasharray="4,2"/><line x1="0" y1="0" x2="50" y2="0"/><rect x="95" y="0" width="5" height="50" fill="white"/><path d="M100.00,50.00 A50,50 0 0,1 50.00,0.00" stroke-dasharray="4,2"/><line x1="100" y1="0" x2="50" y2="0"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" stroke="currentColor" fill="none" stroke-width="1.00" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 73.250 27.500 L 73.250 30.500" />
+  <path d="M 72.500 27.500 L 72.500 30.500" />
+  <path d="M 73.250 30.500 L 72.500 30.500" />
+  <path d="M 73.250 27.500 L 72.500 27.500" />
+  <path d="M 72.500 29.281 L 72.406 29.281" />
+  <path d="M 72.219 28.531 L 72.219 29.094" />
+  <path d="M 72.219 29.094 A 0.188 0.188 0 0 0 72.406 29.281" />
+  <path d="M 72.500 28.531 L 72.219 28.531" />
+  <path d="M 72.500 27.500 L 71.984 28.393" />
+  <path d="M 53.014 16.250 L 52.499 17.143" />
+  <path d="M 72.500 27.500 L 53.014 16.250" />
+  <path d="M 71.984 28.393 L 52.499 17.143" />
+  <path d="M 26.750 27.500 L 26.750 30.500" />
+  <path d="M 27.500 27.500 L 27.500 30.500" />
+  <path d="M 26.750 30.500 L 27.500 30.500" />
+  <path d="M 26.750 27.500 L 27.500 27.500" />
+  <path d="M 27.500 29.281 L 27.594 29.281" />
+  <path d="M 27.781 28.531 L 27.781 29.094" />
+  <path d="M 27.594 29.281 A 0.188 0.188 0 0 0 27.781 29.094" />
+  <path d="M 27.500 28.531 L 27.781 28.531" />
+  <path d="M 27.500 27.500 L 28.016 28.393" />
+  <path d="M 46.986 16.250 L 47.501 17.143" />
+  <path d="M 27.500 27.500 L 46.986 16.250" />
+  <path d="M 28.016 28.393 L 47.501 17.143" />
+  <path d="M 50.000 27.500 A 22.500 22.500 0 0 0 47.480 17.154" />
+  <path d="M 52.520 17.154 A 22.500 22.500 0 0 0 50.000 27.500" />
+</svg>

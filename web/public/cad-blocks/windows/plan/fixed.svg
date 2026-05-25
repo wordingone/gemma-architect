@@ -1,1 +1,34 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20" width="100" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="0" y="0" width="8" height="20" fill="currentColor"/><line x1="8" y1="7" x2="92" y2="7"/><line x1="8" y1="10" x2="92" y2="10"/><line x1="8" y1="13" x2="92" y2="13"/><rect x="92" y="0" width="8" height="20" fill="currentColor"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" stroke="currentColor" fill="none" stroke-width="1.00" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 92.188 5.000 L 92.188 21.875" />
+  <path d="M 95.000 21.875 L 95.000 24.688" />
+  <path d="M 87.266 15.547 L 89.375 15.547" />
+  <path d="M 87.266 15.547 L 87.266 18.359" />
+  <path d="M 87.266 21.172 L 87.266 21.875" />
+  <path d="M 89.375 5.000 L 89.375 15.547" />
+  <path d="M 89.375 18.359 L 89.375 21.172" />
+  <path d="M 89.375 21.875 L 89.375 24.688" />
+  <path d="M 87.266 21.875 L 89.375 21.875" />
+  <path d="M 87.266 18.359 L 89.375 18.359" />
+  <path d="M 89.375 21.172 L 87.266 21.172" />
+  <path d="M 89.375 24.688 L 95.000 24.688" />
+  <path d="M 89.375 5.000 L 92.188 5.000" />
+  <path d="M 95.000 21.875 L 92.188 21.875" />
+  <path d="M 7.812 5.000 L 7.812 21.875" />
+  <path d="M 5.000 21.875 L 5.000 24.688" />
+  <path d="M 10.625 15.547 L 12.734 15.547" />
+  <path d="M 12.734 15.547 L 12.734 18.359" />
+  <path d="M 12.734 21.172 L 12.734 21.875" />
+  <path d="M 10.625 5.000 L 10.625 15.547" />
+  <path d="M 10.625 18.359 L 10.625 21.172" />
+  <path d="M 10.625 21.875 L 10.625 24.688" />
+  <path d="M 10.625 21.875 L 12.734 21.875" />
+  <path d="M 12.734 18.359 L 10.625 18.359" />
+  <path d="M 10.625 21.172 L 12.734 21.172" />
+  <path d="M 10.625 5.000 L 7.812 5.000" />
+  <path d="M 5.000 24.688 L 10.625 24.688" />
+  <path d="M 5.000 21.875 L 7.812 21.875" />
+  <path d="M 10.625 5.000 L 92.188 5.000" />
+  <path d="M 10.625 24.688 L 89.375 24.688" />
+  <path d="M 10.625 18.359 L 89.375 18.359" />
+  <path d="M 10.625 21.172 L 89.375 21.172" />
+</svg>

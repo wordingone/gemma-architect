@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 70" width="140" height="70" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="2" y="2" width="136" height="66" fill="white"/><rect x="2" y="50" width="30" height="18" fill="white"/><line x1="2" y1="50" x2="138" y2="50"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" stroke="currentColor" fill="none" stroke-width="1.00" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 5.000 50.000 L 5.000 5.000" />
+  <path d="M 5.000 5.000 L 95.000 5.000" />
+  <path d="M 95.000 5.000 L 95.000 50.000" />
+  <path d="M 95.000 50.000 L 5.000 50.000" />
+</svg>

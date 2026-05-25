@@ -21,38 +21,33 @@ export type BlockEntry = {
 };
 
 const BLOCK_CATALOG: BlockEntry[] = [
-  // Doors — plan
-  { id: "doors/plan/single-swing",  category: "Doors",     subcategory: "Plan",      label: "Single Swing",  path: "doors/plan/single-swing.svg",  view: "plan" },
-  { id: "doors/plan/double-swing",  category: "Doors",     subcategory: "Plan",      label: "Double Swing",  path: "doors/plan/double-swing.svg",  view: "plan" },
-  { id: "doors/plan/sliding",       category: "Doors",     subcategory: "Plan",      label: "Sliding",       path: "doors/plan/sliding.svg",       view: "plan" },
-  { id: "doors/plan/pocket",        category: "Doors",     subcategory: "Plan",      label: "Pocket",        path: "doors/plan/pocket.svg",        view: "plan" },
-  { id: "doors/plan/bi-fold",       category: "Doors",     subcategory: "Plan",      label: "Bi-Fold",       path: "doors/plan/bi-fold.svg",       view: "plan" },
-  // Doors — elevation
-  { id: "doors/elevation/single-swing",  category: "Doors", subcategory: "Elevation", label: "Single Swing", path: "doors/elevation/single-swing.svg",  view: "elevation" },
-  { id: "doors/elevation/double-swing",  category: "Doors", subcategory: "Elevation", label: "Double Swing", path: "doors/elevation/double-swing.svg",  view: "elevation" },
-  { id: "doors/elevation/sliding",       category: "Doors", subcategory: "Elevation", label: "Sliding",      path: "doors/elevation/sliding.svg",       view: "elevation" },
-  { id: "doors/elevation/pocket",        category: "Doors", subcategory: "Elevation", label: "Pocket",       path: "doors/elevation/pocket.svg",        view: "elevation" },
-  { id: "doors/elevation/bi-fold",       category: "Doors", subcategory: "Elevation", label: "Bi-Fold",      path: "doors/elevation/bi-fold.svg",       view: "elevation" },
-  // Doors — section
-  { id: "doors/section/single-swing",    category: "Doors", subcategory: "Section",   label: "Single Swing", path: "doors/section/single-swing.svg",    view: "section" },
-  { id: "doors/section/double-swing",    category: "Doors", subcategory: "Section",   label: "Double Swing", path: "doors/section/double-swing.svg",    view: "section" },
-  // Windows — plan
-  { id: "windows/plan/fixed",       category: "Windows",   subcategory: "Plan",      label: "Fixed",         path: "windows/plan/fixed.svg",       view: "plan" },
-  { id: "windows/plan/casement",    category: "Windows",   subcategory: "Plan",      label: "Casement",      path: "windows/plan/casement.svg",    view: "plan" },
-  { id: "windows/plan/sliding",     category: "Windows",   subcategory: "Plan",      label: "Sliding",       path: "windows/plan/sliding.svg",     view: "plan" },
-  { id: "windows/plan/double-hung", category: "Windows",   subcategory: "Plan",      label: "Double Hung",   path: "windows/plan/double-hung.svg", view: "plan" },
-  { id: "windows/plan/awning",      category: "Windows",   subcategory: "Plan",      label: "Awning",        path: "windows/plan/awning.svg",      view: "plan" },
-  // Windows — elevation
-  { id: "windows/elevation/fixed",       category: "Windows", subcategory: "Elevation", label: "Fixed",       path: "windows/elevation/fixed.svg",       view: "elevation" },
-  { id: "windows/elevation/casement",    category: "Windows", subcategory: "Elevation", label: "Casement",    path: "windows/elevation/casement.svg",    view: "elevation" },
-  { id: "windows/elevation/sliding",     category: "Windows", subcategory: "Elevation", label: "Sliding",     path: "windows/elevation/sliding.svg",     view: "elevation" },
-  { id: "windows/elevation/double-hung", category: "Windows", subcategory: "Elevation", label: "Double Hung", path: "windows/elevation/double-hung.svg", view: "elevation" },
-  { id: "windows/elevation/awning",      category: "Windows", subcategory: "Elevation", label: "Awning",      path: "windows/elevation/awning.svg",      view: "elevation" },
-  // Windows — section
-  { id: "windows/section/fixed",        category: "Windows", subcategory: "Section",   label: "Fixed",        path: "windows/section/fixed.svg",        view: "section" },
-  { id: "windows/section/casement",     category: "Windows", subcategory: "Section",   label: "Casement",     path: "windows/section/casement.svg",     view: "section" },
-  { id: "windows/section/double-hung",  category: "Windows", subcategory: "Section",   label: "Double Hung",  path: "windows/section/double-hung.svg",  view: "section" },
-  // Furniture — plan
+  // Doors — plan (source: GSStnb/dxfBlocks, CC0-1.0)
+  { id: "doors/plan/single-swing", category: "Doors",  subcategory: "Plan", label: "Single Swing", path: "doors/plan/single-swing.svg", view: "plan" },
+  { id: "doors/plan/double-swing", category: "Doors",  subcategory: "Plan", label: "Double Swing", path: "doors/plan/double-swing.svg", view: "plan" },
+  { id: "doors/plan/sliding",      category: "Doors",  subcategory: "Plan", label: "Sliding",      path: "doors/plan/sliding.svg",      view: "plan" },
+  { id: "doors/plan/pocket",       category: "Doors",  subcategory: "Plan", label: "Pocket",       path: "doors/plan/pocket.svg",       view: "plan" },
+  { id: "doors/plan/bi-fold",      category: "Doors",  subcategory: "Plan", label: "Bi-Fold",      path: "doors/plan/bi-fold.svg",      view: "plan" },
+  // Windows — plan (source: GSStnb/dxfBlocks, CC0-1.0)
+  { id: "windows/plan/fixed",          category: "Windows", subcategory: "Plan",      label: "Fixed",          path: "windows/plan/fixed.svg",          view: "plan" },
+  { id: "windows/plan/casement",       category: "Windows", subcategory: "Plan",      label: "Casement",       path: "windows/plan/casement.svg",       view: "plan" },
+  { id: "windows/plan/sliding",        category: "Windows", subcategory: "Plan",      label: "Slider",         path: "windows/plan/sliding.svg",        view: "plan" },
+  { id: "windows/plan/fixed-casement", category: "Windows", subcategory: "Plan",      label: "Fixed+Casement", path: "windows/plan/fixed-casement.svg", view: "plan" },
+  // Windows — elevation (source: GSStnb/dxfBlocks, CC0-1.0)
+  { id: "windows/elevation/fixed-small",  category: "Windows", subcategory: "Elevation", label: "Fixed 24\"",  path: "windows/elevation/fixed-small.svg",  view: "elevation" },
+  { id: "windows/elevation/fixed-medium", category: "Windows", subcategory: "Elevation", label: "Fixed 30\"",  path: "windows/elevation/fixed-medium.svg", view: "elevation" },
+  { id: "windows/elevation/fixed-large",  category: "Windows", subcategory: "Elevation", label: "Fixed 36\"",  path: "windows/elevation/fixed-large.svg",  view: "elevation" },
+  { id: "windows/elevation/casement",     category: "Windows", subcategory: "Elevation", label: "Casement",    path: "windows/elevation/casement.svg",     view: "elevation" },
+  // Windows — section/detail (source: GSStnb/dxfBlocks, CC0-1.0)
+  { id: "windows/section/casement-head", category: "Windows", subcategory: "Section", label: "Csmt Head&Sill", path: "windows/section/casement-head.svg", view: "section" },
+  { id: "windows/section/casement-jamb", category: "Windows", subcategory: "Section", label: "Csmt Jamb",      path: "windows/section/casement-jamb.svg", view: "section" },
+  { id: "windows/section/fixed",         category: "Windows", subcategory: "Section", label: "Fixed",          path: "windows/section/fixed.svg",         view: "section" },
+  // Plumbing — plan (source: GSStnb/dxfBlocks, CC0-1.0)
+  { id: "plumbing/plan/toilet",        category: "Plumbing", subcategory: "Plan", label: "Toilet",        path: "plumbing/plan/toilet.svg",        view: "plan" },
+  { id: "plumbing/plan/bathroom-sink", category: "Plumbing", subcategory: "Plan", label: "Bathroom Sink", path: "plumbing/plan/bathroom-sink.svg", view: "plan" },
+  { id: "plumbing/plan/bathtub",       category: "Plumbing", subcategory: "Plan", label: "Bathtub",       path: "plumbing/plan/bathtub.svg",       view: "plan" },
+  { id: "plumbing/plan/shower",        category: "Plumbing", subcategory: "Plan", label: "Shower",        path: "plumbing/plan/shower.svg",        view: "plan" },
+  { id: "plumbing/plan/kitchen-sink",  category: "Plumbing", subcategory: "Plan", label: "Kitchen Sink",  path: "plumbing/plan/kitchen-sink.svg",  view: "plan" },
+  // Furniture — plan (source: GSStnb/dxfBlocks, CC0-1.0)
   { id: "furniture/plan/chair",        category: "Furniture", subcategory: "Plan", label: "Chair",        path: "furniture/plan/chair.svg",        view: "plan" },
   { id: "furniture/plan/arm-chair",    category: "Furniture", subcategory: "Plan", label: "Arm Chair",    path: "furniture/plan/arm-chair.svg",    view: "plan" },
   { id: "furniture/plan/dining-table", category: "Furniture", subcategory: "Plan", label: "Dining Table", path: "furniture/plan/dining-table.svg", view: "plan" },
@@ -62,34 +57,16 @@ const BLOCK_CATALOG: BlockEntry[] = [
   { id: "furniture/plan/desk",         category: "Furniture", subcategory: "Plan", label: "Desk",         path: "furniture/plan/desk.svg",         view: "plan" },
   { id: "furniture/plan/bookcase",     category: "Furniture", subcategory: "Plan", label: "Bookcase",     path: "furniture/plan/bookcase.svg",     view: "plan" },
   { id: "furniture/plan/wardrobe",     category: "Furniture", subcategory: "Plan", label: "Wardrobe",     path: "furniture/plan/wardrobe.svg",     view: "plan" },
-  // Furniture — elevation
-  { id: "furniture/elevation/chair",  category: "Furniture", subcategory: "Elevation", label: "Chair", path: "furniture/elevation/chair.svg",  view: "elevation" },
-  { id: "furniture/elevation/sofa",   category: "Furniture", subcategory: "Elevation", label: "Sofa",  path: "furniture/elevation/sofa.svg",   view: "elevation" },
-  // Plumbing — plan
-  { id: "plumbing/plan/kitchen-sink",   category: "Plumbing", subcategory: "Plan", label: "Kitchen Sink",   path: "plumbing/plan/kitchen-sink.svg",   view: "plan" },
-  { id: "plumbing/plan/bathroom-sink",  category: "Plumbing", subcategory: "Plan", label: "Bathroom Sink",  path: "plumbing/plan/bathroom-sink.svg",  view: "plan" },
-  { id: "plumbing/plan/toilet",         category: "Plumbing", subcategory: "Plan", label: "Toilet",         path: "plumbing/plan/toilet.svg",         view: "plan" },
-  { id: "plumbing/plan/bathtub",        category: "Plumbing", subcategory: "Plan", label: "Bathtub",        path: "plumbing/plan/bathtub.svg",        view: "plan" },
-  { id: "plumbing/plan/shower",         category: "Plumbing", subcategory: "Plan", label: "Shower",         path: "plumbing/plan/shower.svg",         view: "plan" },
-  // Entourage — plan
-  { id: "entourage/plan/person-standing", category: "Entourage", subcategory: "Plan",      label: "Standing", path: "entourage/plan/person-standing.svg", view: "plan" },
-  { id: "entourage/plan/person-sitting",  category: "Entourage", subcategory: "Plan",      label: "Sitting",  path: "entourage/plan/person-sitting.svg",  view: "plan" },
-  { id: "entourage/plan/person-walking",  category: "Entourage", subcategory: "Plan",      label: "Walking",  path: "entourage/plan/person-walking.svg",  view: "plan" },
-  // Entourage — elevation
-  { id: "entourage/elevation/person-standing", category: "Entourage", subcategory: "Elevation", label: "Standing", path: "entourage/elevation/person-standing.svg", view: "elevation" },
-  { id: "entourage/elevation/person-sitting",  category: "Entourage", subcategory: "Elevation", label: "Sitting",  path: "entourage/elevation/person-sitting.svg",  view: "elevation" },
-  { id: "entourage/elevation/person-walking",  category: "Entourage", subcategory: "Elevation", label: "Walking",  path: "entourage/elevation/person-walking.svg",  view: "elevation" },
-  // Vegetation — plan
-  { id: "vegetation/plan/tree-deciduous", category: "Vegetation", subcategory: "Plan",      label: "Deciduous Tree", path: "vegetation/plan/tree-deciduous.svg", view: "plan" },
-  { id: "vegetation/plan/tree-conifer",   category: "Vegetation", subcategory: "Plan",      label: "Conifer Tree",   path: "vegetation/plan/tree-conifer.svg",   view: "plan" },
-  { id: "vegetation/plan/shrub",          category: "Vegetation", subcategory: "Plan",      label: "Shrub",          path: "vegetation/plan/shrub.svg",          view: "plan" },
-  // Vegetation — elevation
-  { id: "vegetation/elevation/tree-deciduous", category: "Vegetation", subcategory: "Elevation", label: "Deciduous Tree", path: "vegetation/elevation/tree-deciduous.svg", view: "elevation" },
-  { id: "vegetation/elevation/tree-conifer",   category: "Vegetation", subcategory: "Elevation", label: "Conifer Tree",   path: "vegetation/elevation/tree-conifer.svg",   view: "elevation" },
-  { id: "vegetation/elevation/shrub",          category: "Vegetation", subcategory: "Elevation", label: "Shrub",          path: "vegetation/elevation/shrub.svg",          view: "elevation" },
-  // Vehicles — plan
-  { id: "vehicles/plan/sedan", category: "Vehicles", subcategory: "Plan", label: "Sedan", path: "vehicles/plan/sedan.svg", view: "plan" },
-  { id: "vehicles/plan/suv",   category: "Vehicles", subcategory: "Plan", label: "SUV",   path: "vehicles/plan/suv.svg",   view: "plan" },
+  // Vegetation — plan (source: GSStnb/dxfBlocks, CC0-1.0)
+  { id: "vegetation/plan/tree-deciduous", category: "Vegetation", subcategory: "Plan", label: "Deciduous Tree", path: "vegetation/plan/tree-deciduous.svg", view: "plan" },
+  { id: "vegetation/plan/tree-conifer",   category: "Vegetation", subcategory: "Plan", label: "Conifer Tree",   path: "vegetation/plan/tree-conifer.svg",   view: "plan" },
+  { id: "vegetation/plan/shrub",          category: "Vegetation", subcategory: "Plan", label: "Shrub",          path: "vegetation/plan/shrub.svg",          view: "plan" },
+  // Appliances — plan (source: GSStnb/dxfBlocks, CC0-1.0)
+  { id: "appliances/plan/refrigerator", category: "Appliances", subcategory: "Plan", label: "Refrigerator", path: "appliances/plan/refrigerator.svg", view: "plan" },
+  { id: "appliances/plan/washer",       category: "Appliances", subcategory: "Plan", label: "Washer",       path: "appliances/plan/washer.svg",       view: "plan" },
+  { id: "appliances/plan/dryer",        category: "Appliances", subcategory: "Plan", label: "Dryer",        path: "appliances/plan/dryer.svg",        view: "plan" },
+  { id: "appliances/plan/dishwasher",   category: "Appliances", subcategory: "Plan", label: "Dishwasher",   path: "appliances/plan/dishwasher.svg",   view: "plan" },
+  { id: "appliances/plan/range",        category: "Appliances", subcategory: "Plan", label: "Range",        path: "appliances/plan/range.svg",        view: "plan" },
 ];
 
 // Exported for tests and for the draft-elements block-insert tool

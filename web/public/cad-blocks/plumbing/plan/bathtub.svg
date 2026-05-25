@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 160" width="80" height="160" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="2" y="2" width="76" height="156" rx="6" fill="white"/><ellipse cx="40" cy="95" rx="32" ry="58" fill="white"/><circle cx="40" cy="30" r="5" fill="none"/><line x1="35" y1="22" x2="45" y2="22"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" stroke="currentColor" fill="none" stroke-width="1.00" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 5.000 50.000 L 5.000 5.000" />
+  <path d="M 5.000 5.000 L 95.000 5.000" />
+  <path d="M 95.000 5.000 L 95.000 50.000" />
+  <path d="M 95.000 50.000 L 5.000 50.000" />
+  <path d="M 11.000 8.000 A 3.000 3.000 0 0 0 8.000 11.000" />
+  <path d="M 8.000 41.000 L 8.000 11.000" />
+  <path d="M 8.000 41.000 A 3.000 3.000 0 0 0 11.000 44.000" />
+  <path d="M 89.000 44.000 L 11.000 44.000" />
+  <path d="M 89.000 44.000 A 3.000 3.000 0 0 0 92.000 41.000" />
+  <path d="M 11.000 8.000 L 89.000 8.000" />
+  <path d="M 92.000 11.000 L 92.000 41.000" />
+  <path d="M 92.000 11.000 A 3.000 3.000 0 0 0 89.000 8.000" />
+  <path d="M 11.750 26.000 A 2.250 2.250 0 1 0 16.250 26.000 A 2.250 2.250 0 1 0 11.750 26.000" />
+</svg>

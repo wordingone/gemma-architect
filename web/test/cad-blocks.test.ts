@@ -1,5 +1,5 @@
-// Regression-net: #1853 — CAD blocks library.
-// Tests: block catalog completeness, provenance, panel state, insertion flow.
+// Regression-net: #1853 / #1888 — CAD blocks library.
+// Sourced from GSStnb/dxfBlocks (CC0-1.0), DXF→SVG converted.
 
 import { test, expect, describe } from "bun:test";
 import {
@@ -12,7 +12,7 @@ import {
 
 // ── Catalog completeness ─────────────────────────────────────────────────────
 
-describe("BLOCK_CATALOG completeness (AC #1: ≥30 blocks)", () => {
+describe("BLOCK_CATALOG completeness (AC #1: ≥30 sourced blocks)", () => {
   test("catalog has ≥30 blocks", () => {
     expect(BLOCK_CATALOG.length).toBeGreaterThanOrEqual(30);
   });
@@ -51,67 +51,46 @@ describe("BLOCK_CATALOG completeness (AC #1: ≥30 blocks)", () => {
 // ── Category coverage ────────────────────────────────────────────────────────
 
 describe("block catalog category coverage", () => {
-  const byCategory = (cat: string) => BLOCK_CATALOG.filter(b => b.category === cat);
+  const byView = (cat: string, v: string) => BLOCK_CATALOG.filter(b => b.category === cat && b.view === v);
 
-  test("Doors: 5 plan + 5 elevation + 2 section", () => {
-    const plan = byCategory("Doors").filter(b => b.view === "plan");
-    const elev = byCategory("Doors").filter(b => b.view === "elevation");
-    const sect = byCategory("Doors").filter(b => b.view === "section");
-    expect(plan.length).toBe(5);
-    expect(elev.length).toBe(5);
-    expect(sect.length).toBeGreaterThanOrEqual(1);
+  test("Doors: 5 plan views", () => {
+    expect(byView("Doors", "plan").length).toBe(5);
   });
 
-  test("Windows: 5 plan + 5 elevation + 3 section", () => {
-    const plan = byCategory("Windows").filter(b => b.view === "plan");
-    const elev = byCategory("Windows").filter(b => b.view === "elevation");
-    const sect = byCategory("Windows").filter(b => b.view === "section");
-    expect(plan.length).toBe(5);
-    expect(elev.length).toBe(5);
-    expect(sect.length).toBe(3);
+  test("Windows: 4 plan + 4 elevation + 3 section", () => {
+    expect(byView("Windows", "plan").length).toBe(4);
+    expect(byView("Windows", "elevation").length).toBe(4);
+    expect(byView("Windows", "section").length).toBe(3);
   });
 
-  test("Furniture: ≥9 total", () => {
-    expect(byCategory("Furniture").length).toBeGreaterThanOrEqual(9);
+  test("Furniture: 9 plan views", () => {
+    expect(byView("Furniture", "plan").length).toBe(9);
   });
 
-  test("Plumbing: 5 plan views (sink/toilet/tub/shower)", () => {
-    const plan = byCategory("Plumbing").filter(b => b.view === "plan");
-    expect(plan.length).toBe(5);
+  test("Plumbing: 5 plan views", () => {
+    expect(byView("Plumbing", "plan").length).toBe(5);
   });
 
-  test("Entourage: 3 plan + 3 elevation (standing/sitting/walking)", () => {
-    const plan = byCategory("Entourage").filter(b => b.view === "plan");
-    const elev = byCategory("Entourage").filter(b => b.view === "elevation");
-    expect(plan.length).toBe(3);
-    expect(elev.length).toBe(3);
+  test("Vegetation: 3 plan views", () => {
+    expect(byView("Vegetation", "plan").length).toBe(3);
   });
 
-  test("Vegetation: 3 plan + 3 elevation (tree/shrub)", () => {
-    const plan = byCategory("Vegetation").filter(b => b.view === "plan");
-    const elev = byCategory("Vegetation").filter(b => b.view === "elevation");
-    expect(plan.length).toBe(3);
-    expect(elev.length).toBe(3);
+  test("Appliances: 5 plan views", () => {
+    expect(byView("Appliances", "plan").length).toBe(5);
   });
 
-  test("Vehicles: 2 plan views (sedan/suv)", () => {
-    const plan = byCategory("Vehicles").filter(b => b.view === "plan");
-    expect(plan.length).toBe(2);
-  });
-
-  test("all required categories are present", () => {
+  test("all required categories present", () => {
     const cats = new Set(BLOCK_CATALOG.map(b => b.category));
     expect(cats.has("Doors")).toBe(true);
     expect(cats.has("Windows")).toBe(true);
     expect(cats.has("Furniture")).toBe(true);
     expect(cats.has("Plumbing")).toBe(true);
-    expect(cats.has("Entourage")).toBe(true);
     expect(cats.has("Vegetation")).toBe(true);
-    expect(cats.has("Vehicles")).toBe(true);
+    expect(cats.has("Appliances")).toBe(true);
   });
 });
 
-// ── Specific block shapes (spot-check) ───────────────────────────────────────
+// ── Specific block entries (AC #5: path convention) ──────────────────────────
 
 describe("specific block entries", () => {
   test("single-swing door plan entry exists", () => {
@@ -121,11 +100,24 @@ describe("specific block entries", () => {
     expect(e!.category).toBe("Doors");
   });
 
-  test("fixed window elevation entry exists", () => {
-    const e = getBlockEntry("windows/elevation/fixed");
+  test("fixed window plan entry exists", () => {
+    const e = getBlockEntry("windows/plan/fixed");
+    expect(e).toBeDefined();
+    expect(e!.view).toBe("plan");
+    expect(e!.path).toBe("windows/plan/fixed.svg");
+  });
+
+  test("fixed-medium window elevation entry exists", () => {
+    const e = getBlockEntry("windows/elevation/fixed-medium");
     expect(e).toBeDefined();
     expect(e!.view).toBe("elevation");
-    expect(e!.path).toBe("windows/elevation/fixed.svg");
+  });
+
+  test("casement-head window section entry exists", () => {
+    const e = getBlockEntry("windows/section/casement-head");
+    expect(e).toBeDefined();
+    expect(e!.view).toBe("section");
+    expect(e!.category).toBe("Windows");
   });
 
   test("toilet plan entry exists", () => {
@@ -134,14 +126,18 @@ describe("specific block entries", () => {
     expect(e!.category).toBe("Plumbing");
   });
 
-  test("person-standing plan and elevation both exist", () => {
-    expect(getBlockEntry("entourage/plan/person-standing")).toBeDefined();
-    expect(getBlockEntry("entourage/elevation/person-standing")).toBeDefined();
+  test("sofa furniture plan entry exists", () => {
+    const e = getBlockEntry("furniture/plan/sofa");
+    expect(e).toBeDefined();
+    expect(e!.category).toBe("Furniture");
   });
 
-  test("sedan and suv plan both exist", () => {
-    expect(getBlockEntry("vehicles/plan/sedan")).toBeDefined();
-    expect(getBlockEntry("vehicles/plan/suv")).toBeDefined();
+  test("deciduous tree vegetation entry exists", () => {
+    expect(getBlockEntry("vegetation/plan/tree-deciduous")).toBeDefined();
+  });
+
+  test("refrigerator appliance entry exists", () => {
+    expect(getBlockEntry("appliances/plan/refrigerator")).toBeDefined();
   });
 
   test("getBlockEntry returns undefined for unknown id", () => {
@@ -179,7 +175,7 @@ describe("block path convention", () => {
 // ── Selected block state ─────────────────────────────────────────────────────
 
 describe("getSelectedBlockId / setSelectedBlockId", () => {
-  test("initial value is null", () => {
+  test("initial value is null after reset", () => {
     setSelectedBlockId(null);
     expect(getSelectedBlockId()).toBeNull();
   });
@@ -191,7 +187,7 @@ describe("getSelectedBlockId / setSelectedBlockId", () => {
   });
 
   test("setSelectedBlockId(null) clears", () => {
-    setSelectedBlockId("furniture/plan/chair");
+    setSelectedBlockId("furniture/plan/sofa");
     setSelectedBlockId(null);
     expect(getSelectedBlockId()).toBeNull();
   });
@@ -209,8 +205,9 @@ describe("BlockEntry type structure", () => {
     }
   });
 
-  test("layerId-aware: entries carry id which serves as blockId for RS_Insert", () => {
-    const entry = getBlockEntry("furniture/plan/sofa");
-    expect(entry?.id).toBe("furniture/plan/sofa");
+  test("id is the canonical block identifier (no .svg suffix)", () => {
+    for (const b of BLOCK_CATALOG) {
+      expect(b.id.endsWith(".svg")).toBe(false);
+    }
   });
 });

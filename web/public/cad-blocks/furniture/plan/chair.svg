@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 70" width="60" height="70" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="5" y="20" width="50" height="45" rx="4" fill="white"/><path d="M5,20 A30,30 0 0,1 55,20" fill="white"/><path d="M5,20 A30,30 0 0,1 55,20" fill="none"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" stroke="currentColor" fill="none" stroke-width="1.00" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 30.820 8.919 A 0.517 0.517 0 0 0 30.565 9.609" />
+  <path d="M 67.111 8.919 A 43.966 43.966 0 0 0 30.820 8.919" />
+  <path d="M 67.366 9.609 A 0.517 0.517 0 0 0 67.111 8.919" />
+  <path d="M 67.002 10.387 L 67.366 9.609" />
+  <path d="M 66.329 10.643 A 0.517 0.517 0 0 0 67.002 10.387" />
+  <path d="M 30.929 10.387 L 30.565 9.609" />
+  <path d="M 66.329 10.643 A 43.966 43.966 0 0 0 31.602 10.643" />
+  <path d="M 30.929 10.387 A 0.517 0.517 0 0 0 31.602 10.643" />
+  <path d="M 30.376 45.832 L 32.414 10.304" />
+  <path d="M 30.376 45.832 A 0.517 0.517 0 0 0 30.893 46.379" />
+  <path d="M 67.555 45.832 L 65.517 10.304" />
+  <path d="M 67.038 46.379 L 30.893 46.379" />
+  <path d="M 67.038 46.379 A 0.517 0.517 0 0 0 67.555 45.832" />
+</svg>

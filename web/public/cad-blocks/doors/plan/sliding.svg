@@ -1,1 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20" width="100" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="0" y="2" width="60" height="16" fill="white"/><rect x="40" y="2" width="60" height="16" fill="white"/><line x1="5" y1="10" x2="25" y2="10"/><polyline points="20,6 25,10 20,14"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" stroke="currentColor" fill="none" stroke-width="1.00" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M 5.000 5.000 L 5.000 10.806" />
+  <path d="M 6.452 5.000 L 6.452 10.806" />
+  <path d="M 5.000 10.806 L 6.452 10.806" />
+  <path d="M 5.000 5.000 L 6.452 5.000" />
+  <path d="M 6.452 5.000 L 6.452 6.996" />
+  <path d="M 93.548 6.996 L 93.548 8.992" />
+  <path d="M 93.548 5.000 L 93.548 10.806" />
+  <path d="M 95.000 5.000 L 95.000 10.806" />
+  <path d="M 93.548 10.806 L 95.000 10.806" />
+  <path d="M 93.548 5.000 L 95.000 5.000" />
+  <path d="M 95.000 5.000 L 95.000 6.996" />
+  <path d="M 50.000 5.000 L 50.000 6.996" />
+  <path d="M 50.000 6.996 L 50.000 8.992" />
+  <path d="M 6.452 5.000 L 50.000 5.000" />
+  <path d="M 6.452 6.996 L 50.000 6.996" />
+  <path d="M 50.000 6.996 L 93.548 6.996" />
+  <path d="M 50.000 8.992 L 93.548 8.992" />
+</svg>
