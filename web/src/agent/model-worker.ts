@@ -166,18 +166,26 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
   // cache writes without surfacing the error. Fix: check available quota upfront and
   // skip caching entirely when quota < model size, so the worker streams directly to
   // memory without ever touching the Cache API.
-  try {
-    const nav = globalThis.navigator as (Navigator & { storage?: StorageManager }) | undefined;
-    if (nav?.storage && typeof nav.storage.estimate === "function") {
-      const est = await nav.storage.estimate();
-      const quota = est.quota ?? 0;
-      const used  = est.usage ?? 0;
-      const free  = quota - used;
-      if (quota > 0 && free < ESTIMATED_MODEL_BYTES) {
-        tfEnv.useBrowserCache = false;
+  //
+  // §#18 fix: skip probe on warm path (isReturning=true). On recycle, cached model
+  // shards count toward storage `used`, so `free` drops by ~5.5 GB post-first-boot.
+  // The probe then disables useBrowserCache on the replacement worker — but the files
+  // ARE in cache and need to be READ, not written. Probe is only relevant for cold
+  // boots where write failure must be pre-empted.
+  if (!isReturning) {
+    try {
+      const nav = globalThis.navigator as (Navigator & { storage?: StorageManager }) | undefined;
+      if (nav?.storage && typeof nav.storage.estimate === "function") {
+        const est = await nav.storage.estimate();
+        const quota = est.quota ?? 0;
+        const used  = est.usage ?? 0;
+        const free  = quota - used;
+        if (quota > 0 && free < ESTIMATED_MODEL_BYTES) {
+          tfEnv.useBrowserCache = false;
+        }
       }
-    }
-  } catch { /* navigator.storage not available in all worker contexts */ }
+    } catch { /* navigator.storage not available in all worker contexts */ }
+  }
 
   // Cumulative bytes downloaded (all model files combined) for aggregate throughput.
   // Track per-file to correctly accumulate across shard boundaries — `info.loaded`
@@ -321,6 +329,9 @@ async function handleInit(data: Record<string, unknown>): Promise<void> {
             await writable.close();
           } catch (writeErr) {
             console.warn("[model-worker] OPFS write failed, model stays in-memory:", writeErr);
+            // §#18: surface OPFS write failure in telemetry so replacement-worker cache-miss
+            // root cause is visible in Phase J receipts (instead of appearing as a cold re-download).
+            post({ type: "phase_timing", phase: "opfs_write_failed", elapsed_ms: Date.now() - _workerStartMs, error: String(writeErr) });
           }
         },
       };
