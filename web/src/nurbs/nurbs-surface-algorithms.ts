@@ -212,7 +212,7 @@ function _clampedKnots(n: number, order: number): number[] {
   const innerCount = n - order;
   const knots: number[] = [];
   for (let i = 0; i < degree; i++) knots.push(0);
-  for (let i = 0; i <= innerCount; i++) knots.push(i / (innerCount + 1));
+  for (let i = 1; i <= innerCount; i++) knots.push(i / (innerCount + 1));
   for (let i = 0; i < degree; i++) knots.push(1);
   return knots;
 }

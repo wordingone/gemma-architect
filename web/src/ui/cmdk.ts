@@ -81,6 +81,7 @@ const ALL_CMDS: Cmd[] = [
       });
     },
   },
+  { group: "MODEL",    icon: "loft",     label: "loft — Loft two curves into a surface", kbd: "", run: () => dispatchSync("setActiveTool", { toolId: "loft" }) },
   { group: "MODEL",    icon: "wall",     label: "IfcWall — place wall",              kbd: "",   run: () => startPicker("IfcWall") },
   { group: "MODEL",    icon: "slab",     label: "IfcSlab — place slab",              kbd: "",   run: () => startPicker("IfcSlab") },
   { group: "MODEL",    icon: "column",   label: "IfcColumn — place column",          kbd: "",   run: () => startPicker("IfcColumn") },
