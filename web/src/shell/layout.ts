@@ -1921,6 +1921,8 @@ function escapeXml(s: string): string {
 
 export type SheetViewType = "plan" | "rcp" | "section" | "elevation" | "3d";
 export type CardinalDir = "N" | "S" | "E" | "W";
+/** Section axis shorthand (#1848): positions the cut at 1/3 or 2/3 of the scene AABB. */
+export type SectionAxis = "NS-1" | "NS-2" | "EW-1" | "EW-2";
 
 export interface SheetTemplate {
   /** Sheet identifier, e.g. "S1" … "S8". */
@@ -1945,6 +1947,9 @@ export interface SheetTemplate {
   // Elevation shorthand — auto-derives origin + normal from the model AABB.
   cardinalDir?: CardinalDir;
 
+  // Section shorthand (#1848) — auto-derives cut position from scene AABB at 1/3 or 2/3.
+  sectionAxis?: SectionAxis;
+
   // Camera axis for this sheet.
   camera: "top" | "front" | "right";
 
@@ -1952,12 +1957,16 @@ export interface SheetTemplate {
   clipPlaneId?: string;
 }
 
-/** Default elevation sheet set (#1850): N/E/S/W, one per cardinal direction. */
+/** Default sheet set (#1850 elevations + #1848 sections): 4 N/E/S/W elevations + 4 bbox-derived sections. */
 export const DEMO_SHEET_SET: SheetTemplate[] = [
   { id: "S1", viewType: "elevation", title: "Elevation: North", cardinalDir: "N", farClip: 40, camera: "front" },
   { id: "S2", viewType: "elevation", title: "Elevation: East",  cardinalDir: "E", farClip: 40, camera: "right" },
   { id: "S3", viewType: "elevation", title: "Elevation: South", cardinalDir: "S", farClip: 40, camera: "front" },
   { id: "S4", viewType: "elevation", title: "Elevation: West",  cardinalDir: "W", farClip: 40, camera: "right" },
+  { id: "S5", viewType: "section", title: "Section A-A", sectionAxis: "NS-1", camera: "front" },
+  { id: "S6", viewType: "section", title: "Section B-B", sectionAxis: "NS-2", camera: "front" },
+  { id: "S7", viewType: "section", title: "Section C-C", sectionAxis: "EW-1", camera: "right" },
+  { id: "S8", viewType: "section", title: "Section D-D", sectionAxis: "EW-2", camera: "right" },
 ];
 
 /** Level stub used in applySheetCut when levelStore is not provided. */
@@ -2011,6 +2020,22 @@ export function applySheetCut(
         origin = entity.origin;
         normal = entity.normal;
         farClip = entity.bounds.farClip;
+      }
+    } else if (t.sectionAxis) {
+      // #1848: derive cut position from scene AABB at 1/3 or 2/3 along the given axis.
+      const bounds = viewer.getSceneBounds?.();
+      const cx = bounds ? (bounds.min.x + bounds.max.x) / 2 : 0;
+      const cy = bounds ? (bounds.min.y + bounds.max.y) / 2 : 0;
+      const cz = bounds ? (bounds.min.z + bounds.max.z) / 2 : 0;
+      const spanX = bounds ? bounds.max.x - bounds.min.x : 20;
+      const spanY = bounds ? bounds.max.y - bounds.min.y : 20;
+      const minX = bounds ? bounds.min.x : -10;
+      const minY = bounds ? bounds.min.y : -10;
+      switch (t.sectionAxis) {
+        case "NS-1": origin = [cx, minY + spanY / 3, cz];           normal = [0, -1, 0]; farClip = farClip ?? spanY * 1.1; break;
+        case "NS-2": origin = [cx, minY + 2 * spanY / 3, cz];       normal = [0, -1, 0]; farClip = farClip ?? spanY * 1.1; break;
+        case "EW-1": origin = [minX + spanX / 3, cy, cz];           normal = [-1, 0, 0]; farClip = farClip ?? spanX * 1.1; break;
+        case "EW-2": origin = [minX + 2 * spanX / 3, cy, cz];       normal = [-1, 0, 0]; farClip = farClip ?? spanX * 1.1; break;
       }
     }
     viewer.addClippingPlane(origin, normal, "sheet-front");

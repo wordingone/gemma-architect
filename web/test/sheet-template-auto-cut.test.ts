@@ -1,9 +1,9 @@
-// Regression-net: #1805 — SheetTemplate interface + applySheetCut.
-// Tests: SheetTemplate type shape, DEMO_SHEET_SET 4-elevation sheet set (#1850), applySheetCut
-// clip-plane configuration per viewType (plan/section/elevation/3d).
+// Regression-net: #1805/#1848/#1850 — SheetTemplate interface + applySheetCut.
+// Tests: SheetTemplate type shape, DEMO_SHEET_SET (4 elevations #1850 + 4 sections #1848),
+// applySheetCut clip-plane configuration per viewType (plan/rcp/section/elevation/3d).
 
 import { test, expect, describe } from "bun:test";
-import type { SheetTemplate, SheetLevelRef } from "../src/shell/layout";
+import type { SheetTemplate, SheetLevelRef, SectionAxis } from "../src/shell/layout";
 import {
   DEMO_SHEET_SET,
   applySheetCut,
@@ -50,38 +50,60 @@ function makeMockViewer() {
 // ── DEMO_SHEET_SET shape ────────────────────────────────────────────────────
 
 describe("DEMO_SHEET_SET", () => {
-  test("has exactly 4 sheets (#1850: default elevation set)", () => {
-    expect(DEMO_SHEET_SET).toHaveLength(4);
+  test("has exactly 8 sheets: 4 elevations (#1850) + 4 sections (#1848)", () => {
+    expect(DEMO_SHEET_SET).toHaveLength(8);
   });
 
-  test("IDs are S1 through S4 in order", () => {
+  test("IDs are S1 through S8 in order", () => {
     const ids = DEMO_SHEET_SET.map((s) => s.id);
-    expect(ids).toEqual(["S1", "S2", "S3", "S4"]);
+    expect(ids).toEqual(["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]);
   });
 
-  test("all four sheets are elevation views", () => {
-    expect(DEMO_SHEET_SET.every((s) => s.viewType === "elevation")).toBe(true);
+  test("first 4 sheets are elevation views", () => {
+    const elevations = DEMO_SHEET_SET.slice(0, 4);
+    expect(elevations.every((s) => s.viewType === "elevation")).toBe(true);
   });
 
-  test("cardinal dirs are N/E/S/W in order", () => {
-    expect(DEMO_SHEET_SET.map((s) => s.cardinalDir)).toEqual(["N", "E", "S", "W"]);
+  test("last 4 sheets are section views (#1848)", () => {
+    const sections = DEMO_SHEET_SET.slice(4);
+    expect(sections.every((s) => s.viewType === "section")).toBe(true);
   });
 
-  test("titles follow 'Elevation: <Dir>' format", () => {
+  test("elevation cardinal dirs are N/E/S/W in order", () => {
+    expect(DEMO_SHEET_SET.slice(0, 4).map((s) => s.cardinalDir)).toEqual(["N", "E", "S", "W"]);
+  });
+
+  test("section axis values are NS-1/NS-2/EW-1/EW-2 in order", () => {
+    const axes = DEMO_SHEET_SET.slice(4).map((s) => s.sectionAxis);
+    expect(axes).toEqual(["NS-1", "NS-2", "EW-1", "EW-2"] satisfies SectionAxis[]);
+  });
+
+  test("elevation titles follow 'Elevation: <Dir>' format", () => {
     expect(DEMO_SHEET_SET[0].title).toBe("Elevation: North");
     expect(DEMO_SHEET_SET[1].title).toBe("Elevation: East");
     expect(DEMO_SHEET_SET[2].title).toBe("Elevation: South");
     expect(DEMO_SHEET_SET[3].title).toBe("Elevation: West");
   });
 
-  test("N and S elevations use camera front", () => {
-    expect(DEMO_SHEET_SET[0].camera).toBe("front"); // N
-    expect(DEMO_SHEET_SET[2].camera).toBe("front"); // S
+  test("section titles are Section A-A through D-D", () => {
+    expect(DEMO_SHEET_SET[4].title).toBe("Section A-A");
+    expect(DEMO_SHEET_SET[5].title).toBe("Section B-B");
+    expect(DEMO_SHEET_SET[6].title).toBe("Section C-C");
+    expect(DEMO_SHEET_SET[7].title).toBe("Section D-D");
   });
 
-  test("E and W elevations use camera right", () => {
-    expect(DEMO_SHEET_SET[1].camera).toBe("right"); // E
-    expect(DEMO_SHEET_SET[3].camera).toBe("right"); // W
+  test("N/S elevations and NS sections use camera front", () => {
+    expect(DEMO_SHEET_SET[0].camera).toBe("front"); // N elevation
+    expect(DEMO_SHEET_SET[2].camera).toBe("front"); // S elevation
+    expect(DEMO_SHEET_SET[4].camera).toBe("front"); // Section A-A (NS-1)
+    expect(DEMO_SHEET_SET[5].camera).toBe("front"); // Section B-B (NS-2)
+  });
+
+  test("E/W elevations and EW sections use camera right", () => {
+    expect(DEMO_SHEET_SET[1].camera).toBe("right"); // E elevation
+    expect(DEMO_SHEET_SET[3].camera).toBe("right"); // W elevation
+    expect(DEMO_SHEET_SET[6].camera).toBe("right"); // Section C-C (EW-1)
+    expect(DEMO_SHEET_SET[7].camera).toBe("right"); // Section D-D (EW-2)
   });
 
   test("all sheets have non-empty titles", () => {
@@ -196,6 +218,84 @@ describe("applySheetCut — section", () => {
     };
     applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
     expect(state.setSectionBoxCalled).toBe(0);
+  });
+});
+
+// ── applySheetCut — section with sectionAxis (#1848) ─────────────────────────
+
+describe("applySheetCut — section with sectionAxis", () => {
+  function makeViewerWithBounds(minX: number, minY: number, maxX: number, maxY: number, z = 0) {
+    const { viewer, state } = makeMockViewer();
+    state.sceneBounds = { min: { x: minX, y: minY, z }, max: { x: maxX, y: maxY, z: 6 } };
+    return { viewer, state };
+  }
+
+  // Bounds: x in [0,30], y in [0,20], spanX=30, spanY=20
+  const bounds = { minX: 0, minY: 0, maxX: 30, maxY: 20 };
+  const cx = 15; // (0+30)/2
+  const cy = 10; // (0+20)/2
+
+  test("NS-1: origin.y at 1/3 of spanY = 20/3 ≈ 6.67 from minY", () => {
+    const { viewer, state } = makeViewerWithBounds(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+    const t: SheetTemplate = { id: "S5", viewType: "section", title: "Section A-A", sectionAxis: "NS-1", camera: "front" };
+    applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
+    expect(state.clipCalls[0].origin[0]).toBeCloseTo(cx);
+    expect(state.clipCalls[0].origin[1]).toBeCloseTo(20 / 3);
+    expect(state.clipCalls[0].normal).toEqual([0, -1, 0]);
+  });
+
+  test("NS-2: origin.y at 2/3 of spanY = 40/3 ≈ 13.33 from minY", () => {
+    const { viewer, state } = makeViewerWithBounds(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+    const t: SheetTemplate = { id: "S6", viewType: "section", title: "Section B-B", sectionAxis: "NS-2", camera: "front" };
+    applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
+    expect(state.clipCalls[0].origin[1]).toBeCloseTo(40 / 3);
+    expect(state.clipCalls[0].normal).toEqual([0, -1, 0]);
+  });
+
+  test("EW-1: origin.x at 1/3 of spanX = 10 from minX", () => {
+    const { viewer, state } = makeViewerWithBounds(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+    const t: SheetTemplate = { id: "S7", viewType: "section", title: "Section C-C", sectionAxis: "EW-1", camera: "right" };
+    applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
+    expect(state.clipCalls[0].origin[0]).toBeCloseTo(10);
+    expect(state.clipCalls[0].origin[1]).toBeCloseTo(cy);
+    expect(state.clipCalls[0].normal).toEqual([-1, 0, 0]);
+  });
+
+  test("EW-2: origin.x at 2/3 of spanX = 20 from minX", () => {
+    const { viewer, state } = makeViewerWithBounds(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+    const t: SheetTemplate = { id: "S8", viewType: "section", title: "Section D-D", sectionAxis: "EW-2", camera: "right" };
+    applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
+    expect(state.clipCalls[0].origin[0]).toBeCloseTo(20);
+    expect(state.clipCalls[0].normal).toEqual([-1, 0, 0]);
+  });
+
+  test("sectionAxis auto-computes farClip from span and adds back plane", () => {
+    const { viewer, state } = makeViewerWithBounds(0, 0, 30, 20);
+    const t: SheetTemplate = { id: "S5", viewType: "section", title: "Section A-A", sectionAxis: "NS-1", camera: "front" };
+    applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
+    expect(state.clipCalls).toHaveLength(2);  // front + back auto-added
+    expect(state.clipCalls[1].label).toBe("sheet-back");
+    // back normal reversed from [0,-1,0] → [0,1,0]; use toBeCloseTo to avoid -0 vs 0 issues
+    expect(state.clipCalls[1].normal[0]).toBeCloseTo(0);
+    expect(state.clipCalls[1].normal[1]).toBeCloseTo(1);
+    expect(state.clipCalls[1].normal[2]).toBeCloseTo(0);
+  });
+
+  test("explicit farClip on template overrides auto-computed value", () => {
+    const { viewer, state } = makeViewerWithBounds(0, 0, 30, 20);
+    const t: SheetTemplate = { id: "S5", viewType: "section", title: "Section A-A", sectionAxis: "NS-1", farClip: 5, camera: "front" };
+    applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
+    // back origin.y = 1/3*20 + (-1)*5 = 6.67 - 5 = 1.67
+    expect(state.clipCalls[1].origin[1]).toBeCloseTo(20 / 3 - 5);
+  });
+
+  test("sectionAxis without scene bounds falls back to span=20 defaults", () => {
+    const { viewer, state } = makeMockViewer(); // no bounds set
+    const t: SheetTemplate = { id: "S5", viewType: "section", title: "Section A-A", sectionAxis: "NS-1", camera: "front" };
+    applySheetCut(viewer as unknown as import("../src/viewer/viewer").Viewer, t);
+    // spanY default = 20, minY = -10 → y_cut = -10 + 20/3 ≈ -3.33
+    expect(state.clipCalls[0].origin[1]).toBeCloseTo(-10 + 20 / 3);
+    expect(state.clipCalls).toHaveLength(2); // auto farClip = 20*1.1 = 22 → back added
   });
 });
 
