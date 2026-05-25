@@ -98,6 +98,10 @@ export class AgentRuntimeController {
   modelLoadError: string | null = null;
   deviceLabel        = "GPU";
   recycleCount       = 0;
+  // §#1505: unplannedOomCount tracks only unexpected D3D12_OOM / device-lost / self-spec crashes.
+  // Planned recycling (MODEL_WORKER_RECYCLE_AFTER) increments recycleCount but NOT this counter,
+  // so FATAL_ERROR isn't triggered by accumulated planned flushes + one real OOM.
+  unplannedOomCount  = 0;
   turnCount          = 0;
   activeTurnId: string | null = null;
 
@@ -146,6 +150,7 @@ export class AgentRuntimeController {
         this.webgpuFallbackEngaged = false;
         this.modelLoadError = null;
         this.activeTurnId = null;
+        this.unplannedOomCount = 0;
         break;
       case "MODEL_READY":
         this.deviceLabel = ev.device;
@@ -176,6 +181,12 @@ export class AgentRuntimeController {
         this.turnCount    = 0;
         this.nextInitNoWarmup = true;
         this.recycleCount++;
+        // §#1505: only count unplanned crashes toward the FATAL_ERROR limit.
+        // Planned recycles (reason="planned") flush the KV buffer pool intentionally
+        // and do not indicate GPU adapter corruption.
+        if (ev.type !== "D3D12_OOM" || (ev as { reason?: string }).reason !== "planned") {
+          this.unplannedOomCount++;
+        }
         break;
       case "WORKER_RECYCLED":
         if (this.state === "ready") {
@@ -205,6 +216,7 @@ export class AgentRuntimeController {
         this.turnCount    = 0;
         this.nextInitNoWarmup = true;
         this.recycleCount++;
+        this.unplannedOomCount++; // self-spec crashes are always unplanned
         break;
       case "FATAL_ERROR":
         this.webgpuFallbackEngaged = true;

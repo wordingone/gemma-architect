@@ -176,11 +176,14 @@ if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>).__model_worker_recycle_count = 0;
 }
 
-async function recycleModelWorkerIfNeeded(): Promise<void> {
-  if (_arc.turnCount < MODEL_WORKER_RECYCLE_AFTER) return;
-  if (!_inferenceWorker) return;
+// §#1505: Scene-VRAM pressure threshold — creator-tagged objects beyond this count
+// indicate enough THREE.js GPU buffers to compete with LLM KV-cache on the next turn.
+// Triggers proactive worker recycle (KV-cache flush) before inference begins.
+const SCENE_VRAM_RECYCLE_THRESHOLD = 12;
 
-  // Graceful shutdown: let worker release ORT sessions + model before terminate.
+// §#1505: Shared graceful-shutdown + planned-recycle sequence.
+// Used by both the turn-count gate and the scene-VRAM gate.
+async function _doPlannedRecycle(reason: string): Promise<void> {
   await new Promise<void>((resolve) => {
     const timeout = setTimeout(resolve, 5000);
     const onMsg = (ev: MessageEvent<Record<string, unknown>>) => {
@@ -193,16 +196,38 @@ async function recycleModelWorkerIfNeeded(): Promise<void> {
     _inferenceWorker!.addEventListener("message", onMsg);
     _inferenceWorker!.postMessage({ type: "shutdown" });
   });
-
   _inferenceWorker!.terminate();
   _inferenceWorker = null;
-  _arc.dispatch({ type: "D3D12_OOM", reason: "planned" }); // resets lifecycle flags, state → recycling
+  _arc.dispatch({ type: "D3D12_OOM", reason: "planned" });
   (window as unknown as Record<string, unknown>).__model_worker_recycle_count = _arc.recycleCount;
   window.dispatchEvent(new CustomEvent("agentmodel:worker-recycled", {
-    detail: { recycleCount: _arc.recycleCount },
+    detail: { recycleCount: _arc.recycleCount, reason },
   }));
-  _arc.dispatch({ type: "WORKER_RECYCLED", recycleCount: _arc.recycleCount, reason: "planned" }); // → recovering
-  emitRecycle(_arc.recycleCount, "planned"); // §#1628
+  _arc.dispatch({ type: "WORKER_RECYCLED", recycleCount: _arc.recycleCount, reason });
+  emitRecycle(_arc.recycleCount, reason);
+}
+
+async function recycleModelWorkerIfNeeded(): Promise<void> {
+  if (!_inferenceWorker) return;
+
+  // §#1505: VRAM-aware early recycle — count creator-tagged scene objects.
+  // When the scene has grown large (many GPU buffers from dispatches), flush the
+  // ORT KV-cache BEFORE the next turn's inference to prevent D3D12_OOM mid-turn.
+  // Fires ahead of the turn-count gate so Turn 2 gets a fresh worker after a large Turn 1.
+  {
+    type CreatorChild = { userData?: Record<string, unknown> };
+    const _sceneArr = (window as unknown as { __viewer?: { scene?: { children?: CreatorChild[] } } })
+      .__viewer?.scene?.children;
+    const _creatorCount = _sceneArr?.filter(c => c.userData?.creator != null).length ?? 0;
+    if (_creatorCount >= SCENE_VRAM_RECYCLE_THRESHOLD && _arc.turnCount > 0) {
+      await _doPlannedRecycle("scene-vram");
+      return;
+    }
+  }
+
+  if (_arc.turnCount < MODEL_WORKER_RECYCLE_AFTER) return;
+
+  await _doPlannedRecycle("planned"); // #1303: turn-count-based KV buffer flush
 }
 
 // CDN URL injected at build time via VITE_DRAFTER_ONNX_URL env var (#811).
@@ -416,7 +441,10 @@ function initWorkerIfNeeded(): Worker {
           // corrupted. Auto-respawn produces "function signature mismatch" because the new
           // worker's ONNX WASM imports fail against the torn adapter's device table.
           // Surface user-actionable reload message and halt instead of spawning a doomed worker.
-          if (_arc.recycleCount >= 2) {
+          // §#1505: FATAL_ERROR only when ≥2 *unplanned* OOMs occur consecutively.
+          // Planned recycling (scene-vram / turn-count flushes) resets unplannedOomCount to 0
+          // via BOOT_REQUESTED on the new worker, preventing false FATAL_ERROR.
+          if (_arc.unplannedOomCount >= 2) {
             const _fatalMsg = "GPU memory exhausted after multiple resets — please refresh the page to continue.";
             _arc.dispatch({ type: "FATAL_ERROR", error: _fatalMsg }); // sets webgpuFallbackEngaged, bootComplete, modelLoadError
             for (const [, cb] of _generateCallbacks) cb.reject(new Error(_fatalMsg));
@@ -489,7 +517,7 @@ function initWorkerIfNeeded(): Worker {
             detail: { recycleCount: _arc.recycleCount, reason: "device-lost-dgpu" },
           }));
           emitRecycle(_arc.recycleCount, "device-lost-dgpu"); // §#1628
-          if (_arc.recycleCount >= 2) {
+          if (_arc.unplannedOomCount >= 2) {
             const _fatalMsg = "GPU device lost after multiple resets — please refresh the page to continue.";
             _arc.dispatch({ type: "FATAL_ERROR", error: _fatalMsg });
             for (const [, cb] of _generateCallbacks) cb.reject(new Error(_fatalMsg));
@@ -1417,13 +1445,17 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   let trimmedHistory = _historyIn.slice(-MAX_HISTORY_MSGS);
   // Char-based safety trim: ~40K chars ≈ 10K tokens, leaves 6K headroom for sys+image+prompt
   // within the 16384-token WEBGPU_CONTEXT_LIMIT. Drop oldest user+assistant pairs together.
+  // §#1505: never trim below the last 2 messages (most recent user+assistant pair).
+  // After a scene-VRAM recycle, the model needs at least the prior assistant turn so it
+  // knows what was built and can continue adding geometry rather than outputting NL-only.
   const HISTORY_CHAR_BUDGET = 40_000;
+  const HISTORY_MIN_TAIL = 2; // always preserve last user+assistant pair
   {
     let histChars = trimmedHistory.reduce(
       (s, m) => s + (typeof m.content === "string" ? m.content.length : 0),
       0,
     );
-    while (histChars > HISTORY_CHAR_BUDGET && trimmedHistory.length >= 2) {
+    while (histChars > HISTORY_CHAR_BUDGET && trimmedHistory.length > HISTORY_MIN_TAIL) {
       histChars -= (typeof trimmedHistory[0].content === "string" ? trimmedHistory[0].content.length : 0)
                 + (typeof trimmedHistory[1].content === "string" ? trimmedHistory[1].content.length : 0);
       trimmedHistory = trimmedHistory.slice(2);

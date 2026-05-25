@@ -287,4 +287,64 @@ describe("AgentRuntimeController — #1868 ARC event unit tests", () => {
       expect(c.chatInputEnabled).toBe(false);
     });
   });
+
+  // ── §#1505: unplannedOomCount — planned recycles must NOT count ──────────
+
+  describe("unplannedOomCount (#1505 VRAM management)", () => {
+    test("starts at 0", () => {
+      expect(new AgentRuntimeController().unplannedOomCount).toBe(0);
+    });
+
+    test("unplanned D3D12_OOM increments unplannedOomCount", () => {
+      const c = generatingCtrl();
+      c.dispatch({ type: "D3D12_OOM" });
+      expect(c.unplannedOomCount).toBe(1);
+    });
+
+    test("planned D3D12_OOM (reason='planned') does NOT increment unplannedOomCount", () => {
+      const c = bootedCtrl();
+      c.dispatch({ type: "D3D12_OOM", reason: "planned" });
+      expect(c.unplannedOomCount).toBe(0);
+      expect(c.recycleCount).toBe(1); // recycleCount still increments
+    });
+
+    test("planned + unplanned: only unplanned contributes to unplannedOomCount", () => {
+      const c = bootedCtrl();
+      c.dispatch({ type: "D3D12_OOM", reason: "planned" }); // planned flush
+      c.dispatch({ type: "WORKER_RECYCLED", recycleCount: 1, reason: "planned" });
+      c.dispatch({ type: "BOOT_COMPLETE" }); // → ready
+      c.dispatch({ type: "GENERATE_REQUESTED", turnId: "t2" });
+      c.dispatch({ type: "D3D12_OOM" }); // actual OOM
+      expect(c.unplannedOomCount).toBe(1);
+      expect(c.recycleCount).toBe(2);
+    });
+
+    test("BOOT_REQUESTED resets unplannedOomCount", () => {
+      const c = generatingCtrl();
+      c.dispatch({ type: "D3D12_OOM" });
+      expect(c.unplannedOomCount).toBe(1);
+      c.dispatch({ type: "WORKER_RECYCLED", recycleCount: 1, reason: "test" });
+      c.dispatch({ type: "FATAL_ERROR", error: "test" });
+      c.dispatch({ type: "BOOT_REQUESTED" });
+      expect(c.unplannedOomCount).toBe(0);
+    });
+
+    test("SELF_SPEC_DRAFT_DEVICE_LOST increments unplannedOomCount", () => {
+      const c = generatingCtrl();
+      c.dispatch({ type: "SELF_SPEC_DRAFT_DEVICE_LOST", turnId: "t1" });
+      expect(c.unplannedOomCount).toBe(1);
+    });
+
+    test("SELF_SPEC_VERIFY_D3D12_OOM increments unplannedOomCount", () => {
+      const c = generatingCtrl();
+      c.dispatch({ type: "SELF_SPEC_VERIFY_D3D12_OOM", turnId: "t1" });
+      expect(c.unplannedOomCount).toBe(1);
+    });
+
+    test("WATCHDOG_TIMEOUT increments unplannedOomCount", () => {
+      const c = generatingCtrl();
+      c.dispatch({ type: "WATCHDOG_TIMEOUT", turnId: "t1" });
+      expect(c.unplannedOomCount).toBe(1);
+    });
+  });
 });
