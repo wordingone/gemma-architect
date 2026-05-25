@@ -6850,6 +6850,69 @@ await resetScene('before-box-inject');
   await resetScene('post-S134');
 }
 
+// ── S138 — intermediate-floor-slab (#1557): two-story house prompt → SdSlab dispatched after setActiveLevel(level/1) ──
+// Requires on-device model (arc.state==='ready'). In surface-allowfail.txt — no model in CI.
+// Validates AC: ≥1 SdSlab appears in dispatch ledger immediately following setActiveLevel with id=level/1.
+{
+  let arcReady = false;
+  for (let i = 0; i < 60; i++) {
+    const state = await evaluate(`window.__arc?.state ?? 'absent'`);
+    if (state === 'ready') { arcReady = true; break; }
+    if (state === 'failed') break;
+    await delay(2000);
+  }
+
+  if (!arcReady) {
+    record('intermediate-floor-slab', false, { reason: 'arc not ready — model not loaded or failed' });
+  } else {
+    const r138 = await evaluate(`(async function() {
+      try {
+        const input   = document.querySelector('.chat-input');
+        const sendBtn = document.querySelector('.chat-send-btn');
+        if (!input || !sendBtn) return { passed: false, evidence: { reason: 'chat UI not found' } };
+        if (sendBtn.disabled) return { passed: false, evidence: { reason: 'send-btn disabled' } };
+
+        window.__dispatchLedger = [];
+        const turnPromise = new Promise(resolve => {
+          const t = setTimeout(() => resolve({ timedOut: true }), 600000);
+          window.addEventListener('agent:turn-complete', () => { clearTimeout(t); resolve({ timedOut: false }); }, { once: true });
+        });
+
+        input.value = "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.";
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        sendBtn.click();
+
+        const turn = await turnPromise;
+        if (turn.timedOut) return { passed: false, evidence: { reason: 'turn timed out' } };
+
+        const ledger = window.__dispatchLedger ?? [];
+        // Find setActiveLevel(level/1) in the sequence
+        const l1idx = ledger.findIndex(e => e.verb === 'setActiveLevel' && e.args?.id === 'level/1');
+        // Count SdSlab dispatches that follow it
+        const l2Slabs = l1idx >= 0 ? ledger.slice(l1idx + 1).filter(e => e.verb === 'SdSlab') : [];
+
+        const passed = l2Slabs.length >= 1;
+        return {
+          passed,
+          evidence: {
+            totalDispatches: ledger.length,
+            setActiveLevel1Found: l1idx >= 0,
+            l2SlabCount: l2Slabs.length,
+            l2SlabArgs: l2Slabs.slice(0, 2).map(e => e.args),
+          },
+        };
+      } catch (e) {
+        return { passed: false, evidence: { reason: 'exception', message: String(e) } };
+      }
+    })()`, true, 660000);
+
+    if (!r138) record('intermediate-floor-slab', false, { reason: 'evaluate returned null' });
+    else record('intermediate-floor-slab', r138.passed, r138.evidence);
+  }
+
+  await resetScene('post-S138');
+}
+
 // ── S140 — interior-partition-present (#1556): two-story house prompt → ≥1 wall center inside bbox ──
 // Requires on-device model (arc.state==='ready'). In surface-allowfail.txt — no model in CI.
 // Validates AC D3: at least 1 SdWall whose XY centroid is >0.5m from all four perimeter edges.

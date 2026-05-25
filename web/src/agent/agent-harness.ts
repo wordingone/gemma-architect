@@ -718,6 +718,7 @@ HANDLER AUTO-BEHAVIORS — the dispatch handlers do these automatically; agent m
 - IfcRoof(type=pitched): auto-trims the two short-edge (gable-end) walls to a triangle profile. Emit IfcRoof only — do NOT emit topProfile on walls.
 - IfcStair: auto-cuts a rectangular stairwell void through the IfcSlab at target elevation. Place IfcStair AFTER the upper-floor slab.
 - Multi-level sequence: emit ALL IfcLevel calls first (elevation=0, 3.0, 6.0 ...), then setActiveLevel, then walls+slabs for that level. Walls spanning only one storey use height = floor_height (not total building height).
+- SdSlab MUST be the FIRST dispatch after each setActiveLevel (intermediate floor slab for that storey). Emit SdSlab before any SdWall on that level — walls with no floor beneath them are invalid.
 `.trim();
 
 // FEW_SHOT_EXAMPLES — API/CPU path. Two examples kept trim for WASM heap (#1058, #1194).
