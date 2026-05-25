@@ -891,6 +891,34 @@ Assistant: SdBooleanIntersection — keeps only the shared volume of a and b.
 1. SdBooleanIntersection — a=<uuid-A>, b=<uuid-B>
 </plan>
 <tool_call>{"name":"SdBooleanIntersection","arguments":{"a":"<uuid-A>","b":"<uuid-B>"},"metadata":{"source":"agent"}}</tool_call>
+
+User: explode that polysurface into its individual faces
+Assistant: SdExplode — target UUID from scene context.
+<plan>
+1. SdExplode — target=<uuid-of-polysurface>
+</plan>
+<tool_call>{"name":"SdExplode","arguments":{"target":"<uuid-of-polysurface>"},"metadata":{"source":"agent"}}</tool_call>
+
+User: join these two surfaces into one polysurface
+Assistant: SdJoin — targets is an array of surface UUIDs from the scene context.
+<plan>
+1. SdJoin — targets=[<uuid-A>, <uuid-B>]
+</plan>
+<tool_call>{"name":"SdJoin","arguments":{"targets":["<uuid-of-surface-A>","<uuid-of-surface-B>"]},"metadata":{"source":"agent"}}</tool_call>
+
+User: rebuild that NURBS surface with 20 control points
+Assistant: SdRebuild — target UUID + count=20.
+<plan>
+1. SdRebuild — target=<uuid>, count=20
+</plan>
+<tool_call>{"name":"SdRebuild","arguments":{"target":"<uuid-of-surface>","count":20},"metadata":{"source":"agent"}}</tool_call>
+
+User: generate contour curves at 1-metre intervals across that solid
+Assistant: SdContour — target UUID, interval=1.
+<plan>
+1. SdContour — target=<uuid>, interval=1
+</plan>
+<tool_call>{"name":"SdContour","arguments":{"target":"<uuid-of-solid>","interval":1},"metadata":{"source":"agent"}}</tool_call>
 `.trim();
 
 const WEBGPU_HOUSE_FEW_SHOT = `
