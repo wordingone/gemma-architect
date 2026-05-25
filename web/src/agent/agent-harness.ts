@@ -63,6 +63,8 @@ import { snapshotAsText } from "../scene/scene-kg";
 import { captureViewport } from "./viewport-capture";
 import type { Skill } from "./skills-loader";
 import { recordTurn } from "./telemetry";
+import { selfSpecController, BASELINE_TPS_P50 } from "./self-spec-controller";
+import type { SelfSpecRuntimeState } from "./self-spec-controller";
 import { isWasmFallbackMode } from "./boot-screen";
 import {
   initTelemetry,
@@ -1440,7 +1442,24 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     { role: "user" as const, content: req.prompt },
   ];
 
-  const useMtp = !_MTP_OFF;
+  // §#1860 Sub-5: activation gates for self-speculative decoding.
+  // Estimate input tokens at ~4 chars/token (conservative pre-turn estimate).
+  const _estimatedInputTokens = Math.round(
+    messages.reduce((s, m) => s + (typeof m.content === "string" ? m.content.length : 0), 0) / 4,
+  );
+  const _selfSpecState: SelfSpecRuntimeState = {
+    backendPath:     "webgpu",   // harness is only reached on the WebGPU path
+    modelReady:      _arc.workerReady,
+    prefillComplete: _arc.prefillDone,
+    inputLength:     _estimatedInputTokens,
+    contextLimit:    16384,
+    verifyBeta:      1.0,        // Sub-5 default; full measurement in follow-up (#1865 AC)
+    deviceLost:      _arc.webgpuFallbackEngaged,
+    recycleCount:    _arc.recycleCount,
+    highEntropyMode: false,      // greedy by default; temperature gate in follow-up
+  };
+  const _selfSpecDecision = selfSpecController.shouldActivate(_selfSpecState);
+  const useMtp = !_MTP_OFF && _selfSpecDecision.active;
   const turnId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   // §P0-ARC: advance state machine; increments turnCount (used by recycle threshold).
   // Valid from "ready" or "recovering" (post-planned-recycle first turn).
@@ -1532,7 +1551,15 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
   const tgTps = decodeMs > 0 ? tokensOut / (decodeMs / 1000) : 0;
   const ppTps = prefillMs > 0 ? inputLength / (prefillMs / 1000) : 0;
   const _specAcceptRate = specAttempts > 0 ? specAccepts / specAttempts : 0;
-  console.debug(`[agent] prefill=${Math.round(prefillMs)}ms decode=${Math.round(decodeMs)}ms in=${inputLength} out=${tokensOut} tg=${tgTps.toFixed(1)}t/s mtp=${_mtpActive}`);
+  // §#1860 Sub-5: self-spec telemetry fields.
+  // accepted_tokens = specAccepts (verifier-accepted; replacements excluded).
+  // effective_tps uses tokensOut as emitted count (conservative; same as tgTps numerator).
+  const _effectiveTps = tgTps; // identical to tgTps until drafter+verifier fully wired
+  const _speedupObserved = BASELINE_TPS_P50 > 0 ? _effectiveTps / BASELINE_TPS_P50 : undefined;
+  const _selfSpecAcceptRate = specAttempts > 0 ? specAccepts / specAttempts : 0;
+  // Update controller rolling window — use 0 if MTP was not active this turn.
+  selfSpecController.recordTurn(_mtpActive ? _selfSpecAcceptRate : 0);
+  console.debug(`[agent] prefill=${Math.round(prefillMs)}ms decode=${Math.round(decodeMs)}ms in=${inputLength} out=${tokensOut} tg=${tgTps.toFixed(1)}t/s mtp=${_mtpActive} self_spec=${_selfSpecDecision.active}(${_selfSpecDecision.reason})`);
   _arc.dispatch({ type: "GENERATE_DONE", turnId }); // §P0-ARC: state → ready
   const _mtpSuffix = _mtpActive ? " · MTP" : "";
   updateBadge(`<span class="v">G</span>EMMA·4·${MODEL_LABEL}  ·  LIVE · ${_arc.deviceLabel} · ${tgTps.toFixed(0)} t/s${_mtpSuffix}`);
@@ -1552,6 +1579,15 @@ export async function runAgentTurn(req: AgentRequest): Promise<AgentResponse> {
     spec_accepts:        specAccepts,
     spec_accept_rate:    _specAcceptRate,
     path:                "webgpu",
+    // §#1860 Sub-5
+    self_spec_active:  _selfSpecDecision.active,
+    self_spec_reason:  _selfSpecDecision.reason,
+    draft_tokens:      specAttempts,
+    accepted_tokens:   specAccepts,
+    acceptance_rate:   _selfSpecAcceptRate,
+    verify_beta:       _selfSpecState.verifyBeta,
+    effective_tps:     _effectiveTps,
+    speedup_observed:  _speedupObserved,
   });
 
   let plan: string | undefined;
