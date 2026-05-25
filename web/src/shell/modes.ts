@@ -23,6 +23,7 @@ import { iconSVG } from "../ui/icons";
 import { buildLayoutMode, addPanel, getController, type SceneBounds } from "./layout";
 import { buildLayoutPalette } from "./workbench";
 import { buildLayoutLayersPanel } from "./layers-panel";
+import { buildCadBlocksPanel } from "./cad-blocks-panel";
 import {
   buildResearchIndex,
   queryResearch,
@@ -58,11 +59,50 @@ function buildPaperMode(boundsProvider?: () => SceneBounds | null): HTMLElement 
   buildLayoutPalette(paletteEl);
   el.appendChild(paletteEl);
 
-  // Inject rightside layers panel (grid-area: layers) into the paper-mode grid.
-  const layersEl = document.createElement("div");
-  layersEl.className = "paper-layers";
-  buildLayoutLayersPanel(layersEl);
-  el.appendChild(layersEl);
+  // Inject rightside panel (grid-area: layers) with LAYERS + BLOCKS tabs.
+  const rightPanel = document.createElement("div");
+  rightPanel.className = "paper-layers paper-right-panel";
+
+  // Tab switcher
+  const tabBar = document.createElement("div");
+  tabBar.className = "pr-tab-bar";
+  const tabs: Array<{ id: string; label: string }> = [
+    { id: "layers", label: "LAYERS" },
+    { id: "blocks", label: "BLOCKS" },
+  ];
+  const tabPanels: Record<string, HTMLElement> = {};
+  const tabBtns: Record<string, HTMLElement> = {};
+
+  tabs.forEach(({ id, label }) => {
+    const btn = document.createElement("button");
+    btn.className = "pr-tab-btn" + (id === "layers" ? " pr-tab-btn--active" : "");
+    btn.textContent = label;
+    btn.dataset.tab = id;
+    tabBar.appendChild(btn);
+    tabBtns[id] = btn;
+
+    const panel = document.createElement("div");
+    panel.className = "pr-tab-panel";
+    panel.dataset.tabPanel = id;
+    panel.style.display = id === "layers" ? "" : "none";
+    tabPanels[id] = panel;
+  });
+
+  tabBar.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>(".pr-tab-btn");
+    const id = btn?.dataset.tab;
+    if (!id) return;
+    Object.values(tabBtns).forEach(b => b.classList.remove("pr-tab-btn--active"));
+    tabBtns[id].classList.add("pr-tab-btn--active");
+    Object.values(tabPanels).forEach(p => { p.style.display = "none"; });
+    tabPanels[id].style.display = "";
+  });
+
+  rightPanel.appendChild(tabBar);
+  buildLayoutLayersPanel(tabPanels["layers"]);
+  buildCadBlocksPanel(tabPanels["blocks"]);
+  Object.values(tabPanels).forEach(p => rightPanel.appendChild(p));
+  el.appendChild(rightPanel);
 
   void addPanel;
   return el;
