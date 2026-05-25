@@ -29,25 +29,24 @@ if (/localhost|127\.0\.0\.1/.test(PAGES_URL)) {
 }
 
 const turnsIdx = process.argv.indexOf("--turns");
-const TURNS_PER_PROMPT = turnsIdx !== -1 ? parseInt(process.argv[turnsIdx + 1]) : 5;
+const TURNS_PER_PROMPT = turnsIdx !== -1 ? parseInt(process.argv[turnsIdx + 1]) : 1;
 
-// ── Canonical imperial prompts (from STARTER_PROMPTS in chat-panel.ts) ───────
-
-// two-story-house excluded: multi-dispatch turn takes 15-20 min on E4B (>2000 tokens + tool calls).
-// tg_tps is a hardware/model characteristic, not prompt-dependent. The 5 shorter prompts
-// produce the same TPS baseline signal in a fraction of the time.
-const PROMPTS = [
-  { label: "scene-query", complexity: "short",
-    text: "What's currently in the scene?" },
-  { label: "wall-height", complexity: "short",
-    text: "Change the height of the currently selected wall to 10'." },
-  { label: "garage", complexity: "medium",
-    text: "Add an attached single-car garage, 12' wide by 22' deep, connected to the right side of the house." },
-  { label: "section-cut", complexity: "medium",
-    text: "Cut a vertical section through the center of the building and describe the structural elements and layers visible in the section." },
-  { label: "stair-add", complexity: "medium",
-    text: "Add a straight-run stair from the first floor to the second floor, 3' wide, with 14 risers each 7\" tall." },
-];
+// ── Sampling strategy: 15 fresh sessions, each 1 turn of the confirmed webgpu prompt ──
+//
+// The send button takes 10+ minutes to re-enable within a single session after each turn
+// (webgpu path still; arc context accumulates and triggers long pre-processing).
+// Solution: 1 turn per fresh session (reload between each). 15 sessions = 15 samples.
+// Each reload takes ~40s boot; total runtime ~14 min for 15 samples.
+//
+// "What's currently in the scene?" is the ONLY confirmed non-dispatch webgpu-path prompt.
+// All other prompts (measurements, scene inspection, geometry questions) trigger tool dispatch
+// → agent path → 30+ min per turn. Never use those for baseline TPS measurement.
+const N_SAMPLES = 25; // ~33% timeout rate observed; 25 samples gives ≥15 valid at up to 40% timeouts
+const PROMPTS = Array.from({ length: N_SAMPLES }, (_, i) => ({
+  label: `scene-query-${String(i + 1).padStart(2, "0")}`,
+  complexity: "short",
+  text: "What's currently in the scene?",
+}));
 
 // ── CDP helpers ───────────────────────────────────────────────────────────────
 
@@ -116,7 +115,8 @@ if (/localhost|127\.0\.0\.1/.test(target.url)) {
 }
 
 console.log(`[baseline-tps] Attaching to tab: ${target.url}`);
-const cdp = await cdpWs(target.webSocketDebuggerUrl);
+let currentTabId = target.id;
+let cdp = await cdpWs(target.webSocketDebuggerUrl);
 
 // 2. Enable domains
 await cdp.send("Page.enable");
@@ -135,41 +135,11 @@ await Promise.race([nav1Done, sleep(30000)]);
 console.log("[baseline-tps] Pages URL loaded. Now clearing origin storage (cold-cache)...");
 await sleep(2000); // let page settle before clearing
 
-// 4. Cold-cache clear in Pages origin context
-// Network-level: browser-wide HTTP cache + cookies
+// 4. Clear HTTP cache + cookies only. NEVER touch localStorage (app stores boot-state there)
+//    and NEVER touch OPFS (model lives there — ~4GB, re-download takes 10+ min).
 await cdp.send("Network.clearBrowserCache");
 await cdp.send("Network.clearBrowserCookies");
-
-// Origin-level: Cache API, IDB, SW — runs in Pages origin, clears Pages storage only
-const clearResult = await cdp.send("Runtime.evaluate", {
-  expression: `(async () => {
-    const log = [];
-    try {
-      if (navigator.serviceWorker) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map(r => r.unregister()));
-        log.push('sw:' + regs.length);
-      }
-    } catch (e) { log.push('sw-err:' + e.message); }
-    try {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-      log.push('cache:' + keys.length);
-    } catch (e) { log.push('cache-err:' + e.message); }
-    try {
-      const dbs = await indexedDB.databases?.() ?? [];
-      await Promise.all(dbs.map(db => new Promise((res, rej) => {
-        const req = indexedDB.deleteDatabase(db.name);
-        req.onsuccess = res; req.onerror = () => rej(req.error); req.onblocked = res;
-      })));
-      log.push('idb:' + dbs.length);
-    } catch (e) { log.push('idb-err:' + e.message); }
-    try { localStorage.clear(); log.push('ls'); } catch {}
-    return log.join(',');
-  })()`,
-  awaitPromise: true,
-}).catch(e => ({ result: { value: "clear-error:" + e.message } }));
-console.log(`[baseline-tps] Storage cleared: ${clearResult?.result?.value ?? '?'}`);
+console.log("[baseline-tps] HTTP cache + cookies cleared (localStorage + OPFS preserved)");
 
 // 5. Reload to cold-boot (all storage now clear — this is the actual cold-cache start)
 console.log("[baseline-tps] Reloading for cold-cache boot...");
@@ -182,51 +152,73 @@ await cdp.send("Page.reload", { ignoreCache: true });
 await Promise.race([nav2Done, sleep(15000)]);
 console.log("[baseline-tps] Reload done. Waiting for boot...");
 
-// 6. Wait for boot — poll every 5s (avoid long-running awaitPromise that dies on reload)
-// Runtime.evaluate with awaitPromise:true gets cancelled by Page.reload navigation.
-const BOOT_TIMEOUT_MS = 360000; // 6 min
-const bootStart = Date.now();
-let bootResult = null;
+// 6. Boot helper — used at startup AND between each prompt group.
+// Each prompt group gets a fresh arc session to avoid context accumulation across groups.
+// (5 turns of wall-height in a single session degrades TPS by turn 3-4 and crashes at turn 5.)
+async function waitForBoot(cdp, label = "") {
+  const BOOT_TIMEOUT_MS = 600000; // 10 min
+  const bootStart = Date.now();
+  let bootResult = null;
+  let downloadClicked = false;
+  const pfx = label ? `[baseline-tps][${label}]` : "[baseline-tps]";
 
-while (Date.now() - bootStart < BOOT_TIMEOUT_MS) {
-  await sleep(5000);
-  let check;
-  try {
-    check = await cdp.send("Runtime.evaluate", {
-      expression: `
-        (() => {
-          const input = document.querySelector('.chat-input');
-          const bootOverlay = document.querySelector('.boot-overlay, .loading-overlay, [data-boot]');
-          const fatalEl = document.querySelector('.fatal-error, [data-fatal]');
-          if (fatalEl) return 'fatal';
-          if (input && !bootOverlay) return 'ready';
-          const telLen = (window.__telemetry ?? []).length;
-          return 'booting:' + telLen;
-        })()
-      `,
-    });
-  } catch (e) {
-    // Page still navigating after reload — normal for first few polls
+  while (Date.now() - bootStart < BOOT_TIMEOUT_MS) {
+    await sleep(5000);
+    let check;
+    try {
+      check = await cdp.send("Runtime.evaluate", {
+        expression: `
+          (() => {
+            const fatalEl = document.querySelector('.fatal-error, [data-fatal]');
+            if (fatalEl) return 'fatal';
+            const arc = window.__arc;
+            if (arc?.state === 'failed' || arc?.modelLoadError) return 'fatal';
+            if (arc?.bootComplete === true && arc?.state === 'ready') return 'ready';
+            if (arc?.state === 'idle') {
+              const downloadBtn = Array.from(document.querySelectorAll('button'))
+                .find(b => b.textContent.includes('Download'));
+              if (downloadBtn) return 'idle:download-btn-present';
+              return 'idle:no-download-btn';
+            }
+            return 'booting:' + (arc ? 'arc.' + arc.state + ':bc=' + arc.bootComplete : 'no-arc');
+          })()
+        `,
+      });
+    } catch (e) {
+      const elapsed = ((Date.now() - bootStart) / 1000).toFixed(0);
+      console.log(`${pfx} Boot poll error: ${e.message} (+${elapsed}s)`);
+      continue;
+    }
+    const val = check.result?.value ?? 'unknown';
     const elapsed = ((Date.now() - bootStart) / 1000).toFixed(0);
-    console.log(`[baseline-tps] Boot poll error (page still loading?): ${e.message} (+${elapsed}s)`);
-    continue;
+    console.log(`${pfx} Boot check: ${val} (+${elapsed}s)`);
+    if (val === 'ready') { bootResult = 'ready'; break; }
+    if (val === 'fatal') { bootResult = 'fatal'; break; }
+    if (val === 'idle:download-btn-present' && !downloadClicked) {
+      downloadClicked = true;
+      await cdp.send("Runtime.evaluate", {
+        expression: `(() => {
+          const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('Download'));
+          if (btn) { btn.click(); return 'clicked'; }
+          return 'btn-gone';
+        })()`,
+      });
+      console.log(`${pfx} Clicked Download button — model loading from OPFS...`);
+    }
   }
-  const val = check.result?.value ?? 'unknown';
-  const elapsed = ((Date.now() - bootStart) / 1000).toFixed(0);
-  console.log(`[baseline-tps] Boot check: ${val} (+${elapsed}s)`);
-  if (val === 'ready') { bootResult = 'ready'; break; }
-  if (val === 'fatal') { bootResult = 'fatal'; break; }
+  return bootResult;
 }
 
-if (!bootResult) {
-  console.error("ERROR: boot timeout after 6 min");
+const initialBoot = await waitForBoot(cdp, "");
+if (!initialBoot) {
+  console.error("ERROR: boot timeout after 10 min");
   process.exit(1);
 }
-if (bootResult === 'fatal') {
+if (initialBoot === 'fatal') {
   console.error("ERROR: boot fatal — WebGPU not available or model failed to load");
   process.exit(1);
 }
-console.log(`[baseline-tps] Boot complete (+${((Date.now() - bootStart)/1000).toFixed(0)}s)`);
+console.log(`[baseline-tps] Boot complete`);
 
 // 6. Read model info
 const modelInfo = await cdp.send("Runtime.evaluate", {
@@ -238,12 +230,55 @@ const modelInfo = await cdp.send("Runtime.evaluate", {
 
 console.log(`[baseline-tps] Model info:`, modelInfo);
 
-// 7. Run prompts
+// 7. Run prompts — each group gets a fresh arc session (reload between groups)
 const samples = [];
 let baselineTelCount = modelInfo.telemetry_count ?? 0;
 
 for (let pi = 0; pi < PROMPTS.length; pi++) {
   const prompt = PROMPTS[pi];
+
+  // Open a fresh tab between prompt groups — clears accumulated chat context and forces renderer death
+  // so Chrome can reclaim WebGPU/ONNX buffers from the prior session (Page.reload() cannot do this).
+  if (pi > 0) {
+    console.log(`\n[baseline-tps] Opening fresh tab for prompt group ${pi + 1}/${PROMPTS.length}: ${prompt.label}...`);
+    // Open a new tab instead of Page.reload() — forces a new renderer process with clean GPU/ONNX state.
+    // Page.reload() accumulates ~400-800 MB WebGPU/ONNX buffers per cycle that Chrome never reclaims.
+    // Only renderer process death (tab close) forces full GPU buffer reclamation.
+    const newTarget = await cdp.send("Target.createTarget", { url: PAGES_URL });
+    const newTabId = newTarget.targetId;
+    await sleep(2000); // let Chrome register the new target before fetching its WS URL
+    const freshTargets = await fetch(`${CDP_BASE}/json`).then(r => r.json());
+    const freshTargetInfo = freshTargets.find(t => t.id === newTabId);
+    if (!freshTargetInfo) {
+      console.error(`ERROR: new tab ${newTabId} not found in /json — skipping ${prompt.label}`);
+      for (let t = 1; t <= TURNS_PER_PROMPT; t++) {
+        samples.push({ prompt_idx: pi, prompt: prompt.label, complexity: prompt.complexity, turn: t, tg_tps: null, pp_tps: null, tokens_out: null, decode_ms: null, error: "tab-create-failed" });
+      }
+      continue;
+    }
+    // Close old tab now — renderer death frees GPU buffers before new tab needs them
+    try { await cdp.send("Target.closeTarget", { targetId: currentTabId }); } catch (_) {}
+    try { cdp.ws.close(); } catch (_) {}
+    // Connect to new tab
+    cdp = await cdpWs(freshTargetInfo.webSocketDebuggerUrl);
+    currentTabId = newTabId;
+    await cdp.send("Page.enable");
+    await cdp.send("Runtime.enable");
+    await cdp.send("Network.enable");
+    const interBoot = await waitForBoot(cdp, `p${pi + 1}`);
+    if (!interBoot || interBoot === 'fatal') {
+      console.error(`ERROR: inter-prompt boot failed for ${prompt.label} — marking all turns as boot-failed`);
+      for (let t = 1; t <= TURNS_PER_PROMPT; t++) {
+        samples.push({ prompt_idx: pi, prompt: prompt.label, complexity: prompt.complexity, turn: t, tg_tps: null, pp_tps: null, tokens_out: null, decode_ms: null, error: "boot-failed" });
+      }
+      continue;
+    }
+    // Reset baseline — new tab always starts with zero telemetry
+    baselineTelCount = await cdp.send("Runtime.evaluate", {
+      expression: `(window.__telemetry ?? []).length`,
+    }).then(r => parseInt(r.result?.value ?? '0'));
+  }
+
   console.log(`\n[baseline-tps] Prompt ${pi + 1}/${PROMPTS.length}: ${prompt.label}`);
 
   for (let turn = 1; turn <= TURNS_PER_PROMPT; turn++) {
@@ -324,21 +359,22 @@ for (let pi = 0; pi < PROMPTS.length; pi++) {
   }
 }
 
-// 8. Compute stats per prompt
+// 8. Compute aggregate stats across all samples (all scene-query-NN share same text)
 const stats = {};
-for (let pi = 0; pi < PROMPTS.length; pi++) {
-  const p = PROMPTS[pi];
-  const tpsValues = samples.filter(s => s.prompt_idx === pi && s.tg_tps !== null).map(s => s.tg_tps).sort((a, b) => a - b);
-  if (tpsValues.length === 0) { stats[p.label] = { error: "no valid samples" }; continue; }
-  stats[p.label] = {
-    count: tpsValues.length,
-    median: percentile(tpsValues, 50),
-    p25: percentile(tpsValues, 25),
-    p75: percentile(tpsValues, 75),
-    min: tpsValues[0],
-    max: tpsValues[tpsValues.length - 1],
-    complexity: p.complexity,
+const allTpsValues = samples.filter(s => s.tg_tps !== null).map(s => s.tg_tps).sort((a, b) => a - b);
+if (allTpsValues.length > 0) {
+  stats["scene-query"] = {
+    count: allTpsValues.length,
+    median: percentile(allTpsValues, 50),
+    p25: percentile(allTpsValues, 25),
+    p75: percentile(allTpsValues, 75),
+    min: allTpsValues[0],
+    max: allTpsValues[allTpsValues.length - 1],
+    complexity: "short",
+    prompt_text: "What's currently in the scene?",
   };
+} else {
+  stats["scene-query"] = { error: "no valid samples" };
 }
 
 // 9. Write output
@@ -348,7 +384,7 @@ mkdirSync(`${process.cwd()}/state`, { recursive: true });
 const output = {
   date,
   url: PAGES_URL,
-  cold_cache: true,
+  fresh_session: true, // HTTP cache + cookies cleared; OPFS model + localStorage preserved; page reloaded
   turns_per_prompt: TURNS_PER_PROMPT,
   prompt_count: PROMPTS.length,
   total_samples: samples.filter(s => s.tg_tps !== null).length,
