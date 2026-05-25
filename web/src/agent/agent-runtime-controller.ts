@@ -27,7 +27,11 @@ export type RuntimeEvent =
   | { type: "WATCHDOG_TIMEOUT"; turnId: string }
   | { type: "WORKER_RECYCLED"; recycleCount: number; reason: string }
   | { type: "RECOVERY_COMPLETE" }
-  | { type: "FATAL_ERROR"; error: string; reason?: string };
+  | { type: "FATAL_ERROR"; error: string; reason?: string }
+  // §#1860 Sub-6: self-speculative decoding failure events
+  | { type: "SELF_SPEC_DRAFT_START"; turnId: string }        // drafter begins a k-step block
+  | { type: "SELF_SPEC_DRAFT_DEVICE_LOST"; turnId: string }  // device-lost mid-draft
+  | { type: "SELF_SPEC_VERIFY_D3D12_OOM"; turnId: string };  // D3D12_OOM mid-verify-pass
 
 export type TransitionCallback = (
   from: RuntimeState,
@@ -58,6 +62,10 @@ const TRANSITIONS: Record<RuntimeState, Partial<Record<RuntimeEvent["type"], Run
     // generate is in flight (the old turn is still awaiting resolution).
     MODEL_READY:      "generating",
     BOOT_COMPLETE:    "ready",
+    // §#1860 Sub-6: self-speculative failure events (drafter/verifier abort paths).
+    SELF_SPEC_DRAFT_START:        "generating", // self-loop: marker only, no state change
+    SELF_SPEC_DRAFT_DEVICE_LOST:  "recycling",  // device-lost mid-draft → discard + recycle
+    SELF_SPEC_VERIFY_D3D12_OOM:   "recycling",  // D3D12_OOM mid-verify → discard + recycle
   },
   recycling:  { WORKER_RECYCLED: "recovering", FATAL_ERROR: "failed" },
   recovering: {
@@ -184,6 +192,19 @@ export class AgentRuntimeController {
         break;
       case "RECOVERY_COMPLETE":
         // Unused — use BOOT_COMPLETE from recovering state instead.
+        break;
+      case "SELF_SPEC_DRAFT_START":
+        // No state mutation — just a marker for listeners / telemetry.
+        break;
+      case "SELF_SPEC_DRAFT_DEVICE_LOST":
+      case "SELF_SPEC_VERIFY_D3D12_OOM":
+        // Same recovery path as D3D12_OOM: discard in-flight draft block and recycle.
+        this.workerReady  = false;
+        this.bootComplete = false;
+        this.prefillDone  = false;
+        this.turnCount    = 0;
+        this.nextInitNoWarmup = true;
+        this.recycleCount++;
         break;
       case "FATAL_ERROR":
         this.webgpuFallbackEngaged = true;

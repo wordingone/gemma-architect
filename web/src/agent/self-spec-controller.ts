@@ -49,13 +49,28 @@ export class SelfSpecController {
   private _acceptanceWin: number[] = [];
   private _consecutiveLow  = 0;
   private _forcedDisable   = false;
+  // Post-recovery force-disable: set by notifyRecovery() or notifyVerifyOom().
+  // Decrements in recordTurn(); blocks self-spec for the next N turns.
+  private _postRecoveryDisableRemaining = 0;
+  // Multimodal prefill guard: toggled by model-worker.ts around mm tokenize+prefill.
+  private _mmPrefillInProgress = false;
 
   // ── Decision (called before each turn) ──────────────────────────────────────
 
   shouldActivate(state: SelfSpecRuntimeState): ShouldActivateResult {
+    // Gate 0 (highest priority): multimodal prefill in progress — NEVER self-spec during mm prefill
+    if (this._mmPrefillInProgress) {
+      return { active: false, reason: "mm_prefill_in_progress" };
+    }
+
     // Gate 1: warmup — first WARMUP_TURNS turns always disabled
     if (this._turnsCompleted < WARMUP_TURNS) {
       return { active: false, reason: `warmup(${this._turnsCompleted}/${WARMUP_TURNS})` };
+    }
+
+    // Gate 1b: post-recovery warmup — disabled for WARMUP_TURNS turns after any recycle
+    if (this._postRecoveryDisableRemaining > 0) {
+      return { active: false, reason: `post_recovery_warmup(${this._postRecoveryDisableRemaining} left)` };
     }
 
     // Gate 2: consecutive-low-acceptance forced disable
@@ -129,6 +144,11 @@ export class SelfSpecController {
   recordTurn(acceptanceRate: number): void {
     this._turnsCompleted++;
 
+    // Tick down post-recovery disable window
+    if (this._postRecoveryDisableRemaining > 0) {
+      this._postRecoveryDisableRemaining--;
+    }
+
     // Update rolling window
     this._acceptanceWin.push(acceptanceRate);
     if (this._acceptanceWin.length > ACCEPTANCE_WINDOW) this._acceptanceWin.shift();
@@ -148,6 +168,38 @@ export class SelfSpecController {
     }
   }
 
+  // ── Post-recovery + OOM hooks (called by agent-harness.ts on ARC transitions) ─
+
+  /**
+   * Called when ARC transitions recovering → ready (BOOT_COMPLETE from recovering).
+   * Forces WARMUP_TURNS turns of self-spec disable so KV state is re-stabilized.
+   */
+  notifyRecovery(): void {
+    this._postRecoveryDisableRemaining = WARMUP_TURNS;
+    this._consecutiveLow  = 0;
+    this._forcedDisable   = false;
+    this._acceptanceWin   = [];  // discard stale window — pre-recycle data is invalid
+  }
+
+  /**
+   * Called when SELF_SPEC_VERIFY_D3D12_OOM fires (verifier aborted mid-pass).
+   * Same disable window as recovery — KV state is unknown.
+   */
+  notifyVerifyOom(): void {
+    this._postRecoveryDisableRemaining = WARMUP_TURNS;
+    this._consecutiveLow  = 0;
+    this._forcedDisable   = false;
+    this._acceptanceWin   = [];
+  }
+
+  /**
+   * Toggled around multimodal tokenize+prefill in model-worker.ts.
+   * While true, shouldActivate() always returns { active: false, reason: "mm_prefill_in_progress" }.
+   */
+  setMmPrefillInProgress(v: boolean): void {
+    this._mmPrefillInProgress = v;
+  }
+
   private _recentRate(): number {
     if (this._acceptanceWin.length === 0) return 1.0; // assume best before any data
     const sum = this._acceptanceWin.reduce((a, b) => a + b, 0);
@@ -156,10 +208,12 @@ export class SelfSpecController {
 
   // ── Read-only accessors (tests + DevTools) ───────────────────────────────────
 
-  get turnsCompleted(): number  { return this._turnsCompleted; }
-  get forcedDisable():  boolean { return this._forcedDisable; }
-  get consecutiveLow(): number  { return this._consecutiveLow; }
-  get recentRate():     number  { return this._recentRate(); }
+  get turnsCompleted():              number  { return this._turnsCompleted; }
+  get forcedDisable():               boolean { return this._forcedDisable; }
+  get consecutiveLow():              number  { return this._consecutiveLow; }
+  get recentRate():                  number  { return this._recentRate(); }
+  get postRecoveryDisableRemaining(): number  { return this._postRecoveryDisableRemaining; }
+  get mmPrefillInProgress():         boolean { return this._mmPrefillInProgress; }
 }
 
 // Module-level singleton — shared across all runAgentTurn() calls within the session.
