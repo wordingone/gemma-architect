@@ -857,6 +857,13 @@ Assistant: Revolve a line [0,0,0]→[5,0,0] full 360° around Z axis → disk/cy
 </plan>
 <tool_call>{"name":"SdRevolve","arguments":{"profile":{"kind":"line","from":[0,0,0],"to":[5,0,0]},"axisFrom":[0,0,0],"axisTo":[0,0,1],"angleStart":0,"angleEnd":6.2832},"metadata":{"source":"agent"}}</tool_call>
 
+User: fill this closed curve with a surface patch
+Assistant: Fill a rectangular closed loop with a flat surface patch at z=0.
+<plan>
+1. SdSurface — profile={points: [[0,0,0],[4,0,0],[4,3,0],[0,3,0]]} (closed loop → filled surface)
+</plan>
+<tool_call>{"name":"SdSurface","arguments":{"profile":{"points":[[0,0,0],[4,0,0],[4,3,0],[0,3,0]]}},"metadata":{"source":"agent"}}</tool_call>
+
 User: union the two selected objects
 Assistant: SdBoolean union — a and b are object UUIDs from the scene context "Current scene:" list.
 <plan>
