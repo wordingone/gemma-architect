@@ -1,0 +1,297 @@
+{
+  "date": "2026-05-25",
+  "url": "https://wordingone.github.io/gemma-architect/",
+  "fresh_session": true,
+  "turns_per_prompt": 1,
+  "prompt_count": 25,
+  "total_samples": 25,
+  "stats": {
+    "scene-query": {
+      "count": 25,
+      "median": 2.132494958158695,
+      "p25": 2.068520479644845,
+      "p75": 2.193721256367307,
+      "min": 1.9582754447354764,
+      "max": 2.2349882623256763,
+      "complexity": "short",
+      "prompt_text": "What's currently in the scene?"
+    }
+  },
+  "samples": [
+    {
+      "prompt_idx": 0,
+      "prompt": "scene-query-01",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 1.9582754447354764,
+      "pp_tps": 954.8528279627991,
+      "tokens_out": 28,
+      "decode_ms": 14298.294999957085,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 1,
+      "prompt": "scene-query-02",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.017332488450423,
+      "pp_tps": 1005.3768572251887,
+      "tokens_out": 28,
+      "decode_ms": 13879.715000033379,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 2,
+      "prompt": "scene-query-03",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.1879948629177535,
+      "pp_tps": 972.8386179807712,
+      "tokens_out": 28,
+      "decode_ms": 12797.104999899864,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 3,
+      "prompt": "scene-query-04",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.2276109191156457,
+      "pp_tps": 976.1776240088024,
+      "tokens_out": 28,
+      "decode_ms": 12569.519999980927,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 4,
+      "prompt": "scene-query-05",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.03294975927204,
+      "pp_tps": 990.6560869287218,
+      "tokens_out": 28,
+      "decode_ms": 13773.090000033379,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 5,
+      "prompt": "scene-query-06",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.2281622197647835,
+      "pp_tps": 989.1072993412606,
+      "tokens_out": 28,
+      "decode_ms": 12566.409999966621,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 6,
+      "prompt": "scene-query-07",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.03901583987467,
+      "pp_tps": 958.128935704312,
+      "tokens_out": 28,
+      "decode_ms": 13732.115000009537,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 7,
+      "prompt": "scene-query-08",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.096387400421221,
+      "pp_tps": 992.3294454284633,
+      "tokens_out": 28,
+      "decode_ms": 13356.30999994278,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 8,
+      "prompt": "scene-query-09",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.1799799208326562,
+      "pp_tps": 1019.0589828693411,
+      "tokens_out": 28,
+      "decode_ms": 12844.15499997139,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 9,
+      "prompt": "scene-query-10",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.132494958158695,
+      "pp_tps": 1066.803126499063,
+      "tokens_out": 28,
+      "decode_ms": 13130.16000008583,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 10,
+      "prompt": "scene-query-11",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.0443671479024963,
+      "pp_tps": 995.7757481124396,
+      "tokens_out": 28,
+      "decode_ms": 13696.169999957085,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 11,
+      "prompt": "scene-query-12",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.177042542130155,
+      "pp_tps": 1041.0958904109589,
+      "tokens_out": 28,
+      "decode_ms": 12861.485000014305,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 12,
+      "prompt": "scene-query-13",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.0931261736450013,
+      "pp_tps": 1036.8474587615763,
+      "tokens_out": 28,
+      "decode_ms": 13377.120000004768,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 13,
+      "prompt": "scene-query-14",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.116277347220689,
+      "pp_tps": 1018.0999311561148,
+      "tokens_out": 28,
+      "decode_ms": 13230.77999997139,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 14,
+      "prompt": "scene-query-15",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.2236137455843434,
+      "pp_tps": 1020.0389055148094,
+      "tokens_out": 28,
+      "decode_ms": 12592.115000009537,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 15,
+      "prompt": "scene-query-16",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.2349882623256763,
+      "pp_tps": 1041.4390036341124,
+      "tokens_out": 28,
+      "decode_ms": 12528.02999997139,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 16,
+      "prompt": "scene-query-17",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.095722891531753,
+      "pp_tps": 873.1363686734836,
+      "tokens_out": 28,
+      "decode_ms": 13360.545000076294,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 17,
+      "prompt": "scene-query-18",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.122642492797951,
+      "pp_tps": 963.4347314867377,
+      "tokens_out": 28,
+      "decode_ms": 13191.105000019073,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 18,
+      "prompt": "scene-query-19",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.1976935206509003,
+      "pp_tps": 1023.776719832107,
+      "tokens_out": 28,
+      "decode_ms": 12740.629999995232,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 19,
+      "prompt": "scene-query-20",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.193721256367307,
+      "pp_tps": 989.6371604925286,
+      "tokens_out": 28,
+      "decode_ms": 12763.700000047684,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 20,
+      "prompt": "scene-query-21",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.064734591264171,
+      "pp_tps": 1016.4057090864095,
+      "tokens_out": 28,
+      "decode_ms": 13561.06500005722,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 21,
+      "prompt": "scene-query-22",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.1766752917473515,
+      "pp_tps": 1017.7150906248328,
+      "tokens_out": 28,
+      "decode_ms": 12863.65499997139,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 22,
+      "prompt": "scene-query-23",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.1769494485182683,
+      "pp_tps": 1012.83076413426,
+      "tokens_out": 28,
+      "decode_ms": 12862.034999966621,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 23,
+      "prompt": "scene-query-24",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.2162796026744145,
+      "pp_tps": 1006.7221000842724,
+      "tokens_out": 28,
+      "decode_ms": 12633.784999966621,
+      "path": "webgpu"
+    },
+    {
+      "prompt_idx": 24,
+      "prompt": "scene-query-25",
+      "complexity": "short",
+      "turn": 1,
+      "tg_tps": 2.068520479644845,
+      "pp_tps": 980.1360828405285,
+      "tokens_out": 28,
+      "decode_ms": 13536.245000004768,
+      "path": "webgpu"
+    }
+  ]
+}
