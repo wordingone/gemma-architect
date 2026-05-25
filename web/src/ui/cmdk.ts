@@ -81,6 +81,7 @@ const ALL_CMDS: Cmd[] = [
       });
     },
   },
+  { group: "MODEL",    icon: "plane",    label: "plane — Place a planar surface via 3-point pick", kbd: "", run: () => dispatchSync("setActiveTool", { toolId: "plane" }) },
   { group: "MODEL",    icon: "surface",  label: "surface — Fill a closed curve with a surface patch", kbd: "", run: () => dispatchSync("setActiveTool", { toolId: "surface" }) },
   { group: "MODEL",    icon: "revolve",  label: "revolve — Revolve profile around an axis", kbd: "", run: () => dispatchSync("setActiveTool", { toolId: "revolve" }) },
   { group: "MODEL",    icon: "sweep",    label: "sweep — Sweep profile along rail curve", kbd: "", run: () => dispatchSync("setActiveTool", { toolId: "sweep" }) },

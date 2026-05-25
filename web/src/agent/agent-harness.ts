@@ -864,6 +864,13 @@ Assistant: Fill a rectangular closed loop with a flat surface patch at z=0.
 </plan>
 <tool_call>{"name":"SdSurface","arguments":{"profile":{"points":[[0,0,0],[4,0,0],[4,3,0],[0,3,0]]}},"metadata":{"source":"agent"}}</tool_call>
 
+User: place a reference plane at 3 points — origin at [0,0,0], width to [5,0,0], height to [0,0,3]
+Assistant: Place a planar surface via 3-point pick: origin=[0,0,0], xAxis=[5,0,0] (width), yAxis=[0,0,3] (height).
+<plan>
+1. SdPlane — origin=[0,0,0], xAxis=[5,0,0], yAxis=[0,0,3] → quad planar surface
+</plan>
+<tool_call>{"name":"SdPlane","arguments":{"origin":[0,0,0],"xAxis":[5,0,0],"yAxis":[0,0,3]},"metadata":{"source":"agent"}}</tool_call>
+
 User: union the two selected objects
 Assistant: SdBoolean union — a and b are object UUIDs from the scene context "Current scene:" list.
 <plan>
