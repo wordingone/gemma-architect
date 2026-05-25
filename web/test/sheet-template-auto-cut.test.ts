@@ -54,56 +54,56 @@ describe("DEMO_SHEET_SET", () => {
     expect(DEMO_SHEET_SET).toHaveLength(8);
   });
 
-  test("IDs are S1 through S8 in order", () => {
+  test("IDs follow sections-first order: S5-S8 (sections) then S1-S4 (elevations) (#1847)", () => {
     const ids = DEMO_SHEET_SET.map((s) => s.id);
-    expect(ids).toEqual(["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]);
+    expect(ids).toEqual(["S5", "S6", "S7", "S8", "S1", "S2", "S3", "S4"]);
   });
 
-  test("first 4 sheets are elevation views", () => {
-    const elevations = DEMO_SHEET_SET.slice(0, 4);
-    expect(elevations.every((s) => s.viewType === "elevation")).toBe(true);
-  });
-
-  test("last 4 sheets are section views (#1848)", () => {
-    const sections = DEMO_SHEET_SET.slice(4);
+  test("first 4 sheets are section views (#1847: sections before elevations)", () => {
+    const sections = DEMO_SHEET_SET.slice(0, 4);
     expect(sections.every((s) => s.viewType === "section")).toBe(true);
   });
 
-  test("elevation cardinal dirs are N/E/S/W in order", () => {
-    expect(DEMO_SHEET_SET.slice(0, 4).map((s) => s.cardinalDir)).toEqual(["N", "E", "S", "W"]);
+  test("last 4 sheets are elevation views (#1847)", () => {
+    const elevations = DEMO_SHEET_SET.slice(4);
+    expect(elevations.every((s) => s.viewType === "elevation")).toBe(true);
   });
 
-  test("section axis values are NS-1/NS-2/EW-1/EW-2 in order", () => {
-    const axes = DEMO_SHEET_SET.slice(4).map((s) => s.sectionAxis);
+  test("section axis values are NS-1/NS-2/EW-1/EW-2 in order (sections first, #1847)", () => {
+    const axes = DEMO_SHEET_SET.slice(0, 4).map((s) => s.sectionAxis);
     expect(axes).toEqual(["NS-1", "NS-2", "EW-1", "EW-2"] satisfies SectionAxis[]);
   });
 
-  test("elevation titles follow 'Elevation: <Dir>' format", () => {
-    expect(DEMO_SHEET_SET[0].title).toBe("Elevation: North");
-    expect(DEMO_SHEET_SET[1].title).toBe("Elevation: East");
-    expect(DEMO_SHEET_SET[2].title).toBe("Elevation: South");
-    expect(DEMO_SHEET_SET[3].title).toBe("Elevation: West");
+  test("elevation cardinal dirs are N/E/S/W in order (after sections, #1847)", () => {
+    expect(DEMO_SHEET_SET.slice(4, 8).map((s) => s.cardinalDir)).toEqual(["N", "E", "S", "W"]);
   });
 
-  test("section titles are Section A-A through D-D", () => {
-    expect(DEMO_SHEET_SET[4].title).toBe("Section A-A");
-    expect(DEMO_SHEET_SET[5].title).toBe("Section B-B");
-    expect(DEMO_SHEET_SET[6].title).toBe("Section C-C");
-    expect(DEMO_SHEET_SET[7].title).toBe("Section D-D");
+  test("section titles are Section A-A through D-D (indices 0-3)", () => {
+    expect(DEMO_SHEET_SET[0].title).toBe("Section A-A");
+    expect(DEMO_SHEET_SET[1].title).toBe("Section B-B");
+    expect(DEMO_SHEET_SET[2].title).toBe("Section C-C");
+    expect(DEMO_SHEET_SET[3].title).toBe("Section D-D");
   });
 
-  test("N/S elevations and NS sections use camera front", () => {
-    expect(DEMO_SHEET_SET[0].camera).toBe("front"); // N elevation
-    expect(DEMO_SHEET_SET[2].camera).toBe("front"); // S elevation
-    expect(DEMO_SHEET_SET[4].camera).toBe("front"); // Section A-A (NS-1)
-    expect(DEMO_SHEET_SET[5].camera).toBe("front"); // Section B-B (NS-2)
+  test("elevation titles follow 'Elevation: <Dir>' format (indices 4-7)", () => {
+    expect(DEMO_SHEET_SET[4].title).toBe("Elevation: North");
+    expect(DEMO_SHEET_SET[5].title).toBe("Elevation: East");
+    expect(DEMO_SHEET_SET[6].title).toBe("Elevation: South");
+    expect(DEMO_SHEET_SET[7].title).toBe("Elevation: West");
   });
 
-  test("E/W elevations and EW sections use camera right", () => {
-    expect(DEMO_SHEET_SET[1].camera).toBe("right"); // E elevation
-    expect(DEMO_SHEET_SET[3].camera).toBe("right"); // W elevation
-    expect(DEMO_SHEET_SET[6].camera).toBe("right"); // Section C-C (EW-1)
-    expect(DEMO_SHEET_SET[7].camera).toBe("right"); // Section D-D (EW-2)
+  test("NS sections and N/S elevations use camera front", () => {
+    expect(DEMO_SHEET_SET[0].camera).toBe("front"); // Section A-A (NS-1)
+    expect(DEMO_SHEET_SET[1].camera).toBe("front"); // Section B-B (NS-2)
+    expect(DEMO_SHEET_SET[4].camera).toBe("front"); // N elevation
+    expect(DEMO_SHEET_SET[6].camera).toBe("front"); // S elevation
+  });
+
+  test("EW sections and E/W elevations use camera right", () => {
+    expect(DEMO_SHEET_SET[2].camera).toBe("right"); // Section C-C (EW-1)
+    expect(DEMO_SHEET_SET[3].camera).toBe("right"); // Section D-D (EW-2)
+    expect(DEMO_SHEET_SET[5].camera).toBe("right"); // E elevation
+    expect(DEMO_SHEET_SET[7].camera).toBe("right"); // W elevation
   });
 
   test("all sheets have non-empty titles", () => {

@@ -156,7 +156,9 @@ const SHEET_PRESET_DEFS: Record<Exclude<SheetPresetId, "blank">, SheetPresetDef>
   elevation:   { name: "Elevation",   viewport: "front",       scale: "1:50",  displayMode: "technical" },
 };
 // "plan" omitted — plan sheets are managed dynamically by syncPlanSheets() (#1846).
-const SHEET_PRESET_ORDER: Exclude<SheetPresetId, "blank">[] = ["perspective", "axonometric", "section", "elevation"];
+// Order follows architectural convention: section→elevation→axo→perspective (#1847).
+// Plans (dynamic) are inserted at front; RCPs are inserted after elevation.
+const SHEET_PRESET_ORDER: Exclude<SheetPresetId, "blank">[] = ["section", "elevation", "axonometric", "perspective"];
 
 // --- Scene bounds provider ------------------------------------------------
 
@@ -372,13 +374,15 @@ class LayoutController {
     // Spawn preset panels for each sheet unless caller overrides sheet 0 via initialPanels.
     if (opts.spawnDefault !== false) {
       const hasInitial = (opts.initialPanels?.length ?? 0) > 0;
+      // Plan sheets occupy indices 0..(planCount-1); presets start at planCount (#1847).
+      const planCount = this._planSheetByLevelId.size;
       SHEET_PRESET_ORDER.forEach((pid, i) => {
-        if (i === 0 && hasInitial) return; // initialPanels fill sheet 0 instead
-        this.switchSheet(i);
+        if (i === 0 && hasInitial) return; // initialPanels fill first preset sheet instead
+        this.switchSheet(planCount + i);
         const def = SHEET_PRESET_DEFS[pid];
         this._spawnPresetPanel(def.viewport, def.scale, def.displayMode);
       });
-      this.switchSheet(0);
+      this.switchSheet(0); // activate first sheet (Plan: Level 1 or first preset)
     }
     // initialPanels go to the active (first) sheet.
     for (const p of opts.initialPanels ?? []) this.addPanel(p);
@@ -690,18 +694,22 @@ class LayoutController {
       const expectedName = `Plan: ${level.name}`;
       const existingSheetId = this._planSheetByLevelId.get(level.id);
       if (!existingSheetId) {
-        // Create new plan sheet for this level.
+        // Insert new plan sheet after existing plan sheets (index = current plan count).
+        // Plans occupy the front of the sheet list; presets follow (#1847).
+        const insertIdx = this._planSheetByLevelId.size;
         const id = newSheetId();
         this._planSheetByLevelId.set(level.id, id);
-        const defaultSheet = this.sheets[0];
-        this.sheets.push({
+        const refSheet = this.sheets[0];
+        const newSheet: SheetData = {
           id,
           name: expectedName,
-          size: defaultSheet?.size ?? "Tabloid",
-          orientation: defaultSheet?.orientation ?? "landscape",
-          customMm: defaultSheet ? { ...defaultSheet.customMm } : { ...DEFAULT_CUSTOM },
+          size: refSheet?.size ?? "Tabloid",
+          orientation: refSheet?.orientation ?? "landscape",
+          customMm: refSheet ? { ...refSheet.customMm } : { ...DEFAULT_CUSTOM },
           panels: [],
-        });
+        };
+        this.sheets.splice(insertIdx, 0, newSheet);
+        if (this.activeSheetIdx >= insertIdx) this.activeSheetIdx++;
       } else if (!this._planSheetUserRenamed.has(existingSheetId)) {
         // Rename if level was renamed.
         const sheet = this.sheets.find(s => s.id === existingSheetId);
@@ -747,17 +755,22 @@ class LayoutController {
       const expectedName = `RCP: ${level.name}`;
       const existingSheetId = this._rcpSheetByLevelId.get(level.id);
       if (!existingSheetId) {
+        // Insert after plans (front) + 2 presets (section + elevation) + existing RCPs (#1847).
+        // Layout: [Plan(s)][Section][Elevation][RCP(s)][Axonometric][Perspective]
+        const insertIdx = this._planSheetByLevelId.size + 2 + this._rcpSheetByLevelId.size;
         const id = newSheetId();
         this._rcpSheetByLevelId.set(level.id, id);
-        const defaultSheet = this.sheets[0];
-        this.sheets.push({
+        const refSheet = this.sheets[0];
+        const newSheet: SheetData = {
           id,
           name: expectedName,
-          size: defaultSheet?.size ?? "Tabloid",
-          orientation: defaultSheet?.orientation ?? "landscape",
-          customMm: defaultSheet ? { ...defaultSheet.customMm } : { ...DEFAULT_CUSTOM },
+          size: refSheet?.size ?? "Tabloid",
+          orientation: refSheet?.orientation ?? "landscape",
+          customMm: refSheet ? { ...refSheet.customMm } : { ...DEFAULT_CUSTOM },
           panels: [],
-        });
+        };
+        this.sheets.splice(insertIdx, 0, newSheet);
+        if (this.activeSheetIdx >= insertIdx) this.activeSheetIdx++;
       } else if (!this._rcpSheetUserRenamed.has(existingSheetId)) {
         const sheet = this.sheets.find(s => s.id === existingSheetId);
         if (sheet && sheet.name !== expectedName) sheet.name = expectedName;
@@ -798,18 +811,38 @@ class LayoutController {
     return id;
   }
 
+  /** Compute the insertion index for a user-added sheet of the given type (#1847).
+   *  Keeps sheets grouped: [Plan(s)][Section(s)][Elevation(s)][RCP(s)][Axo][Perspective].
+   *  Name-based scan is safe for our fixed preset names and "Plan:"/"RCP:" prefixes. */
+  private _typeInsertIdx(presetId: SheetPresetId): number {
+    let i = 0;
+    // Skip plan sheets (front group).
+    while (i < this.sheets.length && this.sheets[i].name.startsWith("Plan:")) i++;
+    if (presetId === "plan") return i;
+    // Skip section sheets.
+    while (i < this.sheets.length && this.sheets[i].name.startsWith("Section")) i++;
+    if (presetId === "section") return i;
+    // Skip elevation sheets.
+    while (i < this.sheets.length && this.sheets[i].name.startsWith("Elevation")) i++;
+    if (presetId === "elevation") return i;
+    // Axo, perspective, blank → append at end.
+    return this.sheets.length;
+  }
+
   private addSheet(presetId?: SheetPresetId): void {
     if (!presetId) { this._showPresetPicker(); return; }
     const def = presetId !== "blank" ? SHEET_PRESET_DEFS[presetId as Exclude<SheetPresetId, "blank">] : null;
-    this.sheets.push({
+    const insertIdx = this._typeInsertIdx(presetId);
+    const newSheet: SheetData = {
       id: newSheetId(),
       name: def ? def.name : `Sheet ${this.sheets.length + 1}`,
       size: this.size,
       orientation: this.orientation,
       customMm: { ...this.customMm },
       panels: [],
-    });
-    this.switchSheet(this.sheets.length - 1);
+    };
+    this.sheets.splice(insertIdx, 0, newSheet);
+    this.switchSheet(insertIdx);
     if (def) this._spawnPresetPanel(def.viewport, def.scale, def.displayMode);
   }
 
@@ -1957,16 +1990,17 @@ export interface SheetTemplate {
   clipPlaneId?: string;
 }
 
-/** Default sheet set (#1850 elevations + #1848 sections): 4 N/E/S/W elevations + 4 bbox-derived sections. */
+/** Default sheet set (#1847 ordering: sections → elevations per architectural convention).
+ *  Sections (#1848) come before elevations (#1850); plans/RCP are dynamically managed. */
 export const DEMO_SHEET_SET: SheetTemplate[] = [
-  { id: "S1", viewType: "elevation", title: "Elevation: North", cardinalDir: "N", farClip: 40, camera: "front" },
-  { id: "S2", viewType: "elevation", title: "Elevation: East",  cardinalDir: "E", farClip: 40, camera: "right" },
-  { id: "S3", viewType: "elevation", title: "Elevation: South", cardinalDir: "S", farClip: 40, camera: "front" },
-  { id: "S4", viewType: "elevation", title: "Elevation: West",  cardinalDir: "W", farClip: 40, camera: "right" },
-  { id: "S5", viewType: "section", title: "Section A-A", sectionAxis: "NS-1", camera: "front" },
-  { id: "S6", viewType: "section", title: "Section B-B", sectionAxis: "NS-2", camera: "front" },
-  { id: "S7", viewType: "section", title: "Section C-C", sectionAxis: "EW-1", camera: "right" },
-  { id: "S8", viewType: "section", title: "Section D-D", sectionAxis: "EW-2", camera: "right" },
+  { id: "S5", viewType: "section",   title: "Section A-A",       sectionAxis: "NS-1", camera: "front" },
+  { id: "S6", viewType: "section",   title: "Section B-B",       sectionAxis: "NS-2", camera: "front" },
+  { id: "S7", viewType: "section",   title: "Section C-C",       sectionAxis: "EW-1", camera: "right" },
+  { id: "S8", viewType: "section",   title: "Section D-D",       sectionAxis: "EW-2", camera: "right" },
+  { id: "S1", viewType: "elevation", title: "Elevation: North",  cardinalDir: "N",    farClip: 40, camera: "front" },
+  { id: "S2", viewType: "elevation", title: "Elevation: East",   cardinalDir: "E",    farClip: 40, camera: "right" },
+  { id: "S3", viewType: "elevation", title: "Elevation: South",  cardinalDir: "S",    farClip: 40, camera: "front" },
+  { id: "S4", viewType: "elevation", title: "Elevation: West",   cardinalDir: "W",    farClip: 40, camera: "right" },
 ];
 
 /** Level stub used in applySheetCut when levelStore is not provided. */
