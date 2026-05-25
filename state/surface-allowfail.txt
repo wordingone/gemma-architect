@@ -3,6 +3,7 @@ demo-prompt-design-house  # #494  NL agent verb output nondeterministic: model s
 chat-plan-foldable  # #538  cascade from S54/S56 model latency timeouts; testMode fixes direct timeout but not UI-state contamination
 skill-node-parameter-sidecar  # #538  cascade: S55 depends on su1-e2e (S54) populating scene; S54 skips on model latency timeout
 agent-verb-completeness  # #1527  requires on-device model (arc.state==='ready'); no model in CI
+interior-partition-present  # #1556  requires on-device model; verifies ≥1 interior wall centroid inside bbox; no model in CI
 on-device-agent-response  # #1581  true agent-path: sends to .chat-input, waits 60s for agent:turn-complete; no soft-skip; hard-fail without model
 fzk-haus-perception-rehearsal  # #1581  true agent-path: loads FZK IFC, sends perception prompt, waits 60s; no soft-skip; hard-fail without model
 su1-end-to-end-2storey-house  # #1572  agent-path: 3-turn design loop; all IFC dispatch counts 0 without model; CDP 30s limit exceeded

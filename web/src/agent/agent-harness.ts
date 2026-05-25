@@ -695,7 +695,7 @@ DIMENSION RULES — extract ALL numeric values BEFORE generating geometry. Never
 const BUILDING_DEFAULTS = `
 BUILDING DEFAULTS — apply when dimensions are unspecified. "Design a house/apartment/office" implies ALL of the following element types:
 - IfcLevel: one per storey (elevation = floor_index × floor_height). Always emit before walls on that level.
-- IfcWall: exterior 0.15m thick; interior partition 0.10m thick. Enclose all rooms — no open faces.
+- IfcWall: exterior 0.15m thick; interior partition 0.10m thick. Enclose all rooms — no open faces. Every multi-room building MUST include ≥1 interior partition per storey (profile endpoints both inside the perimeter bbox, centroid >0.5m from any perimeter edge).
 - IfcSlab: 0.20m thick at every level base (floor slab). Also use for roof on flat-roof buildings.
 - IfcDoor: width=0.914, height=2.032, wallThickness=0.15. One per building minimum; front entry on south wall.
 - IfcWindow: width=1.2, height=1.2, sillH=0.9. Minimum 2 per exterior elevation (south + north or east + west).
@@ -732,7 +732,7 @@ Assistant:
 <tool_call>{"name":"SdWall","arguments":{"profile":[[0,0],[5,0]],"thickness":0.2,"height":2.8},"metadata":{"source":"agent"}}</tool_call>
 
 User: Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.
-Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4 walls + door + 4 windows + stair. Upper: slab + 4 walls + 4 windows + SdRoof.
+Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4 perimeter walls + 2 interior partitions (E-W at y=10, N-S at x=13) + door + 4 windows + stair. Upper: slab + 4 walls + 4 windows + SdRoof.
 <plan>
 1. SdLevel — name="Level 1", elevation=0, height=9.0, extent=26
 2. SdLevel — name="Level 2", elevation=9.0, height=9.0, extent=26
@@ -742,23 +742,25 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 6. SdWall — east ground, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
 7. SdWall — north ground, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
 8. SdWall — west ground, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
-9. SdDoor — south entry, position=[13,0,0], sillH=0
-10. SdWindow — south, position=[5,0,0], windowType=eg
-11. SdWindow — east, position=[26,10,0], windowType=eg
-12. SdWindow — north, position=[13,20,0], windowType=eg
-13. SdWindow — west, position=[0,10,0], windowType=eg
-14. SdStair — NE corner, start=[23,16], end=[23,8], type=straight
-15. setActiveLevel — id=level/1
-16. SdSlab — upper, profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
-17. SdWall — south upper, profile=[[0,0],[26,0]], thickness=0.67, height=9.0
-18. SdWall — east upper, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
-19. SdWall — north upper, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
-20. SdWall — west upper, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
-21. SdWindow — upper south, position=[5,0,0], windowType=og
-22. SdWindow — upper east, position=[26,10,0], windowType=og
-23. SdWindow — upper north, position=[13,20,0], windowType=og
-24. SdWindow — upper west, position=[0,10,0], windowType=og
-25. SdRoof — pitched, footprint=[[0,0],[26,0],[26,20],[0,20]], pitchDeg=30
+9. SdWall — interior partition E-W, profile=[[1,10],[12,10]], thickness=0.33, height=9.0
+10. SdWall — interior partition N-S, profile=[[13,10],[13,19]], thickness=0.33, height=9.0
+11. SdDoor — south entry, position=[13,0,0], sillH=0
+12. SdWindow — south, position=[5,0,0], windowType=eg
+13. SdWindow — east, position=[26,10,0], windowType=eg
+14. SdWindow — north, position=[13,20,0], windowType=eg
+15. SdWindow — west, position=[0,10,0], windowType=eg
+16. SdStair — NE corner, start=[23,16], end=[23,8], type=straight
+17. setActiveLevel — id=level/1
+18. SdSlab — upper, profile=[[0,0],[26,0],[26,20],[0,20]], thickness=0.67
+19. SdWall — south upper, profile=[[0,0],[26,0]], thickness=0.67, height=9.0
+20. SdWall — east upper, profile=[[26,0],[26,20]], thickness=0.67, height=9.0
+21. SdWall — north upper, profile=[[26,20],[0,20]], thickness=0.67, height=9.0
+22. SdWall — west upper, profile=[[0,20],[0,0]], thickness=0.67, height=9.0
+23. SdWindow — upper south, position=[5,0,0], windowType=og
+24. SdWindow — upper east, position=[26,10,0], windowType=og
+25. SdWindow — upper north, position=[13,20,0], windowType=og
+26. SdWindow — upper west, position=[0,10,0], windowType=og
+27. SdRoof — pitched, footprint=[[0,0],[26,0],[26,20],[0,20]], pitchDeg=30
 </plan>
 <tool_call>{"name":"SdLevel","arguments":{"name":"Level 1","elevation":0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdLevel","arguments":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26},"metadata":{"source":"agent"}}</tool_call>
@@ -768,6 +770,8 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Ground: slab + 4
 <tool_call>{"name":"SdWall","arguments":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWall","arguments":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[1,10],[12,10]],"thickness":0.33,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
+<tool_call>{"name":"SdWall","arguments":{"profile":[[13,10],[13,19]],"thickness":0.33,"height":9.0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdDoor","arguments":{"position":[13,0,0],"sillH":0},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWindow","arguments":{"position":[5,0,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
 <tool_call>{"name":"SdWindow","arguments":{"position":[26,10,0],"windowType":"eg"},"metadata":{"source":"agent"}}</tool_call>
@@ -925,7 +929,7 @@ const WEBGPU_HOUSE_FEW_SHOT = `
 Examples — copy verb names EXACTLY; emit <tool_call> blocks directly (no <plan> block):
 
 User: build a two-story residential house, 26 feet wide by 20 feet deep
-Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows on L1; 4 windows on L2; stair at NE corner.
+Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows on L1; interior partition at y=10; 4 windows on L2; stair at NE corner.
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 1","elevation":0,"height":9.0,"extent":26}}</tool_call>
 <tool_call>{"command":"SdLevel","parameters":{"name":"Level 2","elevation":9.0,"height":9.0,"extent":26}}</tool_call>
 <tool_call>{"command":"setActiveLevel","parameters":{"id":"level/0"}}</tool_call>
@@ -934,6 +938,7 @@ Assistant: 26ft × 20ft, 2 floors × 9.0ft walls, pitched roof. Door + 4 windows
 <tool_call>{"command":"SdWall","parameters":{"profile":[[26,0],[26,20]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[26,20],[0,20]],"thickness":0.67,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdWall","parameters":{"profile":[[0,20],[0,0]],"thickness":0.67,"height":9.0}}</tool_call>
+<tool_call>{"command":"SdWall","parameters":{"profile":[[1,10],[12,10]],"thickness":0.33,"height":9.0}}</tool_call>
 <tool_call>{"command":"SdDoor","parameters":{"position":[5,0,0],"width":3.0,"height":7.0,"sillH":0}}</tool_call>
 <tool_call>{"command":"SdWindow","parameters":{"position":[18,0,0],"windowType":"eg"}}</tool_call>
 <tool_call>{"command":"SdWindow","parameters":{"position":[26,10,0],"windowType":"eg"}}</tool_call>

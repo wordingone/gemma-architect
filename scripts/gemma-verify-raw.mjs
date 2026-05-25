@@ -6850,6 +6850,97 @@ await resetScene('before-box-inject');
   await resetScene('post-S134');
 }
 
+// ── S140 — interior-partition-present (#1556): two-story house prompt → ≥1 wall center inside bbox ──
+// Requires on-device model (arc.state==='ready'). In surface-allowfail.txt — no model in CI.
+// Validates AC D3: at least 1 SdWall whose XY centroid is >0.5m from all four perimeter edges.
+{
+  let arcReady = false;
+  for (let i = 0; i < 60; i++) {
+    const state = await evaluate(`window.__arc?.state ?? 'absent'`);
+    if (state === 'ready') { arcReady = true; break; }
+    if (state === 'failed') break;
+    await delay(2000);
+  }
+
+  if (!arcReady) {
+    record('interior-partition-present', false, { reason: 'arc not ready — model not loaded or failed' });
+  } else {
+    await evaluate(`
+      window.__dispatchLedger = [];
+      const input = document.querySelector('.chat-input');
+      const sendBtn = document.querySelector('.chat-send-btn');
+      if (input && !sendBtn?.disabled) {
+        input.value = "Build a two-story residential house, 26\\' wide by 20\\' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.";
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    `);
+
+    // Wait for any previous turn to clear.
+    await delay(500);
+
+    const r140 = await evaluate(`(async function() {
+      try {
+        const input   = document.querySelector('.chat-input');
+        const sendBtn = document.querySelector('.chat-send-btn');
+        if (!input || !sendBtn) return { passed: false, evidence: { reason: 'chat UI not found' } };
+        if (sendBtn.disabled) return { passed: false, evidence: { reason: 'send-btn disabled' } };
+
+        window.__dispatchLedger = [];
+        const turnPromise = new Promise(resolve => {
+          const t = setTimeout(() => resolve({ timedOut: true }), 600000);
+          window.addEventListener('agent:turn-complete', () => { clearTimeout(t); resolve({ timedOut: false }); }, { once: true });
+        });
+
+        input.value = "Build a two-story residential house, 26' wide by 20' deep, with a pitched roof. Add windows on all four walls, a door on the first floor, and interior stairs.";
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        sendBtn.click();
+
+        const turn = await turnPromise;
+        if (turn.timedOut) return { passed: false, evidence: { reason: 'turn timed out' } };
+
+        const ledger = window.__dispatchLedger ?? [];
+        const wallEntries = ledger.filter(e => e.verb === 'SdWall' && Array.isArray(e.args?.profile) && e.args.profile.length >= 2);
+
+        // Estimate building bbox from all wall endpoints on level/0 (or first 8 walls = perimeter).
+        const allPts = wallEntries.flatMap(e => e.args.profile);
+        const xs = allPts.map(p => p[0]);
+        const ys = allPts.map(p => p[1]);
+        const xMin = Math.min(...xs), xMax = Math.max(...xs);
+        const yMin = Math.min(...ys), yMax = Math.max(...ys);
+        const MARGIN = 0.5; // must be >0.5m from each perimeter edge
+
+        // A wall is interior if its centroid XY is >MARGIN from all four edges.
+        const interiorWalls = wallEntries.filter(e => {
+          const pts = e.args.profile;
+          const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+          const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+          return cx > xMin + MARGIN && cx < xMax - MARGIN && cy > yMin + MARGIN && cy < yMax - MARGIN;
+        });
+
+        const passed = interiorWalls.length >= 1;
+        return {
+          passed,
+          evidence: {
+            totalWalls: wallEntries.length,
+            interiorWallCount: interiorWalls.length,
+            bbox: { xMin, xMax, yMin, yMax },
+            interiorCentroids: interiorWalls.slice(0, 5).map(e => {
+              const pts = e.args.profile;
+              return { cx: pts.reduce((s,p)=>s+p[0],0)/pts.length, cy: pts.reduce((s,p)=>s+p[1],0)/pts.length };
+            }),
+          },
+        };
+      } catch (e) {
+        return { passed: false, evidence: { reason: 'exception', message: String(e) } };
+      }
+    })()`, true, 660000);
+
+    if (!r140) record('interior-partition-present', false, { reason: 'evaluate returned null' });
+    else record('interior-partition-present', r140.passed, r140.evidence);
+  }
+  await resetScene('post-S140');
+}
+
 // ── S141 — garden-wall-height-guard (#1558): SdWall clamps height<1.2m to 1.2m (boundary wall rule) ─
 // Tests the §#1569/#1558 handler clamp: height=0.3 (ft→m unit bleed) is silently raised to 1.2m.
 // Pure code surface — no on-device model required.
