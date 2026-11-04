@@ -22,7 +22,7 @@ import { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync
 import { join } from "path";
 import { spawnSync } from "child_process";
 
-const SERVING_DIR = "B:/M/gemma-architect-master";
+const SERVING_DIR = process.env.GEMMA_ARCHITECT_ROOT ?? process.cwd();
 const STATE_DIR   = join(SERVING_DIR, "state");
 const HEARTBEAT   = join(STATE_DIR, "gemma-master-autofwd.heartbeat");
 const LOG_FILE    = join(STATE_DIR, "gemma-master-autofwd.log");

@@ -7,7 +7,7 @@ _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from ports import CDP_PORT, DEV_PORT, CDP_BASE, DEV_URL
 
 CDP_HOST = CDP_BASE
-OUT_DIR = "B:/M/gemma-architect-master/state"
+OUT_DIR = os.path.join(os.environ.get("GEMMA_ARCHITECT_ROOT", os.getcwd()), "state")
 SHA = "4003c9a"
 
 def cdp_get_tabs():

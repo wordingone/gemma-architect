@@ -1,3 +1,6 @@
+> **Historical draft** written for the Gemma 4 Good Hackathon. Not edited since; claims here were not independently verified (e.g. IFC import was checked only by re-parsing in web-ifc, not in Revit or ArchiCAD).
+> Submission status is unconfirmed.
+
 # gemma-architect: browser-native parametric architecture from natural language
 
 **Track:** Equity — 3D parametric design accessibility for non-CAD-trained users
@@ -166,7 +169,7 @@ No fine-tuning shipped in this submission. The deployed app runs stock
 No LoRA adapter is loaded at runtime.
 
 The 60-row prompt cache was built from a precursor Gemma 3 4B LoRA's eval outputs
-(see `outputs/archive-gemma3-2026-05-05/`) and remains as a deterministic
+(see `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked)) and remains as a deterministic
 single-element demo path. A Gemma 4 retrain is future work — the precursor
 Gemma 3 LoRA is archived in the repo for reproducibility, not loaded at runtime.
 
@@ -197,7 +200,7 @@ the default is the cache.
 by `scripts/build-ai-cache.ts` (run at `bun run web:build`). They come from
 `data/dsl-demo-corpus.jsonl` (19 DSL corpus rows), the Schultz Residence gold
 sequence, and the precursor Gemma 3 LoRA eval outputs (archived at
-`outputs/archive-gemma3-2026-05-05/`). On a typed prompt, `web/src/ai-generate.ts`
+`src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked)). On a typed prompt, `web/src/ai-generate.ts`
 does weighted-F1 fuzzy match (numeric and dimension tokens count 2x) against the
 cache and returns the closest match's JS. Sub-100ms. No GPU. No network.
 
@@ -322,7 +325,7 @@ bun scripts/web-self-harness.ts
 - **Model**: no LoRA adapter ships in this submission. The deployed app runs stock
   `onnx-community/gemma-4-E4B-it-ONNX` in-browser. Training scripts are scaffolded
   for a future Gemma 4 retrain; the prior Gemma 3 4B LoRA is archived at
-  `outputs/archive-gemma3-2026-05-05/` and not loaded by the deployed app.
+  `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked) and not loaded by the deployed app.
 - **Hosted live demo**: GitHub Pages — https://wordingone.github.io/gemma-architect/
   (single-thread WASM fallback because GH Pages can't serve COOP+COEP; the
   multi-thread path lights up on any host that can — Spaces, Vercel, etc.).

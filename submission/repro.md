@@ -64,13 +64,13 @@ is the deployment path.
 
 Training scripts are scaffolded in `src/train/` for a future Gemma 4 retrain.
 The precursor Gemma 3 4B LoRA (not deployed) is archived at
-`outputs/archive-gemma3-2026-05-05/`. Dataset build is fully deterministic
+`src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked). Dataset build is fully deterministic
 (step 2 above).
 
 ## 4. Eval (archived Gemma 3 LoRA — not required for deployed demo)
 
 The eval outputs from the precursor Gemma 3 4B LoRA are archived at
-`outputs/archive-gemma3-2026-05-05/`. They are not required to run the
+`src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked). They are not required to run the
 deployed app. The eval script and output format are preserved for reference:
 
 ```bash
@@ -169,7 +169,7 @@ and stock Gemma 4 E4B-it in-browser (cache miss). See `docs/ai-pipeline.md`.
 The cache `web/dist/ai-cache.json` is produced at build time. `bun run web:build`
 runs `scripts/build-ai-cache.ts` automatically. The build script reads
 `data/dsl-demo-corpus.jsonl` + Schultz gold + archived Gemma 3 eval outputs
-(if available at `outputs/archive-gemma3-2026-05-05/`).
+(if available at `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked)).
 
 ```bash
 bun run web:build

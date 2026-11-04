@@ -459,7 +459,7 @@ const summary = {
   total_elapsed_s: Math.round((Date.now()-T0)/1000),
 };
 
-const outDir = `B:/M/gemma-architect-eli/state/pages-diagnostic-${new Date().toISOString().replace(/[:.]/g,'').slice(0,15)}Z`;
+const outDir = `${process.env.GEMMA_ARCHITECT_ROOT ?? process.cwd()}/state/pages-diagnostic-${new Date().toISOString().replace(/[:.]/g,'').slice(0,15)}Z`;
 try {
   const { mkdirSync, writeFileSync } = await import('fs');
   mkdirSync(outDir, { recursive: true });

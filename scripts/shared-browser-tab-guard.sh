@@ -3,7 +3,7 @@
 # before a gemma-verify run, so stale tabs don't contaminate surface results.
 #
 # Install (per-founder symlink or direct reference in settings.json):
-#   bash B:/M/gemma-architect/scripts/shared-browser-tab-guard.sh
+#   bash <repo-root>/scripts/shared-browser-tab-guard.sh
 #
 # Fires on: Bash tool calls containing "verify:raw" or "verify:cdp"
 # Exits 2 (block + warn) if >MAX_TABS page tabs open on :9222.

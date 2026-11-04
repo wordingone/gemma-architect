@@ -13,7 +13,7 @@ param(
 )
 
 $TASK_NAME   = "gemma-master-autofwd"
-$SERVING_DIR = "B:\M\gemma-architect-master"
+$SERVING_DIR = $(if ($env:GEMMA_ARCHITECT_ROOT) { $env:GEMMA_ARCHITECT_ROOT } else { (Get-Location).Path })
 $SCRIPT_PATH = "$SERVING_DIR\scripts\gemma-master-autofwd.mjs"
 
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue

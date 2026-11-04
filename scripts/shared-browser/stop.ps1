@@ -5,7 +5,7 @@
 #   (or) powershell -File scripts/shared-browser/stop.ps1
 
 $CDP_PORT = 9222
-$CDP_JSON = "B:\M\gemma-architect-master\.shared-browser\cdp.json"
+$CDP_JSON = "$(if ($env:GEMMA_ARCHITECT_ROOT) { $env:GEMMA_ARCHITECT_ROOT } else { (Get-Location).Path })\.shared-browser\cdp.json"
 
 $pid_to_kill = $null
 

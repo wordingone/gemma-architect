@@ -1,3 +1,6 @@
+> **Historical draft** written for the Gemma 4 Good Hackathon. Not edited since; claims here were not independently verified (e.g. IFC import was checked only by re-parsing in web-ifc, not in Revit or ArchiCAD).
+> Submission status is unconfirmed.
+
 # Submission — Gemma 4 Good Hackathon
 
 **Track:** Equity (3D design for non-CAD users)
@@ -10,7 +13,7 @@
 - [ ] **Public GitHub repo** — this repo, license = CC BY 4.0, README points to demo + writeup.
 - [ ] **3-min demo video** — screen-record the in-browser flow: type prompt → render geometry → export IFC.
 - [ ] **Hosted live demo** — static-hosted single page running Gemma 4 in-browser via WebGPU + replicad.
-- [ ] **Reproducible model artifact** — training scripts in `src/train/`; Gemma 4 LoRA retrain is future work; precursor Gemma 3 LoRA archived at `outputs/archive-gemma3-2026-05-05/`.
+- [ ] **Reproducible model artifact** — training scripts in `src/train/`; Gemma 4 LoRA retrain is future work; precursor Gemma 3 LoRA archived at `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked).
 
 ## Judging criteria (hackathon spec)
 
@@ -28,10 +31,10 @@ Each section gets its own page in this directory near the deadline:
 ## Status (2026-05-05)
 
 - ✅ Spike B (IFC mining pipeline) — 12 pairs mined from open IFC corpus, retrospective at `docs/spike-b-retrospective.md`.
-- ✅ Spike A (LoRA training) — 76 train + 8 eval pairs, QLoRA r=16, eval_loss 0.144 @ epoch 3, **8/8 parse_ok | 8/8 api_clean | 8/8 has_extrude** on held-out set. Adapter at `outputs/archive-gemma3-2026-05-05/spike-a-lora/`. Retrospective at `docs/archive/spike-a-retrospective.md`.
+- ✅ Spike A (LoRA training) — 76 train + 8 eval pairs, QLoRA r=16, eval_loss 0.144 @ epoch 3, **8/8 parse_ok | 8/8 api_clean | 8/8 has_extrude** on held-out set. Adapter not tracked in this repo (was under the gitignored `outputs/`). Retrospective at `docs/archive/spike-a-retrospective.md`.
 - ✅ 18-day plan — `docs/plan-18-day.md` (5 sub-gates: model artifact, browser inference, render+export, demo video, Kaggle writeup).
 - ✅ **Dataset v2** — 400 base rows, 5 buckets (50+50+200+50+50), **round-trip 100%**, 932 augmented training rows, 40-row stratified holdout. See `dataset/v2-results.md`.
-- ⛔ Gemma 4 LoRA not trained in hackathon window. Precursor Gemma 3 4B LoRA (53 min on a 4090, train_loss 0.244 @ epoch 3, 40/40 round-trip on held-out eval) archived at `outputs/archive-gemma3-2026-05-05/` and not loaded by the deployed app. Deployed app runs stock `onnx-community/gemma-4-E4B-it-ONNX`.
+- ⛔ Gemma 4 LoRA not trained in hackathon window. Precursor Gemma 3 4B LoRA (53 min on a 4090, train_loss 0.244 @ epoch 3, 40/40 round-trip on held-out eval) archived at `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked) and not loaded by the deployed app. Deployed app runs stock `onnx-community/gemma-4-E4B-it-ONNX`.
 - ⏳ E2B-LoRA variant — deferred per `dataset/v2-results.md`; will ship once 4b-it submission cycle closes. (Distinct from the image→IFC E2B agent #182 which uses Gemma 4 multimodal native and DID ship — see `submission/repro.md` §3.)
 - ✅ **Browser runtime running** — Vite + TypeScript + three.js + replicad + web-ifc 0.0.77 all wired, 9 canned demos shipping (8 dropdown + Schultz hero via Cmd-K), IFC4 export round-trip-verified, drag-drop loader for IFC/STEP/GLB/GLTF/OBJ/STL, sample IFC files (Schultz Residence real + KIT FZK-Haus / Institute-Var-2 synthetic test fixtures + Bonsai openings) bundled. Self-harness: 9/9 demos pass; dev-as-architect 8/8; verify-dsl-corpus 19/19.
 - ✅ **Bundle design handoff (#170 umbrella) shipped** — `#171/#173/#176/#177/#178/#179/#181/#183` all merged plus `#172` quad-split, `#174` sidebar + Snap dock, `#175` 5-tab dock surface, `#168` 2D→3D agent, `#182` image→IFC agent, `#151` Bonsai MCP via subagent worktree integration onto bridge → master.

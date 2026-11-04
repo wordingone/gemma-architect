@@ -4,13 +4,13 @@
 //
 // gemma-verify-cdp.ts — CDP-attach variant of the gemma-verify skill.
 //
-// When B:/M/gemma-architect-master/.shared-browser/cdp.json exists, connects to
+// When <repo-root>/.shared-browser/cdp.json exists, connects to
 // the shared headed Chromium (the shared window) via chromium.connectOverCDP() instead
 // of launching an isolated browser. All 11 surface checks run in the shared window;
 // the cursor is visible to him in real time.
 //
 // Writes the same JSON format as the /gemma-verify SKILL.md:
-//   B:/M/gemma-architect-master/state/gemma-verify-<sha>-<timestamp>.json
+//   <repo-root>/state/gemma-verify-<sha>-<timestamp>.json
 //   { sha, timestamp, attached_via_cdp, all_passed, surfaces: [...] }
 //
 // Usage:
@@ -49,7 +49,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { DEV_URL as _DEFAULT_DEV_URL } from "./ports";
 
-const CDP_JSON  = "B:/M/gemma-architect-master/.shared-browser/cdp.json";
+const REPO_ROOT = process.env.GEMMA_ARCHITECT_ROOT ?? process.cwd();
+const CDP_JSON  = `${REPO_ROOT}/.shared-browser/cdp.json`;
 const STATE_DIR = `${process.cwd()}/state`;
 const DEV_URL   = process.env.GEMMA_DEV_URL ?? _DEFAULT_DEV_URL;
 
