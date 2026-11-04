@@ -23,7 +23,8 @@ import { chromium } from "playwright";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { DEV_URL } from "./ports";
 
-const CDP_JSON = "B:/M/gemma-architect-master/.shared-browser/cdp.json";
+const REPO_ROOT = process.env.GEMMA_ARCHITECT_ROOT ?? process.cwd();
+const CDP_JSON = `${REPO_ROOT}/.shared-browser/cdp.json`;
 
 function die(msg: string, code = 1): never {
   console.error(msg);

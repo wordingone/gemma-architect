@@ -114,7 +114,7 @@ async function main() {
   };
   console.log("\n=== RESULT ===", allPassed ? "PASS" : "FAIL");
   console.log(JSON.stringify(out, null, 2));
-  const outPath = `B:/M/gemma-architect/state/verify-168a-${Date.now()}.json`;
+  const outPath = `${process.env.GEMMA_ARCHITECT_ROOT ?? process.cwd()}/state/verify-168a-${Date.now()}.json`;
   writeFileSync(outPath, JSON.stringify(out, null, 2));
   console.log("Written:", outPath);
   ws.close();

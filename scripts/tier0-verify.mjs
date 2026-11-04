@@ -7,7 +7,7 @@ import { WebSocket } from "ws";
 import { readFileSync } from "fs";
 import { DEV_PORT } from "./ports.mjs";
 
-const cdpJson = JSON.parse(readFileSync("B:/M/gemma-architect-master/.shared-browser/cdp.json", "utf8").replace(/^﻿/, ""));
+const cdpJson = JSON.parse(readFileSync(`${process.env.GEMMA_ARCHITECT_ROOT ?? process.cwd()}/.shared-browser/cdp.json`, "utf8").replace(/^﻿/, ""));
 const EP = cdpJson.endpoint;
 console.log("Browser endpoint:", EP);
 

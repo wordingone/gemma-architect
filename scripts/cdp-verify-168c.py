@@ -5,7 +5,7 @@ cdp-verify-168c.py — 3-surface CDP probe for #168 Phase C (layer param dispatc
 Probes resolveLayerId() wiring by calling __dispatch() directly and checking
 mesh.userData.layerId on the most-recently-added scene child.
 
-Writes: B:/M/gemma-architect-master/state/verify-168c-<sha>-<timestamp>.json
+Writes: <repo-root>/state/verify-168c-<sha>-<timestamp>.json
 """
 
 import json
@@ -29,7 +29,7 @@ from ports import CDP_PORT, DEV_PORT, CDP_BASE, DEV_URL
 
 DEV_URL = "http://localhost:5182/"
 SHA = "1b9fc43"
-STATE_DIR = Path("B:/M/gemma-architect-master/state")
+STATE_DIR = Path(os.environ.get("GEMMA_ARCHITECT_ROOT", os.getcwd())) / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

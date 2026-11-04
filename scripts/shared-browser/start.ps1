@@ -4,16 +4,17 @@
 #
 # Usage: powershell -File scripts/shared-browser/start.ps1
 #
-# Output: B:\M\gemma-architect-master\.shared-browser\cdp.json
+# Output: <repo-root>\.shared-browser\cdp.json
 #   { "endpoint": "<webSocketDebuggerUrl>", "started_at": "<ISO>", "pid": <int> }
 
 param([switch]$Force)
 
 $CDP_PORT       = if ($env:CDP_PORT) { [int]$env:CDP_PORT } else { 9222 }
 $DEV_URL        = "https://wordingone.github.io/gemma-architect/"
-$ChromeDataDir  = "B:\M\gemma-architect-master\.shared-browser\profile"
-$CDP_JSON       = "B:\M\gemma-architect-master\.shared-browser\cdp.json"
-$LaunchUrlFile  = "B:\M\gemma-architect-master\.shared-browser\launch-url.txt"
+$RepoRoot       = $(if ($env:GEMMA_ARCHITECT_ROOT) { $env:GEMMA_ARCHITECT_ROOT } else { (Get-Location).Path })
+$ChromeDataDir  = "$RepoRoot\.shared-browser\profile"
+$CDP_JSON       = "$RepoRoot\.shared-browser\cdp.json"
+$LaunchUrlFile  = "$RepoRoot\.shared-browser\launch-url.txt"
 
 # --- Locate Playwright bundled Chromium ---
 $MS_PW    = "$env:LOCALAPPDATA\ms-playwright"

@@ -74,7 +74,7 @@ The PROMPT textbox supports two paths:
 
 - **Cache-first (for bundled demos).** A 60-row prompt → JS cache ships with the
   bundle (built from `data/dsl-demo-corpus.jsonl` + Schultz gold + precursor Gemma 3
-  LoRA eval outputs archived at `outputs/archive-gemma3-2026-05-05/`). F1-weighted
+  LoRA eval outputs archived at `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked)). F1-weighted
   similarity (numeric tokens 2x, stop-words filtered) returns the best
   match in ~50 ms. No GPU, no network call — the path bundled demos use.
 - **Live Gemma 4 (default for novel prompts).** Stock `onnx-community/gemma-4-E4B-it-ONNX`
@@ -198,7 +198,7 @@ nested booleans). What it surfaced about the 12-op convention is in
 [`docs/tier1-conventions.md`](docs/tier1-conventions.md) — required
 reading for anyone training against this surface.
 
-Training scripts are in `src/train/` (scaffold for a future Gemma 4 retrain; the precursor Gemma 3 LoRA is archived at `outputs/archive-gemma3-2026-05-05/`).
+Training scripts are in `src/train/` (scaffold for a future Gemma 4 retrain; the precursor Gemma 3 LoRA is archived at `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked)).
 
 ---
 
@@ -208,7 +208,7 @@ Training scripts are in `src/train/` (scaffold for a future Gemma 4 retrain; the
 - **Model** — no LoRA adapter ships in this submission. The deployed app runs stock
   `onnx-community/gemma-4-E4B-it-ONNX` in-browser. Training scripts (`src/train/`) are
   scaffolded for a future Gemma 4 retrain; the prior Gemma 3 4B LoRA is archived at
-  `outputs/archive-gemma3-2026-05-05/` and is not loaded by the deployed app.
+  `src/train/archive-gemma3/` (scripts only; adapter weights and eval outputs are not tracked) and is not loaded by the deployed app.
 - **Hosted live demo** — GitHub Pages: https://wordingone.github.io/gemma-architect/
   (single-thread WASM fallback because GH Pages can't serve COOP+COEP;
   multi-thread path lights up on any host that can — Spaces, Vercel,
