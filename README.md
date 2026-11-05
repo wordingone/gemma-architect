@@ -6,9 +6,9 @@
 >
 > **Status.** Hackathon prototype, no longer developed. Work continued in [WEB-CAD](https://github.com/wordingone/WEB-CAD), which was forked from this repo on 2026-05-24 ([WEB-CAD `docs/ORIGIN.md`](https://github.com/wordingone/WEB-CAD/blob/master/docs/ORIGIN.md)). The last functional code change here is commit `bd70c1c` (2026-05-25); the 2026-11-04 commit `3f43ee6` was a documentation and tidy-up pass. Built for the Gemma 4 Good Hackathon (Kaggle and Google DeepMind); whether the entry was submitted is **not confirmed** (every item in the checklist in [`submission/README.md`](submission/README.md) is unchecked).
 >
-> **Who wrote it.** Designed and directed by the repository owner; most of the code was written by AI coding agents (Claude), as the `Co-Authored-By: Claude` lines in the commit history show.
+> **Who wrote it.** I designed and directed this work; most of the code was written by AI coding agents (Claude) under my review, as the `Co-Authored-By: Claude` lines in the commit history show.
 >
-> **What the AI feature really does.** Prompts close to one of 60 cached examples are answered from the cache with no model call; only other prompts reach the stock, not fine-tuned, in-browser Gemma 4 model ([`docs/ai-pipeline.md`](docs/ai-pipeline.md)). There is no evaluation of the model's output for novel prompts in this repo.
+> **What the AI feature really does.** Prompts close to one of 60 cached examples are answered from the cache with no model call; only other prompts reach the stock, not fine-tuned, in-browser Gemma 4 model ([`docs/ai-pipeline.md`](docs/ai-pipeline.md)). No evaluation of the model's output for novel prompts was found in this repo.
 >
 > **What is not verified.** IFC export is checked only by re-opening the file in web-ifc. It has **not** been tested in Revit, ArchiCAD or BlenderBIM (as the note at the top of [`submission/README.md`](submission/README.md) also says). Where the sections below say otherwise, this box takes precedence.
 >
