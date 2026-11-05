@@ -1,5 +1,24 @@
 # Gemma-CAD
 
+*Part of the research and design work collected at https://wordingone.github.io/.*
+
+> **At a glance (read this first)**
+>
+> **Status.** Hackathon prototype, no longer developed. Work continued in [WEB-CAD](https://github.com/wordingone/WEB-CAD), which was forked from this repo on 2026-05-24 ([WEB-CAD `docs/ORIGIN.md`](https://github.com/wordingone/WEB-CAD/blob/master/docs/ORIGIN.md)). The last functional code change here is commit `bd70c1c` (2026-05-25); the 2026-11-04 commit `3f43ee6` was a documentation and tidy-up pass. Built for the Gemma 4 Good Hackathon (Kaggle and Google DeepMind); whether the entry was submitted is **not confirmed** (every item in the checklist in [`submission/README.md`](submission/README.md) is unchecked).
+>
+> **Who wrote it.** Designed and directed by the repository owner; most of the code was written by AI coding agents (Claude), as the `Co-Authored-By: Claude` lines in the commit history show.
+>
+> **What the AI feature really does.** Prompts close to one of 60 cached examples are answered from the cache with no model call; only other prompts reach the stock, not fine-tuned, in-browser Gemma 4 model ([`docs/ai-pipeline.md`](docs/ai-pipeline.md)). There is no evaluation of the model's output for novel prompts in this repo.
+>
+> **What is not verified.** IFC export is checked only by re-opening the file in web-ifc. It has **not** been tested in Revit, ArchiCAD or BlenderBIM (as the note at the top of [`submission/README.md`](submission/README.md) also says). Where the sections below say otherwise, this box takes precedence.
+>
+> **Try it.** Live page: https://wordingone.github.io/gemma-architect/ (it loaded in headless Chromium on 2026-11-05; the prompt and export flow were not exercised in that check). Run locally with [Bun](https://bun.sh/): `bun install` then `bun run web:dev` (details under [Quick start](#quick-start)).
+>
+> ![The gemma-architect workbench with the Schultz Residence sample IFC file loaded](submission/screenshots/04-schultz-solid.png)
+> *Screenshot from the submission folder, captured from the live page in May 2026 ([`submission/screenshots/`](submission/screenshots/)). The building shown is the bundled Schultz Residence sample IFC file loaded in the viewer, not model output. The model badge reads Gemma 3 4B, an earlier setup than the Gemma 4 model described below.*
+
+---
+
 Browser-native experimental CAD from natural-language prompts.
 Type a sentence; generate 3D geometry; export an IFC4 file. No server,
 no install, no API key — Gemma 4 E4B-it (stock, no fine-tune) + replicad geometry kernel +
@@ -20,8 +39,9 @@ deadline 2026-05-18.
 Open the page. Pick a demo (or type your own prompt). Gemma 4 emits a
 short replicad JavaScript program. The page executes it in a worker,
 meshes the result with OpenCascade, renders with three.js, and offers
-an **Export IFC** button that downloads an IFC4 STEP-21 file consumable
-in Revit, ArchiCAD, BlenderBIM, IFC.js viewers, BimVision.
+an **Export IFC** button that downloads an IFC4 STEP-21 file. The file
+re-opens in web-ifc; it has not been tested in Revit, ArchiCAD or
+BlenderBIM (see the box at the top).
 
 ```
 "a wall, 5.5m long, 0.2m thick, 2.8m tall"
@@ -56,15 +76,16 @@ without round-tripping through the model.
 1. Open the [hosted demo](https://wordingone.github.io/gemma-architect/).
 2. Press `Cmd-K` (or `Ctrl-K`). Type `schultz`. Press Enter.
 3. Watch a 14-element residence emerge in <5 seconds, fully
-   IFC4-exportable. Click **Export → IFC4** to download a file that
-   loads cleanly in Revit / ArchiCAD / BlenderBIM.
+   IFC4-exportable. Click **Export → IFC4** to download the IFC4 file
+   (checked by re-opening it in web-ifc only; see the box at the top).
+   The Schultz demo comes from the prompt cache, not a live model call.
 4. Click any element. The right sidebar shows IFC class + storey +
    GUID + layer. Ctrl-click two more elements; the panel reports
    `3 elements selected` with a union bounds size — the same
    selection model a working architect uses in Rhino.
 
 That's the equity story in three clicks: a non-CAD user, in a browser,
-emits BIM-compliant geometry without an installer or API key.
+exports IFC4 geometry without an installer or API key.
 
 ---
 
@@ -97,7 +118,7 @@ documented in [`docs/console-dsl.md`](docs/console-dsl.md).
 | AI prompt cache rows (DSL + Schultz + archived eval) | 60               |
 | DSL corpus rows compiled via `compileDsl()`| 19 / 19 pass                      |
 
-Numbers reproducible end-to-end via [`submission/repro.md`](submission/repro.md).
+These are what the listed scripts reported when this section was written; they were not re-run on 2026-11-05. Steps: [`submission/repro.md`](submission/repro.md).
 
 ---
 
@@ -130,10 +151,9 @@ Numbers reproducible end-to-end via [`submission/repro.md`](submission/repro.md)
   multi-thread SharedArrayBuffer path lights up automatically on any
   host that can serve those headers (Vercel, Spaces, self-hosted nginx).
 
-License chain (CC BY 4.0 / MIT / MPL-2.0 / LGPL-2.1-with-linking-exception)
-is fully compatible with commercial deployment. MPL-2.0 on web-ifc is
-weakly copyleft per file (modifications to its source must stay MPL),
-but our app code that *uses* web-ifc has no copyleft obligation.
+Licences in the chain: CC BY 4.0 (this repo), MIT, MPL-2.0 (web-ifc,
+weakly copyleft per file) and LGPL-2.1 with linking exception. Check
+each licence's terms before reuse; this README is not legal advice.
 
 ---
 
@@ -222,14 +242,13 @@ Training scripts are in `src/train/` (scaffold for a future Gemma 4 retrain; the
 
 - **Tier 1 vocabulary only** — schematic-design primitives (walls,
   slabs, columns, footings, basic openings via `cut`, L-shape and
-  U-shape footprints). ~85% of what a small-shop architect produces in
-  schematic design. Construction-document detailing is out of scope.
+  U-shape footprints). Construction-document detailing is out of scope.
 - **English only.** Corpus expansion to other languages is a dataset
   job, not a model-architecture job.
 - **Not a structural validator.** The model produces geometry that
   *could* be a wall; it does not check that the wall would stand. That
   belongs to the engineer who picks up the IFC export.
-- **Semantic placement gaps.** Held-out eval scores `runtime_pass`
+- **Semantic placement gaps.** The held-out eval of the earlier Gemma 3 LoRA (outputs not tracked in this repo) scored `runtime_pass`
   (the JS executes and produces a Solid). Some emitted sequences place
   components in geometrically-imprecise positions (e.g., the
   four-walled room's bounding box is slightly wider than the spec calls
@@ -242,9 +261,10 @@ Full discussion in [`submission/writeup.md`](submission/writeup.md#limitations).
 
 ## Contributing
 
-Issues + PRs welcome. The 18-day hackathon plan at
-[`docs/plan-18-day.md`](docs/plan-18-day.md) lists the open work
-items. Post-hackathon roadmap in [`submission/impact.md`](submission/impact.md#adoption-path).
+This repo is no longer developed; active work is in
+[WEB-CAD](https://github.com/wordingone/WEB-CAD). The 18-day hackathon
+plan at [`docs/plan-18-day.md`](docs/plan-18-day.md) and the roadmap in
+[`submission/impact.md`](submission/impact.md#adoption-path) are kept as historical records.
 
 ---
 
